@@ -51,6 +51,8 @@
 
 `main`, 대문자, 밑줄, 공백, 의미 없는 번호만 있는 이름은 feature 브랜치에 사용하지 않습니다. 사용자 요청 없이 force push하거나 이미 공유된 브랜치 이력을 다시 쓰지 않습니다.
 
+GitHub Dependabot이 소유한 `dependabot/<ecosystem>/<slug>` 브랜치만 자동화 예외입니다. 사람이 만드는 브랜치에는 이 예외를 사용하지 않습니다.
+
 ### Commits
 
 모든 커밋 제목은 Conventional Commits를 따릅니다.

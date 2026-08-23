@@ -12,6 +12,7 @@ FamilyCare는 공개 저장소이지만 실제 보험·의료 자료를 다루�
 6. 필수 GitHub Actions가 모두 성공한 뒤 merge합니다.
 
 허용된 브랜치 type과 커밋 type의 전체 목록은 `AGENTS.md`가 기준입니다.
+`dependabot/<ecosystem>/<slug>` 형식은 GitHub Dependabot이 만든 브랜치에만 허용됩니다.
 
 ## Synthetic data only
 
