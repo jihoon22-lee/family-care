@@ -1,13 +1,20 @@
 """FastAPI application factory."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response, status
 
-from familycare_api.health import HealthResponse, liveness, readiness
+from familycare_api.health import (
+    HealthResponse,
+    ReadinessProbe,
+    database_is_ready,
+    liveness,
+    readiness,
+)
 
 
-def create_app() -> FastAPI:
-    """Create the Foundation API without external service dependencies."""
+def create_app(readiness_probe: ReadinessProbe | None = None) -> FastAPI:
+    """Create the Foundation API with an injectable database probe."""
 
+    probe = readiness_probe or database_is_ready
     app = FastAPI(
         title="FamilyCare API",
         version="0.0.0",
@@ -20,13 +27,14 @@ def create_app() -> FastAPI:
         response_model=HealthResponse,
         tags=["health"],
     )
-    app.add_api_route(
-        "/health/ready",
-        readiness,
-        methods=["GET"],
-        response_model=HealthResponse,
-        tags=["health"],
-    )
+
+    @app.get("/health/ready", response_model=HealthResponse, tags=["health"])
+    def readiness_endpoint(response: Response) -> HealthResponse:
+        health = readiness(probe)
+        if health.status == "unavailable":
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return health
+
     return app
 
 

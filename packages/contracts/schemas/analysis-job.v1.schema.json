@@ -1,0 +1,31 @@
+{
+  "$id": "https://familycare.invalid/schemas/analysis-job.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "document_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "job_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "job_id",
+    "document_id",
+    "content_sha256"
+  ],
+  "title": "FamilyCare analysis job version 1",
+  "type": "object"
+}

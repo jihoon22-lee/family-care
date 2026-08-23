@@ -9,7 +9,6 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MAX_FILE_BYTES = 2 * 1024 * 1024
 FORBIDDEN_SUFFIXES = {
@@ -105,9 +104,7 @@ def inspect_path(root: Path, path: Path) -> list[str]:
 
     size = lexical_path.stat().st_size
     if size > MAX_FILE_BYTES:
-        errors.append(
-            f"file size {size} exceeds public limit {MAX_FILE_BYTES}: {relative_path}"
-        )
+        errors.append(f"file size {size} exceeds public limit {MAX_FILE_BYTES}: {relative_path}")
 
     return errors
 
@@ -127,7 +124,9 @@ def git_visible_paths(root: Path) -> list[Path]:
 def stdin_paths(root: Path) -> list[Path]:
     """Read NUL-delimited repository-relative paths from standard input."""
 
-    return [root / Path(item.decode("utf-8")) for item in sys.stdin.buffer.read().split(b"\0") if item]
+    return [
+        root / Path(item.decode("utf-8")) for item in sys.stdin.buffer.read().split(b"\0") if item
+    ]
 
 
 def walk_paths(root: Path) -> Iterable[Path]:

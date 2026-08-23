@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
@@ -37,18 +36,14 @@ REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
     "docs/design/project-foundation.md": ("# FamilyCare 프로젝트 기반 설계",),
     "docs/design/data-model.md": ("# Data model design",),
     "docs/design/pdf-ingestion.md": ("# PDF ingestion design",),
-    "docs/design/coverage-decision-engine.md": (
-        "# Coverage decision engine design",
-    ),
+    "docs/design/coverage-decision-engine.md": ("# Coverage decision engine design",),
     "docs/design/security-privacy.md": ("# Security and privacy design",),
     "docs/design/test-strategy.md": ("# Test strategy",),
     "docs/adr/0001-modular-monolith.md": ("# ADR 0001: Modular monolith",),
     "docs/adr/0002-public-repository-data-boundary.md": (
         "# ADR 0002: Public repository data boundary",
     ),
-    "docs/adr/0003-postgresql-job-queue.md": (
-        "# ADR 0003: PostgreSQL job queue",
-    ),
+    "docs/adr/0003-postgresql-job-queue.md": ("# ADR 0003: PostgreSQL job queue",),
     "docs/adr/0004-evidence-first-tristate-decisions.md": (
         "# ADR 0004: Evidence-first tri-state decisions",
     ),
@@ -56,9 +51,7 @@ REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
         "# ADR 0005: GHCR-only continuous delivery",
     ),
     "docs/plan/000-project-roadmap.md": ("# FamilyCare 프로젝트 로드맵",),
-    "docs/plan/001-project-foundation.md": (
-        "# Project Foundation Implementation Plan",
-    ),
+    "docs/plan/001-project-foundation.md": ("# Project Foundation Implementation Plan",),
 }
 
 UNFINISHED_MARKERS = ("T" + "BD", "T" + "ODO", "FIX" + "ME")

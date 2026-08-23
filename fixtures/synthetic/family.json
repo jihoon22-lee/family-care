@@ -1,0 +1,13 @@
+{
+  "family_id": "synthetic-family-001",
+  "members": [
+    {
+      "display_name": "Family Member A",
+      "member_id": "family-member-a"
+    },
+    {
+      "display_name": "Family Member B",
+      "member_id": "family-member-b"
+    }
+  ]
+}

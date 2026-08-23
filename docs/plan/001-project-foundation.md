@@ -137,11 +137,20 @@ Create a standard-library script with this manifest and behavior:
 ```python
 REQUIRED_HEADINGS = {
     "README.md": ["# FamilyCare", "## Privacy boundary", "## Quick start"],
-    "AGENTS.md": ["# FamilyCare development instructions", "## Non-negotiable privacy rules", "## Required verification"],
+    "AGENTS.md": [
+        "# FamilyCare development instructions",
+        "## Non-negotiable privacy rules",
+        "## Required verification",
+    ],
     "CHANGELOG.md": ["# Changelog", "## [Unreleased]"],
-    "docs/architecture.md": ["# FamilyCare architecture", "## Trust boundaries", "## Runtime components"],
+    "docs/architecture.md": [
+        "# FamilyCare architecture",
+        "## Trust boundaries",
+        "## Runtime components",
+    ],
     "docs/guide.md": ["# FamilyCare guide", "## Local development", "## Safe data handling"],
 }
+
 
 def validate_document(path: Path, headings: list[str]) -> list[str]:
     if not path.is_file():
@@ -243,11 +252,22 @@ Implement these constants and rules:
 ```python
 MAX_FILE_BYTES = 2 * 1024 * 1024
 FORBIDDEN_SUFFIXES = {
-    ".db", ".dump", ".key", ".log", ".p12", ".pem", ".pfx",
-    ".sqlite", ".sqlite3",
+    ".db",
+    ".dump",
+    ".key",
+    ".log",
+    ".p12",
+    ".pem",
+    ".pfx",
+    ".sqlite",
+    ".sqlite3",
 }
 FORBIDDEN_SEGMENTS = {
-    "actual-data", "documents", "ocr", "private", "uploads",
+    "actual-data",
+    "documents",
+    "ocr",
+    "private",
+    "uploads",
 }
 PDF_ALLOW_ROOT = Path("fixtures/synthetic")
 IMAGE_ALLOW_ROOTS = (Path("apps/web/public"), Path("docs/assets"), Path("fixtures/synthetic"))
