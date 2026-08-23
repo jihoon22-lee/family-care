@@ -10,6 +10,8 @@
 
 **Spec:** `docs/design/project-foundation.md`
 
+**Status (2026-08-24):** Tasks 1-9 were implemented and locally verified on WSL. Task 10 (remote PR, GitHub-hosted CI, and merge) remains pending.
+
 ## Global Constraints
 
 - The repository is public and has no `LICENSE`; no reuse permission is granted by default.
@@ -130,7 +132,7 @@
 - Consumes: `docs/design/project-foundation.md` and `docs/plan/000-project-roadmap.md`.
 - Produces: the document paths and mandatory headings enforced by `check_documentation.py`; later CI invokes `python3 scripts/check_documentation.py`.
 
-- [ ] **Step 1: Write the documentation contract checker**
+- [x] **Step 1: Write the documentation contract checker**
 
 Create a standard-library script with this manifest and behavior:
 
@@ -162,13 +164,13 @@ def validate_document(path: Path, headings: list[str]) -> list[str]:
 The `main()` function iterates the manifest, prints one error per line, and returns `1` on any error or `0` otherwise.
 It also rejects unfinished-work markers built as `("T" + "BD", "T" + "ODO", "FIX" + "ME")` so the plan and documentation cannot silently defer required content.
 
-- [ ] **Step 2: Run the checker and confirm the expected failure**
+- [x] **Step 2: Run the checker and confirm the expected failure**
 
 Run: `python3 scripts/check_documentation.py`
 
 Expected: exit `1` with at least `missing required document: README.md`.
 
-- [ ] **Step 3: Write the top-level documents**
+- [x] **Step 3: Write the top-level documents**
 
 Use these exact policy outcomes:
 
@@ -181,13 +183,13 @@ Use these exact policy outcomes:
 - SECURITY directs vulnerability and accidental-data reports to GitHub private vulnerability reporting when enabled and says not to open a public issue containing sensitive data.
 - The absence of a license is stated without claiming an open-source license.
 
-- [ ] **Step 4: Write architecture, guide, glossary, feature designs, and ADRs**
+- [x] **Step 4: Write architecture, guide, glossary, feature designs, and ADRs**
 
 Each design document must define scope, inputs, outputs, invariants, failure behavior, security considerations, tests, and deferred decisions. ADRs use `Accepted` status and sections `Context`, `Decision`, `Alternatives`, `Consequences`.
 
 The guide must keep real-data setup disabled by default and show only `/absolute/path/outside/repository` as an example. The glossary must define at least `AppUser`, `FamilyMember`, `PolicyParty`, `PolicyContract`, `Rider`, `Clause`, `Evidence`, `MedicalEvent`, `ClaimCandidate`, `MATCH`, `NO_MATCH`, and `UNKNOWN`.
 
-- [ ] **Step 5: Verify the documentation contract and formatting**
+- [x] **Step 5: Verify the documentation contract and formatting**
 
 Run:
 
@@ -198,7 +200,7 @@ git diff --check
 
 Expected: checker exit `0`, including its unfinished-work-marker scan, and `git diff --check` exit `0`.
 
-- [ ] **Step 6: Commit the documentation set**
+- [x] **Step 6: Commit the documentation set**
 
 ```bash
 git add README.md AGENTS.md CHANGELOG.md CONTRIBUTING.md SECURITY.md docs scripts/check_documentation.py
@@ -223,7 +225,7 @@ git commit -m "docs: establish project governance"
 - Consumes: the repository root or an explicit list of paths.
 - Produces: `inspect_path(root: Path, path: Path) -> list[str]` and CLI exit `0` for safe files, `1` for violations.
 
-- [ ] **Step 1: Write failing unit tests for safety rules**
+- [x] **Step 1: Write failing unit tests for safety rules**
 
 Use `unittest.TemporaryDirectory` to verify these exact cases:
 
@@ -239,13 +241,13 @@ def test_allows_generated_web_icon(self): ...
 
 The synthetic PDF test writes only `b"%PDF-1.4\nsynthetic fixture\n"`; it must not copy a real document.
 
-- [ ] **Step 2: Run tests and confirm the expected import failure**
+- [x] **Step 2: Run tests and confirm the expected import failure**
 
 Run: `python3 -m unittest scripts.tests.test_repository_safety -v`
 
 Expected: failure because `scripts.check_repository_safety` does not exist.
 
-- [ ] **Step 3: Implement the repository safety scanner**
+- [x] **Step 3: Implement the repository safety scanner**
 
 Implement these constants and rules:
 
@@ -275,7 +277,7 @@ IMAGE_ALLOW_ROOTS = (Path("apps/web/public"), Path("docs/assets"), Path("fixture
 
 Reject `.pdf` outside `fixtures/synthetic`, reject image suffixes outside approved roots, reject service-account-like JSON filenames, and inspect only regular files. CLI default input comes from `git ls-files --cached --others --exclude-standard -z`; `--all-files` may walk a supplied temporary root for tests.
 
-- [ ] **Step 4: Add ignore, environment, and text policies**
+- [x] **Step 4: Add ignore, environment, and text policies**
 
 `.gitignore` must cover environment files except `.env.example`, Python and Node caches, build outputs, coverage, databases, dumps, logs, PDFs except `fixtures/synthetic/**/*.pdf`, OCR/output/private directories, keys, and local container volumes.
 
@@ -294,7 +296,7 @@ FAMILYCARE_WORK_ROOT=/absolute/path/outside/repository/work
 
 `.gitleaks.toml` extends default rules and contains no real-value allowlist. `.gitattributes` enforces LF for source and keeps binary image/PDF types binary. `.editorconfig` uses UTF-8, LF, final newline, two spaces for web/YAML/JSON, and four spaces for Python.
 
-- [ ] **Step 5: Run positive and negative safety verification**
+- [x] **Step 5: Run positive and negative safety verification**
 
 Run:
 
@@ -306,7 +308,7 @@ git diff --check
 
 Expected: seven unit tests pass, repository scan exits `0`, diff check exits `0`.
 
-- [ ] **Step 6: Commit safety guardrails**
+- [x] **Step 6: Commit safety guardrails**
 
 ```bash
 git add .gitignore .gitattributes .editorconfig .env.example .gitleaks.toml scripts
@@ -340,7 +342,7 @@ git commit -m "chore: guard public repository data boundary"
 - Consumes: no backend and no environment secrets.
 - Produces: `@familycare/web` scripts `format:check`, `lint`, `typecheck`, `test`, and `build`; a static PWA shell that displays Foundation status and privacy copy.
 
-- [ ] **Step 1: Create root workspace manifests**
+- [x] **Step 1: Create root workspace manifests**
 
 Root `package.json` uses this contract:
 
@@ -363,7 +365,7 @@ Root `package.json` uses this contract:
 
 Set `.node-version` to `24.19.0`. `pnpm-workspace.yaml` includes `apps/*` and `packages/*`.
 
-- [ ] **Step 2: Create Web package configuration and a failing UI test**
+- [x] **Step 2: Create Web package configuration and a failing UI test**
 
 Pin these direct dependencies in `apps/web/package.json`:
 
@@ -379,7 +381,7 @@ expect(screen.getByText(/보험금 지급을 보장하지 않습니다/)).toBeIn
 expect(screen.getByText(/Foundation/)).toBeInTheDocument()
 ```
 
-- [ ] **Step 3: Install dependencies and confirm the expected failing test**
+- [x] **Step 3: Install dependencies and confirm the expected failing test**
 
 Run:
 
@@ -390,13 +392,13 @@ corepack pnpm@11.22.0 --filter @familycare/web test
 
 Expected: dependency installation creates `pnpm-lock.yaml`; test fails because `App.tsx` does not yet export the required UI.
 
-- [ ] **Step 4: Implement the minimal application shell**
+- [x] **Step 4: Implement the minimal application shell**
 
 `App.tsx` must render only product name, Foundation status, and the decision-support disclaimer. Do not add forms, sample policies, real names, authentication stubs, or network calls.
 
 Configure `VitePWA` with `registerType: "prompt"`, no `runtimeCaching`, a manifest containing only FamilyCare identity, and Workbox `globPatterns` limited to built HTML/CSS/JS/icons. Create a geometric compass-style SVG icon with no external asset or text derived from an insurance document. Add a comment stating that API responses and documents require an approved cache-policy change.
 
-- [ ] **Step 5: Run the full Web validation**
+- [x] **Step 5: Run the full Web validation**
 
 Run serially:
 
@@ -410,7 +412,7 @@ corepack pnpm@11.22.0 web:build
 
 Expected: every command exits `0`; Vitest reports the shell test passing; `apps/web/dist` contains a manifest and service worker.
 
-- [ ] **Step 6: Commit the Web workspace**
+- [x] **Step 6: Commit the Web workspace**
 
 ```bash
 git add .node-version package.json pnpm-workspace.yaml pnpm-lock.yaml apps/web
@@ -440,13 +442,13 @@ git commit -m "feat: add minimal FamilyCare PWA shell"
 - Consumes: `FAMILYCARE_ENV` only; no database is required for liveness.
 - Produces: `create_app() -> FastAPI`, GET `/health/live`, GET `/health/ready`, `health_payload() -> dict[str, str]`, and console command `familycare-worker`.
 
-- [ ] **Step 1: Define the uv workspace and package metadata**
+- [x] **Step 1: Define the uv workspace and package metadata**
 
 Root `pyproject.toml` declares Python `>=3.14,<3.15`, workspace members `apps/api` and `workers/analyzer`, and dev dependencies `httpx2==2.12.0`, `mypy==2.3.1`, `pytest==9.1.1`, `ruff==0.16.4`. Configure Ruff for Python 3.14 with line length 100 and rules `E`, `F`, `I`, `UP`, `B`, `SIM`; configure mypy strict mode for both `src` trees.
 
 API runtime dependencies are `fastapi==0.141.1`, `pydantic==2.13.4`, and `uvicorn[standard]==0.52.4`. Worker initially has no third-party runtime dependency. Both packages use the pinned Hatchling `1.32.0` build backend and `src` layouts.
 
-- [ ] **Step 2: Write failing API and Worker tests**
+- [x] **Step 2: Write failing API and Worker tests**
 
 API assertions:
 
@@ -464,7 +466,7 @@ assert health_payload() == {"service": "analyzer", "status": "ok", "version": "0
 assert main([]) == 0
 ```
 
-- [ ] **Step 3: Lock dependencies and confirm the expected import failures**
+- [x] **Step 3: Lock dependencies and confirm the expected import failures**
 
 Run:
 
@@ -476,7 +478,7 @@ uv run pytest apps/api/tests workers/analyzer/tests -q
 
 Expected: tests fail because `familycare_api.main` and `familycare_worker.health` are absent.
 
-- [ ] **Step 4: Implement minimal health contracts**
+- [x] **Step 4: Implement minimal health contracts**
 
 Use a frozen Pydantic model for API responses:
 
@@ -490,7 +492,7 @@ class HealthResponse(BaseModel):
 
 `create_app()` sets docs at `/docs`, disables no security controls beyond framework defaults, and registers only health routes. Worker `main(argv: Sequence[str] | None = None) -> int` prints sorted JSON from `health_payload()` and exits `0`; it performs no polling or document access in Foundation.
 
-- [ ] **Step 5: Run Python format, lint, type, and unit checks**
+- [x] **Step 5: Run Python format, lint, type, and unit checks**
 
 Run serially:
 
@@ -503,7 +505,7 @@ uv run pytest apps/api/tests workers/analyzer/tests -q
 
 Expected: all commands exit `0`, with four health endpoint/command tests passing.
 
-- [ ] **Step 6: Commit the Python workspace**
+- [x] **Step 6: Commit the Python workspace**
 
 ```bash
 git add .python-version pyproject.toml uv.lock apps/api workers/analyzer
@@ -538,7 +540,7 @@ git commit -m "feat: add API and analyzer service shells"
 - Consumes: `familycare_api.main.create_app`, `FAMILYCARE_DATABASE_URL`, JSON Schema draft 2020-12.
 - Produces: deterministic OpenAPI JSON, `analysis-job.v1` envelope, `alembic upgrade head` entrypoint.
 
-- [ ] **Step 1: Add contract checks before contract artifacts**
+- [x] **Step 1: Add contract checks before contract artifacts**
 
 `scripts/check_contracts.py` must:
 
@@ -547,13 +549,13 @@ git commit -m "feat: add API and analyzer service shells"
 3. load the job schema and example;
 4. assert required keys, fixed `schema_version == "1"`, UUID-shaped `job_id`, and `document_id` beginning with `synthetic-` without adding a JSON Schema runtime dependency.
 
-- [ ] **Step 2: Run the checker and confirm missing-artifact failure**
+- [x] **Step 2: Run the checker and confirm missing-artifact failure**
 
 Run: `uv run python scripts/check_contracts.py`
 
 Expected: exit `1` naming missing `packages/contracts/openapi/familycare.v1.json`.
 
-- [ ] **Step 3: Add deterministic OpenAPI and synthetic contracts**
+- [x] **Step 3: Add deterministic OpenAPI and synthetic contracts**
 
 Generate OpenAPI from the app, then create an analysis job schema with required properties:
 
@@ -568,13 +570,13 @@ Generate OpenAPI from the app, then create an analysis job schema with required 
 
 `fixtures/synthetic/family.json` uses only `family-member-a` and `family-member-b` IDs and display names `Family Member A` and `Family Member B`. Its README states the fixture was authored from scratch and is not a redaction of a real policy.
 
-- [ ] **Step 4: Add the Alembic baseline**
+- [x] **Step 4: Add the Alembic baseline**
 
 Add `alembic==1.19.1`, `psycopg[binary]==3.3.4`, and `sqlalchemy==2.0.52` to the API, and `psycopg[binary]==3.3.4` to the Worker. `env.py` reads only `FAMILYCARE_DATABASE_URL`; if absent, it exits with `FAMILYCARE_DATABASE_URL is required for migrations`. Revision `0001_foundation` has no domain tables; applying it creates Alembic's version metadata and establishes an intentional pre-domain baseline. Its downgrade is also empty.
 
 Extend API readiness with an injected `Callable[[], bool]`: the default probe executes `SELECT 1`, readiness returns `200` with `ready` when true and `503` with `unavailable` when false. Extend Worker health with the same true/false probe behavior and exit `1` on unavailable. Unit tests inject probes; integration checks use PostgreSQL 18.
 
-- [ ] **Step 5: Validate contracts and migration against PostgreSQL 18**
+- [x] **Step 5: Validate contracts and migration against PostgreSQL 18**
 
 Run:
 
@@ -593,7 +595,7 @@ docker stop familycare-plan-postgres
 
 Expected: contract checker exits `0`; Alembic reports revision `0001_foundation (head)`. If the fixed port is occupied, use a validated unused port and record it in the verification report rather than stopping another process.
 
-- [ ] **Step 6: Commit contracts and migration baseline**
+- [x] **Step 6: Commit contracts and migration baseline**
 
 ```bash
 git add packages/contracts fixtures/synthetic scripts/check_contracts.py apps/api/alembic.ini apps/api/migrations apps/api/pyproject.toml uv.lock
@@ -619,28 +621,28 @@ git commit -m "feat: add contracts and migration baseline"
 - Consumes: `.env`, locked pnpm/uv dependencies, local source trees.
 - Produces: services `db`, `api`, `worker`, `web`; images `familycare-web`, `familycare-api`, `familycare-worker`; Make targets `setup`, `check`, `up`, `down`, `build`.
 
-- [ ] **Step 1: Write container-definition checks first**
+- [x] **Step 1: Write container-definition checks first**
 
 `scripts/check_containers.py` must inspect Dockerfiles as text and fail unless each final stage contains a non-root `USER`, exact runtime major versions, and no `COPY . .`. It must run `docker compose --env-file .env.example -f infra/compose/compose.yaml config --quiet` and require the four service names.
 
-- [ ] **Step 2: Run the checker and confirm missing Dockerfile failure**
+- [x] **Step 2: Run the checker and confirm missing Dockerfile failure**
 
 Run: `uv run python scripts/check_containers.py`
 
 Expected: exit `1` identifying `infra/containers/web.Dockerfile` as missing.
 
-- [ ] **Step 3: Create Web, API, and Worker Dockerfiles**
+- [x] **Step 3: Create Web, API, and Worker Dockerfiles**
 
 - Web builder uses `node:24.19.0-alpine`, Corepack pnpm 11.22.0, frozen lockfile, and `pnpm web:build`; runtime uses an exact `nginxinc/nginx-unprivileged` 1.29 Alpine tag and `USER 101`.
 - API builder and runtime use `python:3.14.7-slim`; copy uv 0.12.5 from the official uv image; sync only API runtime dependencies; runtime uses a numeric non-root UID and starts Uvicorn on port 8000.
 - Worker uses the same Python and uv versions, installs only Worker runtime dependencies, uses a numeric non-root UID, and runs a Foundation idle process with signal-aware shutdown plus a separate `--health` command.
 - No Dockerfile copies `.env`, fixture PDFs, `.git`, or the repository root wholesale.
 
-- [ ] **Step 4: Extend Worker tests for process modes**
+- [x] **Step 4: Extend Worker tests for process modes**
 
 Add tests that `main(["--health"])` prints one health JSON line and returns `0`, while an injected stop event makes `run_idle(stop_event, interval_seconds=0)` return without accessing the filesystem or network.
 
-- [ ] **Step 5: Create Compose and Make orchestration**
+- [x] **Step 5: Create Compose and Make orchestration**
 
 Compose requirements:
 
@@ -653,7 +655,7 @@ Compose requirements:
 
 Make commands call package-native commands and do not install global tools.
 
-- [ ] **Step 6: Validate and build serially**
+- [x] **Step 6: Validate and build serially**
 
 Run:
 
@@ -667,11 +669,11 @@ docker compose --env-file .env.example -f infra/compose/compose.yaml build worke
 
 Expected: tests and definition checks pass; all three builds exit `0`. Build one image at a time to avoid WSL memory pressure.
 
-- [ ] **Step 7: Run and inspect non-root containers**
+- [x] **Step 7: Run and inspect non-root containers**
 
 Run each image with `--entrypoint id` and assert UID is not `0`. Then start Compose, request Web and API health endpoints, run Worker health, and stop with `docker compose ... down` without `--volumes` so local state is recoverable.
 
-- [ ] **Step 8: Commit local infrastructure**
+- [x] **Step 8: Commit local infrastructure**
 
 ```bash
 git add Makefile infra scripts/check_containers.py workers/analyzer
@@ -694,7 +696,7 @@ git commit -m "build: add local containers and compose"
 - Consumes: all local check commands and immutable GitHub Action SHAs.
 - Produces: PR/main jobs `repository-safety`, `web`, `python`, `integration`, `containers`; `check_workflows.py` and `check_git_conventions.py` validation entrypoints.
 
-- [ ] **Step 1: Write workflow policy checks before workflow files**
+- [x] **Step 1: Write workflow policy checks before workflow files**
 
 `check_workflows.py` must fail unless:
 
@@ -707,13 +709,13 @@ git commit -m "build: add local containers and compose"
 
 Write `test_git_conventions.py` first with accepted branch names `main`, `build/project-foundation`, and `feat/policy-ledger`, plus rejected names `feature/foo`, `Feature/foo`, and `build/project_foundation`. Accept commit subjects `docs: establish project governance` and `feat(api): add health endpoint`; reject missing types, title-case types, trailing periods, and subjects longer than 72 characters.
 
-- [ ] **Step 2: Run the checker and confirm missing-workflow failure**
+- [x] **Step 2: Run the checker and confirm missing-workflow failure**
 
 Run: `uv run python scripts/check_workflows.py`
 
 Expected: exit `1` identifying `.github/workflows/ci.yml` as missing.
 
-- [ ] **Step 3: Create least-privilege CI**
+- [x] **Step 3: Create least-privilege CI**
 
 Pin these actions exactly:
 
@@ -736,13 +738,13 @@ CI behavior:
 - containers job builds each Dockerfile with `push: false` in a sequential matrix (`max-parallel: 1`).
 - safety job validates `<type>/<kebab-case>` for PR branches and every PR commit subject against Conventional Commits.
 
-- [ ] **Step 4: Add Dependabot and PR privacy checklist**
+- [x] **Step 4: Add Dependabot and PR privacy checklist**
 
 Dependabot runs weekly for npm at `/`, pip at `/`, Docker for each Dockerfile directory, and GitHub Actions at `/`. Group development dependencies separately from runtime updates.
 
 PR checklist requires confirmation that fixtures are synthetic, no real document or derived text is present, no secret or identifier is present, logs are sanitized, tests are listed, and inaccessible external checks are reported as unverified.
 
-- [ ] **Step 5: Validate local equivalence and workflow policy**
+- [x] **Step 5: Validate local equivalence and workflow policy**
 
 Run:
 
@@ -759,7 +761,7 @@ git diff --check
 
 Expected: all commands exit `0` and workflow policy reports both action pinning and least-privilege checks successful.
 
-- [ ] **Step 6: Commit CI and repository metadata**
+- [x] **Step 6: Commit CI and repository metadata**
 
 ```bash
 git add .github scripts/check_workflows.py scripts/check_git_conventions.py scripts/tests/test_git_conventions.py
@@ -781,7 +783,7 @@ git commit -m "ci: validate project foundation"
 - Consumes: a `vMAJOR.MINOR.PATCH` tag whose commit passes CI and the three Dockerfiles.
 - Produces: `ghcr.io/${github.repository}-web`, `-api`, and `-worker` images tagged with semantic version and commit SHA.
 
-- [ ] **Step 1: Extend policy tests for release boundaries**
+- [x] **Step 1: Extend policy tests for release boundaries**
 
 Require release workflow to:
 
@@ -792,13 +794,13 @@ Require release workflow to:
 - publish exactly `web`, `api`, and `worker` image suffixes;
 - contain no Cloud Run, `gcloud`, SSH, Kubernetes, or production deployment command.
 
-- [ ] **Step 2: Run policy checks and confirm release workflow failure**
+- [x] **Step 2: Run policy checks and confirm release workflow failure**
 
 Run: `uv run python scripts/check_workflows.py`
 
 Expected: exit `1` because `.github/workflows/release.yml` is missing.
 
-- [ ] **Step 3: Create release validation and publish jobs**
+- [x] **Step 3: Create release validation and publish jobs**
 
 Use the immutable action pins from Task 7 plus:
 
@@ -814,11 +816,11 @@ Workflow order:
 3. `publish` uses a matrix with explicit Dockerfile and image suffix for Web/API/Worker, logs into `ghcr.io` with `github.actor` and `GITHUB_TOKEN`, and pushes semantic and `sha-<12 chars>` tags.
 4. No `latest` tag is created before version `1.0.0`; later policy change requires an ADR.
 
-- [ ] **Step 4: Document release use and limitations**
+- [x] **Step 4: Document release use and limitations**
 
 README and guide must state that a Git tag is irreversible public release metadata, tag creation is a deliberate user action, GHCR success is not deployment success, and Cloud Run remains out of scope. CHANGELOG records the release automation under Unreleased/Added.
 
-- [ ] **Step 5: Validate the release workflow without pushing a tag**
+- [x] **Step 5: Validate the release workflow without pushing a tag**
 
 Run:
 
@@ -830,7 +832,7 @@ git status --short
 
 Expected: workflow policy exits `0`; no tag is created and no image is pushed during local validation.
 
-- [ ] **Step 6: Commit GHCR release automation**
+- [x] **Step 6: Commit GHCR release automation**
 
 ```bash
 git add .github/workflows/release.yml scripts/check_workflows.py README.md docs/guide.md CHANGELOG.md
@@ -850,7 +852,25 @@ git commit -m "ci: publish tagged images to GHCR"
 - Consumes: all Foundation files and local toolchains.
 - Produces: fresh evidence for repository safety, tests, builds, container execution, Git cleanliness, and documented external verification gaps.
 
-- [ ] **Step 1: Run repository and documentation checks**
+#### Verification record (2026-08-24)
+
+Completed locally and serially:
+
+- Documentation contract, repository safety unit tests (7), tracked/untracked path safety scan (91 paths), contract drift, container policy, workflow policy, Actions syntax, Git convention, and whitespace checks.
+- Web format, lint, typecheck, one Vitest suite, production build, and PWA generation with seven static-shell precache entries.
+- Python format, lint, strict mypy, 13 API/Worker unit tests, 27 repository script tests, and two PostgreSQL integration tests.
+- PostgreSQL 18 migration at `0001_foundation`, three serial image builds, Compose health for all four services, HTTP 200 Web/API checks, Worker readiness, and non-root UIDs 101, 10001, and 10002.
+- Default ports were already occupied by unrelated local work, so runtime verification used 55432, 58000, and 58080 without stopping those processes. Compose was stopped without deleting the named development database volume.
+
+Explicitly unverified at this point:
+
+- GitHub-hosted CI, including its gitleaks action; this is verified in Task 10.
+- GHCR publication from an actual semantic-version tag; no tag was created or pushed.
+- Windows browser installation and device-level PWA behavior.
+- Actual insurance document ingestion or any real/private data path.
+- Google Drive, external AI, authentication, production deployment, and Cloud Run.
+
+- [x] **Step 1: Run repository and documentation checks**
 
 ```bash
 python3 scripts/check_documentation.py
@@ -864,7 +884,7 @@ git diff --check
 
 Expected: every command exits `0`.
 
-- [ ] **Step 2: Run Web checks serially**
+- [x] **Step 2: Run Web checks serially**
 
 ```bash
 corepack pnpm@11.22.0 web:format
@@ -876,7 +896,7 @@ corepack pnpm@11.22.0 web:build
 
 Expected: all commands exit `0` with no skipped test suite.
 
-- [ ] **Step 3: Run Python checks serially**
+- [x] **Step 3: Run Python checks serially**
 
 ```bash
 uv run ruff format --check apps/api workers/analyzer scripts
@@ -887,13 +907,13 @@ uv run pytest apps/api/tests workers/analyzer/tests -q
 
 Expected: all commands exit `0` and all collected tests pass.
 
-- [ ] **Step 4: Run migration and containers serially**
+- [x] **Step 4: Run migration and containers serially**
 
 Start only repository-owned services after confirming names and ports are unused. Apply the migration, build each image one at a time, start Compose, verify API/Web/Worker health, inspect runtime UIDs, then stop Compose without deleting the named database volume.
 
 Expected: migration head is `0001_foundation`, HTTP health checks return `200`, Worker health exits `0`, and all runtime UIDs are non-zero.
 
-- [ ] **Step 5: Audit Git contents and history**
+- [x] **Step 5: Audit Git contents and history**
 
 Run:
 
@@ -905,7 +925,7 @@ git log --oneline --decorate --stat
 
 Expected: no uncommitted files except the plan status update being prepared, safety scan exits `0`, and the history contains only synthetic/public artifacts.
 
-- [ ] **Step 6: Record actual verification boundaries**
+- [x] **Step 6: Record actual verification boundaries**
 
 Update the Foundation plan status to complete only for checks actually run. Record these as explicitly unverified unless separately executed by the user or GitHub:
 
@@ -915,7 +935,7 @@ Update the Foundation plan status to complete only for checks actually run. Reco
 - actual insurance document ingestion
 - Google Drive, external AI, authentication, and Cloud Run
 
-- [ ] **Step 7: Commit verification record if documentation changed**
+- [x] **Step 7: Commit verification record if documentation changed**
 
 ```bash
 git add CHANGELOG.md docs/plan/001-project-foundation.md
