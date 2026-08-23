@@ -28,13 +28,13 @@ docker compose version
 
 ```bash
 cp .env.example .env
-corepack pnpm@11.22.0 install
+corepack pnpm install --frozen-lockfile
 TMPDIR=/tmp uv sync --all-packages --group dev
 ```
 
 `.env`는 로컬 전용이며 commit하지 않습니다. `.env.example`의 개발용 placeholder를 운영 비밀값으로 사용하지 않습니다.
 
-Codex/WSL에서 `TEMP`와 `TMP`가 `/mnt/c` 아래 Windows 임시 디렉터리를 가리키면 Python의 anonymous temporary file이 올바르게 동작하지 않을 수 있습니다. 프로젝트의 Python 검증은 `TMPDIR=/tmp`를 사용하며 향후 Make target이 같은 값을 적용합니다.
+Codex/WSL에서 `TEMP`와 `TMP`가 `/mnt/c` 아래 Windows 임시 디렉터리를 가리키면 Python의 anonymous temporary file이 올바르게 동작하지 않을 수 있습니다. 프로젝트의 Python 검증은 `TMPDIR=/tmp`를 사용하며 Make target도 같은 값을 적용합니다.
 
 ### Run checks
 

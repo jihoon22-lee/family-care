@@ -67,7 +67,7 @@ Foundation 구성이 완료된 뒤 다음 명령으로 시작합니다.
 
 ```bash
 cp .env.example .env
-corepack pnpm@11.22.0 install
+corepack pnpm install --frozen-lockfile
 uv sync --all-packages --group dev
 make check
 make up
