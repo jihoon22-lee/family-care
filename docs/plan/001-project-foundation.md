@@ -21,6 +21,7 @@
 - Cloud deployment is excluded; CD ends after publishing Web/API/Worker images to GHCR.
 - Node.js stays on major 24, Python stays on major/minor 3.14, and PostgreSQL stays on major 18 for this plan.
 - Local verification must run serially because the current WSL environment has limited free memory.
+- Local Python commands set `TMPDIR=/tmp` because the Codex/WSL process inherits Windows `TEMP` and `TMP` paths that break anonymous temporary-file truncation on DrvFS.
 - Every commit must pass the checks introduced by that commit before moving to the next task.
 - Implementation work is committed on `build/project-foundation`; the approved design-only root commit seeds the otherwise empty remote `main` so a pull request has a valid base.
 - Branches follow `<type>/<kebab-case>` and commit subjects follow Conventional Commits as `<type>(<optional-scope>): <imperative description>`.
@@ -421,9 +422,9 @@ git commit -m "feat: add minimal FamilyCare PWA shell"
 
 - [ ] **Step 1: Define the uv workspace and package metadata**
 
-Root `pyproject.toml` declares Python `>=3.14,<3.15`, workspace members `apps/api` and `workers/analyzer`, and dev dependencies `httpx==0.28.1`, `mypy==2.3.1`, `pytest==9.1.1`, `ruff==0.16.4`. Configure Ruff for Python 3.14 with line length 100 and rules `E`, `F`, `I`, `UP`, `B`, `SIM`; configure mypy strict mode for both `src` trees.
+Root `pyproject.toml` declares Python `>=3.14,<3.15`, workspace members `apps/api` and `workers/analyzer`, and dev dependencies `httpx2==2.12.0`, `mypy==2.3.1`, `pytest==9.1.1`, `ruff==0.16.4`. Configure Ruff for Python 3.14 with line length 100 and rules `E`, `F`, `I`, `UP`, `B`, `SIM`; configure mypy strict mode for both `src` trees.
 
-API runtime dependencies are `fastapi==0.141.1`, `pydantic==2.13.4`, and `uvicorn[standard]==0.52.4`. Worker initially has no third-party runtime dependency. Both packages use a pinned Hatchling `>=1.28,<2` build backend and `src` layouts.
+API runtime dependencies are `fastapi==0.141.1`, `pydantic==2.13.4`, and `uvicorn[standard]==0.52.4`. Worker initially has no third-party runtime dependency. Both packages use the pinned Hatchling `1.32.0` build backend and `src` layouts.
 
 - [ ] **Step 2: Write failing API and Worker tests**
 

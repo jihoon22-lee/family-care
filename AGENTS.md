@@ -118,17 +118,18 @@ ci: validate repository safety
 python3 scripts/check_documentation.py
 python3 scripts/check_repository_safety.py
 corepack pnpm@11.22.0 web:check
-uv run ruff format --check apps/api workers/analyzer scripts
-uv run ruff check apps/api workers/analyzer scripts
-uv run mypy apps/api/src workers/analyzer/src scripts
-uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q
-uv run python scripts/check_contracts.py
-uv run python scripts/check_containers.py
-uv run python scripts/check_workflows.py
+TMPDIR=/tmp uv run ruff format --check apps/api workers/analyzer scripts
+TMPDIR=/tmp uv run ruff check apps/api workers/analyzer scripts
+TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts
+TMPDIR=/tmp uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q
+TMPDIR=/tmp uv run python scripts/check_contracts.py
+TMPDIR=/tmp uv run python scripts/check_containers.py
+TMPDIR=/tmp uv run python scripts/check_workflows.py
 git diff --check
 ```
 
 - 프런트엔드와 Python 검사는 동시에 실행하지 않습니다.
+- WSL에서 `TEMP` 또는 `TMP`가 Windows mount를 가리키면 Python 명령에 `TMPDIR=/tmp`를 사용합니다.
 - 컨테이너 이미지는 하나씩 빌드합니다.
 - Docker 작업 전에 메모리·swap과 기존 컨테이너·포트를 확인합니다.
 - 다른 세션이 소유한 프로세스나 컨테이너를 중지하지 않습니다.

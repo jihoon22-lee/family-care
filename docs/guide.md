@@ -29,10 +29,12 @@ docker compose version
 ```bash
 cp .env.example .env
 corepack pnpm@11.22.0 install
-uv sync --all-packages --group dev
+TMPDIR=/tmp uv sync --all-packages --group dev
 ```
 
 `.env`는 로컬 전용이며 commit하지 않습니다. `.env.example`의 개발용 placeholder를 운영 비밀값으로 사용하지 않습니다.
+
+Codex/WSL에서 `TEMP`와 `TMP`가 `/mnt/c` 아래 Windows 임시 디렉터리를 가리키면 Python의 anonymous temporary file이 올바르게 동작하지 않을 수 있습니다. 프로젝트의 Python 검증은 `TMPDIR=/tmp`를 사용하며 향후 Make target이 같은 값을 적용합니다.
 
 ### Run checks
 
@@ -122,8 +124,8 @@ git status --short
 로컬 PostgreSQL이 실행 중이고 `.env`의 연결정보가 설정된 경우:
 
 ```bash
-uv run alembic -c apps/api/alembic.ini upgrade head
-uv run alembic -c apps/api/alembic.ini current
+TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini upgrade head
+TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 ```
 
 마이그레이션은 코드와 함께 검토합니다. 운영 데이터베이스 마이그레이션 절차는 Production Deployment 단계에서 별도 결정합니다.
@@ -133,7 +135,7 @@ uv run alembic -c apps/api/alembic.ini current
 OpenAPI와 작업 JSON Schema가 구현과 일치하는지 확인합니다.
 
 ```bash
-uv run python scripts/check_contracts.py
+TMPDIR=/tmp uv run python scripts/check_contracts.py
 ```
 
 계약을 깨는 변경은 새 버전, CHANGELOG, 소비자 마이그레이션 계획이 필요합니다.
