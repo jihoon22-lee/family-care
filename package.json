@@ -1,0 +1,16 @@
+{
+  "name": "family-care",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "web:format": "pnpm --filter @familycare/web format:check",
+    "web:lint": "pnpm --filter @familycare/web lint",
+    "web:typecheck": "pnpm --filter @familycare/web typecheck",
+    "web:test": "pnpm --filter @familycare/web test",
+    "web:build": "pnpm --filter @familycare/web build",
+    "web:check": "pnpm web:format && pnpm web:lint && pnpm web:typecheck && pnpm web:test && pnpm web:build"
+  }
+}

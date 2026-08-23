@@ -6,7 +6,7 @@
 
 **Architecture:** Use a pnpm workspace for the React PWA and a uv workspace for the FastAPI API and analyzer Worker. PostgreSQL is the only initial stateful service; public automation uses synthetic data and no external credentials. The repository enforces privacy boundaries before application validation and publishes three independent container images only from semantic-version tags.
 
-**Tech Stack:** Node.js 24 LTS, pnpm 11.22.0, React 19.2.8, TypeScript 7.0.2, Vite 8.2.2, Python 3.14, uv 0.12.5 or newer 0.12.x, FastAPI 0.141.1, PostgreSQL 18, Docker Compose v2, GitHub Actions, GHCR.
+**Tech Stack:** Node.js 24 LTS, pnpm 11.22.0, React 19.2.8, TypeScript 6.0.3, Vite 8.2.2, Python 3.14, uv 0.12.5 or newer 0.12.x, FastAPI 0.141.1, PostgreSQL 18, Docker Compose v2, GitHub Actions, GHCR.
 
 **Spec:** `docs/design/project-foundation.md`
 
@@ -347,7 +347,7 @@ Set `.node-version` to `24.19.0`. `pnpm-workspace.yaml` includes `apps/*` and `p
 Pin these direct dependencies in `apps/web/package.json`:
 
 - runtime: `react 19.2.8`, `react-dom 19.2.8`
-- dev: `@eslint/js 10.0.1`, `@testing-library/jest-dom 7.0.1`, `@testing-library/react 16.3.2`, `@types/react 19.2.18`, `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.1.0`, `eslint 10.9.0`, `jsdom 30.0.1`, `prettier 3.9.6`, `typescript 7.0.2`, `typescript-eslint 8.67.0`, `vite 8.2.2`, `vite-plugin-pwa 1.3.0`, `vitest 4.1.11`.
+- dev: `@eslint/js 10.0.1`, `@testing-library/jest-dom 7.0.1`, `@testing-library/react 16.3.2`, `@types/react 19.2.18`, `@types/react-dom 19.2.4`, `@vitejs/plugin-react 6.1.0`, `eslint 10.9.0`, `jsdom 30.0.1`, `prettier 3.9.6`, `typescript 6.0.3`, `typescript-eslint 8.67.0`, `vite 8.2.2`, `vite-plugin-pwa 1.3.0`, `vitest 4.1.11`.
 
 Test exact visible behavior:
 
