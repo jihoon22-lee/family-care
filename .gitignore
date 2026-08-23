@@ -1,0 +1,63 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials.json
+client_secret*.json
+service-account*.json
+service_account*.json
+
+# Real or derived data
+actual-data/
+data/
+documents/
+ocr/
+private/
+uploads/
+*.db
+*.dump
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.pdf
+!fixtures/synthetic/**/*.pdf
+
+# Python
+.python-version.local
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+__pycache__/
+*.py[cod]
+.coverage
+coverage.xml
+htmlcov/
+
+# Node and Web
+node_modules/
+apps/web/dist/
+apps/web/coverage/
+*.tsbuildinfo
+.vite/
+
+# Containers and local state
+.docker/
+.volumes/
+postgres-data/
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local worktrees and scratch output
+.worktrees/
+work/
