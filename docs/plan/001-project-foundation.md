@@ -22,8 +22,8 @@
 - Node.js stays on major 24, Python stays on major/minor 3.14, and PostgreSQL stays on major 18 for this plan.
 - Local verification must run serially because the current WSL environment has limited free memory.
 - Every commit must pass the checks introduced by that commit before moving to the next task.
-- Implementation work is committed on `codex/build/project-foundation`; the approved design-only root commit seeds the otherwise empty remote `main` so a pull request has a valid base.
-- Branches follow `codex/<type>/<kebab-case>` and commit subjects follow Conventional Commits as `<type>(<optional-scope>): <imperative description>`.
+- Implementation work is committed on `build/project-foundation`; the approved design-only root commit seeds the otherwise empty remote `main` so a pull request has a valid base.
+- Branches follow `<type>/<kebab-case>` and commit subjects follow Conventional Commits as `<type>(<optional-scope>): <imperative description>`.
 - Completion requires a GitHub pull request, successful required checks, a merge commit into `main`, and post-merge remote verification.
 
 ---
@@ -684,7 +684,7 @@ git commit -m "build: add local containers and compose"
 - CI does not reference `${{ secrets.* }}`;
 - container jobs use build-only mode and never `push: true`.
 
-Write `test_git_conventions.py` first with accepted branch names `main`, `codex/build/project-foundation`, and `codex/feat/policy-ledger`, plus rejected names `feature/foo`, `codex/Feature/foo`, and `codex/build/project_foundation`. Accept commit subjects `docs: establish project governance` and `feat(api): add health endpoint`; reject missing types, title-case types, trailing periods, and subjects longer than 72 characters.
+Write `test_git_conventions.py` first with accepted branch names `main`, `build/project-foundation`, and `feat/policy-ledger`, plus rejected names `feature/foo`, `Feature/foo`, and `build/project_foundation`. Accept commit subjects `docs: establish project governance` and `feat(api): add health endpoint`; reject missing types, title-case types, trailing periods, and subjects longer than 72 characters.
 
 - [ ] **Step 2: Run the checker and confirm missing-workflow failure**
 
@@ -713,7 +713,7 @@ CI behavior:
 - Python job syncs frozen uv lock and runs format, lint, mypy, and pytest;
 - integration job uses a PostgreSQL 18 service and runs Alembic plus contract checks;
 - containers job builds each Dockerfile with `push: false` in a sequential matrix (`max-parallel: 1`).
-- safety job validates `codex/<type>/<kebab-case>` for PR branches and every PR commit subject against Conventional Commits.
+- safety job validates `<type>/<kebab-case>` for PR branches and every PR commit subject against Conventional Commits.
 
 - [ ] **Step 4: Add Dependabot and PR privacy checklist**
 
@@ -731,7 +731,7 @@ uv run python scripts/check_repository_safety.py
 uv run python scripts/check_contracts.py
 uv run python scripts/check_containers.py
 uv run python scripts/check_workflows.py
-uv run python scripts/check_git_conventions.py --branch codex/build/project-foundation --range main..HEAD
+uv run python scripts/check_git_conventions.py --branch build/project-foundation --range main..HEAD
 uv run pytest scripts/tests/test_git_conventions.py -q
 git diff --check
 ```
@@ -912,7 +912,7 @@ Do not create or push a Git tag. The user authorized branch pushes, PR creation,
 - No release tag or production configuration is created.
 
 **Interfaces:**
-- Consumes: clean `codex/build/project-foundation`, configured `origin`, authenticated GitHub CLI, and all fresh local verification evidence.
+- Consumes: clean `build/project-foundation`, configured `origin`, authenticated GitHub CLI, and all fresh local verification evidence.
 - Produces: remote base branch `main`, remote feature branch, one reviewed pull request, successful GitHub Actions checks, and a merged remote `main`.
 
 - [ ] **Step 1: Confirm exact refs and GitHub authority before remote writes**
@@ -923,7 +923,7 @@ Run:
 git status --short --branch
 git log --oneline --decorate --graph --all
 git remote -v
-git ls-remote --heads origin main codex/build/project-foundation
+git ls-remote --heads origin main build/project-foundation
 gh auth status
 ```
 
@@ -944,10 +944,10 @@ Expected: remote `main` is created with only `docs/design/project-foundation.md`
 - [ ] **Step 3: Push the feature branch and create the pull request**
 
 ```bash
-git push -u origin codex/build/project-foundation
+git push -u origin build/project-foundation
 gh pr create \
   --base main \
-  --head codex/build/project-foundation \
+  --head build/project-foundation \
   --title "build: establish FamilyCare project foundation" \
   --body-file /tmp/familycare-pr-body.md
 ```
@@ -967,7 +967,7 @@ Expected: every required check reaches `SUCCESS`; the PR is open and mergeable. 
 
 - [ ] **Step 5: Fix any CI-only failure with evidence**
 
-For each failure, obtain its numeric database ID with `gh run list --branch codex/build/project-foundation --limit 10`, inspect it with `gh run view RUN_DATABASE_ID --log-failed` after replacing `RUN_DATABASE_ID` with that returned integer, reproduce the failing command locally when possible, add or adjust a regression check, rerun the full affected validation group, commit the scoped fix, push, and repeat Step 4. Do not weaken privacy checks, remove tests, or mark a failed check optional merely to make the PR green.
+For each failure, obtain its numeric database ID with `gh run list --branch build/project-foundation --limit 10`, inspect it with `gh run view RUN_DATABASE_ID --log-failed` after replacing `RUN_DATABASE_ID` with that returned integer, reproduce the failing command locally when possible, add or adjust a regression check, rerun the full affected validation group, commit the scoped fix, push, and repeat Step 4. Do not weaken privacy checks, remove tests, or mark a failed check optional merely to make the PR green.
 
 - [ ] **Step 6: Merge only after all checks succeed**
 
@@ -987,7 +987,7 @@ Run:
 gh pr view --json number,url,state,mergedAt,mergeCommit
 git fetch origin main --prune
 git log --oneline --decorate -5 origin/main
-git ls-remote --heads origin codex/build/project-foundation
+git ls-remote --heads origin build/project-foundation
 ```
 
 Expected: PR state is `MERGED`, `mergedAt` and `mergeCommit` are populated, `origin/main` contains the Foundation history, and the remote feature branch is absent. Report the PR URL, merge commit, CI run result, and all intentionally unexecuted checks.
