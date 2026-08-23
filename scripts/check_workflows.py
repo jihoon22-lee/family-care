@@ -8,12 +8,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CI_PATH = ROOT / ".github/workflows/ci.yml"
+RELEASE_PATH = ROOT / ".github/workflows/release.yml"
 REQUIRED_CI_JOBS = {"containers", "integration", "python", "repository-safety", "web"}
 EXPECTED_ACTIONS = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
     "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
     "astral-sh/setup-uv": ("20cfd1bf945f4377ade1205e4dbc17946fc9a30d", "v10.0.1"),
     "docker/build-push-action": ("53b7df96c91f9c12dcc8a07bcb9ccacbed38856a", "v7.3.0"),
+    "docker/login-action": ("dbcb813823bdd20940b903addbd779551569679f", "v4.6.0"),
+    "docker/metadata-action": ("dc802804100637a589fabce1cb79ff13a1411302", "v6.2.0"),
     "docker/setup-buildx-action": ("37fe631027851001ddb9b187196cc803df7f5f0e", "v4.3.0"),
     "gitleaks/gitleaks-action": ("e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e", "v3.0.0"),
     "pnpm/action-setup": ("0977fd99725f1db4007ccb2928dbb4e90d06cc86", "v6.0.10"),
@@ -82,17 +85,65 @@ def validate_ci(content: str) -> list[str]:
     return errors
 
 
+def validate_release(content: str) -> list[str]:
+    """Validate the semantic-tag-only GHCR publishing boundary."""
+
+    relative = RELEASE_PATH.relative_to(ROOT)
+    errors = validate_action_pins(content, relative)
+    required_fragments = {
+        "semantic-version tags": '      - "v[0-9]+.[0-9]+.[0-9]+"',
+        "read-only top-level permissions": "permissions:\n  contents: read",
+        "package write permission": "packages: write",
+        "validation dependency": "needs: [validate-tag, validate-foundation]",
+        "Web image": "- name: web",
+        "API image": "- name: api",
+        "Worker image": "- name: worker",
+        "GHCR registry": "registry: ghcr.io",
+        "automatic GitHub token": "password: ${{ github.token }}",
+        "semantic image tag": "type=semver,pattern={{version}}",
+        "12-character SHA tag": 'DOCKER_METADATA_SHORT_SHA_LENGTH: "12"',
+        "no automatic latest tag": "latest=false",
+        "container publication": "push: true",
+    }
+    for label, fragment in required_fragments.items():
+        if fragment not in content:
+            errors.append(f"{relative}: missing {label}")
+
+    if content.count("packages: write") != 1:
+        errors.append(f"{relative}: packages: write must appear only on the publish job")
+    if "pull_request" in content or re.search(r"(?m)^\s+branches:\s*$", content):
+        errors.append(f"{relative}: release must trigger only from semantic-version tags")
+    if re.search(r"\$\{\{\s*secrets\.", content):
+        errors.append(f"{relative}: release must use only the automatic GitHub token")
+    if re.search(r"(?i)\b(cloud\s*run|gcloud|kubectl|kubernetes|ssh)\b", content):
+        errors.append(f"{relative}: production deployment commands are out of scope")
+
+    validate_index = content.find("  validate-foundation:")
+    publish_index = content.find("  publish:")
+    login_index = content.find("docker/login-action@")
+    push_index = content.find("push: true")
+    if min(validate_index, publish_index, login_index, push_index) < 0 or not (
+        validate_index < publish_index < login_index < push_index
+    ):
+        errors.append(f"{relative}: validation must complete before registry login and publish")
+    return errors
+
+
 def main() -> int:
     """Run workflow policy validation."""
 
-    if not CI_PATH.is_file():
-        print(f"missing workflow: {CI_PATH.relative_to(ROOT)}")
+    missing = [path for path in (CI_PATH, RELEASE_PATH) if not path.is_file()]
+    if missing:
+        print("\n".join(f"missing workflow: {path.relative_to(ROOT)}" for path in missing))
         return 1
-    errors = validate_ci(CI_PATH.read_text(encoding="utf-8"))
+    errors = [
+        *validate_ci(CI_PATH.read_text(encoding="utf-8")),
+        *validate_release(RELEASE_PATH.read_text(encoding="utf-8")),
+    ]
     if errors:
         print("\n".join(errors))
         return 1
-    print("workflow policy passed (immutable actions, least privilege, build-only CI)")
+    print("workflow policy passed (immutable CI and semantic-tag-only GHCR release)")
     return 0
 
 

@@ -167,6 +167,10 @@ Foundation 릴리스 workflow는 `vMAJOR.MINOR.PATCH` 태그에서 다음 이미
 
 태그는 되돌리기 어려운 공개 릴리스 메타데이터입니다. 사용자 요청 없이 만들거나 push하지 않습니다. GHCR 게시 성공은 Cloud Run 또는 다른 운영 환경의 배포 성공을 의미하지 않습니다.
 
+릴리스 workflow는 정확한 `vMAJOR.MINOR.PATCH`만 허용하며, 게시 전 문서·민감정보 경계·계약·Web·Python·PostgreSQL·세 컨테이너 빌드를 다시 검증합니다. 성공 시 각 이미지에는 버전 태그와 12자리 commit SHA 태그가 생성되며 `latest`는 생성하지 않습니다.
+
+현재 CD 범위는 GHCR 게시까지입니다. Cloud Run 설정, 운영 비밀값, 운영 데이터베이스 마이그레이션, 실제 트래픽 전환은 포함하지 않습니다.
+
 ## Troubleshooting
 
 - 도구 버전이 다르면 `.node-version`, `.python-version`, root package manager 설정을 우선합니다.

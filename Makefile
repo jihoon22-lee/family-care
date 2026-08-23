@@ -14,6 +14,8 @@ check:
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run python scripts/check_repository_safety.py
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run python scripts/check_contracts.py
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run python scripts/check_containers.py
+	TMPDIR=$(FAMILYCARE_TMPDIR) uv run python scripts/check_workflows.py
+	TMPDIR=$(FAMILYCARE_TMPDIR) uv run python scripts/check_git_conventions.py
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run ruff format --check .
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run ruff check .
 	TMPDIR=$(FAMILYCARE_TMPDIR) uv run mypy apps/api/src workers/analyzer/src scripts

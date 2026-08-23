@@ -6,6 +6,11 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Added
 
+- Semantic-version Git tags publish independently versioned Web, API, and Worker images to GHCR after full Foundation validation.
+- Published images receive version and 12-character commit SHA tags; pre-1.0 releases do not create `latest`.
+
+### Added
+
 - 프로젝트 기반 설계와 전체 단계별 로드맵
 - 공개 저장소 개인정보 경계와 개발 지침
 - 브랜치 및 Conventional Commits 규칙
