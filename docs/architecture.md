@@ -1,6 +1,6 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion은 완료되었고 Phase 2 core Policy Ledger가 구현되었다. Phase 2 candidate review부터 Phase 8까지는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion은 완료되었고 Phase 2 core Policy Ledger, Phase 4 Clause search, Phase 5 Rider-Clause/CoverageRule review boundary가 구현되었다. Phase 2 candidate review부터 Phase 8까지는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다. 결정론적 CoverageRule 실행은 다음 Phase의 범위다.
 
 ## Architectural goals
 
@@ -127,7 +127,15 @@ import 성공 문서는 document별 data key로 암호화하고, data key는 저
 
 ### Contracts
 
-FastAPI OpenAPI가 동기 HTTP 계약의 기준이다. Worker job, AI candidate, CoverageRule DSL은 versioned JSON Schema를 사용한다. TypeScript와 Python 소비자는 계약에서 생성하거나 검증하고 구조를 수동 복제하지 않는다.
+FastAPI OpenAPI가 동기 HTTP 계약의 기준이다. Worker job, AI candidate, Rider-Clause/CoverageRule review payload, CoverageRule DSL은 versioned JSON Schema를 사용한다. TypeScript와 Python 소비자는 계약에서 생성하거나 검증하고 구조를 수동 복제하지 않는다. CoverageRule version 목록은 optimistic publication에 필요한 `expected_version`을 함께 반환한다.
+
+### Rider-Clause and CoverageRule review boundary
+
+`clauses` 모듈은 실제 가입이 검증된 Rider와 계약일에 적용되는 TermsEdition의 Clause만 연결한다. 연결 확인·제외는 서버가 계산한 `HouseholdScope` 안에서 실행되며, 모든 전이는 예상 버전을 요구한다. 약관에만 존재하는 Rider, 계약일과 맞지 않는 판본, 다른 문서 버전의 Clause, 누락·불일치 Evidence는 자동으로 다른 후보로 대체하지 않고 검토 상태로 남긴다.
+
+CoverageRule 후보는 버전이 지정된 data-only DSL allowlist로 구조·필드·연산자·단위와 Evidence 참조를 검증한다. 검증기는 규칙을 저장할 수 있는 형태로 정리할 뿐 MedicalEvent를 평가하거나 `MATCH`·`NO_MATCH`·`UNKNOWN`을 계산하지 않는다. 정확한 Clause/Policy Evidence를 가진 저장 후보 중 `AI_VERIFIED` 또는 `USER_CONFIRMED`인 버전만 immutable executable version으로 게시할 수 있다. `NEEDS_REVIEW`, 지원하지 않는 DSL, 상충·손실 Evidence는 정보성 후보이며 결정 엔진이 소비하지 않는다.
+
+사용자 검토 화면 `/app/clauses/review`는 Rider-Clause 연결과 CoverageRule 예외를 별도 대기열로 제공한다. 화면은 bounded Evidence drawer와 생성된 typed field/operator/unit control만 사용하며 raw DSL textarea나 원문 문서·private path·provider payload를 노출하지 않는다. 후보 수정은 원 버전을 덮어쓰지 않고 typed child version을 만든다. Rule version 목록의 `expected_version`과 저장된 `version_id`를 함께 제출해야 게시되므로 충돌 시 최신 근거를 다시 확인해야 한다.
 
 ## Core data flows
 
@@ -161,6 +169,8 @@ natural-language situation
 ```
 
 AI는 input fact와 rule candidate를 구조화할 뿐 tri-state와 금액 계산을 직접 반환하지 않는다.
+
+Phase 5의 link/rule boundary는 위 흐름에서 `published CoverageRule evaluation` 직전까지를 담당한다. 즉, 가입 담보·Clause 연결과 실행 가능한 immutable rule version을 준비하지만, 실제 MedicalEvent evaluation과 tri-state 집계는 별도 구현 단계에서 수행한다.
 
 ### Indemnity calculation
 
@@ -220,4 +230,4 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
 
 ## Verification boundaries
 
-PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. 로컬 acceptance는 사용자가 지정한 저장소 밖 source만 사용한다. Windows browser, 실제 mobile PWA, 실제 보험 format, Tailscale device 확인은 실행 증거와 미검증 범위를 각각 보고한다.
+PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. 로컬 acceptance는 사용자가 지정한 저장소 밖 source만 사용한다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Windows browser, 실제 mobile PWA, 실제 보험 format, Tailscale device 확인은 실행 증거와 미검증 범위를 각각 보고한다.

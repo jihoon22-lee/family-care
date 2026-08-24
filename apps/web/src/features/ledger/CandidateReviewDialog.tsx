@@ -6,12 +6,17 @@ import { CandidateFieldEditor } from "./CandidateFieldEditor";
 
 const ISSUE_COPY = {
   CONFLICTING_EVIDENCE: "서로 다른 근거가 있어 하나를 선택할 수 없습니다.",
+  COMMON_SPECIAL_TERMS_CONFLICT:
+    "공통 약관과 특별 약관의 적용 범위를 다시 확인해야 합니다.",
   INVALID_DATE: "날짜의 앞뒤 관계를 다시 확인해야 합니다.",
   INVALID_UNIT: "금액 또는 단위를 다시 확인해야 합니다.",
   LOW_CONFIDENCE: "근거와 후보 값의 일치 여부를 확인해 주세요.",
   MISSING_EVIDENCE: "후보 값을 뒷받침하는 근거가 필요합니다.",
+  STALE_EVIDENCE: "문서 판본이 바뀌어 최신 근거를 다시 연결해야 합니다.",
   TERMS_ONLY_RIDER: "약관에서만 확인된 후보는 가입 담보로 등록하지 않습니다.",
+  UNSUPPORTED_DSL: "현재 지원하지 않는 규칙 구조입니다.",
   UNSUPPORTED_STRUCTURE: "자동으로 구조화하기 어려운 항목입니다.",
+  WRONG_EDITION: "계약일에 적용되는 약관 판본인지 다시 확인해야 합니다.",
 } as const;
 
 function evidenceIsComplete(item: PolicyReviewItem): boolean {
