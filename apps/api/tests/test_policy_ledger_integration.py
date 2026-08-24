@@ -138,6 +138,22 @@ def _seed(database_url: str) -> _Seed:
         ).fetchone()
         assert policy_extraction and terms_extraction
 
+        for extraction_id in (policy_extraction["id"], terms_extraction["id"]):
+            for page_number in (1, 2, 3):
+                connection.execute(
+                    """
+                    INSERT INTO extraction_pages (
+                        extraction_id, page_number, width_points, height_points,
+                        non_whitespace_chars, alphanumeric_ratio,
+                        replacement_character_ratio, maximum_repeated_character_run,
+                        classification
+                    ) VALUES (%s, %s, 612, 792, 10, 0.8, 0, 1, 'TEXT_SUFFICIENT')
+                    ON CONFLICT (extraction_id, page_number)
+                    DO UPDATE SET classification = EXCLUDED.classification
+                    """,
+                    (extraction_id, page_number),
+                )
+
         def insert_evidence(
             household_id: UUID,
             document_version_id: UUID,
@@ -230,7 +246,13 @@ def _policy_request(seed: _Seed, family_member_id: str) -> dict[str, Any]:
     }
 
 
-def _insert_synthetic_rider(database_url: str, seed: _Seed, policy_id: str) -> UUID:
+def _insert_synthetic_rider(
+    database_url: str,
+    seed: _Seed,
+    policy_id: str,
+    *,
+    evidence_id: UUID | None = None,
+) -> UUID:
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         row = connection.execute(
             """
@@ -245,7 +267,7 @@ def _insert_synthetic_rider(database_url: str, seed: _Seed, policy_id: str) -> U
             (
                 seed.scope_a.household_space_id,
                 UUID(policy_id),
-                seed.source_evidence_id,
+                evidence_id or seed.source_evidence_id,
             ),
         ).fetchone()
     assert row
@@ -287,6 +309,7 @@ def test_postgresql_ledger_enforces_scope_evidence_versions_and_trash(
         assert riders.status_code == 200
         assert riders.json()[0]["id"] == str(rider_id)
         assert riders.json()[0]["benefit_type"] == "fixed"
+        assert riders.json()[0]["insured_amount"] == "100000.00"
         assert riders.json()[0]["source_evidence"]["physical_page"] == 1
 
         deleted = client_a.request(
@@ -330,4 +353,61 @@ def test_terms_only_evidence_cannot_create_an_actual_policy(database_url: str) -
     assert response.json() == {
         "error_code": "EVIDENCE_INVALID",
         "message": "evidence is invalid",
+    }
+
+
+@pytest.mark.parametrize("corruption", ["policy-source", "party-source", "rider-source"])
+def test_corrupt_cross_document_lineage_is_never_projected(
+    database_url: str,
+    corruption: str,
+) -> None:
+    seed = _seed(database_url)
+    with _client(seed.scope_a) as client:
+        member = client.post(
+            "/api/v1/family-members",
+            json={"display_name": "Family Member A", "internal_alias": "member-a"},
+        ).json()
+        policy = client.post(
+            "/api/v1/policies",
+            json=_policy_request(seed, member["id"]),
+        ).json()
+
+        with psycopg.connect(_psycopg_url(database_url)) as connection:
+            if corruption == "policy-source":
+                connection.execute(
+                    """
+                    UPDATE policy_contracts
+                    SET source_document_version_id = %s
+                    WHERE id = %s
+                    """,
+                    (seed.terms_document_version_id, UUID(policy["id"])),
+                )
+            elif corruption == "party-source":
+                connection.execute(
+                    """
+                    UPDATE policy_parties
+                    SET evidence_id = %s
+                    WHERE policy_contract_id = %s
+                    """,
+                    (seed.terms_evidence_id, UUID(policy["id"])),
+                )
+            else:
+                _insert_synthetic_rider(
+                    database_url,
+                    seed,
+                    policy["id"],
+                    evidence_id=seed.terms_evidence_id,
+                )
+
+        endpoint = (
+            f"/api/v1/policies/{policy['id']}/riders"
+            if corruption == "rider-source"
+            else f"/api/v1/policies/{policy['id']}"
+        )
+        response = client.get(endpoint)
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error_code": "RESOURCE_LIMIT_EXCEEDED",
+        "message": "policy service unavailable",
     }

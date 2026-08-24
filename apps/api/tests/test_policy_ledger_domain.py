@@ -120,6 +120,16 @@ def test_evidence_ref_rejects_invalid_page_hash_and_bbox() -> None:
             evidence_id=evidence_id,
             document_version_id=document_version_id,
             extraction_id=extraction_id,
+            content_sha256="a" * 64,
+            physical_page=1,
+            bbox=(Decimal("-1"), Decimal("2"), Decimal("3"), Decimal("4")),
+            review_state="AI_VERIFIED",
+        )
+    with pytest.raises(EvidenceInvalid):
+        EvidenceRef(
+            evidence_id=evidence_id,
+            document_version_id=document_version_id,
+            extraction_id=extraction_id,
             content_sha256="not-a-hash",
             physical_page=1,
             bbox=None,
@@ -152,6 +162,7 @@ def test_evidence_repository_requires_same_scope_document_extraction_and_policy(
                 "extraction_id": extraction_id,
                 "evidence_hash": "a" * 64,
                 "document_hash": "a" * 64,
+                "document_page_count": 3,
                 "extraction_document_version_id": document_version_id,
                 "physical_page": 1,
                 "x0": None,
@@ -160,6 +171,8 @@ def test_evidence_repository_requires_same_scope_document_extraction_and_policy(
                 "y1": None,
                 "review_state": "AI_VERIFIED",
                 "document_kind": "policy",
+                "page_width": Decimal("100"),
+                "page_height": Decimal("100"),
             }
         ]
     )
@@ -176,6 +189,7 @@ def test_evidence_repository_requires_same_scope_document_extraction_and_policy(
     assert "evidence.household_space_id = %s" in query
     assert "document.document_kind = 'policy'" in query
     assert "extraction.document_version_id = evidence.document_version_id" in query
+    assert "page.page_number = evidence.physical_page" in query
     assert params == (evidence_id, scope.household_space_id, document_version_id)
 
 
@@ -187,6 +201,8 @@ def test_evidence_repository_requires_same_scope_document_extraction_and_policy(
         ("document_kind", "terms"),
         ("physical_page", 0),
         ("review_state", "NEEDS_REVIEW"),
+        ("x1", Decimal("101")),
+        ("document_page_count", 0),
     ],
 )
 def test_evidence_repository_rejects_stale_or_non_policy_lineage(
@@ -202,6 +218,7 @@ def test_evidence_repository_rejects_stale_or_non_policy_lineage(
         "extraction_id": uuid4(),
         "evidence_hash": "a" * 64,
         "document_hash": "a" * 64,
+        "document_page_count": 3,
         "extraction_document_version_id": document_version_id,
         "physical_page": 1,
         "x0": None,
@@ -210,6 +227,8 @@ def test_evidence_repository_rejects_stale_or_non_policy_lineage(
         "y1": None,
         "review_state": "USER_CONFIRMED",
         "document_kind": "policy",
+        "page_width": Decimal("100"),
+        "page_height": Decimal("100"),
     }
     row[field] = value
     monkeypatch.setattr(psycopg, "connect", _connect_with(_Connection([row])))

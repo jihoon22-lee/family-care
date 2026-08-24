@@ -13,6 +13,7 @@ __all__ = [
     "FamilyMemberId",
     "FamilyMemberRecord",
     "PartyRole",
+    "PolicyApiErrorCode",
     "PolicyErrorCode",
     "PolicyId",
     "PolicyLedger",
@@ -53,6 +54,18 @@ PartyRole = Literal[
     "beneficiary",
     "policyholder",
     "primary_insured",
+]
+
+
+PolicyApiErrorCode = Literal[
+    "AUTHENTICATION_REQUIRED",
+    "EVIDENCE_INVALID",
+    "FAMILY_MEMBER_NOT_FOUND",
+    "INVALID_REQUEST",
+    "POLICY_NOT_FOUND",
+    "POLICY_STATE_CONFLICT",
+    "RESOURCE_LIMIT_EXCEEDED",
+    "VERSION_CONFLICT",
 ]
 
 
@@ -149,7 +162,7 @@ class RiderRecord(TypedDict):
     currency: str | None
     display_name: str
     id: RiderId
-    insured_amount: float | None
+    insured_amount: str | None
     normalized_key: str
     policy_contract_id: PolicyId
     renewable: bool | None

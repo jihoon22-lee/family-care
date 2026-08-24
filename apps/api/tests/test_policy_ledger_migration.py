@@ -179,6 +179,8 @@ def test_evidence_requires_document_hash_page_extraction_and_valid_bbox() -> Non
     assert "content_sha256 ~ '^[0-9a-f]{64}$'" in checks
     assert "physical_page >= 1" in checks
     assert "x0 IS NULL" in checks
+    assert "x0 >= 0" in checks
+    assert "y0 >= 0" in checks
     assert "x1 > x0" in checks
     assert "y1 > y0" in checks
 

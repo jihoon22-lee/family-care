@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from familycare_api.common.evidence import EvidenceRef, EvidenceReviewState
+from familycare_api.contracts.generated_business import PolicyApiErrorCode
 from familycare_api.policies.domain import (
     BenefitType,
     FamilyMember,
@@ -29,6 +30,14 @@ class FamilyMemberCreateRequest(BaseModel):
 
     display_name: str = Field(min_length=1, max_length=160)
     internal_alias: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+class PolicyErrorResponse(BaseModel):
+    model_config = _STRICT
+
+    error_code: PolicyApiErrorCode
+    message: str
+    fields: list[str] | None = None
 
 
 class FamilyMemberUpdateRequest(BaseModel):
@@ -293,6 +302,7 @@ __all__ = [
     "FamilyMemberResponse",
     "FamilyMemberUpdateRequest",
     "PolicyCreateRequest",
+    "PolicyErrorResponse",
     "PolicyPartyCreateRequest",
     "PolicyPartyResponse",
     "PolicyResponse",

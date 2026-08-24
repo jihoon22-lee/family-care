@@ -8,13 +8,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Response, status
 
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
-from familycare_api.errors import ErrorResponse
 from familycare_api.policies.schemas import (
     ExpectedVersionRequest,
     FamilyMemberCreateRequest,
     FamilyMemberResponse,
     FamilyMemberUpdateRequest,
     PolicyCreateRequest,
+    PolicyErrorResponse,
     PolicyResponse,
     PolicyUpdateRequest,
     RiderResponse,
@@ -34,11 +34,14 @@ ServiceDependency = Annotated[PolicyLedgerService, Depends(get_policy_ledger_ser
 router = APIRouter(prefix="/api/v1", tags=["policy ledger"])
 
 _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
-    401: {"model": ErrorResponse, "description": "Authentication required"},
-    404: {"model": ErrorResponse, "description": "Scoped record not found"},
-    409: {"model": ErrorResponse, "description": "Version or state conflict"},
-    422: {"model": ErrorResponse, "description": "Sanitized invalid request or Evidence"},
-    503: {"model": ErrorResponse, "description": "Local database unavailable"},
+    401: {"model": PolicyErrorResponse, "description": "Authentication required"},
+    404: {"model": PolicyErrorResponse, "description": "Scoped record not found"},
+    409: {"model": PolicyErrorResponse, "description": "Version or state conflict"},
+    422: {
+        "model": PolicyErrorResponse,
+        "description": "Sanitized invalid request or Evidence",
+    },
+    503: {"model": PolicyErrorResponse, "description": "Local database unavailable"},
 }
 
 

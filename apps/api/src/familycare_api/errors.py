@@ -41,7 +41,7 @@ class ErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: ApiErrorCode
+    error_code: ErrorCode
     message: str
     fields: list[str] | None = None
 
@@ -83,13 +83,12 @@ def install_error_handlers(app: FastAPI) -> None:
         error: ApiBoundaryError,
     ) -> JSONResponse:
         del request
-        payload = ErrorResponse(
-            error_code=error.error_code,
-            message=error.public_message,
-        )
         return JSONResponse(
             status_code=error.status_code,
-            content=payload.model_dump(exclude_none=True),
+            content={
+                "error_code": error.error_code,
+                "message": error.public_message,
+            },
         )
 
 

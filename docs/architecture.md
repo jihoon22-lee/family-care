@@ -1,6 +1,6 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion은 완료되었다. Phase 2부터 Phase 8은 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion은 완료되었고 Phase 2 core Policy Ledger가 구현되었다. Phase 2 candidate review부터 Phase 8까지는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
 
 ## Architectural goals
 

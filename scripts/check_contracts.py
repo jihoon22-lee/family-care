@@ -259,6 +259,18 @@ def validate_policy_contract() -> list[str]:
         "VERSION_CONFLICT",
     ]:
         errors.append("policy error-code enum changed")
+    policy_api_error_codes = schema.get("$defs", {}).get("PolicyApiErrorCode", {}).get("enum")
+    if policy_api_error_codes != [
+        "AUTHENTICATION_REQUIRED",
+        "EVIDENCE_INVALID",
+        "FAMILY_MEMBER_NOT_FOUND",
+        "INVALID_REQUEST",
+        "POLICY_NOT_FOUND",
+        "POLICY_STATE_CONFLICT",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "VERSION_CONFLICT",
+    ]:
+        errors.append("policy API error-code enum changed")
 
     if not BUSINESS_OUTPUT_PATH.is_file():
         errors.append("generated business contract module is missing")
@@ -351,7 +363,10 @@ def main() -> int:
     if errors:
         print("\n".join(errors))
         return 1
-    print("contract checks passed (OpenAPI, analysis-job.v1, and document ingestion contracts)")
+    print(
+        "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
+        "and policy-ledger.v1 contracts)"
+    )
     return 0
 
 

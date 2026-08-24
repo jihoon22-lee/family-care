@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1 개발환경의 사용법을 설명합니다. Phase 2~8의 v0.1 기능은 설계 승인 상태이며 아직 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현 완료 전에는 아래 synthetic endpoint에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1과 구현된 Phase 2 core ledger 개발환경의 사용법을 설명합니다. Phase 2 candidate review와 Phase 3~8의 v0.1 기능은 아직 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현 완료 전에는 아래 synthetic endpoint에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -60,6 +60,14 @@ Foundation 서비스:
 - PostgreSQL: 로컬 개발 포트 5432
 
 Phase 1의 문서 endpoint와 analyzer는 인증이 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아닙니다. Phase 7은 외부 provider가 아니라 `docs/design/authentication.md`의 두 로컬 관리자와 server-side session을 추가합니다.
+
+### Phase 2 policy ledger boundary
+
+Migration `0003_policy_ledger`는 `HouseholdSpace`, `FamilyMember`, Evidence, `PolicyContract`, `PolicyParty`, 실제 가입 Rider, 시점별 상태 snapshot을 추가합니다. 가족과 계약 API는 soft delete·휴지통·복원, optimistic version 충돌, household object scope를 적용하며 계약과 당사자·Rider 응답은 검증된 증권 page Evidence만 노출합니다.
+
+Policy route는 항상 등록되지만 클라이언트가 `household_space_id`를 보내 권한을 선택할 수 없습니다. Phase 7 인증이 PostgreSQL session에서 `HouseholdScope`를 제공하기 전까지 기본 resolver는 모든 Policy route를 `401 AUTHENTICATION_REQUIRED`로 닫습니다. 현재는 합성 테스트가 resolver를 주입할 때만 lifecycle을 실행하며, 인증을 우회하는 로컬 household 환경변수나 header는 제공하지 않습니다.
+
+계약 원장 발행에 사용하는 Evidence는 같은 household의 성공 extraction과 실제 policy 문서 버전, 1-based physical page, page 범위 안의 선택 좌표, 일치하는 content SHA-256을 가져야 합니다. `AI_VERIFIED` 또는 `USER_CONFIRMED`만 현재 원장에 발행할 수 있고 `NEEDS_REVIEW`와 terms-only Evidence는 거부됩니다.
 
 ### Planned v0.1 local runtime
 

@@ -152,7 +152,7 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "((x0 IS NULL AND y0 IS NULL AND x1 IS NULL AND y1 IS NULL) OR "
             "(x0 IS NOT NULL AND y0 IS NOT NULL AND x1 IS NOT NULL AND y1 IS NOT NULL "
-            "AND x1 > x0 AND y1 > y0))",
+            "AND x0 >= 0 AND y0 >= 0 AND x1 > x0 AND y1 > y0))",
             name="ck_evidence_bbox",
         ),
         sa.CheckConstraint(

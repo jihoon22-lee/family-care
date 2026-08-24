@@ -68,7 +68,9 @@ def _evidence(row: dict[str, Any], prefix: str) -> EvidenceRef | None:
 
 _POLICY_SELECT = """
     SELECT
-        policy.id, policy.household_space_id, policy.source_document_version_id,
+        policy.id, policy.household_space_id,
+        policy.source_document_version_id AS policy_source_document_version_id,
+        policy_document.document_kind AS policy_document_kind,
         policy.insurer_display, policy.insurer_key, policy.product_display,
         policy.product_key, policy.contract_date, policy.coverage_start_date,
         policy.coverage_end_date, policy.status, policy.version,
@@ -90,6 +92,9 @@ _POLICY_SELECT = """
         status_source.x1 AS status_x1, status_source.y1 AS status_y1,
         status_source.review_state AS status_review_state
     FROM policy_contracts AS policy
+    JOIN document_versions AS policy_version
+      ON policy_version.id = policy.source_document_version_id
+    JOIN documents AS policy_document ON policy_document.id = policy_version.document_id
     JOIN evidence AS source ON source.id = policy.source_evidence_id
     LEFT JOIN evidence AS status_source ON status_source.id = policy.status_evidence_id
 """
@@ -133,12 +138,27 @@ def _policy_party(row: dict[str, Any]) -> PolicyParty:
 
 def _policy(row: dict[str, Any], parties: list[dict[str, Any]]) -> PolicyContract:
     source = _evidence(row, "source")
-    if source is None:
+    policy_document_version_id = cast(UUID, row["policy_source_document_version_id"])
+    status_evidence = _evidence(row, "status")
+    policy_parties = tuple(_policy_party(party) for party in parties)
+    if (
+        source is None
+        or source.document_version_id != policy_document_version_id
+        or source.review_state == "NEEDS_REVIEW"
+        or row.get("policy_document_kind") != "policy"
+        or any(
+            party.evidence.document_version_id != policy_document_version_id
+            or party.evidence.review_state == "NEEDS_REVIEW"
+            for party in policy_parties
+        )
+        or (status_evidence is not None and status_evidence.review_state == "NEEDS_REVIEW")
+        or (row.get("status") != "unknown" and status_evidence is None)
+    ):
         raise PolicyRepositoryUnavailable
     return PolicyContract(
         id=cast(UUID, row["id"]),
         household_space_id=cast(UUID, row["household_space_id"]),
-        source_document_version_id=cast(UUID, row["source_document_version_id"]),
+        source_document_version_id=policy_document_version_id,
         source_evidence=source,
         insurer_display=cast(str, row["insurer_display"]),
         insurer_key=cast(str, row["insurer_key"]),
@@ -148,8 +168,8 @@ def _policy(row: dict[str, Any], parties: list[dict[str, Any]]) -> PolicyContrac
         coverage_start_date=cast(date | None, row.get("coverage_start_date")),
         coverage_end_date=cast(date | None, row.get("coverage_end_date")),
         status=cast(PolicyStatus, row["status"]),
-        status_evidence=_evidence(row, "status"),
-        parties=tuple(_policy_party(party) for party in parties),
+        status_evidence=status_evidence,
+        parties=policy_parties,
         version=int(row["version"]),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
@@ -515,6 +535,8 @@ class PolicyLedgerRepository:
                 rider.normalized_key, rider.benefit_type, rider.insured_amount,
                 rider.currency, rider.coverage_start_date, rider.coverage_end_date,
                 rider.renewable, rider.status, rider.version,
+                policy.source_document_version_id AS policy_source_document_version_id,
+                policy_document.document_kind AS policy_document_kind,
                 source.id AS source_id,
                 source.document_version_id AS source_document_version_id,
                 source.extraction_id AS source_extraction_id,
@@ -533,6 +555,9 @@ class PolicyLedgerRepository:
                 status_source.review_state AS status_review_state
             FROM riders AS rider
             JOIN policy_contracts AS policy ON policy.id = rider.policy_contract_id
+            JOIN document_versions AS policy_version
+              ON policy_version.id = policy.source_document_version_id
+            JOIN documents AS policy_document ON policy_document.id = policy_version.document_id
             JOIN evidence AS source ON source.id = rider.source_evidence_id
             LEFT JOIN evidence AS status_source ON status_source.id = rider.status_evidence_id
             WHERE rider.policy_contract_id = %s
@@ -552,7 +577,15 @@ class PolicyLedgerRepository:
         result: list[Rider] = []
         for row in rows:
             source = _evidence(row, "source")
-            if source is None:
+            status_evidence = _evidence(row, "status")
+            if (
+                source is None
+                or source.document_version_id != row.get("policy_source_document_version_id")
+                or source.review_state == "NEEDS_REVIEW"
+                or row.get("policy_document_kind") != "policy"
+                or (status_evidence is not None and status_evidence.review_state == "NEEDS_REVIEW")
+                or (row.get("status") != "unknown" and status_evidence is None)
+            ):
                 raise PolicyRepositoryUnavailable
             result.append(
                 Rider(
@@ -568,7 +601,7 @@ class PolicyLedgerRepository:
                     renewable=cast(bool | None, row.get("renewable")),
                     status=cast(PolicyStatus, row["status"]),
                     source_evidence=source,
-                    status_evidence=_evidence(row, "status"),
+                    status_evidence=status_evidence,
                     version=int(row["version"]),
                 )
             )

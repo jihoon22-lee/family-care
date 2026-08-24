@@ -105,6 +105,7 @@ def test_business_types_are_generated_deterministically() -> None:
     generated = GENERATED_PATH.read_text(encoding="utf-8")
     assert "class PolicyLedger(TypedDict)" in generated
     assert "PolicyErrorCode = Literal[" in generated
+    assert "insured_amount: str | None" in generated
     assert "password" not in generated
     assert "document_text" not in generated
 
@@ -142,3 +143,15 @@ def test_committed_openapi_has_no_contract_drift_and_policy_error_codes_are_fixe
         "VERSION_CONFLICT",
     ):
         assert code in generated
+
+
+def test_policy_errors_do_not_widen_the_phase_one_error_component() -> None:
+    schemas = create_app(enable_synthetic_ingestion=True).openapi()["components"]["schemas"]
+    document_codes = schemas["ErrorResponse"]["properties"]["error_code"]["enum"]
+    policy_codes = schemas["PolicyErrorResponse"]["properties"]["error_code"]["enum"]
+
+    assert "ANALYSIS_JOB_NOT_FOUND" in document_codes
+    assert "VERSION_CONFLICT" not in document_codes
+    assert "VERSION_CONFLICT" in policy_codes
+    assert "INVALID_REQUEST" in policy_codes
+    assert "RESOURCE_LIMIT_EXCEEDED" in policy_codes

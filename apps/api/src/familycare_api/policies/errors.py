@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from familycare_api.contracts.generated_business import PolicyErrorCode
+from familycare_api.contracts.generated_business import PolicyApiErrorCode, PolicyErrorCode
 from familycare_api.errors import ApiBoundaryError
 
 
@@ -30,7 +30,7 @@ class PolicyRepositoryUnavailable(PolicyLedgerError):
     """The policy persistence boundary could not complete an operation."""
 
     status_code = 503
-    error_code = "RESOURCE_LIMIT_EXCEEDED"
+    error_code: PolicyApiErrorCode = "RESOURCE_LIMIT_EXCEEDED"
     public_message = "policy service unavailable"
 
 

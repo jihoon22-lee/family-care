@@ -44,7 +44,13 @@ def validate_evidence_bbox(bbox: EvidenceBbox | None) -> EvidenceBbox | None:
     if len(bbox) != 4:
         raise EvidenceInvalid
     x0, y0, x1, y1 = bbox
-    if any(not isinstance(value, Decimal) for value in bbox) or x1 <= x0 or y1 <= y0:
+    if (
+        any(not isinstance(value, Decimal) for value in bbox)
+        or x0 < 0
+        or y0 < 0
+        or x1 <= x0
+        or y1 <= y0
+    ):
         raise EvidenceInvalid
     return bbox
 
@@ -94,7 +100,10 @@ class EvidenceRepository:
                         evidence.extraction_id,
                         evidence.content_sha256 AS evidence_hash,
                         document_version.content_sha256 AS document_hash,
+                        document_version.page_count AS document_page_count,
                         extraction.document_version_id AS extraction_document_version_id,
+                        page.width_points AS page_width,
+                        page.height_points AS page_height,
                         evidence.physical_page,
                         evidence.x0,
                         evidence.y0,
@@ -110,6 +119,9 @@ class EvidenceRepository:
                     JOIN extractions AS extraction
                       ON extraction.id = evidence.extraction_id
                      AND extraction.document_version_id = evidence.document_version_id
+                    JOIN extraction_pages AS page
+                      ON page.extraction_id = extraction.id
+                     AND page.page_number = evidence.physical_page
                     WHERE evidence.id = %s
                       AND evidence.household_space_id = %s
                       AND evidence.document_version_id = %s
@@ -144,13 +156,26 @@ class EvidenceRepository:
             bbox = cast(EvidenceBbox, coordinates)
         else:
             raise EvidenceInvalid
+        physical_page = row.get("physical_page")
+        page_count = row.get("document_page_count")
+        page_width = row.get("page_width")
+        page_height = row.get("page_height")
+        if (
+            not isinstance(physical_page, int)
+            or not isinstance(page_count, int)
+            or physical_page > page_count
+            or not isinstance(page_width, Decimal)
+            or not isinstance(page_height, Decimal)
+            or (bbox is not None and (bbox[2] > page_width or bbox[3] > page_height))
+        ):
+            raise EvidenceInvalid
         try:
             return EvidenceRef(
                 evidence_id=cast(UUID, row["evidence_id"]),
                 document_version_id=cast(UUID, row["document_version_id"]),
                 extraction_id=cast(UUID, row["extraction_id"]),
                 content_sha256=cast(str, row["evidence_hash"]),
-                physical_page=cast(int, row["physical_page"]),
+                physical_page=physical_page,
                 bbox=bbox,
                 review_state=cast(EvidenceReviewState, row["review_state"]),
             )
