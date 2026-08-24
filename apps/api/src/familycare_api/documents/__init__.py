@@ -1,1 +1,1 @@
-"""Document-ingestion contracts and HTTP boundary."""
+"""Document-ingestion contracts and explicitly gated HTTP boundary."""

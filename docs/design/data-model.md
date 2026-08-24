@@ -42,6 +42,19 @@ Worker는 parser Evidence에 필요한 UUID를 확정하기 위해 validated int
 
 Phase 1의 API에는 인증 provider가 없고 인증·인가를 제공하지 않습니다. 따라서 이 모델과 endpoint는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다. Authentication provider는 Phase 7에 남깁니다. Phase 2 이후의 모든 business record는 `HouseholdSpace` scope를 소유하거나 명시적인 `household_space_id` foreign key를 가져야 하며, 클라이언트가 보낸 household/user ID를 권위로 사용하지 않습니다.
 
+## Phase 1 asynchronous API projection
+
+문서 ingestion API는 위의 여덟 테이블에 대한 얇은 enqueue/status projection입니다. 런타임 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 설정된 경우에만 등록하며, 기본-disabled app은 두 문서 경로에 `404`를 반환합니다. OpenAPI 생성과 테스트의 `enable_synthetic_ingestion=True`는 이 runtime gate를 우회하는 운영 설정이 아니라 문서·테스트를 위한 명시적 opt-in입니다.
+
+| Route | Projection |
+|---|---|
+| `POST /api/v1/documents/analysis` | Relative `source_key`, `document_kind`, canonical extractor settings를 strict하게 검증하고 `documents`를 생성·재사용한 뒤 `analysis_jobs`를 enqueue합니다. 성공은 `202`이며 `job_id`, queued `state`, relative `status_url`을 반환합니다. |
+| `GET /api/v1/analysis-jobs/{job_id}` | queued/running/succeeded/retryable_failed/permanently_failed/cancelled state, attempts, sanitized error code, extraction summary counts를 반환합니다. 모르는 UUID는 `404 ANALYSIS_JOB_NOT_FOUND`입니다. |
+
+Request model은 extra fields를 거부하므로 password, absolute path, raw PDF bytes, URL, arbitrary metadata를 저장 경계로 전달하지 않습니다. API validation 오류는 HTTP `422`와 `INVALID_REQUEST` envelope로 즉시 반환되며, validation message는 raw value와 document content를 echo하지 않습니다. 반면 source key가 형식상 유효한 POST는 파일을 열지 않으므로 missing/corrupt/encrypted 상태를 동기적으로 알 수 없습니다. Worker가 나중에 파일을 열고 encrypted input을 `PASSWORD_REQUIRED` job error로 전이합니다. 이 순서는 `POST → AnalysisJob → Worker intake/extraction → GET`이며, API는 content hash, DocumentVersion, Extraction을 직접 만들지 않습니다.
+
+이 endpoint는 authentication·authorization이 없는 local synthetic-only 개발 기능이며 production-safe가 아닙니다. Authentication provider와 HouseholdSpace authorization은 Phase 7 및 이후 business record 범위에서 별도로 다룹니다. Policy Ledger, OCR, 외부 URL·AI, 실제 자료 acceptance는 이 projection의 책임이 아닙니다.
+
 ## Phase 1 Evidence coordinates
 
 Evidence는 `DocumentVersion` UUID와 1-based PDF page를 필수로 가지며, 선택적 bounding box는 PDF points·top-left origin·소수 셋째 자리 반올림을 사용합니다. `ExtractionBlock`, `ExtractionTable`, `ExtractionCell`은 자신의 page 또는 table parent를 통해 이 좌표를 보존합니다. 사용자 화면의 page index와 내부 page number를 혼용하지 않습니다.

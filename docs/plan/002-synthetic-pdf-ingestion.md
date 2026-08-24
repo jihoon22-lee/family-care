@@ -469,7 +469,7 @@ git commit -m "feat(pdf): extract synthetic pages and tables"
 
 The root agent reviews the full feat/synthetic-pdf-extraction diff once, checking the exact parser versions and notices, source-to-sink descriptor boundary, coordinate normalization, page closure, quality thresholds, deterministic fixture authorship, and password tests. Then push, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, rerun the complete extraction suite on post-merge main, and record the merge commit before beginning feat/analysis-job-worker.
 
-Completed in PR #10 at merge commit `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, and the local post-merge extraction checks passed. Task 4 remains pending.
+Completed in PR #10 at merge commit `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, and the local post-merge extraction checks passed. Task 4 is recorded below as the next completed checkpoint.
 
 ---
 
@@ -556,9 +556,11 @@ git add workers/analyzer/src/familycare_worker workers/analyzer/tests workers/an
 git commit -m "feat(worker): process analysis jobs with leases"
 ~~~
 
-- [ ] **Step 7: Complete the PR checkpoint**
+- [x] **Step 7: Complete the PR checkpoint**
 
 The root agent reviews the full feat/analysis-job-worker diff once, checking SQL transaction boundaries, SKIP LOCKED behavior, lease ownership, attempts, idempotency constraint use, retry classification, cleanup, and signal handling. Then push, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, rerun queue and full synthetic extraction checks on post-merge main, and record the merge commit before beginning feat/document-analysis-api.
+
+Completed in PR #11 at merge commit `cc651436cab884109dc6fdc7f793c8b32e9c86d4`; PR CI and post-merge `main` CI each passed 7/7, and the post-merge local checks passed 23 queue tests and 59 extraction tests. Task 5 is the next pending branch.
 
 ---
 
@@ -589,7 +591,22 @@ The root agent reviews the full feat/analysis-job-worker diff once, checking SQL
 - Missing, corrupt, or encrypted PDFs are asynchronous job outcomes: encrypted input is PASSWORD_REQUIRED. Unknown status GET UUIDs return 404 with ANALYSIS_JOB_NOT_FOUND, not DOCUMENT_NOT_FOUND.
 - The API performs no authentication or authorization and includes a clear local synthetic-only route description. It must not claim production safety.
 
-- [ ] **Step 1: Write failing API contract and behavior tests**
+### Approved local API contract
+
+Task 5 exposes a deliberately narrow local development boundary. The runtime router is registered only when both `FAMILYCARE_ENV=development` and `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`; the default is disabled, and a disabled app does not register either document route, so both paths return 404. Tests may pass `enable_synthetic_ingestion=True` explicitly. OpenAPI generation may use that explicit opt-in to describe the routes, but it must not change the module-level runtime default or the `/health/live` and `/health/ready` routes.
+
+| Method | Path | Enabled response | Contract boundary |
+|---|---|---|---|
+| `POST` | `/api/v1/documents/analysis` | `202 Accepted` | Validate the request and enqueue an `AnalysisJob`; return `job_id`, `state`, and relative `status_url`. |
+| `GET` | `/api/v1/analysis-jobs/{job_id}` | `200 OK` | Project the job state, attempts, sanitized `error_code`, and extraction summary counts. |
+
+The request contains only `schema_version: "1"`, a relative `source_key`, the contract `document_kind`, and canonical `extractor_config`. Extra fields are forbidden. A malformed body, an absolute or parent-traversal source key, or fields such as `password`, `absolute_path`, `raw_pdf`, or `url` returns HTTP `422` with the stable `error_code: "INVALID_REQUEST"` envelope. Validation details are sanitized and never echo raw values, passwords, absolute paths, or document content.
+
+For an enabled route, every valid source key is accepted asynchronously with `202`; the API does not open the source, compute `content_sha256`, create a `DocumentVersion`, or inspect whether the PDF exists, is corrupt, or is encrypted. The Worker later performs intake and extraction. Consequently, missing, corrupt, and encrypted inputs are job outcomes rather than synchronous POST errors; encrypted input becomes `PASSWORD_REQUIRED`. An unknown status UUID returns `404` with `ANALYSIS_JOB_NOT_FOUND`, not `DOCUMENT_NOT_FOUND`. `PASSWORD_INVALID` remains a direct one-shot adapter diagnostic and is not transported through a queued password field.
+
+The intended sequence is `POST → documents/analysis_jobs enqueue → Worker intake and isolated extraction → GET status`. The API has no authentication or authorization and is not production-safe; Authentication provider integration remains Phase 7. No Policy Ledger, OCR execution, external URL, external AI, or insurance decision logic is part of this contract.
+
+- [x] **Step 1: Write failing API contract and behavior tests**
 
 Add FastAPI unit tests that assert the default-disabled app returns 404, an explicitly enabled app returns 202 for a valid source_key, the response contains a UUID job_id and status_url, the status GET returns queued/running/succeeded projections from seeded rows, unknown UUIDs return ANALYSIS_JOB_NOT_FOUND, invalid absolute or parent-traversal source keys return the stable error envelope, and request fields named password, absolute_path, raw_pdf, or url are rejected without creating a job. Do not claim this unit file reaches the Worker or classifies encrypted PDFs.
 
@@ -635,27 +652,27 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_document_analysis_api.py -q
 
 Expected: FAIL because the document router, service, and OpenAPI paths do not yet exist.
 
-- [ ] **Step 2: Implement the explicit local synthetic-ingestion gate**
+- [x] **Step 2: Implement the explicit local synthetic-ingestion gate**
 
 Add `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=false` to `.env.example` and make the module-level runtime app derive its default from both `FAMILYCARE_ENV=development` and `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`. Implement `create_app(*, readiness_probe: ReadinessProbe | None = None, enable_synthetic_ingestion: bool | None = None) -> FastAPI`: `None` derives the two-variable gate, while tests may pass `True` explicitly. The committed OpenAPI generator calls `create_app(enable_synthetic_ingestion=True)` so the canonical contract contains the routes without changing runtime defaults. When disabled, do not register the router and let both document-analysis paths return 404; leave `/health/live` and `/health/ready` unchanged. Tests cover disabled and enabled apps. The endpoint remains unauthenticated and local synthetic-only.
 
 Add the custom FastAPI `RequestValidationError` handler to `apps/api/src/familycare_api/errors.py`. It returns HTTP 422 with the stable `INVALID_REQUEST` error code and sanitized field locations/messages without echoing raw request values, passwords, absolute paths, or document content.
 
-- [ ] **Step 3: Implement strict request and response schemas**
+- [x] **Step 3: Implement strict request and response schemas**
 
 Use the generated contract types and FastAPI/Pydantic validation. Accept only relative source_key, document_kind from the contract enum, and canonical extractor settings. Configure extra="forbid". Keep password, absolute paths, raw bytes, URL fields, and arbitrary metadata outside the model. The response exposes only job UUID, state, sanitized error code, attempts, and extraction summary counts; it never exposes source path, PDF body, password, or private external identifiers.
 
-- [ ] **Step 4: Implement enqueue and status use cases**
+- [x] **Step 4: Implement enqueue and status use cases**
 
 `service.py` validates the relative `source_key` only, creates or reuses a `documents` row by that key, and enqueues an `analysis_jobs` row with queued state and canonical settings/config hash in one transaction. The POST response is 202 for every valid source key when the gate is enabled; it cannot open the file, compute `content_sha256`, create `document_versions`, or create `extractions`. Worker intake later opens the descriptor, computes the content hash, creates or reuses `document_versions` by `(document_id, content_sha256)`, and creates or reuses `extractions` by the succeeded partial uniqueness key. Missing, corrupt, and encrypted files therefore become asynchronous job errors; encrypted input is `PASSWORD_REQUIRED`. The GET status use case projects `PASSWORD_INVALID` only for direct adapter diagnostics that are never queued, returns `ANALYSIS_JOB_NOT_FOUND` for an unknown job, and never exposes retry details containing a source path or document body.
 
 Register the router without changing /health/live or /health/ready. Add a clear local synthetic-only note to the API route documentation. Do not add authentication, session cookies, HouseholdSpace authorization, Policy Ledger, OCR, or insurance decision logic.
 
-- [ ] **Step 5: Regenerate and check the OpenAPI contract**
+- [x] **Step 5: Regenerate and check the OpenAPI contract**
 
 Regenerate `packages/contracts/openapi/familycare.v1.json` by calling `create_app(enable_synthetic_ingestion=True).openapi()` and extend `scripts/check_contracts.py` to compare the new paths byte-for-byte. Include request schemas, 202 response, 422 `INVALID_REQUEST`, 404 `ANALYSIS_JOB_NOT_FOUND`, and status response examples with only synthetic source keys. The generated contract opt-in must not alter the module-level runtime gate or the health contract.
 
-- [ ] **Step 6: Add the PostgreSQL/temp-root end-to-end integration test**
+- [x] **Step 6: Add the PostgreSQL/temp-root end-to-end integration test**
 
 Create `apps/api/tests/test_document_analysis_e2e.py` as an integration test against a fresh PostgreSQL database and a `TemporaryDirectory`/`tmp_path` root outside the checkout. Opt into both gate variables, generate wholly synthetic unencrypted and encrypted fixtures with reportlab, set `FAMILYCARE_DOCUMENT_ROOT` to the temporary root, and exercise POST → Worker run → GET `succeeded` for the unencrypted fixture. Submit the encrypted fixture through the same API path, run the Worker, and assert GET reports `PASSWORD_REQUIRED`. Assert that passwords and source paths do not enter the job payload or captured logs. This is the test that proves encrypted input reaches the Worker; the API unit tests must retain their narrower contract scope.
 
@@ -667,7 +684,7 @@ FAMILYCARE_ENV=development FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true TMPDIR=/tm
 
 Expected: FAIL because the route, Worker wiring, migration, and integration fixture setup do not yet exist.
 
-- [ ] **Step 7: Run API, Worker, contract, and safety checks serially**
+- [x] **Step 7: Run API, Worker, contract, and safety checks serially**
 
 ~~~bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_document_analysis_api.py -q
@@ -683,7 +700,9 @@ git diff --check
 
 Expected: every command exits 0; the asynchronous synthetic path is covered; no password, absolute path, real document, or private root is touched.
 
-- [ ] **Step 8: Commit the independently reviewable branch**
+Local pre-PR evidence: 19 focused API tests, 178 complete non-integration tests, and 27 PostgreSQL integration tests passed. The integration set includes three API cases: synthetic POST → Worker → succeeded GET, encrypted → `PASSWORD_REQUIRED`, and active Document reuse with distinct queued jobs. Ruff format/lint, mypy, OpenAPI/JSON contracts, container/workflow policy, documentation, repository safety, Web/PWA checks, and `git diff --check` passed. Web, API, and Worker images built one at a time; the API image ran as UID 10001 and exposed only health routes by default, then exposed the two analysis routes only with the exact opt-in variables. One E2E retry was interrupted before collection by transient WSL memory exhaustion while unrelated Rust builds consumed swap; the unchanged test passed on the immediate serial retry. No unrelated process or container was stopped.
+
+- [x] **Step 8: Commit the independently reviewable branch**
 
 ~~~bash
 git add apps/api/src/familycare_api apps/api/tests/test_document_analysis_api.py apps/api/tests/test_document_analysis_e2e.py packages/contracts/openapi/familycare.v1.json scripts/check_contracts.py .env.example

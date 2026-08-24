@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OPENAPI_PATH = ROOT / "packages/contracts/openapi/familycare.v1.json"
 JOB_SCHEMA_PATH = ROOT / "packages/contracts/schemas/analysis-job.v1.schema.json"
 JOB_EXAMPLE_PATH = ROOT / "packages/contracts/examples/analysis-job.v1.json"
+DOCUMENT_SCHEMA_PATH = ROOT / "packages/contracts/schemas/document-ingestion.v1.schema.json"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -37,7 +38,14 @@ validate_document_contracts = _DOCUMENT_CONTRACT_CHECKER.validate_document_contr
 def render_openapi() -> str:
     """Render the canonical OpenAPI document deterministically."""
 
-    return json.dumps(create_app().openapi(), indent=2, sort_keys=True) + "\n"
+    return (
+        json.dumps(
+            create_app(enable_synthetic_ingestion=True).openapi(),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n"
+    )
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -58,9 +66,103 @@ def validate_openapi() -> list[str]:
         return [f"missing contract artifact: {OPENAPI_PATH.relative_to(ROOT)}"]
     committed = OPENAPI_PATH.read_text(encoding="utf-8")
     generated = render_openapi()
+    errors: list[str] = []
     if committed != generated:
-        return ["OpenAPI contract drift: regenerate familycare.v1.json"]
-    return []
+        errors.append("OpenAPI contract drift: regenerate familycare.v1.json")
+    document = json.loads(generated)
+    paths = document.get("paths", {})
+    expected_paths = {
+        "/health/live",
+        "/health/ready",
+        "/api/v1/documents/analysis",
+        "/api/v1/analysis-jobs/{job_id}",
+    }
+    if set(paths) != expected_paths:
+        errors.append("OpenAPI paths must contain health and gated analysis routes only")
+        return errors
+
+    post = paths["/api/v1/documents/analysis"].get("post", {})
+    status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})
+    if set(post.get("responses", {})) != {"202", "422", "503"}:
+        errors.append("analysis POST responses must be exactly 202, 422, and 503")
+    if set(status_get.get("responses", {})) != {"200", "404", "422", "503"}:
+        errors.append("analysis status responses must be exactly 200, 404, 422, and 503")
+    for operation in (post, status_get):
+        description = str(operation.get("description", ""))
+        if "synthetic-only" not in description or "not production-safe" not in description:
+            errors.append("analysis routes must state their local synthetic-only safety boundary")
+
+    schemas = document.get("components", {}).get("schemas", {})
+    request_schema = schemas.get("DocumentAnalysisRequest", {})
+    if set(request_schema.get("properties", {})) != {
+        "schema_version",
+        "source_key",
+        "document_kind",
+        "extractor_config",
+    }:
+        errors.append("analysis request exposes fields outside the v1 ingestion contract")
+    if request_schema.get("additionalProperties") is not False:
+        errors.append("analysis request must reject additional properties")
+    request_examples = request_schema.get("examples", [])
+    if (
+        not isinstance(request_examples, list)
+        or len(request_examples) != 1
+        or not isinstance(request_examples[0], dict)
+        or not str(request_examples[0].get("source_key", "")).startswith("synthetic/")
+    ):
+        errors.append("analysis request must have one wholly synthetic example")
+    document_contract = load_json(DOCUMENT_SCHEMA_PATH)
+    contract_properties = document_contract.get("properties", {})
+    for field in ("schema_version", "source_key", "document_kind"):
+        openapi_field = request_schema.get("properties", {}).get(field, {})
+        contract_field = contract_properties.get(field, {})
+        for keyword in ("const", "enum", "minLength", "maxLength", "pattern", "type"):
+            if openapi_field.get(keyword) != contract_field.get(keyword):
+                errors.append(f"analysis request {field} drifted from the v1 JSON Schema")
+                break
+    extractor_schema = schemas.get("ExtractorConfigRequest", {})
+    contract_extractor = document_contract.get("$defs", {}).get("ExtractorConfig", {})
+    if extractor_schema.get("additionalProperties") is not False:
+        errors.append("analysis extractor config must reject additional properties")
+    for field in ("profile", "quality_rule_version", "table_strategy"):
+        openapi_field = extractor_schema.get("properties", {}).get(field, {})
+        contract_field = contract_extractor.get("properties", {}).get(field, {})
+        for keyword in ("const", "enum", "type"):
+            if openapi_field.get(keyword) != contract_field.get(keyword):
+                errors.append(f"analysis extractor {field} drifted from the v1 JSON Schema")
+                break
+    accepted_schema = schemas.get("AnalysisAcceptedResponse", {})
+    accepted_fields = {
+        "schema_version",
+        "job_id",
+        "state",
+        "status_url",
+    }
+    if set(accepted_schema.get("properties", {})) != accepted_fields:
+        errors.append("analysis accepted response exposes unexpected fields")
+    if set(accepted_schema.get("required", [])) != accepted_fields:
+        errors.append("analysis accepted response fields must all be required")
+    status_schema = schemas.get("AnalysisJobStatusResponse", {})
+    status_fields = {
+        "schema_version",
+        "job_id",
+        "document_id",
+        "state",
+        "attempts",
+        "error_code",
+        "extraction_summary",
+    }
+    if set(status_schema.get("properties", {})) != status_fields:
+        errors.append("analysis status response exposes unexpected fields")
+    required_status_fields = status_fields - {"error_code", "extraction_summary"}
+    if set(status_schema.get("required", [])) != required_status_fields:
+        errors.append("analysis status identity and state fields must all be required")
+    if "source_key" in json.dumps(
+        [accepted_schema.get("examples", []), status_schema.get("examples", [])],
+        sort_keys=True,
+    ):
+        errors.append("analysis response examples must not expose source keys")
+    return errors
 
 
 def validate_job_contract() -> list[str]:

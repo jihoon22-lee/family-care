@@ -61,6 +61,31 @@ Foundation 서비스:
 
 Phase 1의 문서 endpoint와 analyzer는 인증 provider가 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아니며, 인증 provider는 Phase 7에서 다룹니다.
 
+### Use the local synthetic document-analysis API
+
+문서 route는 기본적으로 꺼져 있습니다. 저장소 밖의 처음부터 만든 합성 PDF와 별도 개발용 PostgreSQL을 사용할 때만 로컬 `.env`에서 다음 두 변수를 함께 opt-in하고 API를 재시작합니다.
+
+```dotenv
+FAMILYCARE_ENV=development
+FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true
+```
+
+두 변수 중 하나라도 다르거나 없으면 router가 등록되지 않아 `POST /api/v1/documents/analysis`와 `GET /api/v1/analysis-jobs/{job_id}`가 모두 `404`입니다. 이 gate는 local synthetic-only 개발용이며 authentication·authorization이 없고 production-safe endpoint가 아닙니다. `/health/live`와 `/health/ready`는 gate와 무관하게 유지됩니다.
+
+유효한 요청은 source key와 canonical extraction 설정만 보내고, 응답의 `status_url`을 polling합니다.
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/api/v1/documents/analysis \
+  -H 'content-type: application/json' \
+  --data '{"schema_version":"1","source_key":"synthetic/policy-001.pdf","document_kind":"policy","extractor_config":{"profile":"quality-v1","quality_rule_version":"quality-v1","table_strategy":"auto"}}'
+
+curl -i http://127.0.0.1:8000/api/v1/analysis-jobs/00000000-0000-4000-8000-000000000001
+```
+
+성공적인 POST는 파일을 열지 않고 항상 `202 Accepted`로 job UUID, queued state, 상대 `status_url`을 반환합니다. Worker가 `POST → Worker → GET` 순서로 intake·isolated extraction·persistence를 수행한 뒤 status GET은 `succeeded`와 sanitized extraction summary를 보여줍니다. 파일이 없거나 손상되었거나 암호화되어도 POST는 동기 오류로 바뀌지 않으며, Worker 결과에서 encrypted input은 `PASSWORD_REQUIRED`가 됩니다. 요청 body가 잘못되거나 absolute/parent-traversal source key, `password`, `absolute_path`, `raw_pdf`, `url` 같은 추가 필드를 보내면 HTTP `422`와 `error_code: "INVALID_REQUEST"`가 반환됩니다. 알 수 없는 job UUID는 `404`와 `ANALYSIS_JOB_NOT_FOUND`입니다. 오류 응답은 raw value, password, absolute path, document body를 echo하지 않습니다.
+
+API는 `FAMILYCARE_DOCUMENT_ROOT`를 직접 열지 않습니다. 실제 Worker 실행은 아래의 합성 전용 Analyzer 절차와 migration `0002_document_ingestion`을 사용하며, 문서·work root에는 실제 자료를 넣지 않습니다.
+
 종료:
 
 ```bash

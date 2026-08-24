@@ -1,6 +1,309 @@
 {
   "components": {
     "schemas": {
+      "AnalysisAcceptedResponse": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "job_id": "00000000-0000-4000-8000-000000000001",
+            "schema_version": "1",
+            "state": "queued",
+            "status_url": "/api/v1/analysis-jobs/00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "const": "queued",
+            "title": "State",
+            "type": "string"
+          },
+          "status_url": {
+            "title": "Status Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "job_id",
+          "state",
+          "status_url"
+        ],
+        "title": "AnalysisAcceptedResponse",
+        "type": "object"
+      },
+      "AnalysisJobStatusResponse": {
+        "additionalProperties": false,
+        "examples": [
+          {
+            "attempts": 1,
+            "document_id": "00000000-0000-4000-8000-000000000002",
+            "extraction_summary": {
+              "block_count": 3,
+              "cell_count": 0,
+              "page_count": 1,
+              "table_count": 0
+            },
+            "job_id": "00000000-0000-4000-8000-000000000001",
+            "schema_version": "1",
+            "state": "succeeded"
+          }
+        ],
+        "properties": {
+          "attempts": {
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "document_id": {
+            "format": "uuid",
+            "title": "Document Id",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ANALYSIS_JOB_NOT_FOUND",
+                  "DOCUMENT_NOT_FOUND",
+                  "DOCUMENT_PATH_ESCAPE",
+                  "DOCUMENT_TOO_LARGE",
+                  "EXTRACTION_TIMEOUT",
+                  "INVALID_REQUEST",
+                  "PAGE_LIMIT_EXCEEDED",
+                  "PASSWORD_INVALID",
+                  "PASSWORD_REQUIRED",
+                  "PDF_CORRUPT",
+                  "RESOURCE_LIMIT_EXCEEDED",
+                  "TEMP_CLEANUP_FAILED",
+                  "UNSUPPORTED_FILE_TYPE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "extraction_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExtractionSummaryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "cancelled",
+              "permanently_failed",
+              "queued",
+              "retryable_failed",
+              "running",
+              "succeeded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "job_id",
+          "document_id",
+          "state",
+          "attempts"
+        ],
+        "title": "AnalysisJobStatusResponse",
+        "type": "object"
+      },
+      "DocumentAnalysisRequest": {
+        "additionalProperties": false,
+        "description": "Exact v1 request; files and credentials are intentionally absent.",
+        "examples": [
+          {
+            "document_kind": "policy",
+            "extractor_config": {
+              "profile": "quality-v1",
+              "quality_rule_version": "quality-v1",
+              "table_strategy": "auto"
+            },
+            "schema_version": "1",
+            "source_key": "synthetic/policy-001.pdf"
+          }
+        ],
+        "properties": {
+          "document_kind": {
+            "enum": [
+              "amendment",
+              "application",
+              "claim",
+              "policy",
+              "supporting",
+              "terms"
+            ],
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "extractor_config": {
+            "$ref": "#/components/schemas/ExtractorConfigRequest"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_key": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*[\\r\\n])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+            "title": "Source Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "source_key",
+          "document_kind",
+          "extractor_config"
+        ],
+        "title": "DocumentAnalysisRequest",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "additionalProperties": false,
+        "description": "Stable error envelope that never echoes request values.",
+        "properties": {
+          "error_code": {
+            "enum": [
+              "ANALYSIS_JOB_NOT_FOUND",
+              "DOCUMENT_NOT_FOUND",
+              "DOCUMENT_PATH_ESCAPE",
+              "DOCUMENT_TOO_LARGE",
+              "EXTRACTION_TIMEOUT",
+              "INVALID_REQUEST",
+              "PAGE_LIMIT_EXCEEDED",
+              "PASSWORD_INVALID",
+              "PASSWORD_REQUIRED",
+              "PDF_CORRUPT",
+              "RESOURCE_LIMIT_EXCEEDED",
+              "TEMP_CLEANUP_FAILED",
+              "UNSUPPORTED_FILE_TYPE"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "ExtractionSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "block_count": {
+            "minimum": 0.0,
+            "title": "Block Count",
+            "type": "integer"
+          },
+          "cell_count": {
+            "minimum": 0.0,
+            "title": "Cell Count",
+            "type": "integer"
+          },
+          "page_count": {
+            "minimum": 0.0,
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "table_count": {
+            "minimum": 0.0,
+            "title": "Table Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "page_count",
+          "block_count",
+          "table_count",
+          "cell_count"
+        ],
+        "title": "ExtractionSummaryResponse",
+        "type": "object"
+      },
+      "ExtractorConfigRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "const": "quality-v1",
+            "title": "Profile",
+            "type": "string"
+          },
+          "quality_rule_version": {
+            "const": "quality-v1",
+            "title": "Quality Rule Version",
+            "type": "string"
+          },
+          "table_strategy": {
+            "enum": [
+              "auto",
+              "lines",
+              "text"
+            ],
+            "title": "Table Strategy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "quality_rule_version",
+          "table_strategy"
+        ],
+        "title": "ExtractorConfigRequest",
+        "type": "object"
+      },
       "HealthResponse": {
         "description": "Stable public health response.",
         "properties": {
@@ -40,6 +343,122 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/analysis-jobs/{job_id}": {
+      "get": {
+        "description": "Local synthetic-only development endpoint. It has no authentication or authorization and is not production-safe. The API enqueues metadata only and never opens the PDF.",
+        "operationId": "get_analysis_job_api_v1_analysis_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisJobStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Analysis job not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Stable sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get a synthetic document analysis job",
+        "tags": [
+          "local synthetic document analysis"
+        ]
+      }
+    },
+    "/api/v1/documents/analysis": {
+      "post": {
+        "description": "Local synthetic-only development endpoint. It has no authentication or authorization and is not production-safe. The API enqueues metadata only and never opens the PDF.",
+        "operationId": "submit_document_analysis_api_v1_documents_analysis_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentAnalysisRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalysisAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Stable sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Enqueue a synthetic document analysis job",
+        "tags": [
+          "local synthetic document analysis"
+        ]
+      }
+    },
     "/health/live": {
       "get": {
         "description": "Report that the API process can serve requests.",
