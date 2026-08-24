@@ -10,7 +10,7 @@
 
 **Spec:** `docs/design/project-foundation.md`
 
-**Status (2026-08-24):** Tasks 1-9 were implemented and locally verified on WSL. Task 10 (remote PR, GitHub-hosted CI, and merge) remains pending.
+**Status (2026-08-24):** Tasks 1-10 are complete. PR #1 (`https://github.com/jihoon22-lee/family-care/pull/1`) merged as `0f632989df891ae944c012bfcce6c838009867a9`; all seven PR and post-merge GitHub Actions jobs succeeded. No semantic-version tag, GHCR publish, Cloud Run deployment, Windows/device acceptance, or real/private-data verification was performed.
 
 ## Global Constraints
 
@@ -956,7 +956,7 @@ Do not create or push a Git tag. The user authorized branch pushes, PR creation,
 - Consumes: clean `build/project-foundation`, configured `origin`, authenticated GitHub CLI, and all fresh local verification evidence.
 - Produces: remote base branch `main`, remote feature branch, one reviewed pull request, successful GitHub Actions checks, and a merged remote `main`.
 
-- [ ] **Step 1: Confirm exact refs and GitHub authority before remote writes**
+- [x] **Step 1: Confirm exact refs and GitHub authority before remote writes**
 
 Run:
 
@@ -968,11 +968,11 @@ git ls-remote --heads origin main build/project-foundation
 gh auth status
 ```
 
-Expected: local working tree is clean, `origin` is `https://github.com/jihoon22-lee/family-care.git`, no conflicting remote feature branch exists, and GitHub CLI is authenticated with repository write access.
+Observed: `origin` is `https://github.com/jihoon22-lee/family-care.git`; the approved branch and pull request were available to GitHub; and the remote workflow completed the required checks. This step did not authorize a tag or a production action.
 
-- [ ] **Step 2: Seed the empty remote base branch with the approved design commit**
+- [x] **Step 2: Seed the empty remote base branch with the approved design commit**
 
-Only when `git ls-remote --heads origin main` is empty, verify local `main` points to the reviewed design-only root commit and push that ref:
+The remote base was established from the reviewed design-only root commit before the PR. No force push or history rewrite was used.
 
 ```bash
 git show --stat --oneline main
@@ -980,9 +980,9 @@ git diff --exit-code main -- docs/design/project-foundation.md
 git push origin main:main
 ```
 
-Expected: remote `main` is created with only `docs/design/project-foundation.md`. If a remote `main` appears before this step, fetch it and reconcile without force-pushing.
+Observed: the PR was based on the reviewed `main` history. The foundation merge was a merge commit.
 
-- [ ] **Step 3: Push the feature branch and create the pull request**
+- [x] **Step 3: Push the feature branch and create the pull request**
 
 ```bash
 git push -u origin build/project-foundation
@@ -993,9 +993,9 @@ gh pr create \
   --body-file /tmp/familycare-pr-body.md
 ```
 
-The PR body records purpose, major files, runtime/API contracts, privacy boundary, exact local checks and results, unverified GHCR tag publishing, and the explicit absence of real insurance data.
+Observed: PR #1 was created at `https://github.com/jihoon22-lee/family-care/pull/1` with the purpose, major files, runtime/API contracts, privacy boundary, local evidence, unverified GHCR tag publishing, and absence of real insurance data recorded.
 
-- [ ] **Step 4: Watch GitHub Actions through a terminal result**
+- [x] **Step 4: Watch GitHub Actions through a terminal result**
 
 Run:
 
@@ -1004,13 +1004,13 @@ gh pr checks --watch --interval 10
 gh pr view --json number,url,state,mergeable,statusCheckRollup
 ```
 
-Expected: every required check reaches `SUCCESS`; the PR is open and mergeable. A pending, skipped-required, cancelled, timed-out, or missing check is not a pass.
+Observed: all seven PR required jobs reached `SUCCESS`, and all seven post-merge `main` jobs reached `SUCCESS`. No pending, skipped-required, cancelled, timed-out, or missing job was counted as a pass.
 
-- [ ] **Step 5: Fix any CI-only failure with evidence**
+- [x] **Step 5: Fix any CI-only failure with evidence**
 
-For each failure, obtain its numeric database ID with `gh run list --branch build/project-foundation --limit 10`, inspect it with `gh run view RUN_DATABASE_ID --log-failed` after replacing `RUN_DATABASE_ID` with that returned integer, reproduce the failing command locally when possible, add or adjust a regression check, rerun the full affected validation group, commit the scoped fix, push, and repeat Step 4. Do not weaken privacy checks, remove tests, or mark a failed check optional merely to make the PR green.
+No unresolved CI-only failure remained. The successful required jobs were not achieved by weakening privacy checks, removing tests, or making a failed check optional.
 
-- [ ] **Step 6: Merge only after all checks succeed**
+- [x] **Step 6: Merge only after all checks succeed**
 
 Run:
 
@@ -1018,9 +1018,9 @@ Run:
 gh pr merge --merge --delete-branch
 ```
 
-Expected: GitHub reports the PR merged through a merge commit. If branch protection or repository policy blocks merge, report the exact policy instead of bypassing it with an administrator override.
+Observed: GitHub reports PR #1 merged through merge commit `0f632989df891ae944c012bfcce6c838009867a9`. No administrator override was used.
 
-- [ ] **Step 7: Verify post-merge remote state**
+- [x] **Step 7: Verify post-merge remote state**
 
 Run:
 
@@ -1031,4 +1031,4 @@ git log --oneline --decorate -5 origin/main
 git ls-remote --heads origin build/project-foundation
 ```
 
-Expected: PR state is `MERGED`, `mergedAt` and `mergeCommit` are populated, `origin/main` contains the Foundation history, and the remote feature branch is absent. Report the PR URL, merge commit, CI run result, and all intentionally unexecuted checks.
+Observed: PR state is `MERGED`, `mergedAt` and `mergeCommit` are populated, `main` contains the Foundation history, and the feature branch cleanup was completed. The completion report records the PR URL, merge commit, seven successful PR jobs, seven successful post-merge jobs, and the intentionally unexecuted tag/GHCR, Cloud Run, Windows/device, authentication, external-provider, and real/private-data checks.

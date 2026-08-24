@@ -1,11 +1,11 @@
 # Data model design
 
-- 상태: 설계 기준
-- 적용 단계: Policy Ledger 이후
+- 상태: Phase 1·Phase 2 설계 기준
+- 적용 단계: Phase 1은 최소 문서 ingestion 모델, Phase 2는 Policy Ledger 모델
 
 ## Scope
 
-보험 대상 가족, 계약, 문서, 가입 담보, 약관, 사건, 판정, 청구 이력을 서로 다른 수명주기와 증거 수준으로 관리하는 데이터 경계를 정의합니다. 이 문서는 물리 스키마보다 도메인 의미와 불변조건을 우선합니다.
+보험 대상 가족, 계약, 문서, 가입 담보, 약관, 사건, 판정, 청구 이력을 서로 다른 수명주기와 증거 수준으로 관리하는 데이터 경계를 정의합니다. Phase 1은 문서 ingestion에 필요한 최소 물리 모델을 먼저 소유하고, Policy Ledger는 Phase 2에서 그 모델에 의존합니다. 이 문서는 물리 스키마보다 도메인 의미와 불변조건을 우선하지만 Phase 1 구현에 필요한 테이블·키·상태 경계는 명시합니다.
 
 ## Inputs
 
@@ -16,6 +16,31 @@
 - MedicalEvent와 ClaimHistory
 
 원시 추출값은 입력 후보이며 관리자 확정값과 구분합니다.
+
+## Phase 1 minimum physical model
+
+Phase 1 migration은 다음 여덟 엔터티만 만듭니다. 원본 PDF bytes, password, absolute path, 문서 본문 전체의 비식별 복사본은 이 모델에 저장하지 않습니다. `source_key`는 `FAMILYCARE_DOCUMENT_ROOT`에 상대적인 값이며, API와 job payload에 absolute path가 들어가지 않습니다.
+
+| Entity | Physical table | Minimum responsibility and fields |
+|---|---|---|
+| `Document` | `documents` | logical UUID, unique active synthetic/local `source_key`, document kind, nullable media type/byte size/page count until intake, current status, soft-delete timestamp |
+| `DocumentVersion` | `document_versions` | document UUID, version number, content SHA-256, source metadata, created timestamp; same document content does not create a new version |
+| `Extraction` | `extractions` | document-version UUID, extractor name/version, extractor-config hash, quality-rule version, status, succeeded timestamp |
+| `ExtractionPage` | `extraction_pages` | extraction UUID, 1-based page number, page dimensions, quality metrics, `TEXT_SUFFICIENT` or `OCR_REQUIRED`, warning codes |
+| `ExtractionBlock` | `extraction_blocks` | page UUID, `TextBlock` text, PDF-point top-left bounding box rounded to 3 decimals, reading order starting at 0 |
+| `ExtractionTable` | `extraction_tables` | page UUID, table candidate bounding box, extraction metadata, review state |
+| `ExtractionCell` | `extraction_cells` | table UUID, cell candidate bounding box, row/column coordinates, extracted text, review state |
+| `AnalysisJob` | `analysis_jobs` | document UUID, relative source key, canonical settings and config hash, queued/running/succeeded/retryable_failed/permanently_failed/cancelled state, availability time, lease, heartbeat, attempts, error code |
+
+`AnalysisJob`에는 available-at timestamp, lease owner, lease expiry, heartbeat timestamp, attempt count, max attempts, created/updated timestamps를 둡니다. job payload에는 password, absolute path, document body, private external identifier를 두지 않습니다. `documents`는 active `source_key`를 유일하게 유지합니다. `document_versions`는 `(document_id, version_number)`와 `(document_id, content_sha256)`를 각각 unique로 유지해 버전 순서와 content identity를 표현합니다. `extractions`는 `(document_version_id, extractor_config_hash)`에 대해 `status = 'succeeded'`인 행만 partial unique constraint를 적용합니다. DocumentVersion이 content hash를 대표하므로 이 두 키가 같은 document content와 extractor config에 성공 extraction 하나를 공동으로 보장하며, `extractions`에 `content_sha256`를 중복 저장하거나 두 테이블을 가로지르는 불가능한 constraint를 만들지 않습니다. `extraction_pages(extraction_id, page_number)`, `extraction_blocks(page_id, reading_order)`, `extraction_cells(table_id, row_index, column_index)`도 각각 unique로 유지합니다. 같은 hash/config의 queued 또는 failed job은 기존 succeeded result를 재사용하는 idempotency 경로를 사용합니다.
+
+Phase 1의 API POST는 source_key 형식만 검증하고 `documents` row를 source_key로 생성·재사용한 뒤 `analysis_jobs` row를 enqueue합니다. API는 아직 파일을 열지 않으므로 DocumentVersion이나 content hash를 만들 수 없습니다. Worker intake가 열린 source descriptor에서 hash와 PDF 구조를 확인한 뒤 `document_versions`를 생성·재사용하고, `extractions`를 생성·재사용합니다. Unknown job 조회는 `ANALYSIS_JOB_NOT_FOUND`를 반환합니다.
+
+Phase 1의 API에는 인증 provider가 없고 인증·인가를 제공하지 않습니다. 따라서 이 모델과 endpoint는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다. Authentication provider는 Phase 7에 남깁니다. Phase 2 이후의 모든 business record는 `HouseholdSpace` scope를 소유하거나 명시적인 `household_space_id` foreign key를 가져야 하며, 클라이언트가 보낸 household/user ID를 권위로 사용하지 않습니다.
+
+## Phase 1 Evidence coordinates
+
+Evidence는 `DocumentVersion` UUID와 1-based PDF page를 필수로 가지며, 선택적 bounding box는 PDF points·top-left origin·소수 셋째 자리 반올림을 사용합니다. `ExtractionBlock`, `ExtractionTable`, `ExtractionCell`은 자신의 page 또는 table parent를 통해 이 좌표를 보존합니다. 사용자 화면의 page index와 내부 page number를 혼용하지 않습니다.
 
 ## Outputs
 
@@ -66,7 +91,6 @@
 
 - 문서 종류: policy, terms, application, amendment, claim, supporting
 - 원본 제공자와 비공개 외부 참조
-- SHA-256 콘텐츠 해시
 - MIME, 크기, 페이지 수
 - 문서 작성·수집·수정 시각
 - 처리와 검수 상태
@@ -76,7 +100,7 @@
 
 ### DocumentVersion
 
-같은 논리 문서가 교체되거나 재발급됐을 때 원본 버전을 보존합니다. 해시가 같으면 새 버전을 만들지 않습니다.
+같은 논리 문서가 교체되거나 재발급됐을 때 원본 버전을 보존합니다. `document_versions`는 `(document_id, content_sha256)`를 unique로 관리하며, 이 행이 content hash의 단일 대표입니다. 해시가 같으면 새 버전을 만들지 않습니다.
 
 ### Extraction
 
@@ -220,7 +244,7 @@ Evidence는 다음을 가집니다.
 ## Failure behavior
 
 - 필수 근거가 누락되면 확정 전이 요청을 거부하고 안정적인 오류 코드를 반환합니다.
-- 중복 해시는 기존 DocumentVersion을 반환하고 새 분석 작업을 만들지 않습니다.
+- Worker intake의 중복 content hash는 기존 DocumentVersion을 재사용하고, 동일 extractor config의 succeeded Extraction을 재사용합니다. API POST 자체는 source key가 유효하면 AnalysisJob을 enqueue합니다.
 - 충돌하는 계약 상태는 최신 값을 임의 선택하지 않고 conflict와 `UNKNOWN`을 만듭니다.
 - 삭제·복원 충돌은 상태 전이 버전으로 감지합니다.
 
@@ -233,6 +257,10 @@ Evidence는 다음을 가집니다.
 
 ## Tests
 
+- Phase 1 minimum model migration creates exactly the eight ingestion entities and no Policy Ledger tables
+- `document_versions(document_id, content_sha256)` unique와 `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'` partial unique
+- AnalysisJob state, lease, heartbeat, attempts, and cancellation transitions
+- relative source key and absence of password or absolute path in persisted payloads
 - AppUser와 FamilyMember 독립 수명주기
 - 약관 전용 특약의 Rider 생성 거부
 - 갱신 상태 미확인의 `UNKNOWN`
@@ -243,4 +271,4 @@ Evidence는 다음을 가집니다.
 
 ## Deferred decisions
 
-물리 테이블, 인덱스, 암호화 키 관리, 보존 기간, 실제 증권번호 저장 필요성은 해당 구현 단계에서 별도 ADR로 확정합니다. 이 지연은 외부 입력 없이 구현 가능한 Foundation 범위에 영향을 주지 않습니다.
+Phase 1의 여덟 ingestion tables와 성공 extraction unique rule은 `docs/plan/002-synthetic-pdf-ingestion.md`에서 구현합니다. 그 밖의 인덱스 조정, 암호화 키 관리, 보존 기간, 실제 증권번호 저장 필요성은 해당 구현 단계에서 별도 ADR로 확정합니다. 이 지연은 합성 데이터로 구현 가능한 Phase 1 범위에 영향을 주지 않습니다.

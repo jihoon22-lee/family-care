@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 Foundation 개발환경과 공개 저장소의 안전한 사용법을 설명합니다. 실제 보험 분석 기능은 아직 제공하지 않습니다.
+이 문서는 완료된 Foundation 개발환경과 Phase 1 합성 PDF 계획의 안전한 사용법을 설명합니다. 실제 보험·의료 자료 분석 기능은 제공하지 않습니다.
 
 ## Local development
 
@@ -28,7 +28,7 @@ docker compose version
 
 ```bash
 cp .env.example .env
-corepack pnpm install --frozen-lockfile
+corepack pnpm@11.22.0 install --frozen-lockfile
 TMPDIR=/tmp uv sync --all-packages --group dev
 ```
 
@@ -59,6 +59,8 @@ Foundation 서비스:
 - API readiness: `http://127.0.0.1:8000/health/ready`
 - PostgreSQL: 로컬 개발 포트 5432
 
+Phase 1의 문서 endpoint와 analyzer는 인증 provider가 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아니며, 인증 provider는 Phase 7에서 다룹니다.
+
 종료:
 
 ```bash
@@ -83,6 +85,10 @@ git commit -m "feat(policies): add rider review state"
 
 전체 규칙은 `AGENTS.md`의 Branch and commit conventions를 따릅니다. CI는 PR 브랜치명과 커밋 제목을 검사합니다.
 
+### Protect main ruleset
+
+GitHub의 활성 `Protect main` ruleset은 PR을 요구하고 다음 exact display-name checks를 strict required checks로 적용합니다: `Repository safety`, `Web`, `Python`, `PostgreSQL integration`, `Container (web)`, `Container (api)`, `Container (worker)`. Branch deletion과 force-push는 차단되고, merge는 merge commit만 허용되며, review threads는 모두 resolved 상태여야 합니다. bypass actor는 구성하지 않습니다. Required approving review count는 `0`이며, 자동 검증과 review-thread 해결 조건은 그대로 적용됩니다. 현재 ruleset 상태는 GitHub에서 확인합니다.
+
 ## Safe data handling
 
 ### Public development
@@ -98,7 +104,7 @@ git commit -m "feat(policies): add rider review state"
 
 ### External local paths
 
-실제 자료 사용 단계가 별도 승인되면 저장소 밖 경로만 지정합니다.
+Phase 1 구현과 CI에서는 실제 자료 또는 private external root를 열지 않습니다. 테스트는 처음부터 만든 합성 PDF를 checkout 밖 임시 디렉터리에 복사해 `FAMILYCARE_DOCUMENT_ROOT`로 지정합니다. 실제 자료 사용 단계가 별도 승인된 뒤에만 저장소 밖 경로를 지정할 수 있습니다.
 
 ```dotenv
 FAMILYCARE_DOCUMENT_ROOT=/absolute/path/outside/repository
@@ -108,6 +114,10 @@ FAMILYCARE_WORK_ROOT=/absolute/path/outside/repository/work
 위 문자열은 경로 형식 예시이며 실제 경로가 아닙니다. 실제 값을 문서, 이슈, PR, 로그에 복사하지 않습니다.
 
 Foundation Compose에는 문서 경로 mount가 없습니다. 실제 자료를 연결하는 변경은 Private-data Acceptance 단계의 설계와 사용자 승인이 필요합니다.
+
+Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
+
+문서 parser child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하며 network client나 external URL resolution을 제공하지 않습니다. OS egress enforcement와 실제 private-data acceptance는 approved runtime boundary가 마련될 때까지 수행하지 않습니다.
 
 ### Before every commit
 

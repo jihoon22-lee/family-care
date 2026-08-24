@@ -1,6 +1,6 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명합니다. 현재 구현 범위와 세부 버전은 `docs/design/project-foundation.md`, 단계별 순서는 `docs/plan/000-project-roadmap.md`가 기준입니다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명합니다. Phase 0 Foundation은 PR #1에서 완료되었고, 현재 Phase 1은 합성 PDF ingestion 계획 단계입니다. 현재 구현 범위와 세부 버전은 `docs/design/project-foundation.md`, 단계별 순서는 `docs/plan/000-project-roadmap.md`가 기준입니다.
 
 ## Architectural goals
 
@@ -29,7 +29,7 @@ PostgreSQL <---- Analyzer Worker   원본 문서 저장소
 구조화 계약·담보·조항·판정·청구 이력
 ```
 
-Foundation에서는 원본 문서 저장소, 인증 제공자, 외부 AI가 연결되지 않습니다. Web/API/Worker/PostgreSQL의 최소 실행 경계만 제공합니다.
+Foundation에서는 원본 문서 저장소, 인증 제공자, 외부 AI가 연결되지 않았습니다. Phase 1도 실제 PDF나 private external root를 열지 않고, checkout 밖 임시 root의 합성 fixture만 사용합니다. 인증 provider는 Phase 7 범위이므로 Phase 1 endpoint는 local synthetic-only 개발 경계이며 production-safe endpoint가 아닙니다.
 
 ## Trust boundaries
 
@@ -48,6 +48,8 @@ API는 입력 검증, 인증·인가, 유스케이스 실행, 외부 계약을 �
 ### Worker boundary
 
 Worker는 문서 분석 작업을 격리된 임시 디렉터리에서 수행합니다. 작업은 멱등하며 lease 만료 후 재처리할 수 있습니다. 중간 평문과 페이지 이미지는 종료 경로에서 삭제합니다.
+
+Phase 1 parser는 전용 child process에서 실행하며 parent wall 120초, child CPU 90초, address space 1536 MiB, output file 64 MiB, open descriptor 64개의 제한을 적용합니다. intake는 root directory descriptor부터 각 상대 component를 chained no-follow open으로 순회하고 final source를 한 번만 열어, 그 file identity의 duplicate handles로 magic·hash·구조를 검증합니다. Linux child에는 reopen 가능한 path가 아니라 inherited 또는 duplicated read-only descriptor와 canonical JSON settings만 전달하고, child는 limits 적용 뒤에 parser를 lazy import합니다. network client나 external URL resolution을 제공하지 않습니다. OS egress enforcement는 production hardening 항목이며 approved runtime boundary 전까지 private-data acceptance를 수행하지 않습니다. Windows descriptor passing과 RLIMIT 동작은 미검증입니다.
 
 ### External-provider boundary
 
@@ -93,6 +95,8 @@ Drive와 AI는 후속 선택 연동입니다. Drive는 지정 폴더 읽기 전�
 - 문서 구조 후보 생성
 - 임시 파일 수명주기와 작업 상태 전이
 
+Phase 1에서 Worker가 소유하는 최소 영속 모델과 physical table mapping은 `Document` → `documents`, `DocumentVersion` → `document_versions`, `Extraction` → `extractions`, `ExtractionPage` → `extraction_pages`, `ExtractionBlock` → `extraction_blocks`, `ExtractionTable` → `extraction_tables`, `ExtractionCell` → `extraction_cells`, `AnalysisJob` → `analysis_jobs`입니다. Policy Ledger의 `PolicyContract`, `PolicyParty`, `Rider`와 보험 판정은 후속 단계에 남깁니다.
+
 Worker는 가입 확정이나 보험금 판정을 수행하지 않습니다. 추출 결과는 검수 전 상태로 저장됩니다.
 
 ### PostgreSQL
@@ -103,6 +107,8 @@ Worker는 가입 확정이나 보험금 판정을 수행하지 않습니다. 추
 - 전문검색 인덱스
 - 비동기 작업 큐와 lease
 - 감사와 상태 전이
+
+Phase 1은 이 계층에 위 문서 ingestion tables와 AnalysisJob lease를 추가합니다. `document_versions(document_id, content_sha256)`가 content identity를 표현하고, `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`가 성공 extraction uniqueness를 보장합니다. 이후 Policy Ledger의 business records는 `HouseholdSpace` scope를 가져야 합니다.
 
 Redis, 별도 검색엔진, 벡터 DB는 측정된 병목이나 검색 개선 근거가 있을 때만 추가합니다. 벡터 검색이 필요하면 먼저 PostgreSQL 확장으로 평가합니다.
 
@@ -115,12 +121,12 @@ FastAPI OpenAPI가 동기 HTTP 계약의 기준입니다. Worker 작업 envelope
 ### Document ingestion
 
 ```text
-외부 원본 참조
+상대 `source_key`와 승인된 외부 root
   -> 파일·크기·암호·해시 검사
   -> 작업별 임시 공간
   -> 텍스트/표 추출
   -> 품질 평가
-  -> 필요 시 OCR 후보
+  -> versioned quality classification
   -> 페이지 근거가 있는 추출 결과
   -> 관리자 검수
   -> 임시 산출물 삭제
@@ -147,8 +153,9 @@ MedicalEvent
 - `AppUser`는 로그인 주체입니다.
 - `FamilyMember`는 보험 대상 가족입니다.
 - `PolicyParty`는 특정 계약에서 계약자·피보험자·수익자 역할을 연결합니다.
-- `Document`는 원본 자체가 아니라 외부 참조와 해시·버전·상태를 가집니다.
-- `Extraction`은 파서 출력과 검수 상태를 분리합니다.
+- `Document`는 원본 자체가 아니라 relative source key와 logical 상태를 가집니다.
+- `DocumentVersion`은 content hash와 version을 대표하며, `document_versions(document_id, content_sha256)`를 unique로 관리합니다.
+- `Extraction`은 파서 출력과 검수 상태를 분리하고, `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`를 unique로 관리합니다.
 - 핵심 엔터티는 `deleted_at`을 사용합니다.
 - 물리 삭제와 백업 보존은 운영 배포 설계에서 결정합니다.
 
@@ -166,6 +173,9 @@ AI가 생성한 설명은 판정 레코드의 입력·규칙·근거를 벗어�
 - 콘텐츠 해시와 멱등 키가 중복 결과를 방지합니다.
 - 일부 문서 분석 실패가 다른 계약 조회를 차단하지 않습니다.
 - 임시 파일 삭제 실패는 보안 이벤트이며 성공으로 숨기지 않습니다.
+- Phase 1 암호화 PDF는 asynchronous API에서 `PASSWORD_REQUIRED`로 거부하며, password는 DB·job payload·log에 들어가지 않습니다.
+
+API POST는 source key만 검증하고 `documents`와 `analysis_jobs`를 생성·재사용합니다. 파일 descriptor를 연 뒤 hash, 구조, `document_versions`, `extractions`를 결정하는 책임은 Worker에 있습니다. Unknown job 조회는 `ANALYSIS_JOB_NOT_FOUND`입니다.
 
 ## Deployment boundaries
 

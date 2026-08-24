@@ -13,7 +13,23 @@
 5. 모든 판정 기능은 근거 추적과 `UNKNOWN` 경로를 정상 동작으로 취급한다.
 6. 사용자 승인 없이 저장소 밖 자료를 이동하거나 외부 서비스에 전송하지 않는다.
 
-## 2. 단계 의존성
+## 2. Phase status
+
+| Phase | Status | Current evidence and dependency |
+|---|---|---|
+| Phase 0 — Project Foundation | Complete | PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, and seven successful PR/post-merge CI jobs. No tag, GHCR publish, Cloud Run, or real/private-data verification was performed. |
+| Phase 1 — Synthetic PDF Ingestion | In planning | `docs/design/pdf-ingestion.md`, ADR 0006, and `docs/plan/002-synthetic-pdf-ingestion.md`; synthetic-only implementation and CI. |
+| Phase 2 — Policy Ledger | Planned | Starts after Phase 1 and its minimum document model are merged and verified. |
+| Phase 3 — Clause Linking and Search | Planned | Depends on the Policy Ledger and terms model. |
+| Phase 4 — Coverage Decision Engine | Planned | Depends on linked clauses and evidence contracts. |
+| Phase 5 — Event and Result PWA | Planned | Depends on the decision engine API contract. |
+| Phase 6 — Claim Workflow | Planned | Depends on the event/result flow and claim state model. |
+| Phase 7 — Authentication | Planned | Depends on local feature boundaries and the approved provider/runtime. |
+| Phase 8 — Private-data Acceptance | Planned | Requires explicit user approval and an approved runtime boundary. |
+| Phase 9 — Optional Drive and AI Integrations | Planned | Requires private-data acceptance and external-transfer policy. |
+| Phase 10 — Production Deployment | Planned | Requires a separately approved production design. |
+
+## 3. 단계 의존성
 
 ```text
 Foundation
@@ -31,7 +47,7 @@ Foundation
 
 검색 품질 실험은 Clause Linking 이후 병행할 수 있지만, 실제 판정 결과에 반영하려면 Decision Engine 수용 조건을 통과해야 한다. 인증 구현 전까지 모든 로컬 화면은 합성 데이터 전용 개발 기능으로 취급한다.
 
-## 3. Phase 0 — Project Foundation
+## 4. Phase 0 — Project Foundation
 
 ### 목표
 
@@ -59,21 +75,29 @@ Foundation
 
 `docs/plan/001-project-foundation.md`
 
-## 4. Phase 1 — Synthetic PDF Ingestion
+Foundation은 PR #1의 merge commit `0f632989df891ae944c012bfcce6c838009867a9`으로 완료되었습니다. PR과 post-merge CI의 일곱 required job이 성공했지만, 태그·GHCR publish·Cloud Run·실제 자료 검증은 수행하지 않았습니다.
+
+## 5. Phase 1 — Synthetic PDF Ingestion
 
 ### 선행 조건
 
 Foundation 완료와 PDF 처리 보안 설계 승인.
 
+Phase 1은 `Document`, `DocumentVersion`, `Extraction`, `ExtractionPage`, `ExtractionBlock`, `ExtractionTable`, `ExtractionCell`, `AnalysisJob`의 최소 문서 모델을 만들고 Evidence 좌표를 저장합니다. 이 모델과 content hash·extractor config hash 멱등성은 Phase 2 Policy Ledger가 의존하는 물리 경계입니다. Phase 2는 이 모델을 다시 만들지 않고 문서 버전과 Evidence를 참조합니다.
+
 ### 구현 범위
 
 - 처음부터 작성한 텍스트형·표형·스캔형 합성 PDF 세트
 - 파일 형식, 암호화, 페이지 수, 크기, 해시 검증
-- PyMuPDF 기본 추출과 pdfplumber 표·좌표 보조 추출
+- pdfplumber 0.11.10 primary text/word/coordinate/table extractor
+- pypdf 6.16.2 structural/page/encryption validation
+- reportlab 5.0.1 deterministic synthetic fixture generation
 - 텍스트 품질 임계치 미달 시에만 OCR 후보로 분류
 - 작업별 임시 디렉터리 생성, 권한 제한, 성공·실패·취소 시 삭제
 - 페이지별 텍스트 블록, 좌표, 추출기 버전, 품질 지표 저장
 - 동일 SHA-256 문서의 중복 분석 방지
+- Phase 1 API는 unencrypted PDF만 받고 encrypted input은 `PASSWORD_REQUIRED`로 반환하며 password transport를 만들지 않음
+- parser child resource limits, canonical JSON settings, network client와 external URL resolution 부재
 
 ### 필수 실패 경로
 
@@ -81,16 +105,22 @@ Foundation 완료와 PDF 처리 보안 설계 승인.
 - 임시 디렉터리 생성 실패와 삭제 실패
 - 파서 시간 제한과 Worker 강제 종료 후 lease 복구
 - 텍스트가 없는 문서를 성공 추출로 오판하지 않는 경로
+- 25 MiB input, 500 pages, 120-second parent wall, 90-second child CPU, 1536 MiB address-space, 64 MiB output, 64 open descriptors
 
 ### 수용 조건
 
-- 각 합성 문서의 예상 페이지와 텍스트 블록이 재현 가능하게 추출된다.
+- 각 합성 문서의 예상 페이지와 word-as-`TextBlock` records가 재현 가능하게 추출된다.
 - 결과의 모든 텍스트 조각이 원본 페이지와 좌표를 참조한다.
+- 좌표는 PDF points·top-left origin·3-decimal rounding, page는 1-based, reading order는 0부터 시작한다.
 - 임시 평문 PDF와 페이지 이미지가 작업 종료 후 남지 않는다.
 - 실패 로그에 문서 본문과 로컬 절대경로가 없다.
 - 동일 문서를 두 번 제출해도 분석 결과가 하나만 생성된다.
+- `quality-v1`은 non-whitespace `<20`, alphanumeric ratio `<0.25`, replacement ratio `>0.05`, max repeated run `>20` 중 하나이면 `OCR_REQUIRED`로 분류하고, OCR은 실행하지 않는다.
+- Phase 1 구현과 CI는 실제 PDF나 private external root를 열지 않고, 합성 fixture를 checkout 밖 임시 root에 복사한다.
 
-## 5. Phase 2 — Policy Ledger
+상세 계획은 `docs/plan/002-synthetic-pdf-ingestion.md`입니다. Policy Ledger는 Phase 1 최소 문서 모델과 Evidence contract가 merge되고 검증된 뒤 시작합니다.
+
+## 6. Phase 2 — Policy Ledger
 
 ### 선행 조건
 
@@ -121,7 +151,7 @@ Synthetic PDF Ingestion 완료와 데이터 모델 설계 승인.
 - 갱신형 특약은 최신 상태 증거가 없으면 활성으로 확정되지 않는다.
 - 사용자 계정 삭제나 변경이 FamilyMember 기록을 암묵적으로 삭제하지 않는다.
 
-## 6. Phase 3 — Clause Linking and Search
+## 7. Phase 3 — Clause Linking and Search
 
 ### 선행 조건
 
@@ -152,7 +182,7 @@ Policy Ledger 완료와 약관 조항 모델 승인.
 - 대표 합성 질의 세트에서 전문검색 기준 정확도와 재현율을 기록한다.
 - 벡터 검색은 기준선 대비 개선을 증명하기 전 제품 의존성이 되지 않는다.
 
-## 7. Phase 4 — Coverage Decision Engine
+## 8. Phase 4 — Coverage Decision Engine
 
 ### 선행 조건
 
@@ -184,7 +214,7 @@ Clause Linking 완료와 판정 규칙 계약 승인.
 - 모든 금액에는 계산식·입력값·단위·반올림 규칙이 있다.
 - 규칙 엔진을 우회한 AI 단독 판정 경로가 없다.
 
-## 8. Phase 5 — Event and Result PWA
+## 9. Phase 5 — Event and Result PWA
 
 ### 선행 조건
 
@@ -215,7 +245,7 @@ Coverage Decision Engine API 계약과 UX 설계 승인.
 - 화면에 표시된 모든 후보가 증권과 약관 근거로 이동한다.
 - Lighthouse PWA·접근성 기준과 실제 모바일 브라우저 확인을 별도로 보고한다.
 
-## 9. Phase 6 — Claim Workflow
+## 10. Phase 6 — Claim Workflow
 
 ### 선행 조건
 
@@ -238,7 +268,7 @@ Event and Result PWA 완료와 청구 상태 모델 승인.
 - 과거 지급 이력이 후속 판정의 `UNKNOWN` 또는 제한 규칙에 반영된다.
 - 삭제·복원·상태 전이가 감사 가능하다.
 
-## 10. Phase 7 — Authentication
+## 11. Phase 7 — Authentication
 
 ### 선행 조건
 
@@ -265,7 +295,7 @@ Event and Result PWA 완료와 청구 상태 모델 승인.
 - 한 관리자 계정의 비활성화가 다른 계정이나 가족 데이터를 삭제하지 않는다.
 - 브라우저 저장소에 장기 토큰을 보관하지 않는다.
 
-## 11. Phase 8 — Private-data Acceptance
+## 12. Phase 8 — Private-data Acceptance
 
 ### 선행 조건
 
@@ -286,7 +316,7 @@ Event and Result PWA 완료와 청구 상태 모델 승인.
 - 실제 데이터에서 발견한 예시는 공개 fixture에 복사하지 않고 새 합성 사례로 작성한다.
 - 실행하지 못한 보험사·문서 형식은 미검증으로 명시한다.
 
-## 12. Phase 9 — Optional Drive and AI Integrations
+## 13. Phase 9 — Optional Drive and AI Integrations
 
 ### 선행 조건
 
@@ -313,7 +343,7 @@ Private-data Acceptance 완료와 외부 전송 정책 승인.
 - 외부 AI 장애가 규칙 판정과 기존 근거 조회를 중단시키지 않는다.
 - 전체 PDF 또는 직접 식별자가 AI 요청에 포함되지 않는다.
 
-## 13. Phase 10 — Production Deployment
+## 14. Phase 10 — Production Deployment
 
 ### 선행 조건
 
@@ -335,11 +365,10 @@ Private-data Acceptance 완료와 외부 전송 정책 승인.
 - 운영 비밀값이 GitHub Actions 로그와 이미지 레이어에 없다.
 - 실제 운영 확인 전에는 GHCR 이미지 성공을 배포 성공으로 보고하지 않는다.
 
-## 14. 버전과 릴리스 전략
+## 15. 버전과 릴리스 전략
 
 - `0.y.z`: 가족 내부 사용 전 개발 단계
 - `1.0.0`: 인증, 핵심 판정, 청구 흐름, 비공개 자료 수용 검증 완료
 - 각 버전은 Keep a Changelog 형식의 변경 내역을 가진다.
 - `vMAJOR.MINOR.PATCH` Git 태그는 같은 버전의 Web/API/Worker 이미지를 만든다.
 - 운영 배포 전까지 태그 릴리스는 실행 가능한 이미지 산출물이며 서비스 가용성을 뜻하지 않는다.
-

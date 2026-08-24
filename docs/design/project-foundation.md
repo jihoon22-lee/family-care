@@ -1,8 +1,9 @@
 # FamilyCare 프로젝트 기반 설계
 
-- 상태: 승인됨
+- 상태: 승인됨, Phase 0 완료
 - 작성일: 2026-08-23
 - 적용 범위: 공개 저장소의 문서, 개발환경, 최소 실행 골격, CI, GHCR 릴리스
+- 완료 근거: PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, PR 및 post-merge CI 일곱 required job 성공
 
 ## 1. 목적
 
@@ -144,7 +145,7 @@ family-care/
 | 영역 | 기준 | 선택 이유 |
 |---|---|---|
 | Node.js | 24 LTS | 운영용 LTS 계열이며 최신 도구와 호환된다. |
-| JavaScript 패키지 | pnpm 10 | 워크스페이스와 엄격한 의존성 경계를 제공한다. |
+| JavaScript 패키지 | pnpm 11.22.0 | 워크스페이스와 엄격한 의존성 경계를 제공한다. |
 | Python | 3.14 | 최신 안정 기능 계열이며 장기 지원 창을 확보한다. |
 | Python 패키지 | uv | 잠금 파일, 가상환경, 실행 명령을 하나로 통일한다. |
 | 데이터베이스 | PostgreSQL 18 | 지원 중인 최신 주 버전이며 전문검색과 확장 기반을 제공한다. |
@@ -268,6 +269,20 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 - 실패한 구성 요소가 있으면 어떤 이미지도 완료된 릴리스로 선언하지 않는다.
 - GHCR 게시 성공은 운영 배포 성공을 의미하지 않는다.
 
+### 12.3 Protect main ruleset
+
+GitHub의 활성 `Protect main` ruleset은 다음 저장소 정책을 적용합니다.
+
+- PR required
+- Required strict checks: `Repository safety`, `Web`, `Python`, `PostgreSQL integration`, `Container (web)`, `Container (api)`, `Container (worker)`
+- Branch deletion blocked
+- Force-push blocked
+- Merge commit only
+- Review threads must be resolved
+- No bypass actors are configured
+
+Required approving review count는 `0`입니다. Ruleset 상태와 required check display name은 GitHub에서 별도로 확인하며, 로컬 문서·코드 검증 결과를 ruleset 적용 증거로 확대하지 않습니다.
+
 ## 13. 문서 체계
 
 - `README.md`: 프로젝트 목적, 안전 경고, 빠른 시작, 현재 범위
@@ -285,8 +300,8 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 
 ## 14. 단계별 전달 계획
 
-1. **Foundation**: 문서, 안전장치, 실행 골격, CI, GHCR 릴리스
-2. **Synthetic ingestion**: 합성 PDF 추출, 페이지 근거, 임시 파일 수명주기
+1. **Foundation (Phase 0, 완료)**: 문서, 안전장치, 실행 골격, CI, GHCR 릴리스
+2. **Synthetic ingestion (Phase 1, 계획)**: 합성 PDF 추출, 페이지 근거, 임시 파일 수명주기
 3. **Policy ledger**: 계약 당사자, 실제 가입 담보, 계약 상태, 관리자 검수
 4. **Clause linking**: 담보와 약관 조항·별표 연결, 검색 인덱스
 5. **Decision engine**: 3값 판정, 부족 정보, 정액·실손 분기, 근거 추적
@@ -299,7 +314,13 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 
 각 단계는 별도의 상세 설계와 구현 계획을 승인받은 뒤 시작한다. 이전 단계의 테스트와 데이터 경계를 깨뜨리는 변경은 다음 단계의 일부로 묵시적으로 포함하지 않는다.
 
-## 15. 완료 조건
+## 15. Foundation 완료와 Phase 1 경계
+
+Foundation은 PR #1에서 merge commit `0f632989df891ae944c012bfcce6c838009867a9`로 `main`에 병합되었고, PR 및 post-merge GitHub Actions의 일곱 required job이 성공했다. 이 증거는 Foundation 코드와 CI 검증을 의미한다. 태그 생성과 GHCR publish, Cloud Run 배포, Windows·실제 기기 확인, 실제 보험 자료와 private external root 확인은 수행하지 않았으며 Foundation 완료 주장에 포함하지 않는다.
+
+Phase 1은 `docs/design/pdf-ingestion.md`와 `docs/plan/002-synthetic-pdf-ingestion.md`의 합성 전용 계획을 따른다. 구현과 CI는 실제 PDF와 private external root를 열지 않고, 합성 fixture를 checkout 밖의 임시 root에 복사해서만 실행한다. 인증 provider는 Phase 7에 남아 있으므로 Phase 1 API는 local synthetic-only 개발 경계이며 production-safe endpoint가 아니다. Phase 1이 만드는 최소 Document·DocumentVersion·Extraction·ExtractionPage·ExtractionBlock·ExtractionTable·ExtractionCell·AnalysisJob 모델은 Policy Ledger(Phase 2)의 선행 의존성이다.
+
+## 16. 완료 조건
 
 Foundation 단계는 다음 증거가 모두 있을 때 완료된다.
 
@@ -312,7 +333,7 @@ Foundation 단계는 다음 증거가 모두 있을 때 완료된다.
 - 실제 보험 자료와 개인정보가 Git 인덱스 및 커밋에 포함되지 않았음을 확인한다.
 - Cloud Run과 실제 데이터 검증은 명시적으로 미실행 상태로 보고한다.
 
-## 16. 명시적 결정
+## 17. 명시적 결정
 
 - 공개 저장소지만 `LICENSE` 파일을 두지 않으며 재사용 권한을 자동으로 부여하지 않는다.
 - 초기 구조는 마이크로서비스가 아닌 모듈형 모놀리스와 별도 Worker다.
@@ -320,7 +341,7 @@ Foundation 단계는 다음 증거가 모두 있을 때 완료된다.
 - CI/CD는 GHCR 이미지 게시까지이며 운영 배포를 포함하지 않는다.
 - 실제 데이터가 필요한 기능은 합성 데이터로 먼저 완성하고, 비공개 검증은 별도 완료 경계로 남긴다.
 
-## 17. 기술 기준 참고 자료
+## 18. 기술 기준 참고 자료
 
 - [Node.js 릴리스와 LTS 상태](https://nodejs.org/en/about/previous-releases)
 - [Python 3.14.7 릴리스](https://www.python.org/downloads/release/python-3147/)
