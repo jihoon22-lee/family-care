@@ -20,6 +20,13 @@ from familycare_api.decisions.domain import (
     RuleReader,
     TriState,
 )
+from familycare_api.decisions.engine import (
+    ENGINE_VERSION,
+    DeterministicCoverageDecisionEngine,
+    aggregate_required_results,
+    build_follow_up_questions,
+    evaluate_event,
+)
 from familycare_api.decisions.facts import (
     FactNormalizationError,
     normalize_fact,
@@ -45,6 +52,8 @@ __all__ = [
     "DecisionReaders",
     "DecisionRun",
     "DecisionRunResult",
+    "DeterministicCoverageDecisionEngine",
+    "ENGINE_VERSION",
     "EvidenceRepository",
     "FactContext",
     "FactNormalizationError",
@@ -60,8 +69,11 @@ __all__ = [
     "RuleRuntimeError",
     "TriState",
     "compare_required",
+    "aggregate_required_results",
+    "build_follow_up_questions",
     "compile_rule_expression",
     "evaluate_expression",
+    "evaluate_event",
     "evaluate_rule",
     "normalize_fact",
     "normalize_fact_mapping",

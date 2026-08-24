@@ -138,9 +138,13 @@ class PolicySnapshot:
     rider_type: str | None = None
     contract_start: date | None = None
     contract_end: date | None = None
+    rider_coverage_start: date | None = None
+    rider_coverage_end: date | None = None
     rider_status: str | None = None
     insured_amount: Decimal | None = None
     currency: str | None = None
+    renewable: bool | None = None
+    status_checked_at: datetime | None = None
 
     def __post_init__(self) -> None:
         _require_nonzero_uuid(self.policy_id, "policy")
@@ -294,9 +298,11 @@ class DecisionRun:
 @dataclass(frozen=True)
 class DecisionRunResult:
     run_id: UUID
+    medical_event_id: UUID
     event_version: int
     engine_version: str
     rule_set_version: str
+    policy_snapshot_at: datetime
     candidates: tuple[ClaimCandidate, ...]
     evaluations: tuple[RuleEvaluation, ...]
     stale: bool
