@@ -1,11 +1,11 @@
 # Security and privacy design
 
-- 상태: Foundation 보안 기준
-- 대상: 공개 저장소, 로컬 개발, 향후 운영
+- 상태: Foundation 및 Phase 1 보안 기준
+- 대상: 공개 저장소, 합성 전용 로컬 개발, 향후 운영
 
 ## Scope
 
-보험·의료 자료의 기밀성, 판정 무결성, 서비스 가용성, 공개 저장소의 공급망 위험을 다룹니다. Foundation에서는 실제 데이터와 운영 인증이 없지만 이후 단계가 넘어서는 안 될 경계를 먼저 강제합니다.
+보험·의료 자료의 기밀성, 판정 무결성, 서비스 가용성, 공개 저장소의 공급망 위험을 다룹니다. Foundation은 완료되었고 Phase 1은 실제 데이터·private external root·운영 인증 없이 합성 fixture만 사용하지만, 이후 단계가 넘어서는 안 될 경계를 먼저 강제합니다.
 
 ## Inputs
 
@@ -72,8 +72,13 @@ PDF가 파서 취약점, 과도한 메모리·CPU 사용, embedded action, 경�
 - 비특권 격리 Worker
 - 읽기 전용 원본과 별도 임시 root
 - 크기·페이지·시간·메모리 제한
-- 외부 실행·네트워크 비활성화
+- parser dedicated child process와 64 open descriptor limit
+- 25 MiB input, 500 page, 120초 parent wall, 90초 child CPU, 1536 MiB address-space, 64 MiB output-file 제한
+- child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하고 external URL resolution을 제공하지 않음
+- 외부 실행·네트워크 client 비활성화
 - 파서 버전 갱신과 합성 회귀 corpus
+
+OS-level egress enforcement는 production hardening 항목입니다. approved runtime boundary가 마련되기 전에는 private-data acceptance를 실행하지 않습니다.
 
 ### Browser persistence
 
@@ -130,6 +135,8 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - 증권번호는 필요성이 확인되기 전 저장하지 않습니다.
 - 사용자 화면에는 최소 식별 정보만 표시합니다.
 - 원문은 외부 저장소에 두고 DB에는 필요한 구조와 Evidence만 저장합니다.
+- Phase 1 source key는 `FAMILYCARE_DOCUMENT_ROOT`에 상대적인 값이며 absolute path를 request, job payload, log에 넣지 않습니다.
+- password는 DB, job payload, log에 저장하지 않습니다.
 - 로그와 telemetry는 allowlist 필드 방식으로 구성합니다.
 
 ## Security considerations
@@ -201,6 +208,8 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 4. Worker 임시 산출물은 성공·실패·취소 후 남지 않습니다.
 5. 외부 제공자 전송은 명시적 기능 설계와 최소 필드 정책이 있어야 합니다.
 6. 각 계층은 내부 UUID만으로 접근 권한을 결정하지 않습니다.
+7. Phase 1 implementation과 CI는 실제 PDF나 private external root를 열지 않습니다.
+8. Phase 1 endpoint는 인증 provider가 없는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다.
 
 ## Failure behavior
 
@@ -217,6 +226,8 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - PWA cache manifest와 no-store header
 - 경로 정규화와 symlink 탈출
 - PDF resource limit와 임시 파일 삭제
+- PDF path symlink traversal, magic bytes, 1 MiB streaming hash, and quality-v1 thresholds
+- encrypted PDF `PASSWORD_REQUIRED`와 direct one-shot `PASSWORD_INVALID`
 - 객체 scope 인가
 - 로그 capture에서 금지 필드 부재
 - Evidence 없는 판정 거부

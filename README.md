@@ -6,17 +6,21 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-현재는 Foundation 단계입니다. 문서, 공개 저장소 보안 경계, 최소 Web/API/Worker 실행 환경, PostgreSQL, CI 및 GHCR 태그 릴리스를 먼저 구축합니다.
+Phase 0 (Foundation)은 완료되었습니다. [PR #1](https://github.com/jihoon22-lee/family-care/pull/1)의 merge commit은 `0f632989df891ae944c012bfcce6c838009867a9`이며, PR과 post-merge GitHub Actions의 일곱 required job이 모두 성공했습니다. 이 완료는 문서·코드·CI 경계를 확인한 것이며, 태그 생성, GHCR publish, Cloud Run, 실제 자료 검증을 포함하지 않습니다.
 
-Foundation에서 구현하지 않는 범위:
+현재는 Phase 1 (Synthetic PDF Ingestion) 계획 단계입니다. Phase 1 구현과 CI는 처음부터 만든 합성 PDF만 사용하며, 실제 PDF나 private external root를 열지 않습니다. 테스트는 합성 fixture를 checkout 밖의 임시 root에 복사해 실행합니다. 인증 provider는 Phase 7 범위이므로 Phase 1 endpoint는 local synthetic-only 개발 경계이며 production-safe endpoint로 간주하지 않습니다.
 
-- 실제 보험 PDF 수집·분석
+구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`와 `docs/plan/002-synthetic-pdf-ingestion.md`에서 확인할 수 있습니다.
+
+Foundation에서 구현하지 않은 범위:
+
+- 실제 보험 PDF 수집·분석과 private-data acceptance
 - 로그인과 운영 계정
 - Google Drive 또는 외부 AI 연동
 - 보험금 자격·금액 판정
 - Cloud Run을 포함한 운영 배포
 
-구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다.
+Phase 1에서도 OCR 실행, Policy Ledger, 보험금 자격·금액 판정은 구현하지 않습니다. 약관과 증권에 근거한 결과는 후속 단계의 명시적 규칙과 검수 경계를 거쳐야 합니다.
 
 ## Privacy boundary
 
@@ -67,7 +71,7 @@ Foundation 구성이 완료된 뒤 다음 명령으로 시작합니다.
 
 ```bash
 cp .env.example .env
-corepack pnpm install --frozen-lockfile
+corepack pnpm@11.22.0 install --frozen-lockfile
 uv sync --all-packages --group dev
 make check
 make up

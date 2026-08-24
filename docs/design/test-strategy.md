@@ -1,6 +1,6 @@
 # Test strategy
 
-- 상태: Foundation 검증 기준
+- 상태: Foundation 및 Phase 1 검증 기준
 - 원칙: 최신 실행 증거 없는 완료 주장을 하지 않음
 
 ## Scope
@@ -28,6 +28,8 @@
 - 합성 PDF는 `fixtures/synthetic/`에서만 허용하고 작성 의도를 기록합니다.
 - 무작위 값은 재현 가능한 seed를 사용합니다.
 - 비밀 검사는 실제 credential이 아닌 분할·조립한 합성 문자열을 사용합니다.
+- Phase 1 테스트는 reportlab으로 만든 wholly synthetic PDF를 checkout 밖 임시 root에 복사하고, `FAMILYCARE_DOCUMENT_ROOT`를 그 임시 root로만 설정합니다.
+- Phase 1 구현과 CI는 실제 PDF와 private external root를 열지 않습니다.
 
 ## Test layers
 
@@ -104,6 +106,8 @@ CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 �
 - secret scan
 - dependency·container scan
 
+Phase 1 security tests additionally verify 25 MiB input, 500 pages, 120초 parent wall, 90초 child CPU, 1536 MiB address space, 64 MiB output, 64 open descriptors, mode `0700` work directories, mode `0600` files, 1 MiB streaming SHA-256, `%PDF-` magic, password absence, and symlink rejection.
+
 정적 검사만 수행한 경우 동적 공격 재현을 수행했다고 보고하지 않습니다.
 
 ## Foundation command matrix
@@ -121,6 +125,15 @@ CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 �
 | Migrations | `uv run alembic ... upgrade head` | 합성 로컬 DB |
 | Containers | 개별 `docker compose ... build` | 없음 |
 | Workflows | `uv run python scripts/check_workflows.py` | 없음 |
+
+Phase 1 feature branches also run:
+
+```bash
+TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_pdf_intake.py workers/analyzer/tests/test_pdf_extraction.py -q
+TMPDIR=/tmp uv run pytest apps/api/tests/test_document_analysis_api.py -q
+```
+
+These commands use synthetic fixtures only. They do not discover, open, or copy any private external root.
 
 ## Resource policy
 
@@ -159,6 +172,7 @@ CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 �
 - 임시 파일 수명주기: 성공·실패·취소·강제 종료
 - API 계약: 모든 endpoint status와 오류 envelope
 - UI: 핵심 사용자 흐름과 접근성 role
+- PDF ingestion: parser boundary, path safety, coordinate normalization, quality-v1 classification, cleanup, and AnalysisJob lease transitions
 
 Coverage 감소는 누락 테스트를 확인하는 신호이며, 생성 코드·불가능 branch 제외는 근거를 문서화합니다.
 
