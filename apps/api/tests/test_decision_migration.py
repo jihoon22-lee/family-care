@@ -201,6 +201,7 @@ def test_rule_evaluations_store_one_tri_state_and_versioned_inputs() -> None:
         "required",
         "reason_code",
         "facts_json",
+        "evidence_snapshot_json",
         "missing_fields_json",
         "conflicting_fields_json",
         "evaluator_version",
@@ -212,6 +213,7 @@ def test_rule_evaluations_store_one_tri_state_and_versioned_inputs() -> None:
         "coverage_rule_version_id": ("coverage_rule_versions.id", "RESTRICT"),
     }
     assert isinstance(evaluations.c.facts_json.type, postgresql.JSONB)
+    assert isinstance(evaluations.c.evidence_snapshot_json.type, postgresql.JSONB)
     assert isinstance(evaluations.c.missing_fields_json.type, postgresql.JSONB)
     assert isinstance(evaluations.c.conflicting_fields_json.type, postgresql.JSONB)
     evaluation_checks = checks(evaluations)
@@ -225,6 +227,9 @@ def test_rule_evaluations_store_one_tri_state_and_versioned_inputs() -> None:
     )
     assert evaluation_checks["ck_rule_evaluations_facts_object"] == (
         "jsonb_typeof(facts_json) = 'object'"
+    )
+    assert evaluation_checks["ck_rule_evaluations_evidence_snapshot_array"] == (
+        "jsonb_typeof(evidence_snapshot_json) = 'array'"
     )
     assert evaluation_checks["ck_rule_evaluations_missing_fields_array"] == (
         "jsonb_typeof(missing_fields_json) = 'array'"

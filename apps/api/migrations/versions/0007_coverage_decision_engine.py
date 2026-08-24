@@ -168,6 +168,11 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
+            "evidence_snapshot_json",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+        ),
+        sa.Column(
             "missing_fields_json",
             postgresql.JSONB(astext_type=sa.Text()),
             nullable=False,
@@ -194,6 +199,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "jsonb_typeof(facts_json) = 'object'",
             name="ck_rule_evaluations_facts_object",
+        ),
+        sa.CheckConstraint(
+            "jsonb_typeof(evidence_snapshot_json) = 'array'",
+            name="ck_rule_evaluations_evidence_snapshot_array",
         ),
         sa.CheckConstraint(
             "jsonb_typeof(missing_fields_json) = 'array'",
