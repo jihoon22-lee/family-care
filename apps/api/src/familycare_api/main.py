@@ -13,6 +13,7 @@ from familycare_api.health import (
     liveness,
     readiness,
 )
+from familycare_api.policies.candidate_router import router as policy_candidate_router
 from familycare_api.policies.router import router as policy_ledger_router
 
 
@@ -60,6 +61,7 @@ def create_app(
     if enabled:
         app.include_router(document_analysis_router)
     app.include_router(policy_ledger_router)
+    app.include_router(policy_candidate_router)
 
     return app
 

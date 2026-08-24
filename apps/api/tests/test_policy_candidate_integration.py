@@ -27,16 +27,10 @@ from familycare_api.policies.candidate_models import (
 )
 from familycare_api.policies.candidate_repository import CandidateRepository
 from familycare_api.policies.candidate_service import CandidateReviewService
-from familycare_worker.ai.provider import EvidenceSlice
+from familycare_worker.ai.provider import EvidenceSlice, ProviderResponse
 from familycare_worker.runner import PolicyCandidatePipelineRunner
 from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
-
-from workers.analyzer.tests.fixtures.policy_ai_responses import (
-    VALID_VERIFIED,
-    VERIFIER_NEEDS_REVIEW,
-    FakeProvider,
-)
 
 pytestmark = pytest.mark.integration
 
@@ -57,6 +51,34 @@ FORBIDDEN_RESPONSE_KEYS = (
     "raw_provider_response",
     "source_path",
 )
+
+VALID_VERIFIED: dict[str, object] = {
+    "schema_version": "1",
+    "candidate_id": str(SYNTHETIC_CANDIDATE_ID),
+    "decision": "approved",
+    "evidence_ids": [],
+    "issue_codes": [],
+}
+VERIFIER_NEEDS_REVIEW: dict[str, object] = {
+    "schema_version": "1",
+    "candidate_id": str(SYNTHETIC_CANDIDATE_ID),
+    "decision": "needs_review",
+    "evidence_ids": [],
+    "issue_codes": ["LOW_CONFIDENCE"],
+}
+
+
+class FakeProvider:
+    """Local provider fake that neither reads credentials nor opens a network."""
+
+    def __init__(self, *, structurer: dict[str, object], verifier: dict[str, object]) -> None:
+        self.structurer = structurer
+        self.verifier = verifier
+
+    def complete(self, *, schema_name: str, **_: Any) -> ProviderResponse:
+        payload = self.structurer if "structurer" in schema_name else self.verifier
+        return ProviderResponse(payload=payload, request_id="synthetic-provider-request")
+
 
 _CANDIDATE_TABLES = (
     "analysis_candidate_evidence",
@@ -502,9 +524,10 @@ def test_user_confirmed_policy_candidate_is_published(
     )
     service = _service(database_url)
     item = service.list_review_items(scope=seed.scope_a)[0]
+    assert item.aggregate_id is not None
     corrected = service.correct_field(
         scope=seed.scope_a,
-        review_item_id=item.review_item_id,
+        policy_id=item.aggregate_id,
         request=CandidateCorrectionRequest(
             expected_version=item.expected_version,
             field_id="product_name",

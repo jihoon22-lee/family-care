@@ -80,6 +80,8 @@ def test_web_generated_types_are_checked_in_and_not_stale() -> None:
     assert "PolicyReviewItem" in text
     assert "CandidateCorrectionRequest" in text
     assert "VERSION_CONFLICT" in text
+    assert "bbox: [number, number, number, number] | null;" in text
+    assert "Array<unknown>" not in text
 
 
 def test_candidate_checker_and_web_generator_report_clean_artifacts() -> None:

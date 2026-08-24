@@ -11,8 +11,13 @@ export const API_PATHS = [
   "/api/v1/policies",
   "/api/v1/policies/trash",
   "/api/v1/policies/{policy_id}",
+  "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
   "/api/v1/policies/{policy_id}/restore",
   "/api/v1/policies/{policy_id}/riders",
+  "/api/v1/review-items",
+  "/api/v1/review-items/{review_item_id}",
+  "/api/v1/review-items/{review_item_id}/confirm",
+  "/api/v1/review-items/{review_item_id}/reject",
   "/health/live",
   "/health/ready",
 ] as const;
@@ -98,6 +103,12 @@ export const API_OPERATIONS = [
     operationId: "update_policy_api_v1_policies__policy_id__patch",
   },
   {
+    method: "PATCH",
+    path: "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
+    operationId:
+      "correct_candidate_field_api_v1_policies__policy_id__candidate_fields__field_id__patch",
+  },
+  {
     method: "POST",
     path: "/api/v1/policies/{policy_id}/restore",
     operationId: "restore_policy_api_v1_policies__policy_id__restore_post",
@@ -106,6 +117,28 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/policies/{policy_id}/riders",
     operationId: "list_policy_riders_api_v1_policies__policy_id__riders_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/review-items",
+    operationId: "list_review_items_api_v1_review_items_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/review-items/{review_item_id}",
+    operationId: "get_review_item_api_v1_review_items__review_item_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/review-items/{review_item_id}/confirm",
+    operationId:
+      "confirm_candidate_api_v1_review_items__review_item_id__confirm_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/review-items/{review_item_id}/reject",
+    operationId:
+      "reject_candidate_api_v1_review_items__review_item_id__reject_post",
   },
   {
     method: "GET",
@@ -120,6 +153,9 @@ export const API_OPERATIONS = [
 ] as const;
 
 export type ApiOperation = (typeof API_OPERATIONS)[number];
+
+export type CandidateErrorResponseErrorCode =
+  "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
 
 export type ErrorResponseErrorCode =
   | "ANALYSIS_JOB_NOT_FOUND"
@@ -186,13 +222,27 @@ export interface AnalysisJobStatusResponse {
 }
 
 export interface CandidateConfirmationRequest {
-  expected_version: PositiveVersion;
+  expected_version: number;
 }
 
 export interface CandidateCorrectionRequest {
-  evidence_id: EvidenceId;
-  expected_version: PositiveVersion;
-  field_id: PolicyCandidateFieldId;
+  evidence_id: string;
+  expected_version: number;
+  field_id:
+    | "benefit_type"
+    | "contract_end"
+    | "contract_start"
+    | "coverage_end"
+    | "coverage_start"
+    | "currency"
+    | "insurer"
+    | "policy_status"
+    | "product_name"
+    | "renewable"
+    | "rider_key"
+    | "rider_name"
+    | "rider_status"
+    | "sum_assured";
   value: CandidateScalar;
 }
 
@@ -200,13 +250,37 @@ export type CandidateErrorCode =
   "VERSION_CONFLICT" | "REVIEW_ITEM_NOT_FOUND" | "INVALID_CANDIDATE_CORRECTION";
 
 export interface CandidateErrorResponse {
-  error_code: CandidateErrorCode;
+  error_code:
+    "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
   message: string;
 }
 
+export interface CandidateEvidenceRef {
+  bbox: [number, number, number, number] | null;
+  bounded_excerpt: string;
+  document_label: string;
+  document_version_id: string;
+  evidence_id: string;
+  page: number;
+}
+
 export interface CandidateField {
-  evidence_ids: Array<EvidenceId>;
-  field_id: PolicyCandidateFieldId;
+  evidence_ids: Array<string>;
+  field_id:
+    | "benefit_type"
+    | "contract_end"
+    | "contract_start"
+    | "coverage_end"
+    | "coverage_start"
+    | "currency"
+    | "insurer"
+    | "policy_status"
+    | "product_name"
+    | "renewable"
+    | "rider_key"
+    | "rider_name"
+    | "rider_status"
+    | "sum_assured";
   value: CandidateScalar;
 }
 
@@ -229,8 +303,13 @@ export type CandidateRejectionReason =
   | "UNSUPPORTED_STRUCTURE";
 
 export interface CandidateRejectionRequest {
-  expected_version: PositiveVersion;
-  reason_code: CandidateRejectionReason;
+  expected_version: number;
+  reason_code:
+    | "DUPLICATE_CANDIDATE"
+    | "INVALID_EVIDENCE"
+    | "NOT_ENROLLED"
+    | "TERMS_ONLY_RIDER"
+    | "UNSUPPORTED_STRUCTURE";
 }
 
 export type CandidateScalar = string | number | boolean | null;
@@ -281,7 +360,7 @@ export interface EvidenceRef {
 }
 
 export interface EvidenceResponse {
-  bbox: Array<unknown> | null;
+  bbox: [number, number, number, number] | null;
   content_sha256: string;
   document_version_id: string;
   evidence_id: string;
@@ -431,15 +510,15 @@ export interface PolicyResponse {
 }
 
 export interface PolicyReviewItem {
-  aggregate_id: AggregateId | null;
-  candidate_kind: CandidateKind;
-  candidate_version_id: CandidateVersionId;
-  evidence: Array<EvidenceRef>;
-  expected_version: PositiveVersion;
+  aggregate_id: string | null;
+  candidate_kind: "policy_contract" | "policy_party" | "rider";
+  candidate_version_id: string;
+  evidence: Array<CandidateEvidenceRef>;
+  expected_version: number;
   fields: Array<CandidateField>;
   issues: Array<ReviewIssue>;
-  review_item_id: ReviewItemId;
-  status: CandidateStatus;
+  review_item_id: string;
+  status: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 }
 
 export interface PolicyUpdateRequest {
@@ -452,8 +531,30 @@ export interface PolicyUpdateRequest {
 export type PositiveVersion = number;
 
 export interface ReviewIssue {
-  code: CandidateIssueCode;
-  field_id: PolicyCandidateFieldId | null;
+  code:
+    | "CONFLICTING_EVIDENCE"
+    | "INVALID_DATE"
+    | "INVALID_UNIT"
+    | "LOW_CONFIDENCE"
+    | "MISSING_EVIDENCE"
+    | "TERMS_ONLY_RIDER"
+    | "UNSUPPORTED_STRUCTURE";
+  field_id:
+    | "benefit_type"
+    | "contract_end"
+    | "contract_start"
+    | "coverage_end"
+    | "coverage_start"
+    | "currency"
+    | "insurer"
+    | "policy_status"
+    | "product_name"
+    | "renewable"
+    | "rider_key"
+    | "rider_name"
+    | "rider_status"
+    | "sum_assured"
+    | null;
 }
 
 export type ReviewItemId = string;

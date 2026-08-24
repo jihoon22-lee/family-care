@@ -89,6 +89,9 @@ def _ts_type(schema: Any) -> str:
     if isinstance(schema_type, list):
         return " | ".join(str(_ts_type({"type": item})) for item in schema_type)
     if schema_type == "array":
+        prefix_items = schema.get("prefixItems")
+        if isinstance(prefix_items, list) and prefix_items:
+            return "[" + ", ".join(_ts_type(item) for item in prefix_items) + "]"
         return f"Array<{_ts_type(schema.get('items', {}))}>"
     if schema_type == "object":
         return _inline_object(schema)

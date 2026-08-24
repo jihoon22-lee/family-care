@@ -17,6 +17,9 @@ from psycopg.rows import dict_row
 pytestmark = pytest.mark.integration
 
 _POLICY_TABLES = (
+    "analysis_candidate_evidence",
+    "analysis_candidate_fields",
+    "analysis_candidate_versions",
     "policy_status_snapshots",
     "riders",
     "policy_parties",

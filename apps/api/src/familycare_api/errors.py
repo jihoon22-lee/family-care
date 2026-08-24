@@ -7,10 +7,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
-from familycare_api.contracts.generated_business import PolicyErrorCode
+from familycare_api.contracts.generated_business import CandidateErrorCode, PolicyErrorCode
 from familycare_api.documents.generated_contracts import ErrorCode
 
-ApiErrorCode = ErrorCode | PolicyErrorCode
+ApiErrorCode = ErrorCode | PolicyErrorCode | CandidateErrorCode
 
 
 class ApiBoundaryError(RuntimeError):
@@ -75,7 +75,11 @@ def install_error_handlers(app: FastAPI) -> None:
             message="request validation failed",
             fields=_validation_fields(error),
         )
-        return JSONResponse(status_code=422, content=payload.model_dump(exclude_none=True))
+        return JSONResponse(
+            status_code=422,
+            content=payload.model_dump(exclude_none=True),
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.exception_handler(ApiBoundaryError)
     async def handle_boundary_error(
@@ -89,6 +93,7 @@ def install_error_handlers(app: FastAPI) -> None:
                 "error_code": error.error_code,
                 "message": error.public_message,
             },
+            headers={"Cache-Control": "no-store"},
         )
 
 

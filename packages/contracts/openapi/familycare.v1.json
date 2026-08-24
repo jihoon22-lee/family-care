@@ -138,6 +138,251 @@
         "title": "AnalysisJobStatusResponse",
         "type": "object"
       },
+      "CandidateConfirmationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "CandidateConfirmationRequest",
+        "type": "object"
+      },
+      "CandidateCorrectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "field_id": {
+            "enum": [
+              "benefit_type",
+              "contract_end",
+              "contract_start",
+              "coverage_end",
+              "coverage_start",
+              "currency",
+              "insurer",
+              "policy_status",
+              "product_name",
+              "renewable",
+              "rider_key",
+              "rider_name",
+              "rider_status",
+              "sum_assured"
+            ],
+            "title": "Field Id",
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/CandidateScalar"
+          }
+        },
+        "required": [
+          "expected_version",
+          "field_id",
+          "value",
+          "evidence_id"
+        ],
+        "title": "CandidateCorrectionRequest",
+        "type": "object"
+      },
+      "CandidateErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "enum": [
+              "INVALID_CANDIDATE_CORRECTION",
+              "REVIEW_ITEM_NOT_FOUND",
+              "VERSION_CONFLICT"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "CandidateErrorResponse",
+        "type": "object"
+      },
+      "CandidateEvidenceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "bounded_excerpt": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Bounded Excerpt",
+            "type": "string"
+          },
+          "document_label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Document Label",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "page": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "document_label",
+          "page",
+          "bbox",
+          "bounded_excerpt"
+        ],
+        "title": "CandidateEvidenceRef",
+        "type": "object"
+      },
+      "CandidateField": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "field_id": {
+            "enum": [
+              "benefit_type",
+              "contract_end",
+              "contract_start",
+              "coverage_end",
+              "coverage_start",
+              "currency",
+              "insurer",
+              "policy_status",
+              "product_name",
+              "renewable",
+              "rider_key",
+              "rider_name",
+              "rider_status",
+              "sum_assured"
+            ],
+            "title": "Field Id",
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/CandidateScalar"
+          }
+        },
+        "required": [
+          "field_id",
+          "value",
+          "evidence_ids"
+        ],
+        "title": "CandidateField",
+        "type": "object"
+      },
+      "CandidateRejectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason_code": {
+            "enum": [
+              "DUPLICATE_CANDIDATE",
+              "INVALID_EVIDENCE",
+              "NOT_ENROLLED",
+              "TERMS_ONLY_RIDER",
+              "UNSUPPORTED_STRUCTURE"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "reason_code"
+        ],
+        "title": "CandidateRejectionRequest",
+        "type": "object"
+      },
+      "CandidateScalar": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "DocumentAnalysisRequest": {
         "additionalProperties": false,
         "description": "Exact v1 request; files and credentials are intentionally absent.",
@@ -934,6 +1179,96 @@
         "title": "PolicyResponse",
         "type": "object"
       },
+      "PolicyReviewItem": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregate_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggregate Id"
+          },
+          "candidate_kind": {
+            "enum": [
+              "policy_contract",
+              "policy_party",
+              "rider"
+            ],
+            "title": "Candidate Kind",
+            "type": "string"
+          },
+          "candidate_version_id": {
+            "format": "uuid",
+            "title": "Candidate Version Id",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateEvidenceRef"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateField"
+            },
+            "maxItems": 15,
+            "minItems": 1,
+            "title": "Fields",
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewIssue"
+            },
+            "maxItems": 8,
+            "title": "Issues",
+            "type": "array"
+          },
+          "review_item_id": {
+            "format": "uuid",
+            "title": "Review Item Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_item_id",
+          "candidate_version_id",
+          "aggregate_id",
+          "candidate_kind",
+          "status",
+          "fields",
+          "evidence",
+          "issues",
+          "expected_version"
+        ],
+        "title": "PolicyReviewItem",
+        "type": "object"
+      },
       "PolicyUpdateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -989,6 +1324,57 @@
           "expected_version"
         ],
         "title": "PolicyUpdateRequest",
+        "type": "object"
+      },
+      "ReviewIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "CONFLICTING_EVIDENCE",
+              "INVALID_DATE",
+              "INVALID_UNIT",
+              "LOW_CONFIDENCE",
+              "MISSING_EVIDENCE",
+              "TERMS_ONLY_RIDER",
+              "UNSUPPORTED_STRUCTURE"
+            ],
+            "title": "Code",
+            "type": "string"
+          },
+          "field_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "benefit_type",
+                  "contract_end",
+                  "contract_start",
+                  "coverage_end",
+                  "coverage_start",
+                  "currency",
+                  "insurer",
+                  "policy_status",
+                  "product_name",
+                  "renewable",
+                  "rider_key",
+                  "rider_name",
+                  "rider_status",
+                  "sum_assured"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Id"
+          }
+        },
+        "required": [
+          "code",
+          "field_id"
+        ],
+        "title": "ReviewIssue",
         "type": "object"
       },
       "RiderResponse": {
@@ -2319,6 +2705,104 @@
         ]
       }
     },
+    "/api/v1/policies/{policy_id}/candidate-fields/{field_id}": {
+      "patch": {
+        "operationId": "correct_candidate_field_api_v1_policies__policy_id__candidate_fields__field_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "field_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "benefit_type",
+                "contract_end",
+                "contract_start",
+                "coverage_end",
+                "coverage_start",
+                "currency",
+                "insurer",
+                "policy_status",
+                "product_name",
+                "renewable",
+                "rider_key",
+                "rider_name",
+                "rider_status",
+                "sum_assured"
+              ],
+              "title": "Field Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Correct Candidate Field",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
     "/api/v1/policies/{policy_id}/restore": {
       "post": {
         "operationId": "restore_policy_api_v1_policies__policy_id__restore_post",
@@ -2496,6 +2980,298 @@
         "summary": "List Policy Riders",
         "tags": [
           "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/review-items": {
+      "get": {
+        "operationId": "list_review_items_api_v1_review_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "domain",
+            "required": false,
+            "schema": {
+              "const": "policy",
+              "default": "policy",
+              "title": "Domain",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "NEEDS_REVIEW",
+              "enum": [
+                "NEEDS_REVIEW",
+                "AI_VERIFIED",
+                "USER_CONFIRMED"
+              ],
+              "title": "Status",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyReviewItem"
+                  },
+                  "title": "Response List Review Items Api V1 Review Items Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "List Review Items",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
+    "/api/v1/review-items/{review_item_id}": {
+      "get": {
+        "operationId": "get_review_item_api_v1_review_items__review_item_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Get Review Item",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
+    "/api/v1/review-items/{review_item_id}/confirm": {
+      "post": {
+        "operationId": "confirm_candidate_api_v1_review_items__review_item_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Confirm Candidate",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
+    "/api/v1/review-items/{review_item_id}/reject": {
+      "post": {
+        "operationId": "reject_candidate_api_v1_review_items__review_item_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateRejectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Reject Candidate",
+        "tags": [
+          "policy candidate review"
         ]
       }
     },

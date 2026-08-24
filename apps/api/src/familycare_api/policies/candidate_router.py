@@ -1,0 +1,139 @@
+"""Household-scoped policy-candidate review routes."""
+
+from __future__ import annotations
+
+from typing import Annotated, Any, Literal
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Response
+
+from familycare_api.common.scope import HouseholdScope, resolve_household_scope
+from familycare_api.contracts.generated_business import PolicyCandidateFieldId
+from familycare_api.policies.candidate_errors import InvalidCandidateCorrection
+from familycare_api.policies.candidate_models import (
+    CandidateConfirmationRequest,
+    CandidateCorrectionRequest,
+    CandidateErrorResponse,
+    CandidateRejectionRequest,
+    PolicyReviewItem,
+)
+from familycare_api.policies.candidate_service import CandidateReviewService
+
+ScopeDependency = Annotated[HouseholdScope, Depends(resolve_household_scope)]
+
+
+def get_candidate_review_service(scope: ScopeDependency) -> CandidateReviewService:
+    """Construct a request-local service from trusted server scope."""
+
+    del scope
+    return CandidateReviewService.from_environment()
+
+
+ServiceDependency = Annotated[CandidateReviewService, Depends(get_candidate_review_service)]
+router = APIRouter(prefix="/api/v1", tags=["policy candidate review"])
+
+_COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
+    404: {"model": CandidateErrorResponse, "description": "Scoped review item not found"},
+    409: {"model": CandidateErrorResponse, "description": "Candidate version conflict"},
+    422: {"model": CandidateErrorResponse, "description": "Invalid candidate correction"},
+}
+
+
+def _no_store(response: Response) -> None:
+    response.headers["Cache-Control"] = "no-store"
+
+
+@router.get(
+    "/review-items",
+    response_model=list[PolicyReviewItem],
+    responses=_COMMON_ERRORS,
+)
+def list_review_items(
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+    domain: Literal["policy"] = "policy",
+    status: Literal["NEEDS_REVIEW", "AI_VERIFIED", "USER_CONFIRMED"] = "NEEDS_REVIEW",
+) -> list[PolicyReviewItem]:
+    del domain
+    _no_store(response)
+    return service.list_review_items(scope=scope, status=status)
+
+
+@router.get(
+    "/review-items/{review_item_id}",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def get_review_item(
+    review_item_id: UUID,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    _no_store(response)
+    return service.get_review_item(scope=scope, review_item_id=review_item_id)
+
+
+@router.patch(
+    "/policies/{policy_id}/candidate-fields/{field_id}",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def correct_candidate_field(
+    policy_id: UUID,
+    field_id: PolicyCandidateFieldId,
+    request: CandidateCorrectionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    if request.field_id != field_id:
+        raise InvalidCandidateCorrection
+    _no_store(response)
+    return service.correct_field(scope=scope, policy_id=policy_id, request=request, actor_id=None)
+
+
+@router.post(
+    "/review-items/{review_item_id}/confirm",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def confirm_candidate(
+    review_item_id: UUID,
+    request: CandidateConfirmationRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    _no_store(response)
+    return service.confirm(
+        scope=scope,
+        review_item_id=review_item_id,
+        request=request,
+        actor_id=None,
+    )
+
+
+@router.post(
+    "/review-items/{review_item_id}/reject",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def reject_candidate(
+    review_item_id: UUID,
+    request: CandidateRejectionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    _no_store(response)
+    return service.reject(
+        scope=scope,
+        review_item_id=review_item_id,
+        request=request,
+        actor_id=None,
+    )
+
+
+__all__ = ["get_candidate_review_service", "router"]
