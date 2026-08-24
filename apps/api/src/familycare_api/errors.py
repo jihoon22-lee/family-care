@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -10,7 +12,12 @@ from pydantic import BaseModel, ConfigDict
 from familycare_api.contracts.generated_business import CandidateErrorCode, PolicyErrorCode
 from familycare_api.documents.generated_contracts import ErrorCode
 
-ApiErrorCode = ErrorCode | PolicyErrorCode | CandidateErrorCode
+ClauseBoundaryErrorCode = Literal[
+    "TERMS_EDITION_NOT_FOUND",
+    "CLAUSE_NOT_FOUND",
+    "SEARCH_INDEX_VERSION_MISMATCH",
+]
+ApiErrorCode = ErrorCode | PolicyErrorCode | CandidateErrorCode | ClauseBoundaryErrorCode
 
 
 class ApiBoundaryError(RuntimeError):

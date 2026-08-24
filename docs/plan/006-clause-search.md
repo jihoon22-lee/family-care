@@ -13,9 +13,11 @@
 ## Global Constraints
 
 - Migration `0005_clause_search.py` revises `0004_policy_candidate_review`; `0004` is the preceding approved candidate-review migration and remains unchanged by this plan.
+- Phase 2 candidate review is already merged into `main` in PR #16; this plan records the downstream Phase 4 Clause search slice.
 - The migration preserves every Phase 1 document, DocumentVersion, Extraction, Evidence-coordinate, AnalysisJob state, JSON Schema, and generated document type contract.
 - PostgreSQL is the only search engine in v0.1. Use built-in `simple` text search and `pg_trgm`; do not add Redis, Elasticsearch, a vector database, embeddings, or a second search service.
 - Search normalizes Unicode NFC, whitespace, and punctuation deterministically. The normalization version is persisted with indexed content and query results.
+- v0.1 has no separate live search-index rebuild endpoint. The initial normalization version is fixed by a database constraint; a future version bump is a PostgreSQL transaction migration that keeps the old committed state until commit and switches versions atomically at commit. App/DB mismatch or stale hits fail explicitly with `SEARCH_INDEX_VERSION_MISMATCH`; there is no silent fallback.
 - 목차 표시 page와 PDF physical page를 구분하고 Evidence에는 항상 1-based physical page를 저장합니다.
 - Search is an investigation tool. A search hit never creates a Rider, CoverageRule, `MATCH`, `NO_MATCH`, or payment amount.
 - Every Clause Evidence points to the exact `DocumentVersion`, content hash, physical page, and optional bbox. Missing or stale Evidence is surfaced, never silently substituted.
@@ -213,9 +215,9 @@ POST /api/v1/clauses/search
 - Consumes: `0004_policy_candidate_review`, `household_spaces`, `evidence`, `document_versions`, and the existing Alembic migration-spy conventions.
 - Produces: `revision = "0005_clause_search"`, `down_revision = "0004_policy_candidate_review"`, four terms/search tables, pg_trgm indexes, named checks, and reverse dependency downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert the revision chain, exact table/column names, Clause parent FK, Evidence join FK, 1-based page checks, normalization version, tsvector column, GIN/trigram indexes, and preservation of all Phase 1 table names.
+- [x] **Step 1: Write failing migration tests.** Assert the revision chain, exact table/column names, Clause parent FK, Evidence join FK, 1-based page checks, normalization version, tsvector column, GIN/trigram indexes, and preservation of all Phase 1 table names.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py -q
@@ -223,7 +225,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because `0005_clause_search.py` is absent and no terms/search tables exist.
 
-- [ ] **Step 3: Implement the minimum additive migration.** Use `op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")`, `sa.dialects.postgresql.TSVECTOR`, named indexes, and no destructive extension drop in downgrade.
+- [x] **Step 3: Implement the minimum additive migration.** Use `op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")`, `sa.dialects.postgresql.TSVECTOR`, named indexes, and no destructive extension drop in downgrade.
 
   ```python
   revision = "0005_clause_search"
@@ -238,7 +240,7 @@ POST /api/v1/clauses/search
   )
   ```
 
-- [ ] **Step 4: Run migration-shape and PostgreSQL migration checks.**
+- [x] **Step 4: Run migration-shape and PostgreSQL migration checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py -q
@@ -247,7 +249,7 @@ POST /api/v1/clauses/search
 
   Expected: migration-shape tests pass and a synthetic PostgreSQL reaches `0005_clause_search` with `pg_trgm` available.
 
-- [ ] **Step 5: Commit the migration.**
+- [x] **Step 5: Commit the migration.**
 
   ```bash
   git add apps/api/migrations/versions/0005_clause_search.py apps/api/tests/test_clause_search_migration.py
@@ -268,9 +270,9 @@ POST /api/v1/clauses/search
 - Consumes: `EvidenceRef` and `HouseholdScope` from `familycare_api.common`.
 - Produces: `NORMALIZATION_VERSION`, `normalize_clause_text`, `normalize_search_query`, `bounded_excerpt`, `TermsEdition`, `Clause`, `ClauseSearchFilters`, `ClauseSearchHit`, and a fully synthetic Korean/English corpus.
 
-- [ ] **Step 1: Write failing normalization tests.** Cover NFC composition, repeated whitespace, punctuation boundaries, Korean synthetic terms, empty/overlong queries, deterministic bounded excerpts, and rejection of non-string values.
+- [x] **Step 1: Write failing normalization tests.** Cover NFC composition, repeated whitespace, punctuation boundaries, Korean synthetic terms, empty/overlong queries, deterministic bounded excerpts, and rejection of non-string values.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_normalization.py -q
@@ -278,7 +280,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the normalization module and versioned functions do not exist.
 
-- [ ] **Step 3: Implement the smallest deterministic normalizer.** Do not use external dictionaries or private document text. Preserve meaningful Unicode characters, collapse whitespace, normalize punctuation separators, and keep the normalization version explicit.
+- [x] **Step 3: Implement the smallest deterministic normalizer.** Do not use external dictionaries or private document text. Preserve meaningful Unicode characters, collapse whitespace, normalize punctuation separators, and keep the normalization version explicit.
 
   ```python
   def normalize_clause_text(text: str) -> str:
@@ -290,7 +292,7 @@ POST /api/v1/clauses/search
       return normalized.strip()
   ```
 
-- [ ] **Step 4: Run normalization and safety checks.**
+- [x] **Step 4: Run normalization and safety checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_normalization.py -q
@@ -299,7 +301,7 @@ POST /api/v1/clauses/search
 
   Expected: all normalization cases pass and the corpus is accepted as wholly synthetic.
 
-- [ ] **Step 5: Commit the normalization boundary.**
+- [x] **Step 5: Commit the normalization boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/__init__.py apps/api/src/familycare_api/clauses/domain.py apps/api/src/familycare_api/clauses/normalization.py apps/api/tests/test_clause_normalization.py fixtures/synthetic/terms-search-corpus.json
@@ -319,11 +321,11 @@ POST /api/v1/clauses/search
 
 **Interfaces:**
 - Consumes: normalized domain types and migration indexes from Tasks 1–2.
-- Produces: `TermsEditionRepository.list/get/create`, `ClauseRepository.create_tree/get_hierarchy`, `ClauseSearchService.search`, date/scope filters, bounded excerpts, and deterministic ranking.
+- Produces: `TermsEditionRepository.list/get/create`, individually transactional `ClauseRepository.create/get_hierarchy`, `ClauseSearchService.search`, date/scope filters, bounded excerpts, and deterministic ranking. Individual Clause transactions intentionally preserve earlier searchable rows when a later parse candidate fails.
 
-- [ ] **Step 1: Write failing repository and search tests.** Unit-test parameter construction and ranking tie-breakers. Integration-test a synthetic corpus for exact phrase-ish matches, whitespace variants, Korean query normalization, terms-date boundaries, insurer/product filters, scope exclusion, and same-title different-definition separation.
+- [x] **Step 1: Write failing repository and search tests.** Unit-test parameter construction and ranking tie-breakers. Integration-test a synthetic corpus for exact phrase-ish matches, whitespace variants, Korean query normalization, terms-date boundaries, insurer/product filters, scope exclusion, and same-title different-definition separation.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py -q
@@ -331,7 +333,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because repository/search modules and PostgreSQL Clause rows are not implemented.
 
-- [ ] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and preserve existing index version when a rebuild is in progress.
+- [x] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and enforce the fixed normalization version. v0.1 has no runtime rebuild endpoint; future version bumps follow the transaction-migration boundary in Global Constraints.
 
   ```python
   def search(
@@ -358,7 +360,7 @@ POST /api/v1/clauses/search
       return tuple(_row_to_hit(row) for row in rows)
   ```
 
-- [ ] **Step 4: Run unit, PostgreSQL, and static checks.**
+- [x] **Step 4: Run unit, PostgreSQL, and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search.py -q
@@ -370,7 +372,7 @@ POST /api/v1/clauses/search
 
   Expected: unit and real PostgreSQL FTS/trigram tests pass; no SQLite substitute is accepted.
 
-- [ ] **Step 5: Commit the search implementation.**
+- [x] **Step 5: Commit the search implementation.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/repository.py apps/api/src/familycare_api/clauses/search.py apps/api/src/familycare_api/clauses/service.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py
@@ -397,9 +399,9 @@ POST /api/v1/clauses/search
 - Consumes: `ClauseSearchService.search` and terms repositories from Task 3.
 - Produces: strict `TermsEditionResponse`, `ClauseHierarchyResponse`, `ClauseSearchResponse`, the three GET routes, and the `clause-search.v1` schema/example.
 
-- [ ] **Step 1: Write failing HTTP and contract tests.** Assert exact route status codes, scope filtering, bounded excerpts, Evidence page numbering, no full Clause body, `additionalProperties: false`, synthetic example validation, and invalid query errors without query echo.
+- [x] **Step 1: Write failing HTTP and contract tests.** Assert exact route status codes, scope filtering, bounded excerpts, Evidence page numbering, no full Clause body, `additionalProperties: false`, synthetic example validation, and invalid query errors without query echo.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py -q
@@ -407,7 +409,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the router, response models, schema, and contract checker registration are absent.
 
-- [ ] **Step 3: Implement the strict HTTP adapters and schema.** Map service errors to stable fixed messages, enforce `limit <= 50`, return bounded excerpts only, and include `normalization_version` so stale search indexes are visible.
+- [x] **Step 3: Implement the strict HTTP adapters and schema.** Map service errors to stable fixed messages, enforce `limit <= 50`, return bounded excerpts only, and include `normalization_version` so stale search indexes are visible.
 
   ```python
   class ClauseSearchQuery(BaseModel):
@@ -418,7 +420,7 @@ POST /api/v1/clauses/search
       limit: int = Field(default=20, ge=1, le=50)
   ```
 
-- [ ] **Step 4: Run API/contract/privacy checks.**
+- [x] **Step 4: Run API/contract/privacy checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py apps/api/tests/test_clause_privacy.py -q
@@ -428,7 +430,7 @@ POST /api/v1/clauses/search
 
   Expected: HTTP and JSON Schema tests pass; committed OpenAPI matches FastAPI; no raw query or full text appears in responses/errors.
 
-- [ ] **Step 5: Commit the HTTP contract.**
+- [x] **Step 5: Commit the HTTP contract.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/schemas.py apps/api/src/familycare_api/clauses/router.py apps/api/src/familycare_api/clauses/errors.py packages/contracts/schemas/clause-search.v1.schema.json packages/contracts/examples/clause-search.v1.json apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py
@@ -453,7 +455,7 @@ POST /api/v1/clauses/search
 - Produces: `/app/clauses/search` with an in-memory search phrase, date/edition filters, bounded results, hierarchy context, and Evidence actions.
 - Search text is never placed in the URL, browser history, Web Storage, IndexedDB, service-worker cache, console, analytics, or error copy.
 
-- [ ] **Step 1: Write failing component and privacy tests.** Cover keyboard submit, JSON-body search, no query parameter, filter reset, empty/invalid state, bounded excerpts, exact physical page/Evidence label, stale-index warning, abort of an obsolete request, and zero persistent storage writes.
+- [x] **Step 1: Write failing component and privacy tests.** Cover keyboard submit, JSON-body search, no query parameter, filter reset, empty/invalid state, bounded excerpts, exact physical page/Evidence label, stale-index warning, abort of an obsolete request, and zero persistent storage writes.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -462,9 +464,9 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the generated client, route, and Clause components do not exist.
 
-- [ ] **Step 2: Implement the generated client and accessible page.** Send the phrase in a POST JSON body through `apiRequest`, keep it in component memory, and clear it on logout/session expiry. Render `<form role="search">`, labelled filters, semantic result lists, text status, and an Evidence button. Never render the full normalized body or raw server error.
+- [x] **Step 2: Implement the generated client and accessible page.** Send the phrase in a POST JSON body through `apiRequest`, keep it in component memory, and clear it on logout/session expiry. Render `<form role="search">`, labelled filters, semantic result lists, text status, and an Evidence button. Never render the full normalized body or raw server error.
 
-- [ ] **Step 3: Run GREEN and a synthetic Playwright flow.** The browser stub accepts only POST, rejects a URL containing `q`, and returns wholly synthetic Korean/English Clause snippets.
+- [x] **Step 3: Run GREEN and a synthetic Playwright flow.** The browser stub accepts only POST, rejects a URL containing `q`, and returns wholly synthetic Korean/English Clause snippets.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -476,7 +478,7 @@ POST /api/v1/clauses/search
 
   Expected: search, filters, Evidence navigation, focus, 320 CSS px layout, and browser privacy assertions pass.
 
-- [ ] **Step 4: Commit the Web search slice.**
+- [x] **Step 4: Commit the Web search slice.**
 
   ```bash
   git add apps/web/src/api/clauses.ts apps/web/src/features/clauses \
@@ -490,27 +492,27 @@ POST /api/v1/clauses/search
 **Files:**
 - Create: `apps/api/tests/test_clause_privacy.py`
 - Modify: `apps/api/tests/test_clause_search.py` for stale normalization/index cases
-- Modify: `apps/api/tests/test_clause_search_integration.py` for atomic rebuild and partial Clause parse cases
+- Modify: `apps/api/tests/test_clause_search_integration.py` for the atomic transaction-version boundary and partial Clause parse cases
 - Test: `apps/api/tests/test_clause_privacy.py`
 - Test: `apps/api/tests/test_clause_search_integration.py`
 
 **Interfaces:**
 - Consumes: complete migration, normalization, repository/search service, HTTP contract, and Evidence repository.
-- Produces: synthetic proof that searchable Clauses survive an individual parse failure, old index versions remain available until atomic swap, wrong scope/date editions are excluded, and logs/responses contain no query or full text.
+- Produces: synthetic proof that searchable Clauses survive an individual parse failure, stale versions fail explicitly, wrong scope/date editions are excluded, and logs/responses contain no query or full text. A future normalization-version migration owns its own atomic-visibility acceptance test when that migration is implemented.
 
-- [ ] **Step 1: Write failing stale/partial/privacy tests.** Assert one malformed synthetic Clause does not remove other rows, normalization-version mismatch is explicit rather than silent fallback, and captured logs omit raw query/result text/path.
+- [x] **Step 1: Write failing stale/partial/privacy tests.** Assert one malformed synthetic Clause does not remove other rows, normalization-version mismatch is explicit rather than silent fallback, and captured logs omit raw query/result text/path.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_privacy.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py -q
   ```
 
-  Expected: FAIL until stale-version checks, partial rebuild behavior, and redaction are implemented.
+  Expected: FAIL until stale-version checks, transaction-version boundary behavior, and redaction are implemented.
 
-- [ ] **Step 3: Implement the minimum stale/index and redaction behavior.** Keep the previous normalized/search version readable until the new rows and indexes are complete; return a stable `SEARCH_INDEX_VERSION_MISMATCH` warning/error without exposing SQL or document text.
+- [x] **Step 3: Implement the minimum stale/index and redaction behavior.** v0.1 has no live search-index rebuild endpoint. The initial normalization version is DB-constrained; future version bumps use a PostgreSQL transaction migration that keeps old committed state readable until commit and switches atomically. Return a stable `SEARCH_INDEX_VERSION_MISMATCH` error for app/DB mismatch or stale hits without exposing SQL or document text.
 
-- [ ] **Step 4: Run the complete focused feature suite.**
+- [x] **Step 4: Run the complete focused feature suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py apps/api/tests/test_clause_normalization.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py apps/api/tests/test_clause_privacy.py -q
@@ -523,12 +525,25 @@ POST /api/v1/clauses/search
 
   Expected: all focused tests and static checks pass with a wholly synthetic corpus and no external service.
 
-- [ ] **Step 5: Commit the verified search acceptance.**
+- [x] **Step 5: Commit the verified search acceptance.**
 
   ```bash
   git add apps/api/tests/test_clause_privacy.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py
   git commit -m "test(clauses): verify scoped search boundaries"
   ```
+
+## Focused validation record
+
+The current Phase 4 PR was validated with wholly synthetic inputs only:
+
+- Web Vitest: 7 passed.
+- Playwright: 1 passed at 320 CSS px.
+- `corepack pnpm@11.22.0 web:check`: 28 passed.
+- API focused tests: 51 passed.
+- PostgreSQL integration: 8 passed.
+- Contracts, Ruff format/check, and mypy: passed.
+
+The Post-Merge Verification checkboxes below remain intentionally incomplete. No post-merge, production, or real/private-data validation is recorded here.
 
 ## Focused Post-Merge Verification
 

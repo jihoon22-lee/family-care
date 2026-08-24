@@ -121,7 +121,7 @@ class _Seed:
 def _reset_database(database_url: str) -> None:
     table_list = ", ".join(_RESET_TABLES)
     with psycopg.connect(_psycopg_url(database_url), autocommit=True) as connection:
-        connection.execute(f"TRUNCATE TABLE {table_list} RESTART IDENTITY")
+        connection.execute(f"TRUNCATE TABLE {table_list} RESTART IDENTITY CASCADE")
 
 
 def _seed(database_url: str) -> _Seed:

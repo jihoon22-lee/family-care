@@ -383,6 +383,400 @@
           }
         ]
       },
+      "ClauseErrorResponse": {
+        "additionalProperties": false,
+        "description": "Fixed error envelope; request values and Clause text are never fields.",
+        "properties": {
+          "error_code": {
+            "enum": [
+              "AUTHENTICATION_REQUIRED",
+              "CLAUSE_NOT_FOUND",
+              "EVIDENCE_INVALID",
+              "INVALID_REQUEST",
+              "POLICY_STATE_CONFLICT",
+              "RESOURCE_LIMIT_EXCEEDED",
+              "SEARCH_INDEX_VERSION_MISMATCH",
+              "TERMS_EDITION_NOT_FOUND",
+              "VERSION_CONFLICT"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "ClauseErrorResponse",
+        "type": "object"
+      },
+      "ClauseEvidenceResponse": {
+        "additionalProperties": false,
+        "description": "Public Evidence projection with a 1-based physical PDF page.",
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "page_number": {
+            "minimum": 1.0,
+            "title": "Page Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "content_sha256",
+          "page_number",
+          "bbox"
+        ],
+        "title": "ClauseEvidenceResponse",
+        "type": "object"
+      },
+      "ClauseHierarchyNodeResponse": {
+        "additionalProperties": false,
+        "description": "One Clause hierarchy node with a bounded excerpt only.",
+        "properties": {
+          "clause_id": {
+            "format": "uuid",
+            "title": "Clause Id",
+            "type": "string"
+          },
+          "clause_type": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Clause Type",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseEvidenceResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "excerpt": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "normalization_version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Normalization Version",
+            "type": "string"
+          },
+          "parent_clause_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Clause Id"
+          },
+          "physical_page_end": {
+            "minimum": 1.0,
+            "title": "Physical Page End",
+            "type": "integer"
+          },
+          "physical_page_start": {
+            "minimum": 1.0,
+            "title": "Physical Page Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "clause_id",
+          "parent_clause_id",
+          "clause_type",
+          "label",
+          "excerpt",
+          "physical_page_start",
+          "physical_page_end",
+          "evidence",
+          "normalization_version"
+        ],
+        "title": "ClauseHierarchyNodeResponse",
+        "type": "object"
+      },
+      "ClauseHierarchyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "clauses": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseHierarchyNodeResponse"
+            },
+            "maxItems": 5000,
+            "title": "Clauses",
+            "type": "array"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "terms_edition_id",
+          "clauses"
+        ],
+        "title": "ClauseHierarchyResponse",
+        "type": "object"
+      },
+      "ClauseSearchHitResponse": {
+        "additionalProperties": false,
+        "description": "Search result projection; normalized Clause body is intentionally absent.",
+        "properties": {
+          "clause_id": {
+            "format": "uuid",
+            "title": "Clause Id",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseEvidenceResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "excerpt": {
+            "maxLength": 320,
+            "minLength": 1,
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "normalization_version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Normalization Version",
+            "type": "string"
+          },
+          "physical_page_end": {
+            "minimum": 1.0,
+            "title": "Physical Page End",
+            "type": "integer"
+          },
+          "physical_page_start": {
+            "minimum": 1.0,
+            "title": "Physical Page Start",
+            "type": "integer"
+          },
+          "relevance": {
+            "minimum": 0.0,
+            "title": "Relevance",
+            "type": "number"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "clause_id",
+          "label",
+          "excerpt",
+          "terms_edition_id",
+          "physical_page_start",
+          "physical_page_end",
+          "evidence",
+          "normalization_version",
+          "relevance"
+        ],
+        "title": "ClauseSearchHitResponse",
+        "type": "object"
+      },
+      "ClauseSearchQuery": {
+        "additionalProperties": false,
+        "description": "Bounded JSON body for POST search; the phrase is never a URL field.",
+        "properties": {
+          "effective_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective On"
+          },
+          "insurer_key": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Key"
+          },
+          "limit": {
+            "default": 20,
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "product_key": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Key"
+          },
+          "q": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Q",
+            "type": "string"
+          },
+          "terms_edition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Edition Id"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "title": "ClauseSearchQuery",
+        "type": "object"
+      },
+      "ClauseSearchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseSearchHitResponse"
+            },
+            "maxItems": 50,
+            "title": "Hits",
+            "type": "array"
+          },
+          "normalization_version": {
+            "const": "unicode-nfc-v1",
+            "title": "Normalization Version",
+            "type": "string"
+          },
+          "query_matched_count": {
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Query Matched Count",
+            "type": "integer"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "normalization_version",
+          "query_matched_count",
+          "hits"
+        ],
+        "title": "ClauseSearchResponse",
+        "type": "object"
+      },
       "DocumentAnalysisRequest": {
         "additionalProperties": false,
         "description": "Exact v1 request; files and credentials are intentionally absent.",
@@ -1512,6 +1906,101 @@
         ],
         "title": "RiderResponse",
         "type": "object"
+      },
+      "TermsEditionResponse": {
+        "additionalProperties": false,
+        "description": "Terms metadata that can be shown without exposing household scope.",
+        "properties": {
+          "applicability_end": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicability End"
+          },
+          "applicability_start": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applicability Start"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurer_display": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "insurer_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Key",
+            "type": "string"
+          },
+          "normalization_version": {
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Normalization Version",
+            "type": "string"
+          },
+          "product_display": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Product Display",
+            "type": "string"
+          },
+          "product_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Product Key",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "document_version_id",
+          "insurer_display",
+          "insurer_key",
+          "product_display",
+          "product_key",
+          "applicability_start",
+          "applicability_end",
+          "content_sha256",
+          "normalization_version",
+          "version"
+        ],
+        "title": "TermsEditionResponse",
+        "type": "object"
       }
     }
   },
@@ -1583,6 +2072,87 @@
         "summary": "Get a synthetic document analysis job",
         "tags": [
           "local synthetic document analysis"
+        ]
+      }
+    },
+    "/api/v1/clauses/search": {
+      "post": {
+        "operationId": "search_clauses_api_v1_clauses_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClauseSearchQuery"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Search Clauses",
+        "tags": [
+          "clause search"
         ]
       }
     },
@@ -3371,6 +3941,164 @@
         "summary": "Reject Candidate",
         "tags": [
           "policy candidate review"
+        ]
+      }
+    },
+    "/api/v1/terms-editions": {
+      "get": {
+        "operationId": "list_terms_editions_api_v1_terms_editions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TermsEditionResponse"
+                  },
+                  "title": "Response List Terms Editions Api V1 Terms Editions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Terms Editions",
+        "tags": [
+          "clause search"
+        ]
+      }
+    },
+    "/api/v1/terms-editions/{terms_edition_id}/clauses": {
+      "get": {
+        "operationId": "get_clause_hierarchy_api_v1_terms_editions__terms_edition_id__clauses_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "terms_edition_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Terms Edition Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseHierarchyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Clause Hierarchy",
+        "tags": [
+          "clause search"
         ]
       }
     },

@@ -54,7 +54,7 @@ class _Seed:
 def _seed(database_url: str) -> _Seed:
     table_list = ", ".join(_POLICY_TABLES)
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
-        connection.execute(f"TRUNCATE TABLE {table_list}")
+        connection.execute(f"TRUNCATE TABLE {table_list} CASCADE")
         household_a = connection.execute(
             """
             INSERT INTO household_spaces (space_key, display_name)
