@@ -26,6 +26,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - PostgreSQL AnalysisJob claims with `SKIP LOCKED`, owner leases and heartbeats, bounded retry classification, cancellation, and max-attempt recovery.
 - A single-job Analyzer runner with descriptor-only parser execution, shutdown cancellation, sanitized cleanup failure handling, strict child-result validation, and transactional extraction persistence.
 - Idempotent DocumentVersion and succeeded Extraction reuse for matching content and extractor configuration identities.
+- A default-disabled local synthetic document-analysis API with asynchronous enqueue/status routes, strict v1 request validation, and sanitized extraction summaries.
 
 ### Changed
 
@@ -38,6 +39,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 document contracts and the eight-table ingestion model were merged in PR #8 at `9802781c98c0a6aee3fcd7018dfc020da087fee9`; all seven PR and post-merge `main` checks passed.
 - Phase 1 PDF intake and parser-child isolation were merged in PR #9 at `523bd68be3d951e37a9f4ba19b858d9ac9bdcfcc`; all seven PR and post-merge `main` checks passed.
 - Phase 1 synthetic PDF extraction was merged in PR #10 at `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, along with the local post-merge extraction checks.
+- Phase 1 AnalysisJob queue and Worker runner were merged in PR #11 at `cc651436cab884109dc6fdc7f793c8b32e9c86d4`; PR and post-merge `main` CI each passed 7/7, with 23 local queue tests and 59 local extraction tests passing after merge.
 
 ### Deprecated
 
@@ -58,5 +60,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - The extraction child receives an exact password-free post-intake settings object, preserves the validated descriptor identity, and sanitizes corrupt or invalid-password failures to stable codes.
 - Queue payloads are revalidated against their server-computed config hash before processing, and lease ownership is required for heartbeat, failure, and success transitions.
 - Malformed parser output is rejected before persistence; extraction rows and job success commit atomically, while temporary-cleanup failure is permanently failed and logged only with a job UUID.
+- Synthetic analysis routes require the exact development/feature-flag opt-in, reject extra credential/path/body fields, and return value-free validation errors without opening documents in the API process.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

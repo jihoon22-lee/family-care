@@ -11,6 +11,21 @@ Phase 1은 공개 저장소와 CI에서 처음부터 만든 합성 PDF를 안전
 
 인증 provider는 Phase 7 범위입니다. 따라서 Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-safe endpoint가 아닙니다. Policy Ledger, OCR 실행, 약관 연결, 보험 자격·금액 판정은 이 단계의 책임이 아닙니다.
 
+## Local asynchronous API boundary
+
+Task 5의 API는 합성 fixture를 사용하는 로컬 개발 경계입니다. 런타임에서 문서 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 맞을 때만 등록합니다. `.env.example`의 기본값은 `false`이며 두 변수 중 하나라도 조건을 만족하지 않으면 문서 route를 등록하지 않고 POST와 status GET 모두 `404`를 반환합니다. `create_app(enable_synthetic_ingestion=True)`는 테스트와 canonical OpenAPI 생성처럼 명시적으로 opt-in하는 경우에만 사용하며, module-level runtime app의 기본 gate와 `/health/live`, `/health/ready` 계약은 바꾸지 않습니다.
+
+| Method | Path | 성공 응답 | 의미 |
+|---|---|---|---|
+| `POST` | `/api/v1/documents/analysis` | `202 Accepted` | 요청을 검증하고 `AnalysisJob`을 enqueue한 뒤 `job_id`, `state`, 상대 `status_url`을 반환합니다. |
+| `GET` | `/api/v1/analysis-jobs/{job_id}` | `200 OK` | `state`, `attempts`, sanitized `error_code`, extraction summary counts를 projection합니다. |
+
+요청은 `schema_version: "1"`, relative `source_key`, contract enum의 `document_kind`, canonical `extractor_config`만 가집니다. Pydantic extra fields는 금지합니다. 잘못된 body, absolute 또는 parent-traversal source key, `password`, `absolute_path`, `raw_pdf`, `url` 같은 필드는 HTTP `422`와 안정적인 `error_code: "INVALID_REQUEST"` envelope로 거부합니다. validation 위치와 메시지는 sanitized form만 반환하며 원시 값, password, absolute path, PDF 본문을 echo하지 않습니다.
+
+유효한 source key는 파일을 열거나 존재 여부를 확인하지 않고 항상 `202`로 queue에 들어갑니다. API는 `content_sha256`를 계산하거나 `DocumentVersion`·`Extraction`을 만들지 않으며, Worker가 `POST → Worker → GET` 순서에서 intake, 구조 검증, 격리 parser, persistence를 수행합니다. 따라서 missing, corrupt, encrypted PDF는 동기 POST 오류가 아니라 비동기 job 결과입니다. encrypted PDF는 `PASSWORD_REQUIRED`가 되며 queued password transport는 없습니다. 존재하지 않는 status UUID는 `404 ANALYSIS_JOB_NOT_FOUND`를 반환하고 `DOCUMENT_NOT_FOUND`로 혼동하지 않습니다. `PASSWORD_INVALID`는 queued payload가 없는 direct one-shot adapter 진단에만 해당합니다.
+
+이 API에는 authentication·authorization이 없고 production-safe endpoint라고 주장하지 않습니다. Authentication provider는 Phase 7이며, Policy Ledger·OCR 실행·external URL·external AI·보험 판정은 이 ingestion boundary 밖입니다.
+
 ## Inputs
 
 - 절대경로인 `FAMILYCARE_DOCUMENT_ROOT` 환경변수
@@ -198,6 +213,9 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 6. password는 DB, job payload, log에 들어가지 않습니다.
 7. 임시 평문과 page cache는 page 처리 후 또는 job 종료 후 남지 않습니다.
 8. Phase 1 API에는 인증 provider가 없으며 production-safe endpoint로 표시하지 않습니다.
+9. Synthetic API route는 두 환경변수 gate가 모두 opt-in일 때만 등록되고, disabled runtime은 두 문서 path에 `404`를 반환합니다.
+10. Valid POST는 source key와 request shape만 검사하여 `202`로 enqueue하며, 파일 상태 오류는 Worker가 비동기 job error로 projection합니다.
+11. API validation failure는 HTTP `422 INVALID_REQUEST`이고, unknown status UUID는 `404 ANALYSIS_JOB_NOT_FOUND`입니다.
 
 ## Tests
 

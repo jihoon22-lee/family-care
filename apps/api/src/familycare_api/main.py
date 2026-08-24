@@ -1,7 +1,11 @@
 """FastAPI application factory."""
 
+import os
+
 from fastapi import FastAPI, Response, status
 
+from familycare_api.documents.router import router as document_analysis_router
+from familycare_api.errors import install_error_handlers
 from familycare_api.health import (
     HealthResponse,
     ReadinessProbe,
@@ -11,7 +15,18 @@ from familycare_api.health import (
 )
 
 
-def create_app(readiness_probe: ReadinessProbe | None = None) -> FastAPI:
+def _synthetic_ingestion_enabled() -> bool:
+    return (
+        os.getenv("FAMILYCARE_ENV") == "development"
+        and os.getenv("FAMILYCARE_ENABLE_SYNTHETIC_INGESTION") == "true"
+    )
+
+
+def create_app(
+    *,
+    readiness_probe: ReadinessProbe | None = None,
+    enable_synthetic_ingestion: bool | None = None,
+) -> FastAPI:
     """Create the Foundation API with an injectable database probe."""
 
     probe = readiness_probe or database_is_ready
@@ -20,6 +35,7 @@ def create_app(readiness_probe: ReadinessProbe | None = None) -> FastAPI:
         version="0.0.0",
         description="Evidence-first family insurance guidance API",
     )
+    install_error_handlers(app)
     app.add_api_route(
         "/health/live",
         liveness,
@@ -34,6 +50,14 @@ def create_app(readiness_probe: ReadinessProbe | None = None) -> FastAPI:
         if health.status == "unavailable":
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return health
+
+    enabled = (
+        _synthetic_ingestion_enabled()
+        if enable_synthetic_ingestion is None
+        else enable_synthetic_ingestion
+    )
+    if enabled:
+        app.include_router(document_analysis_router)
 
     return app
 
