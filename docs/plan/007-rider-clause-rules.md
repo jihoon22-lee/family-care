@@ -244,6 +244,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 1: Define Rider-Clause and CoverageRule tables
 
+**Status:** `completed`
+
 **Files:**
 - Create: `apps/api/migrations/versions/0006_rider_clause_rules.py`
 - Create: `apps/api/tests/test_rider_clause_rules_migration.py`
@@ -253,9 +255,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: `0005_clause_search`, policy/Rider/Evidence tables, candidate versions, and Clause hierarchy.
 - Produces: `revision = "0006_rider_clause_rules"`, `down_revision = "0005_clause_search"`, five new tables, FK/index/check constraints, and reverse-order downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert exact tables/columns, all UUID FKs, link/rule Evidence join uniqueness, version uniqueness, allowed review states, executable/status columns, and no duplicate Phase 1/Clause tables.
+- [x] **Step 1: Write failing migration tests.** Assert exact tables/columns, all UUID FKs, link/rule Evidence join uniqueness, version uniqueness, allowed review states, executable/status columns, and no duplicate Phase 1/Clause tables.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py -q
@@ -263,9 +265,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because `0006_rider_clause_rules.py` is absent.
 
-- [ ] **Step 3: Implement the additive Alembic migration.** Use direct `op.create_table` definitions, named constraints, FK delete behavior that preserves audit rows, and indexes on `(household_space_id, deleted_at)`, Rider, TermsEdition, Clause, and rule version.
+- [x] **Step 3: Implement the additive Alembic migration.** Use direct `op.create_table` definitions, named constraints, FK delete behavior that preserves audit rows, and indexes on `(household_space_id, deleted_at)`, Rider, TermsEdition, Clause, and rule version.
 
-- [ ] **Step 4: Run migration tests and synthetic PostgreSQL upgrade.**
+- [x] **Step 4: Run migration tests and synthetic PostgreSQL upgrade.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py -q
@@ -282,6 +284,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 2: Implement the data-only DSL validator
+
+**Status:** `in_progress`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/dsl.py`
