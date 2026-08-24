@@ -17,6 +17,10 @@ export function AppShell({ children }: PropsWithChildren) {
           <span className="context-kicker">Evidence-bound ledger</span>
           <span>보장 원장</span>
         </div>
+        <nav className="primary-nav" aria-label="주요 화면">
+          <a href="/app/ledger">보장 원장</a>
+          <a href="/app/clauses/search">약관 검색</a>
+        </nav>
       </header>
       {children}
       <footer className="page-footer ledger-footer">

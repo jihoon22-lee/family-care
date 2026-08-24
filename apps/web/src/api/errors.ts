@@ -1,4 +1,7 @@
+import type { ClauseErrorResponseErrorCode } from "./generated";
+
 export type ApiErrorCode =
+  | ClauseErrorResponseErrorCode
   | "AUTHENTICATION_REQUIRED"
   | "INVALID_CANDIDATE_CORRECTION"
   | "INVALID_REQUEST"
@@ -23,12 +26,16 @@ export class ApiError extends Error {
 
 const KNOWN_CODES = new Set<ApiErrorCode>([
   "AUTHENTICATION_REQUIRED",
+  "CLAUSE_NOT_FOUND",
+  "EVIDENCE_INVALID",
   "INVALID_CANDIDATE_CORRECTION",
   "INVALID_REQUEST",
   "INVALID_RESPONSE",
   "NETWORK_ERROR",
   "RESOURCE_LIMIT_EXCEEDED",
   "REVIEW_ITEM_NOT_FOUND",
+  "SEARCH_INDEX_VERSION_MISMATCH",
+  "TERMS_EDITION_NOT_FOUND",
   "VERSION_CONFLICT",
   "UNKNOWN_ERROR",
 ]);

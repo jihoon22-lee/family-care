@@ -453,7 +453,7 @@ POST /api/v1/clauses/search
 - Produces: `/app/clauses/search` with an in-memory search phrase, date/edition filters, bounded results, hierarchy context, and Evidence actions.
 - Search text is never placed in the URL, browser history, Web Storage, IndexedDB, service-worker cache, console, analytics, or error copy.
 
-- [ ] **Step 1: Write failing component and privacy tests.** Cover keyboard submit, JSON-body search, no query parameter, filter reset, empty/invalid state, bounded excerpts, exact physical page/Evidence label, stale-index warning, abort of an obsolete request, and zero persistent storage writes.
+- [x] **Step 1: Write failing component and privacy tests.** Cover keyboard submit, JSON-body search, no query parameter, filter reset, empty/invalid state, bounded excerpts, exact physical page/Evidence label, stale-index warning, abort of an obsolete request, and zero persistent storage writes.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -462,9 +462,9 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the generated client, route, and Clause components do not exist.
 
-- [ ] **Step 2: Implement the generated client and accessible page.** Send the phrase in a POST JSON body through `apiRequest`, keep it in component memory, and clear it on logout/session expiry. Render `<form role="search">`, labelled filters, semantic result lists, text status, and an Evidence button. Never render the full normalized body or raw server error.
+- [x] **Step 2: Implement the generated client and accessible page.** Send the phrase in a POST JSON body through `apiRequest`, keep it in component memory, and clear it on logout/session expiry. Render `<form role="search">`, labelled filters, semantic result lists, text status, and an Evidence button. Never render the full normalized body or raw server error.
 
-- [ ] **Step 3: Run GREEN and a synthetic Playwright flow.** The browser stub accepts only POST, rejects a URL containing `q`, and returns wholly synthetic Korean/English Clause snippets.
+- [x] **Step 3: Run GREEN and a synthetic Playwright flow.** The browser stub accepts only POST, rejects a URL containing `q`, and returns wholly synthetic Korean/English Clause snippets.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
