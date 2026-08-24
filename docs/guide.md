@@ -107,6 +107,41 @@ Rule version GET은 `expected_version`을 반환합니다. publish 요청은 새
 
 Evidence drawer는 bounded excerpt와 1-based physical page만 보여줍니다. 화면에는 raw DSL textarea, 문서 전체 text, provider payload, private path를 표시하지 않으며 query/cache는 no-store와 memory-only 경계를 유지합니다. 합성 Web 시나리오는 320px viewport에서도 연결·규칙 dialog focus, Evidence disclosure, stored-version publish body, browser storage 미사용을 확인합니다. 이 단계의 검증은 합성 데이터에 한정되며 실제 보험 자료·실제 기기·Tailscale 환경을 검증하지 않습니다.
 
+### Phase 6 coverage decision engine boundary
+
+Phase 6는 구조화된 사건 입력을 실제 가입 Rider와 게시된 executable CoverageRule에 연결해 `MATCH`, `NO_MATCH`, `UNKNOWN` 후보를 만드는 결정론적 API 경계입니다. 약관에만 존재하는 담보는 후보가 되지 않으며, 정보 부족·충돌·계약 상태 미확인·stale Evidence·history 미연결은 `UNKNOWN`으로 남습니다. 이 단계는 보험금 지급이나 금액을 확정하지 않습니다.
+
+현재 MedicalEvent API는 다음 lifecycle을 제공합니다.
+
+```text
+POST   /api/v1/medical-events
+GET    /api/v1/medical-events/{id}
+PATCH  /api/v1/medical-events/{id}
+DELETE /api/v1/medical-events/{id}
+GET    /api/v1/medical-events/trash
+POST   /api/v1/medical-events/{id}/restore
+POST   /api/v1/medical-events/{id}/analyze
+GET    /api/v1/medical-events/{id}/results/{version}
+```
+
+생성·수정 body에는 `family_member_id`, `pre_visit` 또는 `post_treatment` mode, 사건/방문일, 그리고 제한된 구조화 fact만 넣습니다. fact는 `value`와 `confirmation`(`user`, `ai_structured`, `unconfirmed`, `conflicting`)으로 구성합니다. 클라이언트가 `household_space_id`, Evidence ID, tri-state, 후보, 금액, 지급 보장 문구를 입력할 수 없도록 strict schema가 적용됩니다. 수정·삭제·복원은 현재 `expected_version`을 요구하며 stale version은 `409` 충돌로 처리됩니다.
+
+Phase 7 인증 연결 뒤 동일 API에 보낼 최소 요청 모양은 다음과 같습니다. 아래 UUID와 값은 저장소 안에서만 쓰는 합성 예시이며, 현재 단계에서 명령을 그대로 실행하면 fail-closed scope resolver 때문에 `401 AUTHENTICATION_REQUIRED`가 정상입니다.
+
+```bash
+curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events \
+  -H 'content-type: application/json' \
+  --data '{"family_member_id":"00000000-0000-4000-8000-000000000101","mode":"pre_visit","event_date":"2026-08-25","facts":{"MedicalEvent.classification":{"value":"injury","confirmation":"user"}}}'
+
+curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-000000000102/analyze
+
+curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-000000000102/results/1
+```
+
+분석은 repeatable-read transaction 안에서 하나의 run, RuleEvaluation, Evidence join/snapshot, Rider candidate를 원자적으로 저장합니다. 결과에는 run·event·engine·rule-set version, 후보별 tri-state, 부족/충돌 field, reason code, bounded Evidence가 포함되며 모든 decision response는 `Cache-Control: no-store`입니다. Evidence snapshot에는 당시 문서/추출 ID, 페이지, 좌표, review state, content hash가 있어 나중에 Evidence 원본 행이 바뀌어도 이미 저장된 결과의 근거가 조용히 바뀌지 않습니다. 이후 새 분석에서는 현재 Evidence를 다시 검증하므로 stale이면 `UNKNOWN`이 됩니다.
+
+기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection과 정액형·실손형 금액 계산은 아직 연결하지 않았고, history가 필요한 규칙은 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
+
 ### Planned v0.1 local runtime
 
 v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 이 문서는 인증 연결과 운영 migration 적용을 완료로 표시하지 않으며, 실제 운영 사용 절차는 별도 승인과 acceptance 뒤에 추가합니다.

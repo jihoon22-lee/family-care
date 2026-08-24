@@ -10,6 +10,21 @@ MedicalEvent와 실제 가입 Rider, 계약 상태, 약관 CoverageRule을 결�
 
 Phase 5의 선행 boundary는 이 문서가 소비할 입력을 준비합니다. 즉, 검증된 Rider-Clause 연결과 immutable CoverageRule version을 만들고, data-only DSL이 지원되는지 확인합니다. Phase 5 validator는 규칙을 실행하지 않으며 이 문서의 `MATCH`·`NO_MATCH`·`UNKNOWN` evaluation은 별도 구현 범위입니다.
 
+## PR6 implementation status
+
+PR6는 이 설계의 결정론적 실행 경계를 구현했습니다. `0007_coverage_decision_engine`은 구조화된 MedicalEvent, immutable decision run, RuleEvaluation, Evidence 연결, Rider 후보를 저장하며, 각 평가에는 당시 Evidence의 ID·문서/추출 ID·페이지·좌표·검토 상태·content hash를 담은 `evidence_snapshot_json`도 함께 저장합니다. 결과를 다시 읽을 때 이 snapshot을 우선 사용하므로 이후 Evidence 원본 행이 바뀌어도 이미 성공한 결과의 근거가 조용히 바뀌지 않습니다.
+
+현재 구현에 포함된 범위는 다음과 같습니다.
+
+- 허용된 구조화 fact와 확인 수준을 저장하는 `pre_visit`/`post_treatment` MedicalEvent lifecycle
+- household-scoped create/read/update, optimistic version conflict, soft delete, trash listing, restore
+- 실제 가입 Rider와 published executable CoverageRule만 읽는 순수 deterministic engine
+- 필수 결과의 `NO_MATCH` → `UNKNOWN` → `MATCH` 우선순위 집계, 추가 질문과 근거 Evidence 반환
+- immutable run/evaluation/candidate의 transactional PostgreSQL persistence
+- strict `coverage-decision.v1` JSON Schema와 no-store HTTP response
+
+ClaimHistory projection은 아직 연결되지 않았으며 현재 repository port는 빈 history를 반환합니다. 따라서 history가 필요한 규칙은 0회로 추정하지 않고 `UNKNOWN`으로 남습니다. PR6 결과에는 금액·지급 보장 문구가 없고 정액형/실손형 계산은 다음 benefit-calculation 단계의 handoff로만 남아 있습니다. 또한 기본 `HouseholdScope` resolver는 Phase 7 인증 전까지 fail-closed이므로, 실제 로그인 없이 운영 route를 사용한다고 해석하면 안 됩니다.
+
 ## Inputs
 
 - FamilyMember와 사건일
@@ -113,6 +128,34 @@ Rule publication 단계는 다음 불변식을 보장해야 합니다.
 실손형은 사용자가 수동 입력한 통원·입원·약제비 영수증 항목, 급여 본인부담금, 비급여, 실제 지출액, 한도, 자기부담, 중복 계약 자료로 계산합니다. 일부 자료만 있어도 확인된 청구 검토 금액, 추가 확인 금액, 제외 금액과 이유를 분리해 반환합니다. 자료가 없으면 관련 Rider 후보와 필요한 서류를 반환하되 금액을 확정하지 않습니다.
 
 복수 실손 Rider가 발견되면 계약별 독립 예상액을 더하지 않습니다. 공통 청구 검토 항목과 각 계약의 조건을 보여주고 최종 비례분담은 `UNKNOWN`입니다.
+
+## HTTP lifecycle implemented in PR6
+
+The service exposes the following versioned operations under
+`/api/v1/medical-events`:
+
+```text
+POST   /api/v1/medical-events
+GET    /api/v1/medical-events/{id}
+PATCH  /api/v1/medical-events/{id}
+DELETE /api/v1/medical-events/{id}
+GET    /api/v1/medical-events/trash
+POST   /api/v1/medical-events/{id}/restore
+POST   /api/v1/medical-events/{id}/analyze
+GET    /api/v1/medical-events/{id}/results/{version}
+```
+
+Create and patch accept only a member ID, mode, dates, and a bounded map of
+structured `FactInput` values with `user`, `ai_structured`, `unconfirmed`, or
+`conflicting` confirmation. The client cannot submit a tri-state, candidate,
+amount, household scope, or Evidence ID. Updates, deletes, and restores require
+the current `expected_version`; a stale version is a value-free conflict.
+
+Analyze runs the deterministic engine in a repeatable-read transaction and
+persists a new run, evaluations, Evidence joins/snapshots, and candidates
+atomically. A missing fact or unavailable current Evidence is a normal result
+with `UNKNOWN`, not an HTTP failure. A result is selected by MedicalEvent
+version, and all decision responses carry `Cache-Control: no-store`.
 
 ## Evidence contract
 
