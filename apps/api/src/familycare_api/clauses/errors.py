@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, cast
+from typing import Literal
 
 from familycare_api.contracts.generated_business import PolicyApiErrorCode, PolicyErrorCode
 from familycare_api.errors import ApiBoundaryError, ApiErrorCode
@@ -26,13 +26,13 @@ class InvalidSearchQuery(ClauseError):
 
 class TermsEditionNotFound(ClauseError):
     status_code = 404
-    error_code: ApiErrorCode = cast(ApiErrorCode, "TERMS_EDITION_NOT_FOUND")
+    error_code: ApiErrorCode = "TERMS_EDITION_NOT_FOUND"
     public_message = "terms edition not found"
 
 
 class ClauseNotFound(ClauseError):
     status_code = 404
-    error_code: ApiErrorCode = cast(ApiErrorCode, "CLAUSE_NOT_FOUND")
+    error_code: ApiErrorCode = "CLAUSE_NOT_FOUND"
     public_message = "clause not found"
 
 
@@ -56,7 +56,7 @@ class ClauseStateConflict(ClauseError):
 
 class SearchIndexVersionMismatch(ClauseError):
     status_code = 409
-    error_code: ApiErrorCode = cast(ApiErrorCode, "SEARCH_INDEX_VERSION_MISMATCH")
+    error_code: ApiErrorCode = "SEARCH_INDEX_VERSION_MISMATCH"
     public_message = "search index version mismatch"
 
 

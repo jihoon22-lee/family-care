@@ -3,6 +3,7 @@
 
 export const API_PATHS = [
   "/api/v1/analysis-jobs/{job_id}",
+  "/api/v1/clauses/search",
   "/api/v1/documents/analysis",
   "/api/v1/family-members",
   "/api/v1/family-members/trash",
@@ -19,6 +20,8 @@ export const API_PATHS = [
   "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
   "/api/v1/review-items/{review_item_id}/confirm",
   "/api/v1/review-items/{review_item_id}/reject",
+  "/api/v1/terms-editions",
+  "/api/v1/terms-editions/{terms_edition_id}/clauses",
   "/health/live",
   "/health/ready",
 ] as const;
@@ -30,6 +33,11 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/analysis-jobs/{job_id}",
     operationId: "get_analysis_job_api_v1_analysis_jobs__job_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/clauses/search",
+    operationId: "search_clauses_api_v1_clauses_search_post",
   },
   {
     method: "POST",
@@ -149,6 +157,17 @@ export const API_OPERATIONS = [
   },
   {
     method: "GET",
+    path: "/api/v1/terms-editions",
+    operationId: "list_terms_editions_api_v1_terms_editions_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/terms-editions/{terms_edition_id}/clauses",
+    operationId:
+      "get_clause_hierarchy_api_v1_terms_editions__terms_edition_id__clauses_get",
+  },
+  {
+    method: "GET",
     path: "/health/live",
     operationId: "liveness_health_live_get",
   },
@@ -163,6 +182,17 @@ export type ApiOperation = (typeof API_OPERATIONS)[number];
 
 export type CandidateErrorResponseErrorCode =
   "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
+
+export type ClauseErrorResponseErrorCode =
+  | "AUTHENTICATION_REQUIRED"
+  | "CLAUSE_NOT_FOUND"
+  | "EVIDENCE_INVALID"
+  | "INVALID_REQUEST"
+  | "POLICY_STATE_CONFLICT"
+  | "RESOURCE_LIMIT_EXCEEDED"
+  | "SEARCH_INDEX_VERSION_MISMATCH"
+  | "TERMS_EDITION_NOT_FOUND"
+  | "VERSION_CONFLICT";
 
 export type ErrorResponseErrorCode =
   | "ANALYSIS_JOB_NOT_FOUND"
@@ -327,6 +357,74 @@ export type CandidateStatus =
   "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 
 export type CandidateVersionId = string;
+
+export interface ClauseErrorResponse {
+  error_code:
+    | "AUTHENTICATION_REQUIRED"
+    | "CLAUSE_NOT_FOUND"
+    | "EVIDENCE_INVALID"
+    | "INVALID_REQUEST"
+    | "POLICY_STATE_CONFLICT"
+    | "RESOURCE_LIMIT_EXCEEDED"
+    | "SEARCH_INDEX_VERSION_MISMATCH"
+    | "TERMS_EDITION_NOT_FOUND"
+    | "VERSION_CONFLICT";
+  fields?: Array<string> | null;
+  message: string;
+}
+
+export interface ClauseEvidenceResponse {
+  bbox: [number, number, number, number] | null;
+  content_sha256: string;
+  document_version_id: string;
+  evidence_id: string;
+  page_number: number;
+}
+
+export interface ClauseHierarchyNodeResponse {
+  clause_id: string;
+  clause_type: string;
+  evidence: Array<ClauseEvidenceResponse>;
+  excerpt: string;
+  label: string;
+  normalization_version: string;
+  parent_clause_id: string | null;
+  physical_page_end: number;
+  physical_page_start: number;
+}
+
+export interface ClauseHierarchyResponse {
+  clauses: Array<ClauseHierarchyNodeResponse>;
+  terms_edition_id: string;
+}
+
+export interface ClauseSearchHitResponse {
+  clause_id: string;
+  evidence: Array<ClauseEvidenceResponse>;
+  excerpt: string;
+  label: string;
+  normalization_version: string;
+  physical_page_end: number;
+  physical_page_start: number;
+  relevance: number;
+  terms_edition_id: string;
+}
+
+export interface ClauseSearchQuery {
+  effective_on?: string | null;
+  insurer_key?: string | null;
+  limit?: number;
+  product_key?: string | null;
+  q: string;
+  terms_edition_id?: string | null;
+}
+
+export interface ClauseSearchResponse {
+  hits: Array<ClauseSearchHitResponse>;
+  normalization_version: "unicode-nfc-v1";
+  query_matched_count: number;
+  schema_version: "1";
+}
 
 export interface DocumentAnalysisRequest {
   document_kind:
@@ -582,5 +680,19 @@ export interface RiderResponse {
   source_evidence: EvidenceResponse;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
   status_evidence: EvidenceResponse | null;
+  version: number;
+}
+
+export interface TermsEditionResponse {
+  applicability_end: string | null;
+  applicability_start: string | null;
+  content_sha256: string;
+  document_version_id: string;
+  id: string;
+  insurer_display: string;
+  insurer_key: string;
+  normalization_version: string;
+  product_display: string;
+  product_key: string;
   version: number;
 }

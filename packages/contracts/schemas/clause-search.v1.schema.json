@@ -155,7 +155,8 @@
         "physical_page_start",
         "physical_page_end",
         "evidence",
-        "normalization_version"
+        "normalization_version",
+        "relevance"
       ],
       "title": "ClauseSearchHit"
     }

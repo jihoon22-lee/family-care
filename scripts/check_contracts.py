@@ -153,10 +153,27 @@ def validate_openapi() -> list[str]:
         "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
         "/api/v1/review-items/{review_item_id}/confirm",
         "/api/v1/review-items/{review_item_id}/reject",
+        "/api/v1/terms-editions",
+        "/api/v1/terms-editions/{terms_edition_id}/clauses",
+        "/api/v1/clauses/search",
     }
     if set(paths) != expected_paths:
-        errors.append("OpenAPI paths must contain health, policy, and gated analysis routes")
+        errors.append(
+            "OpenAPI paths must contain health, policy, Clause, and gated analysis routes"
+        )
         return errors
+
+    clause_search = paths["/api/v1/clauses/search"].get("post", {})
+    if clause_search.get("parameters"):
+        errors.append("Clause search must not expose URL query parameters")
+    clause_request = (
+        clause_search.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+    )
+    if clause_request.get("$ref") != "#/components/schemas/ClauseSearchQuery":
+        errors.append("Clause search must use the strict JSON request body")
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})
@@ -402,6 +419,7 @@ def validate_clause_search_contract() -> list[str]:
         "physical_page_end",
         "evidence",
         "normalization_version",
+        "relevance",
     }
     hit_schema = schema.get("$defs", {}).get("ClauseSearchHit", {})
     if set(hit_schema.get("required", [])) != hit_required:

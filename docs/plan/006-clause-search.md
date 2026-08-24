@@ -397,9 +397,9 @@ POST /api/v1/clauses/search
 - Consumes: `ClauseSearchService.search` and terms repositories from Task 3.
 - Produces: strict `TermsEditionResponse`, `ClauseHierarchyResponse`, `ClauseSearchResponse`, the three GET routes, and the `clause-search.v1` schema/example.
 
-- [ ] **Step 1: Write failing HTTP and contract tests.** Assert exact route status codes, scope filtering, bounded excerpts, Evidence page numbering, no full Clause body, `additionalProperties: false`, synthetic example validation, and invalid query errors without query echo.
+- [x] **Step 1: Write failing HTTP and contract tests.** Assert exact route status codes, scope filtering, bounded excerpts, Evidence page numbering, no full Clause body, `additionalProperties: false`, synthetic example validation, and invalid query errors without query echo.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py -q
@@ -407,7 +407,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the router, response models, schema, and contract checker registration are absent.
 
-- [ ] **Step 3: Implement the strict HTTP adapters and schema.** Map service errors to stable fixed messages, enforce `limit <= 50`, return bounded excerpts only, and include `normalization_version` so stale search indexes are visible.
+- [x] **Step 3: Implement the strict HTTP adapters and schema.** Map service errors to stable fixed messages, enforce `limit <= 50`, return bounded excerpts only, and include `normalization_version` so stale search indexes are visible.
 
   ```python
   class ClauseSearchQuery(BaseModel):
@@ -418,7 +418,7 @@ POST /api/v1/clauses/search
       limit: int = Field(default=20, ge=1, le=50)
   ```
 
-- [ ] **Step 4: Run API/contract/privacy checks.**
+- [x] **Step 4: Run API/contract/privacy checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py apps/api/tests/test_clause_privacy.py -q
@@ -428,7 +428,7 @@ POST /api/v1/clauses/search
 
   Expected: HTTP and JSON Schema tests pass; committed OpenAPI matches FastAPI; no raw query or full text appears in responses/errors.
 
-- [ ] **Step 5: Commit the HTTP contract.**
+- [x] **Step 5: Commit the HTTP contract.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/schemas.py apps/api/src/familycare_api/clauses/router.py apps/api/src/familycare_api/clauses/errors.py packages/contracts/schemas/clause-search.v1.schema.json packages/contracts/examples/clause-search.v1.json apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py
