@@ -192,19 +192,27 @@ class PolicySnapshot:
 
 
 class ClaimHistoryReader(Protocol):
-    def for_family_member(self, scope: HouseholdScope, family_member_id: UUID) -> tuple[ClaimHistoryFact, ...]: ...
+    def for_family_member(
+        self, scope: HouseholdScope, family_member_id: UUID
+    ) -> tuple[ClaimHistoryFact, ...]: ...
 
 
 class PolicySnapshotReader(Protocol):
-    def for_event_date(self, scope: HouseholdScope, family_member_id: UUID, event_date: date) -> tuple[PolicySnapshot, ...]: ...
+    def for_event_date(
+        self, scope: HouseholdScope, family_member_id: UUID, event_date: date
+    ) -> tuple[PolicySnapshot, ...]: ...
 
 
 class RuleReader(Protocol):
-    def executable_for_rider(self, scope: HouseholdScope, rider_id: UUID) -> tuple[CoverageRuleVersion, ...]: ...
+    def executable_for_rider(
+        self, scope: HouseholdScope, rider_id: UUID
+    ) -> tuple[CoverageRuleVersion, ...]: ...
 
 
 class EvidenceRepository(Protocol):
-    def get_many(self, scope: HouseholdScope, evidence_ids: tuple[UUID, ...]) -> tuple[EvidenceRef, ...]: ...
+    def get_many(
+        self, scope: HouseholdScope, evidence_ids: tuple[UUID, ...]
+    ) -> tuple[EvidenceRef, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -216,7 +224,9 @@ class DecisionReaders:
 
 
 class CoverageDecisionEngine(Protocol):
-    def evaluate(self, scope: HouseholdScope, event: MedicalEvent, *, history: ClaimHistoryReader) -> DecisionRunResult: ...
+    def evaluate(
+        self, scope: HouseholdScope, event: MedicalEvent, *, history: ClaimHistoryReader
+    ) -> DecisionRunResult: ...
 ```
 
 Core pure functions:
@@ -226,7 +236,9 @@ def evaluate_expression(compiled: CompiledExpression, context: FactContext) -> O
 def evaluate_rule(rule: CoverageRuleVersion, context: FactContext) -> RuleEvaluation: ...
 def aggregate_required_results(evaluations: Sequence[RuleEvaluation]) -> TriState: ...
 def build_follow_up_questions(evaluations: Sequence[RuleEvaluation]) -> tuple[Question, ...]: ...
-def evaluate_event(scope: HouseholdScope, event: MedicalEvent, readers: DecisionReaders) -> DecisionRunResult: ...
+def evaluate_event(
+    scope: HouseholdScope, event: MedicalEvent, readers: DecisionReaders
+) -> DecisionRunResult: ...
 ```
 
 Evaluation order is fixed and tested:
@@ -335,7 +347,11 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
           return OperatorOutcome("UNKNOWN", "MISSING_OR_CONFLICTING_FACT")
       if value.confirmation not in {"user", "ai_structured"}:
           return OperatorOutcome("UNKNOWN", "UNCONFIRMED_FACT")
-      return OperatorOutcome("MATCH", "FACT_EQUALS") if value.value == expected else OperatorOutcome("NO_MATCH", "DETERMINISTIC_VALUE_MISMATCH")
+      return (
+          OperatorOutcome("MATCH", "FACT_EQUALS")
+          if value.value == expected
+          else OperatorOutcome("NO_MATCH", "DETERMINISTIC_VALUE_MISMATCH")
+      )
   ```
 
 - [ ] **Step 4: Run operator/fact tests and static checks.**

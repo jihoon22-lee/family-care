@@ -167,7 +167,9 @@ class ClauseSearchHit:
 
 
 class ClauseSearchService(Protocol):
-    def search(self, scope: HouseholdScope, query: str, filters: ClauseSearchFilters, *, limit: int = 20) -> tuple[ClauseSearchHit, ...]: ...
+    def search(
+        self, scope: HouseholdScope, query: str, filters: ClauseSearchFilters, *, limit: int = 20
+    ) -> tuple[ClauseSearchHit, ...]: ...
 ```
 
 The repository query uses bound parameters and PostgreSQL operators only:
@@ -343,13 +345,16 @@ POST /api/v1/clauses/search
       normalized = normalize_search_query(query)
       if not normalized or len(normalized) > 160:
           raise InvalidSearchQuery
-      rows = self._connection.execute(SEARCH_SQL, {
-          "household_space_id": scope.household_space_id,
-          "normalized_query": normalized,
-          "terms_edition_id": filters.terms_edition_id,
-          "effective_on": filters.effective_on,
-          "limit": min(limit, 50),
-      }).fetchall()
+      rows = self._connection.execute(
+          SEARCH_SQL,
+          {
+              "household_space_id": scope.household_space_id,
+              "normalized_query": normalized,
+              "terms_edition_id": filters.terms_edition_id,
+              "effective_on": filters.effective_on,
+              "limit": min(limit, 50),
+          },
+      ).fetchall()
       return tuple(_row_to_hit(row) for row in rows)
   ```
 

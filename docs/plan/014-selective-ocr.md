@@ -399,7 +399,9 @@ def test_only_ocr_required_pages_are_processed(fake_renderer, fake_engine, works
 
 
 @pytest.mark.parametrize("exit_kind", ["success", "engine_error", "cancelled", "shutdown"])
-def test_ocr_images_are_removed_on_every_exit(fake_renderer, fake_engine, exit_kind, workspace) -> None:
+def test_ocr_images_are_removed_on_every_exit(
+    fake_renderer, fake_engine, exit_kind, workspace
+) -> None:
     run_processor(exit_kind, fake_renderer, fake_engine, workspace)
     assert workspace.remaining_files(suffix=".png") == []
     assert workspace.remaining_files(suffix=".tsv") == []
@@ -423,8 +425,7 @@ Expected: FAIL because the selector, provenance mapper, repository persistence, 
 ~~~python
 def process(self, extraction: ExtractionResult, source_fd: int, workspace: Workspace) -> OcrResult:
     selected = [
-        page for page in extraction["pages"]
-        if page["quality"]["classification"] == "OCR_REQUIRED"
+        page for page in extraction["pages"] if page["quality"]["classification"] == "OCR_REQUIRED"
     ]
     pages: list[OcrPageResult] = []
     try:

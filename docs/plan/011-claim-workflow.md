@@ -184,10 +184,27 @@ ALLOWED_TRANSITIONS: Mapping[ClaimStatus, frozenset[ClaimStatus]] = {
 
 
 def allowed_claim_transitions(status: ClaimStatus) -> frozenset[ClaimStatus]: ...
-def transition_claim(scope: HouseholdScope, claim_id: UUID, target: ClaimStatus, expected_version: int, occurred_at: datetime, metadata: Mapping[str, str]) -> ClaimCase: ...
-def build_claim_snapshot(result: DecisionRunResult, calculation: BenefitCalculationResult | None) -> ClaimCaseSnapshot: ...
-def create_claim_case(scope: HouseholdScope, event_id: UUID, insurer_key: str, policy_id: UUID) -> ClaimCase: ...
-def record_claim_outcome(scope: HouseholdScope, claim_id: UUID, outcome: ClaimOutcome, amount: Money | None, payment_date: date | None) -> ClaimHistoryFact: ...
+def transition_claim(
+    scope: HouseholdScope,
+    claim_id: UUID,
+    target: ClaimStatus,
+    expected_version: int,
+    occurred_at: datetime,
+    metadata: Mapping[str, str],
+) -> ClaimCase: ...
+def build_claim_snapshot(
+    result: DecisionRunResult, calculation: BenefitCalculationResult | None
+) -> ClaimCaseSnapshot: ...
+def create_claim_case(
+    scope: HouseholdScope, event_id: UUID, insurer_key: str, policy_id: UUID
+) -> ClaimCase: ...
+def record_claim_outcome(
+    scope: HouseholdScope,
+    claim_id: UUID,
+    outcome: ClaimOutcome,
+    amount: Money | None,
+    payment_date: date | None,
+) -> ClaimHistoryFact: ...
 ```
 
 Snapshot builder includes only normalized candidate/rule/policy/Evidence/calculation data and a SHA-256 hash. It excludes natural-language medical input, receipt notes, document text, source path, and external IDs. `claim_history` records `paid`/`partially_paid` facts; a `denied` outcome is retained for audit but is not a future deterministic mismatch.
@@ -289,7 +306,9 @@ POST   /api/v1/claims/{id}/restore
 
   ```python
   def snapshot_sha256(payload: Mapping[str, object]) -> str:
-      encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+      encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+          "utf-8"
+      )
       return hashlib.sha256(encoded).hexdigest()
   ```
 

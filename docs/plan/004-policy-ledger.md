@@ -199,13 +199,21 @@ class EvidenceRef:
 class PolicyRepository(Protocol):
     def create(self, scope: HouseholdScope, command: CreatePolicy) -> PolicyContract: ...
     def get(self, scope: HouseholdScope, policy_id: UUID) -> PolicyContract: ...
-    def update(self, scope: HouseholdScope, policy_id: UUID, expected_version: int, command: UpdatePolicy) -> PolicyContract: ...
-    def soft_delete(self, scope: HouseholdScope, policy_id: UUID, expected_version: int) -> None: ...
-    def restore(self, scope: HouseholdScope, policy_id: UUID, expected_version: int) -> PolicyContract: ...
+    def update(
+        self, scope: HouseholdScope, policy_id: UUID, expected_version: int, command: UpdatePolicy
+    ) -> PolicyContract: ...
+    def soft_delete(
+        self, scope: HouseholdScope, policy_id: UUID, expected_version: int
+    ) -> None: ...
+    def restore(
+        self, scope: HouseholdScope, policy_id: UUID, expected_version: int
+    ) -> PolicyContract: ...
 
 
 class EvidenceRepository(Protocol):
-    def validate_for_document(self, scope: HouseholdScope, evidence_id: UUID, document_version_id: UUID) -> EvidenceRef: ...
+    def validate_for_document(
+        self, scope: HouseholdScope, evidence_id: UUID, document_version_id: UUID
+    ) -> EvidenceRef: ...
 ```
 
 Use direct SQL with `%s` parameters and `psycopg.rows.dict_row`. Never interpolate display names, aliases, identifiers, or dates into query strings.
@@ -261,11 +269,17 @@ GET             /api/v1/policies/{id}/riders
   op.create_table(
       "family_members",
       _uuid("id", primary_key=True),
-      sa.Column("household_space_id", sa.UUID(as_uuid=True), sa.ForeignKey("household_spaces.id"), nullable=False),
+      sa.Column(
+          "household_space_id",
+          sa.UUID(as_uuid=True),
+          sa.ForeignKey("household_spaces.id"),
+          nullable=False,
+      ),
       sa.Column("display_name", sa.String(160), nullable=False),
       sa.Column("internal_alias", sa.String(80), nullable=False),
       sa.Column("version", sa.Integer, nullable=False, server_default=sa.text("1")),
-      _created_at(), _updated_at(),
+      _created_at(),
+      _updated_at(),
       sa.Column("deleted_at", sa.DateTime(timezone=True)),
       sa.CheckConstraint("version >= 1", name="ck_family_members_version"),
   )
@@ -387,7 +401,9 @@ GET             /api/v1/policies/{id}/riders
 
 
   @router.patch("/policies/{policy_id}", response_model=PolicyResponse)
-  def patch_policy(policy_id: UUID, request: PolicyUpdateRequest, service: PolicyService = Depends(...)) -> PolicyResponse:
+  def patch_policy(
+      policy_id: UUID, request: PolicyUpdateRequest, service: PolicyService = Depends(...)
+  ) -> PolicyResponse:
       return PolicyResponse.from_domain(
           service.update_policy(policy_id, request.expected_version, request.to_command())
       )

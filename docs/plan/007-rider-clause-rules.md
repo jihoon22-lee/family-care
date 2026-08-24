@@ -139,14 +139,30 @@ Named CHECK constraints must limit review states to `AI_VERIFIED`, `NEEDS_REVIEW
 RULE_SCHEMA_VERSION = "coverage-rule-v1"
 
 RuleKind = Literal[
-    "eligibility", "classification", "temporal", "exclusion", "frequency",
-    "fixed_amount", "rate_amount", "indemnity_eligibility", "deductible",
-    "limit", "required_document",
+    "eligibility",
+    "classification",
+    "temporal",
+    "exclusion",
+    "frequency",
+    "fixed_amount",
+    "rate_amount",
+    "indemnity_eligibility",
+    "deductible",
+    "limit",
+    "required_document",
 ]
 
 ExpressionOperator = Literal[
-    "all", "any", "not", "present", "equals", "in", "range",
-    "date_between", "days_since", "count_before",
+    "all",
+    "any",
+    "not",
+    "present",
+    "equals",
+    "in",
+    "range",
+    "date_between",
+    "days_since",
+    "count_before",
 ]
 
 CalculationOperator = Literal["add", "subtract", "multiply", "min", "max", "round"]
@@ -169,7 +185,9 @@ class CompiledCalculation:
 def validate_field_path(path: str) -> None: ...
 def validate_expression(value: Mapping[str, object]) -> CompiledExpression: ...
 def validate_calculation(value: Mapping[str, object]) -> CompiledCalculation: ...
-def validate_rule_document(value: Mapping[str, object], evidence_index: EvidenceIndex) -> ValidatedRule: ...
+def validate_rule_document(
+    value: Mapping[str, object], evidence_index: EvidenceIndex
+) -> ValidatedRule: ...
 ```
 
 The field registry initially permits only explicit paths such as `MedicalEvent.event_date`, `MedicalEvent.classification`, `MedicalEvent.admission_days`, `PolicyContract.contract_start`, `PolicyContract.contract_end`, `Rider.status`, `Rider.insured_amount`, and `ClaimHistory.counted_occurrence`. Unknown paths, dynamic indexing, URL/path fields, and raw text traversal fail validation.
@@ -294,7 +312,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
       if operator not in EXPRESSION_OPERATORS:
           raise RuleValidationError("UNKNOWN_OPERATOR")
       fields = tuple(_collect_and_validate_fields(value))
-      return CompiledExpression(operator=operator, operands=_compile_args(value), referenced_fields=fields)
+      return CompiledExpression(
+          operator=operator, operands=_compile_args(value), referenced_fields=fields
+      )
   ```
 
 - [ ] **Step 4: Run DSL tests and static checks.**

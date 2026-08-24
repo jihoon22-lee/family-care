@@ -255,12 +255,8 @@ git commit -m "feat(auth): add local admin provisioning"
 def test_session_expires_at_inactivity_boundary(session_service, clock) -> None:
     issued = session_service.issue(USER_ID, "synthetic-device", clock.at("2026-01-01T00:00:00Z"))
 
-    assert session_service.resolve(
-        issued.raw_token, clock.at("2026-01-07T00:00:00Z")
-    ) is not None
-    assert session_service.resolve(
-        issued.raw_token, clock.at("2026-01-07T00:00:00.001Z")
-    ) is None
+    assert session_service.resolve(issued.raw_token, clock.at("2026-01-07T00:00:00Z")) is not None
+    assert session_service.resolve(issued.raw_token, clock.at("2026-01-07T00:00:00.001Z")) is None
 
 
 def test_client_household_id_is_ignored(authenticated_client) -> None:

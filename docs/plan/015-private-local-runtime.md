@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+
 @dataclass(frozen=True)
 class RuntimePolicy:
     service_names: frozenset[str]
@@ -60,14 +61,17 @@ class RuntimePolicy:
     worker_secret_names: frozenset[str]
     forbidden_host_bindings: frozenset[str]
 
+
 def validate_runtime_config(
     compose: Mapping[str, Any],
     environment: Mapping[str, str],
 ) -> list[str]:
     """Return stable, non-sensitive policy errors."""
 
+
 def validate_tailscale_inspection_command(argv: Sequence[str]) -> None:
     """Accept status/ip/serve-status read-only forms; reject mutations."""
+
 
 def validate_private_roots(
     repository_root: Path,
