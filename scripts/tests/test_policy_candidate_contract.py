@@ -52,15 +52,15 @@ def test_candidate_schema_keeps_every_object_strict_and_terms_only_unpublished()
 
     def walk(value: Any) -> list[dict[str, Any]]:
         if isinstance(value, dict):
-            found = [value] if value.get("type") == "object" else []
+            object_schemas = [value] if value.get("type") == "object" else []
             for child in value.values():
-                found.extend(walk(child))
-            return found
+                object_schemas.extend(walk(child))
+            return object_schemas
         if isinstance(value, list):
-            found: list[dict[str, Any]] = []
+            nested_schemas: list[dict[str, Any]] = []
             for child in value:
-                found.extend(walk(child))
-            return found
+                nested_schemas.extend(walk(child))
+            return nested_schemas
         return []
 
     assert walk(schema)

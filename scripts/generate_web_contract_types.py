@@ -139,7 +139,7 @@ def _render_property(name: str, optional: bool, type_name: str, terminator: str 
     one_line = f"{rendered_name}: {type_name}{terminator}"
     if " | " not in type_name or len(one_line) + 2 <= PRINT_WIDTH:
         return [one_line]
-    if len(type_name) <= PRINT_WIDTH:
+    if len(type_name) + len(terminator) + 4 <= PRINT_WIDTH:
         return [f"{rendered_name}:", f"  {type_name}{terminator}"]
     members = type_name.split(" | ")
     return [
