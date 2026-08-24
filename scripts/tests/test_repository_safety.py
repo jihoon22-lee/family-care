@@ -55,6 +55,29 @@ class RepositorySafetyTest(unittest.TestCase):
 
         self.assertTrue(any("directory" in error for error in errors))
 
+    def test_allows_python_modules_in_the_document_api_package_only(self) -> None:
+        path = self.write(
+            "apps/api/src/familycare_api/documents/generated_contracts.py",
+            b'"""Synthetic generated contract."""\n',
+        )
+
+        self.assertEqual(inspect_path(self.root, path), [])
+
+    def test_document_api_package_exception_does_not_allow_data_files(self) -> None:
+        path = self.write(
+            "apps/api/src/familycare_api/documents/sample.json",
+            b'{"synthetic": true}\n',
+        )
+
+        errors = inspect_path(self.root, path)
+        self.assertTrue(any("directory" in error for error in errors))
+
+    def test_document_api_package_exception_does_not_allow_other_source_roots(self) -> None:
+        path = self.write("apps/api/documents/model.py")
+
+        errors = inspect_path(self.root, path)
+        self.assertTrue(any("directory" in error for error in errors))
+
     def test_rejects_file_larger_than_two_mib(self) -> None:
         path = self.write("oversized.bin", b"0" * (MAX_FILE_BYTES + 1))
 

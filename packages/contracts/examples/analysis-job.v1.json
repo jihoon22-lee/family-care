@@ -1,6 +1,16 @@
 {
-  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "document_id": "synthetic-policy-001",
+  "document_id": "00000000-0000-4000-8000-000000000003",
+  "extractor_config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "job_id": "00000000-0000-4000-8000-000000000001",
-  "schema_version": "1"
+  "schema_version": "1",
+  "settings": {
+    "document_kind": "policy",
+    "extractor_config": {
+      "profile": "quality-v1",
+      "quality_rule_version": "quality-v1",
+      "table_strategy": "auto"
+    }
+  },
+  "source_key": "synthetic/policy-001.pdf",
+  "state": "queued"
 }

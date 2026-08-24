@@ -31,6 +31,7 @@ FORBIDDEN_SEGMENTS = {
     "private",
     "uploads",
 }
+DOCUMENT_API_SOURCE_ROOT = Path("apps/api/src/familycare_api/documents")
 PDF_ALLOW_ROOT = Path("fixtures/synthetic")
 IMAGE_ALLOW_ROOTS = (
     Path("apps/web/public"),
@@ -70,15 +71,20 @@ def inspect_path(root: Path, path: Path) -> list[str]:
     if not lexical_path.is_file():
         return errors
 
+    name = relative_path.name.casefold()
+    suffix = relative_path.suffix.casefold()
     normalized_parts = {part.casefold() for part in relative_path.parts}
     forbidden_segments = sorted(normalized_parts & FORBIDDEN_SEGMENTS)
+    if (
+        "documents" in forbidden_segments
+        and suffix == ".py"
+        and is_within(relative_path, DOCUMENT_API_SOURCE_ROOT)
+    ):
+        forbidden_segments.remove("documents")
     if forbidden_segments:
         errors.append(
             f"forbidden data directory in {relative_path}: {', '.join(forbidden_segments)}"
         )
-
-    name = relative_path.name.casefold()
-    suffix = relative_path.suffix.casefold()
 
     if suffix in FORBIDDEN_SUFFIXES:
         errors.append(f"forbidden file suffix {suffix}: {relative_path}")

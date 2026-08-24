@@ -1,0 +1,75 @@
+{
+  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "evidence": [
+    {
+      "bbox": [
+        10.0,
+        20.0,
+        30.0,
+        40.0
+      ],
+      "document_version_id": "00000000-0000-4000-8000-000000000002",
+      "page_number": 1,
+      "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_state": "candidate"
+    }
+  ],
+  "extractor_config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "extractor_name": "pdfplumber",
+  "extractor_version": "0.11.10",
+  "pages": [
+    {
+      "blocks": [
+        {
+          "bbox": [
+            10.0,
+            20.0,
+            30.0,
+            40.0
+          ],
+          "reading_order": 0,
+          "text": "Synthetic Policy Example"
+        }
+      ],
+      "height_points": 792.0,
+      "page_number": 1,
+      "quality": {
+        "alphanumeric_ratio": 0.8,
+        "classification": "TEXT_SUFFICIENT",
+        "maximum_repeated_character_run": 2,
+        "non_whitespace_chars": 22,
+        "replacement_character_ratio": 0.0,
+        "rule_version": "quality-v1"
+      },
+      "tables": [
+        {
+          "bbox": [
+            10.0,
+            40.0,
+            30.0,
+            60.0
+          ],
+          "cells": [
+            {
+              "bbox": [
+                10.0,
+                40.0,
+                30.0,
+                60.0
+              ],
+              "column_index": 0,
+              "review_state": "candidate",
+              "row_index": 0,
+              "text": "synthetic-value"
+            }
+          ],
+          "review_state": "candidate"
+        }
+      ],
+      "warning_codes": [],
+      "width_points": 612.0
+    }
+  ],
+  "quality_rule_version": "quality-v1",
+  "schema_version": "1"
+}

@@ -3,29 +3,137 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "content_sha256": {
-      "pattern": "^[0-9a-f]{64}$",
-      "type": "string"
-    },
     "document_id": {
-      "minLength": 1,
+      "$ref": "#/$defs/DocumentId"
+    },
+    "error_code": {
+      "$ref": "#/$defs/ErrorCode"
+    },
+    "extractor_config_hash": {
+      "pattern": "^[0-9a-f]{64}$",
       "type": "string"
     },
     "job_id": {
       "format": "uuid",
       "type": "string"
     },
+    "settings": {
+      "$ref": "#/$defs/AnalysisSettings"
+    },
     "schema_version": {
       "const": "1",
       "type": "string"
+    },
+    "source_key": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*[\\r\\n])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/JobState"
     }
   },
   "required": [
     "schema_version",
     "job_id",
     "document_id",
-    "content_sha256"
+    "source_key",
+    "settings",
+    "extractor_config_hash",
+    "state"
   ],
-  "title": "FamilyCare analysis job version 1",
-  "type": "object"
+  "title": "AnalysisJob",
+  "type": "object",
+  "$defs": {
+    "AnalysisSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "document_kind": {
+          "enum": [
+            "amendment",
+            "application",
+            "claim",
+            "policy",
+            "supporting",
+            "terms"
+          ],
+          "type": "string"
+        },
+        "extractor_config": {
+          "$ref": "#/$defs/ExtractorConfig"
+        }
+      },
+      "required": [
+        "document_kind",
+        "extractor_config"
+      ],
+      "title": "AnalysisSettings",
+      "type": "object"
+    },
+    "DocumentId": {
+      "format": "uuid",
+      "title": "DocumentId",
+      "type": "string"
+    },
+    "ErrorCode": {
+      "enum": [
+        "ANALYSIS_JOB_NOT_FOUND",
+        "DOCUMENT_NOT_FOUND",
+        "DOCUMENT_PATH_ESCAPE",
+        "DOCUMENT_TOO_LARGE",
+        "EXTRACTION_TIMEOUT",
+        "INVALID_REQUEST",
+        "PAGE_LIMIT_EXCEEDED",
+        "PASSWORD_INVALID",
+        "PASSWORD_REQUIRED",
+        "PDF_CORRUPT",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "TEMP_CLEANUP_FAILED",
+        "UNSUPPORTED_FILE_TYPE"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "ExtractorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "const": "quality-v1",
+          "type": "string"
+        },
+        "quality_rule_version": {
+          "const": "quality-v1",
+          "type": "string"
+        },
+        "table_strategy": {
+          "enum": [
+            "auto",
+            "lines",
+            "text"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "quality_rule_version",
+        "table_strategy"
+      ],
+      "title": "ExtractorConfig",
+      "type": "object"
+    },
+    "JobState": {
+      "enum": [
+        "cancelled",
+        "permanently_failed",
+        "queued",
+        "retryable_failed",
+        "running",
+        "succeeded"
+      ],
+      "title": "JobState",
+      "type": "string"
+    }
+  }
 }

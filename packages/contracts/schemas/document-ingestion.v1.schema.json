@@ -1,0 +1,184 @@
+{
+  "$id": "https://familycare.invalid/schemas/document-ingestion.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Synthetic-only document ingestion request and asynchronous status projection.",
+  "properties": {
+    "document_kind": {
+      "enum": [
+        "amendment",
+        "application",
+        "claim",
+        "policy",
+        "supporting",
+        "terms"
+      ],
+      "type": "string"
+    },
+    "extractor_config": {
+      "$ref": "#/$defs/ExtractorConfig"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "source_key": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!.*[\\r\\n])(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000]+$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source_key",
+    "document_kind",
+    "extractor_config"
+  ],
+  "title": "DocumentIngestionRequest",
+  "type": "object",
+  "$defs": {
+    "DocumentId": {
+      "format": "uuid",
+      "title": "DocumentId",
+      "type": "string"
+    },
+    "DocumentStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "document_id": {
+          "$ref": "#/$defs/DocumentId"
+        },
+        "error_code": {
+          "$ref": "#/$defs/ErrorCode"
+        },
+        "extraction_summary": {
+          "$ref": "#/$defs/ExtractionSummary"
+        },
+        "job_id": {
+          "$ref": "#/$defs/JobId"
+        },
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/JobState"
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "document_id",
+        "state"
+      ],
+      "title": "DocumentStatus",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "ANALYSIS_JOB_NOT_FOUND",
+        "DOCUMENT_NOT_FOUND",
+        "DOCUMENT_PATH_ESCAPE",
+        "DOCUMENT_TOO_LARGE",
+        "EXTRACTION_TIMEOUT",
+        "INVALID_REQUEST",
+        "PAGE_LIMIT_EXCEEDED",
+        "PASSWORD_INVALID",
+        "PASSWORD_REQUIRED",
+        "PDF_CORRUPT",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "TEMP_CLEANUP_FAILED",
+        "UNSUPPORTED_FILE_TYPE"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "ExtractionSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "block_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cell_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "page_count": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "table_count": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page_count",
+        "block_count",
+        "table_count",
+        "cell_count"
+      ],
+      "title": "ExtractionSummary",
+      "type": "object"
+    },
+    "ExtractorConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "profile": {
+          "const": "quality-v1",
+          "type": "string"
+        },
+        "quality_rule_version": {
+          "const": "quality-v1",
+          "type": "string"
+        },
+        "table_strategy": {
+          "enum": [
+            "auto",
+            "lines",
+            "text"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "quality_rule_version",
+        "table_strategy"
+      ],
+      "title": "ExtractorConfig",
+      "type": "object"
+    },
+    "JobId": {
+      "format": "uuid",
+      "title": "JobId",
+      "type": "string"
+    },
+    "JobState": {
+      "enum": [
+        "cancelled",
+        "permanently_failed",
+        "queued",
+        "retryable_failed",
+        "running",
+        "succeeded"
+      ],
+      "title": "JobState",
+      "type": "string"
+    }
+  },
+  "x-familycare-safety-limits": {
+    "child_address_space_bytes": 1610612736,
+    "child_cpu_limit_seconds": 90,
+    "max_input_bytes": 26214400,
+    "max_open_descriptors": 64,
+    "max_output_bytes": 67108864,
+    "max_pages": 500,
+    "parent_wall_timeout_seconds": 120,
+    "sha256_chunk_bytes": 1048576,
+    "work_directory_mode": "0700",
+    "work_file_mode": "0600"
+  }
+}

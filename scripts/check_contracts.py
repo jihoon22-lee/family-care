@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from importlib import import_module
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from familycare_api.main import create_app
 
@@ -17,6 +17,21 @@ OPENAPI_PATH = ROOT / "packages/contracts/openapi/familycare.v1.json"
 JOB_SCHEMA_PATH = ROOT / "packages/contracts/schemas/analysis-job.v1.schema.json"
 JOB_EXAMPLE_PATH = ROOT / "packages/contracts/examples/analysis-job.v1.json"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _load_document_contract_checker() -> Any:
+    """Load the document checker from package or direct-script context."""
+
+    try:
+        return import_module("scripts.check_document_contracts")
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+        return import_module("check_document_contracts")
+
+
+_DOCUMENT_CONTRACT_CHECKER = _load_document_contract_checker()
+is_relative_source_key = _DOCUMENT_CONTRACT_CHECKER.is_relative_source_key
+valid_uuid4 = _DOCUMENT_CONTRACT_CHECKER.valid_uuid4
+validate_document_contracts = _DOCUMENT_CONTRACT_CHECKER.validate_document_contracts
 
 
 def render_openapi() -> str:
@@ -58,27 +73,44 @@ def validate_job_contract() -> list[str]:
         return [str(error)]
 
     errors: list[str] = []
-    required = {"schema_version", "job_id", "document_id", "content_sha256"}
+    required = {
+        "schema_version",
+        "job_id",
+        "document_id",
+        "source_key",
+        "settings",
+        "extractor_config_hash",
+        "state",
+    }
     if set(schema.get("required", [])) != required:
         errors.append("analysis job schema required properties are inconsistent")
     if schema.get("additionalProperties") is not False:
         errors.append("analysis job schema must reject additional properties")
+    if schema.get("properties", {}).get("document_id") != {"$ref": "#/$defs/DocumentId"}:
+        errors.append("analysis job document_id must reference the UUID DocumentId contract")
     if set(example) != required:
         errors.append("analysis job example keys do not match the schema")
     if example.get("schema_version") != "1":
         errors.append("analysis job schema_version must be 1")
 
-    try:
-        job_id = UUID(str(example.get("job_id")))
-        if job_id.version != 4:
-            errors.append("analysis job job_id must be a UUIDv4")
-    except ValueError:
+    if not valid_uuid4(example.get("job_id")):
         errors.append("analysis job job_id must be a UUID")
 
-    if not str(example.get("document_id", "")).startswith("synthetic-"):
-        errors.append("analysis job example document_id must be synthetic")
-    if not SHA256_PATTERN.fullmatch(str(example.get("content_sha256", ""))):
-        errors.append("analysis job content_sha256 must be 64 lowercase hex characters")
+    if not valid_uuid4(example.get("document_id")):
+        errors.append("analysis job example document_id must be a UUIDv4")
+    if not is_relative_source_key(example.get("source_key")):
+        errors.append("analysis job source_key must be a relative path")
+    if not SHA256_PATTERN.fullmatch(str(example.get("extractor_config_hash", ""))):
+        errors.append("analysis job extractor_config_hash must be 64 lowercase hex characters")
+    if example.get("state") not in {
+        "queued",
+        "running",
+        "succeeded",
+        "retryable_failed",
+        "permanently_failed",
+        "cancelled",
+    }:
+        errors.append("analysis job state is not one of the six stable states")
     return errors
 
 
@@ -98,11 +130,11 @@ def main() -> int:
         print(f"wrote {OPENAPI_PATH.relative_to(ROOT)}")
         return 0
 
-    errors = [*validate_openapi(), *validate_job_contract()]
+    errors = [*validate_openapi(), *validate_job_contract(), *validate_document_contracts()]
     if errors:
         print("\n".join(errors))
         return 1
-    print("contract checks passed (OpenAPI and analysis-job.v1)")
+    print("contract checks passed (OpenAPI, analysis-job.v1, and document ingestion contracts)")
     return 0
 
 
