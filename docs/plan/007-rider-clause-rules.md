@@ -276,7 +276,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: all shape tests pass and PostgreSQL reaches `0006_rider_clause_rules` without changing prior tables.
 
-- [ ] **Step 5: Commit the schema.**
+- [x] **Step 5: Commit the schema.**
 
   ```bash
   git add apps/api/migrations/versions/0006_rider_clause_rules.py apps/api/tests/test_rider_clause_rules_migration.py
@@ -332,7 +332,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: every allowlist row passes and every unsupported construct fails with a stable reason code.
 
-- [ ] **Step 5: Commit the validator.**
+- [x] **Step 5: Commit the validator.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/dsl.py apps/api/tests/test_rule_dsl.py
@@ -377,7 +377,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: link invariant tests pass and no untyped/unsafe SQL path remains.
 
-- [ ] **Step 5: Commit the link validator.**
+- [x] **Step 5: Commit the link validator.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/links.py apps/api/src/familycare_api/clauses/repository.py apps/api/src/familycare_api/clauses/service.py apps/api/tests/test_rider_clause_rules.py
@@ -430,7 +430,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: executable-state and atomic-version tests pass; unsupported rules remain informational.
 
-- [ ] **Step 5: Commit rule publication.**
+- [x] **Step 5: Commit rule publication.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/rules.py apps/api/src/familycare_api/clauses/schemas.py apps/api/src/familycare_api/clauses/repository.py apps/api/tests/test_rule_publication.py
@@ -439,7 +439,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 5: Add HTTP contracts, integration tests, and privacy checks
 
-**Status:** `in_progress`
+**Status:** `completed`
 
 **Files:**
 - Modify: `apps/api/src/familycare_api/clauses/router.py`
@@ -461,9 +461,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: link/rule services and publisher from Tasks 3–4.
 - Produces: strict link/rule routes, `rider-clause-rules.v1`, PostgreSQL transaction proof, and response/log redaction.
 
-- [ ] **Step 1: Write failing API/contract/integration tests.** Assert route status/error envelopes, expected version handling, generic review domains and typed child-version correction, link/rule Evidence fields, no raw DSL/path/text output, synthetic PostgreSQL publish atomicity, and inability to access another household.
+- [x] **Step 1: Write failing API/contract/integration tests.** Assert route status/error envelopes, expected version handling, generic review domains and typed child-version correction, link/rule Evidence fields, no raw DSL/path/text output, synthetic PostgreSQL publish atomicity, and inability to access another household.
 
-- [ ] **Step 2: Run the focused RED commands.**
+- [x] **Step 2: Run the focused RED commands.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_integration.py -q
@@ -471,9 +471,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because the routes, schema artifact, and integration transactions are incomplete.
 
-- [ ] **Step 3: Implement strict route adapters and the JSON Schema.** Confirm/reject/publish endpoints accept only expected version and bounded reason metadata. Extend the generic candidate review service with the two new domains and generated typed field IDs; corrections always create child versions. The client cannot submit a new authoritative rule body or household ID.
+- [x] **Step 3: Implement strict route adapters and the JSON Schema.** Confirm/reject/publish endpoints accept only expected version and bounded reason metadata. Extend the generic candidate review service with the two new domains and generated typed field IDs; corrections always create child versions. The client cannot submit a new authoritative rule body or household ID.
 
-- [ ] **Step 4: Run the complete focused suite.**
+- [x] **Step 4: Run the complete focused suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py apps/api/tests/test_rule_dsl.py apps/api/tests/test_rider_clause_rules.py apps/api/tests/test_rule_publication.py apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_privacy.py -q
@@ -486,7 +486,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: migration, DSL, link, publish, HTTP, PostgreSQL, contract, and privacy checks pass with no external AI.
 
-- [ ] **Step 5: Commit the complete rule boundary.**
+- [x] **Step 5: Commit the complete rule boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses packages/contracts/schemas/rider-clause-rules.v1.schema.json packages/contracts/examples/rider-clause-rules.v1.json apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_integration.py apps/api/tests/test_rider_clause_rules_privacy.py
@@ -494,6 +494,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 6: Add Rider-Clause and CoverageRule review screens
+
+**Status:** `in_progress`
 
 **Files:**
 - Create: `apps/web/src/api/rules.ts`

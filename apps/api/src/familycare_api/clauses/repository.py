@@ -812,6 +812,8 @@ def _rider_clause_link(row: dict[str, Any], evidence: Sequence[EvidenceRef]) -> 
         updated_at=row["updated_at"],
         deleted_at=row.get("deleted_at"),
         evidence=tuple(evidence),
+        rider_label=cast(str | None, row.get("rider_label")),
+        clause_label=cast(str | None, row.get("clause_label")),
     )
 
 
@@ -830,7 +832,9 @@ class RiderClauseLinkRepository:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 rows = connection.execute(
                     f"""
-                    SELECT {_LINK_COLUMNS}, {_EVIDENCE_COLUMNS}
+                    SELECT {_LINK_COLUMNS}, {_EVIDENCE_COLUMNS},
+                           rider.display_name AS rider_label,
+                           clause.label AS clause_label
                     FROM rider_clause_links AS link
                     JOIN riders AS rider
                       ON rider.id = link.rider_id
@@ -840,6 +844,10 @@ class RiderClauseLinkRepository:
                       ON policy.id = rider.policy_contract_id
                      AND policy.household_space_id = link.household_space_id
                      AND policy.deleted_at IS NULL
+                    JOIN clauses AS clause
+                      ON clause.id = link.clause_id
+                     AND clause.household_space_id = link.household_space_id
+                     AND clause.deleted_at IS NULL
                     LEFT JOIN rider_clause_link_evidence AS linked
                       ON linked.rider_clause_link_id = link.id
                     LEFT JOIN evidence ON evidence.id = linked.evidence_id

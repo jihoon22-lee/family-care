@@ -4,6 +4,8 @@
 export const API_PATHS = [
   "/api/v1/analysis-jobs/{job_id}",
   "/api/v1/clauses/search",
+  "/api/v1/coverage-rules/{rule_id}/publish",
+  "/api/v1/coverage-rules/{rule_id}/versions",
   "/api/v1/documents/analysis",
   "/api/v1/family-members",
   "/api/v1/family-members/trash",
@@ -19,7 +21,11 @@ export const API_PATHS = [
   "/api/v1/review-items/{review_item_id}",
   "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
   "/api/v1/review-items/{review_item_id}/confirm",
+  "/api/v1/review-items/{review_item_id}/fields/{field_id}",
   "/api/v1/review-items/{review_item_id}/reject",
+  "/api/v1/rider-clause-links/{link_id}/confirm",
+  "/api/v1/rider-clause-links/{link_id}/reject",
+  "/api/v1/riders/{rider_id}/clause-links",
   "/api/v1/terms-editions",
   "/api/v1/terms-editions/{terms_edition_id}/clauses",
   "/health/live",
@@ -38,6 +44,18 @@ export const API_OPERATIONS = [
     method: "POST",
     path: "/api/v1/clauses/search",
     operationId: "search_clauses_api_v1_clauses_search_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/coverage-rules/{rule_id}/publish",
+    operationId:
+      "publish_coverage_rule_api_v1_coverage_rules__rule_id__publish_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/coverage-rules/{rule_id}/versions",
+    operationId:
+      "list_coverage_rule_versions_api_v1_coverage_rules__rule_id__versions_get",
   },
   {
     method: "POST",
@@ -150,10 +168,34 @@ export const API_OPERATIONS = [
       "confirm_candidate_api_v1_review_items__review_item_id__confirm_post",
   },
   {
+    method: "PATCH",
+    path: "/api/v1/review-items/{review_item_id}/fields/{field_id}",
+    operationId:
+      "correct_typed_review_item_field_api_v1_review_items__review_item_id__fields__field_id__patch",
+  },
+  {
     method: "POST",
     path: "/api/v1/review-items/{review_item_id}/reject",
     operationId:
       "reject_candidate_api_v1_review_items__review_item_id__reject_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/rider-clause-links/{link_id}/confirm",
+    operationId:
+      "confirm_rider_clause_link_api_v1_rider_clause_links__link_id__confirm_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/rider-clause-links/{link_id}/reject",
+    operationId:
+      "reject_rider_clause_link_api_v1_rider_clause_links__link_id__reject_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/riders/{rider_id}/clause-links",
+    operationId:
+      "list_rider_clause_links_api_v1_riders__rider_id__clause_links_get",
   },
   {
     method: "GET",
@@ -267,19 +309,30 @@ export interface CandidateCorrectionRequest {
   expected_version: number;
   field_id:
     | "benefit_type"
+    | "clause_id"
     | "contract_end"
     | "contract_start"
     | "coverage_end"
     | "coverage_start"
     | "currency"
+    | "date_boundary"
+    | "decimal_boundary"
+    | "fact_field"
     | "insurer"
+    | "link_review_state"
     | "policy_status"
     | "product_name"
     | "renewable"
+    | "required"
+    | "rider_id"
     | "rider_key"
     | "rider_name"
     | "rider_status"
-    | "sum_assured";
+    | "rule_kind"
+    | "rule_operator"
+    | "sum_assured"
+    | "terms_edition_id"
+    | "unit";
   value: CandidateScalar;
 }
 
@@ -307,19 +360,30 @@ export interface CandidateField {
   evidence_ids: Array<string>;
   field_id:
     | "benefit_type"
+    | "clause_id"
     | "contract_end"
     | "contract_start"
     | "coverage_end"
     | "coverage_start"
     | "currency"
+    | "date_boundary"
+    | "decimal_boundary"
+    | "fact_field"
     | "insurer"
+    | "link_review_state"
     | "policy_status"
     | "product_name"
     | "renewable"
+    | "required"
+    | "rider_id"
     | "rider_key"
     | "rider_name"
     | "rider_status"
-    | "sum_assured";
+    | "rule_kind"
+    | "rule_operator"
+    | "sum_assured"
+    | "terms_edition_id"
+    | "unit";
   value: CandidateScalar;
 }
 
@@ -330,9 +394,14 @@ export type CandidateIssueCode =
   | "UNSUPPORTED_STRUCTURE"
   | "LOW_CONFIDENCE"
   | "INVALID_UNIT"
-  | "INVALID_DATE";
+  | "INVALID_DATE"
+  | "WRONG_EDITION"
+  | "STALE_EVIDENCE"
+  | "UNSUPPORTED_DSL"
+  | "COMMON_SPECIAL_TERMS_CONFLICT";
 
-export type CandidateKind = "policy_contract" | "policy_party" | "rider";
+export type CandidateKind =
+  "policy_contract" | "policy_party" | "rider" | "rider_clause" | "coverage_rule";
 
 export type CandidateRejectionReason =
   | "NOT_ENROLLED"
@@ -424,6 +493,31 @@ export interface ClauseSearchResponse {
   normalization_version: "unicode-nfc-v1";
   query_matched_count: number;
   schema_version: "1";
+}
+
+export interface CoverageRulePublishRequest {
+  expected_version: number;
+  version_id: string;
+}
+
+export interface CoverageRuleVersionResponse {
+  evidence: Array<ClauseEvidenceResponse>;
+  executable: boolean;
+  generator_version: string;
+  input_field_paths: Array<string>;
+  required: boolean;
+  result_reason_code: string;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
+  rule_kind: string;
+  schema_version: "coverage-rule-v1";
+  verifier_version: string;
+  version_id: string;
+  version_number: number;
+}
+
+export interface CoverageRuleVersionsResponse {
+  rule_id: string;
+  versions: Array<CoverageRuleVersionResponse>;
 }
 
 export interface DocumentAnalysisRequest {
@@ -547,7 +641,18 @@ export type PolicyCandidateFieldId =
   | "coverage_start"
   | "coverage_end"
   | "renewable"
-  | "rider_status";
+  | "rider_status"
+  | "rider_id"
+  | "terms_edition_id"
+  | "clause_id"
+  | "link_review_state"
+  | "rule_kind"
+  | "rule_operator"
+  | "fact_field"
+  | "unit"
+  | "decimal_boundary"
+  | "date_boundary"
+  | "required";
 
 export interface PolicyCreateRequest {
   contract_date?: string | null;
@@ -618,7 +723,12 @@ export interface PolicyResponse {
 
 export interface PolicyReviewItem {
   aggregate_id: string | null;
-  candidate_kind: "policy_contract" | "policy_party" | "rider";
+  candidate_kind:
+    | "coverage_rule"
+    | "policy_contract"
+    | "policy_party"
+    | "rider"
+    | "rider_clause";
   candidate_version_id: string;
   evidence: Array<CandidateEvidenceRef>;
   expected_version: number;
@@ -639,32 +749,66 @@ export type PositiveVersion = number;
 
 export interface ReviewIssue {
   code:
+    | "COMMON_SPECIAL_TERMS_CONFLICT"
     | "CONFLICTING_EVIDENCE"
     | "INVALID_DATE"
     | "INVALID_UNIT"
     | "LOW_CONFIDENCE"
     | "MISSING_EVIDENCE"
+    | "STALE_EVIDENCE"
     | "TERMS_ONLY_RIDER"
-    | "UNSUPPORTED_STRUCTURE";
+    | "UNSUPPORTED_DSL"
+    | "UNSUPPORTED_STRUCTURE"
+    | "WRONG_EDITION";
   field_id:
     | "benefit_type"
+    | "clause_id"
     | "contract_end"
     | "contract_start"
     | "coverage_end"
     | "coverage_start"
     | "currency"
+    | "date_boundary"
+    | "decimal_boundary"
+    | "fact_field"
     | "insurer"
+    | "link_review_state"
     | "policy_status"
     | "product_name"
     | "renewable"
+    | "required"
+    | "rider_id"
     | "rider_key"
     | "rider_name"
     | "rider_status"
+    | "rule_kind"
+    | "rule_operator"
     | "sum_assured"
+    | "terms_edition_id"
+    | "unit"
     | null;
 }
 
 export type ReviewItemId = string;
+
+export interface RiderClauseLinkRejectionRequest {
+  expected_version: number;
+  reason_code:
+    "USER_REJECTED" | "WRONG_CLAUSE" | "WRONG_EDITION" | "NOT_APPLICABLE";
+}
+
+export interface RiderClauseLinkResponse {
+  applicability_reason_code: string;
+  clause_id: string;
+  clause_label?: string | null;
+  evidence: Array<ClauseEvidenceResponse>;
+  link_id: string;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
+  rider_id: string;
+  rider_label?: string | null;
+  terms_edition_id: string;
+  version: number;
+}
 
 export interface RiderResponse {
   benefit_type: "fixed" | "indemnity";

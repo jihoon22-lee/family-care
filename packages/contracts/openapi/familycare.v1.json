@@ -169,19 +169,30 @@
           "field_id": {
             "enum": [
               "benefit_type",
+              "clause_id",
               "contract_end",
               "contract_start",
               "coverage_end",
               "coverage_start",
               "currency",
+              "date_boundary",
+              "decimal_boundary",
+              "fact_field",
               "insurer",
+              "link_review_state",
               "policy_status",
               "product_name",
               "renewable",
+              "required",
+              "rider_id",
               "rider_key",
               "rider_name",
               "rider_status",
-              "sum_assured"
+              "rule_kind",
+              "rule_operator",
+              "sum_assured",
+              "terms_edition_id",
+              "unit"
             ],
             "title": "Field Id",
             "type": "string"
@@ -311,19 +322,30 @@
           "field_id": {
             "enum": [
               "benefit_type",
+              "clause_id",
               "contract_end",
               "contract_start",
               "coverage_end",
               "coverage_start",
               "currency",
+              "date_boundary",
+              "decimal_boundary",
+              "fact_field",
               "insurer",
+              "link_review_state",
               "policy_status",
               "product_name",
               "renewable",
+              "required",
+              "rider_id",
               "rider_key",
               "rider_name",
               "rider_status",
-              "sum_assured"
+              "rule_kind",
+              "rule_operator",
+              "sum_assured",
+              "terms_edition_id",
+              "unit"
             ],
             "title": "Field Id",
             "type": "string"
@@ -775,6 +797,147 @@
           "hits"
         ],
         "title": "ClauseSearchResponse",
+        "type": "object"
+      },
+      "CoverageRulePublishRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "version_id"
+        ],
+        "title": "CoverageRulePublishRequest",
+        "type": "object"
+      },
+      "CoverageRuleVersionResponse": {
+        "additionalProperties": false,
+        "description": "Rule metadata and Evidence only; the stored DSL body is not returned.",
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseEvidenceResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "executable": {
+            "title": "Executable",
+            "type": "boolean"
+          },
+          "generator_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Generator Version",
+            "type": "string"
+          },
+          "input_field_paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Input Field Paths",
+            "type": "array"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "result_reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Result Reason Code",
+            "type": "string"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "rule_kind": {
+            "maxLength": 48,
+            "minLength": 1,
+            "title": "Rule Kind",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "coverage-rule-v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "verifier_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Verifier Version",
+            "type": "string"
+          },
+          "version_id": {
+            "format": "uuid",
+            "title": "Version Id",
+            "type": "string"
+          },
+          "version_number": {
+            "minimum": 1.0,
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version_id",
+          "version_number",
+          "schema_version",
+          "rule_kind",
+          "required",
+          "input_field_paths",
+          "result_reason_code",
+          "review_state",
+          "executable",
+          "generator_version",
+          "verifier_version",
+          "evidence"
+        ],
+        "title": "CoverageRuleVersionResponse",
+        "type": "object"
+      },
+      "CoverageRuleVersionsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "rule_id": {
+            "format": "uuid",
+            "title": "Rule Id",
+            "type": "string"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/CoverageRuleVersionResponse"
+            },
+            "maxItems": 100,
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "rule_id",
+          "versions"
+        ],
+        "title": "CoverageRuleVersionsResponse",
         "type": "object"
       },
       "DocumentAnalysisRequest": {
@@ -1590,9 +1753,11 @@
           },
           "candidate_kind": {
             "enum": [
+              "coverage_rule",
               "policy_contract",
               "policy_party",
-              "rider"
+              "rider",
+              "rider_clause"
             ],
             "title": "Candidate Kind",
             "type": "string"
@@ -1725,13 +1890,17 @@
         "properties": {
           "code": {
             "enum": [
+              "COMMON_SPECIAL_TERMS_CONFLICT",
               "CONFLICTING_EVIDENCE",
               "INVALID_DATE",
               "INVALID_UNIT",
               "LOW_CONFIDENCE",
               "MISSING_EVIDENCE",
+              "STALE_EVIDENCE",
               "TERMS_ONLY_RIDER",
-              "UNSUPPORTED_STRUCTURE"
+              "UNSUPPORTED_DSL",
+              "UNSUPPORTED_STRUCTURE",
+              "WRONG_EDITION"
             ],
             "title": "Code",
             "type": "string"
@@ -1741,19 +1910,30 @@
               {
                 "enum": [
                   "benefit_type",
+                  "clause_id",
                   "contract_end",
                   "contract_start",
                   "coverage_end",
                   "coverage_start",
                   "currency",
+                  "date_boundary",
+                  "decimal_boundary",
+                  "fact_field",
                   "insurer",
+                  "link_review_state",
                   "policy_status",
                   "product_name",
                   "renewable",
+                  "required",
+                  "rider_id",
                   "rider_key",
                   "rider_name",
                   "rider_status",
-                  "sum_assured"
+                  "rule_kind",
+                  "rule_operator",
+                  "sum_assured",
+                  "terms_edition_id",
+                  "unit"
                 ],
                 "type": "string"
               },
@@ -1769,6 +1949,126 @@
           "field_id"
         ],
         "title": "ReviewIssue",
+        "type": "object"
+      },
+      "RiderClauseLinkRejectionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "reason_code": {
+            "enum": [
+              "USER_REJECTED",
+              "WRONG_CLAUSE",
+              "WRONG_EDITION",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_version",
+          "reason_code"
+        ],
+        "title": "RiderClauseLinkRejectionRequest",
+        "type": "object"
+      },
+      "RiderClauseLinkResponse": {
+        "additionalProperties": false,
+        "description": "Bounded link projection without source Clause text or household scope.",
+        "properties": {
+          "applicability_reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Applicability Reason Code",
+            "type": "string"
+          },
+          "clause_id": {
+            "format": "uuid",
+            "title": "Clause Id",
+            "type": "string"
+          },
+          "clause_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clause Label"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/ClauseEvidenceResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "link_id": {
+            "format": "uuid",
+            "title": "Link Id",
+            "type": "string"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED",
+              "rejected"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          },
+          "rider_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rider Label"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "link_id",
+          "rider_id",
+          "terms_edition_id",
+          "clause_id",
+          "review_state",
+          "applicability_reason_code",
+          "version",
+          "evidence"
+        ],
+        "title": "RiderClauseLinkResponse",
         "type": "object"
       },
       "RiderResponse": {
@@ -2151,6 +2451,182 @@
           }
         },
         "summary": "Search Clauses",
+        "tags": [
+          "clause search"
+        ]
+      }
+    },
+    "/api/v1/coverage-rules/{rule_id}/publish": {
+      "post": {
+        "operationId": "publish_coverage_rule_api_v1_coverage_rules__rule_id__publish_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoverageRulePublishRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageRuleVersionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Publish Coverage Rule",
+        "tags": [
+          "clause search"
+        ]
+      }
+    },
+    "/api/v1/coverage-rules/{rule_id}/versions": {
+      "get": {
+        "operationId": "list_coverage_rule_versions_api_v1_coverage_rules__rule_id__versions_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageRuleVersionsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Coverage Rule Versions",
         "tags": [
           "clause search"
         ]
@@ -3296,19 +3772,30 @@
             "schema": {
               "enum": [
                 "benefit_type",
+                "clause_id",
                 "contract_end",
                 "contract_start",
                 "coverage_end",
                 "coverage_start",
                 "currency",
+                "date_boundary",
+                "decimal_boundary",
+                "fact_field",
                 "insurer",
+                "link_review_state",
                 "policy_status",
                 "product_name",
                 "renewable",
+                "required",
+                "rider_id",
                 "rider_key",
                 "rider_name",
                 "rider_status",
-                "sum_assured"
+                "rule_kind",
+                "rule_operator",
+                "sum_assured",
+                "terms_edition_id",
+                "unit"
               ],
               "title": "Field Id",
               "type": "string"
@@ -3562,8 +4049,12 @@
             "name": "domain",
             "required": false,
             "schema": {
-              "const": "policy",
               "default": "policy",
+              "enum": [
+                "policy",
+                "rider_clause",
+                "coverage_rule"
+              ],
               "title": "Domain",
               "type": "string"
             }
@@ -3721,19 +4212,30 @@
             "schema": {
               "enum": [
                 "benefit_type",
+                "clause_id",
                 "contract_end",
                 "contract_start",
                 "coverage_end",
                 "coverage_start",
                 "currency",
+                "date_boundary",
+                "decimal_boundary",
+                "fact_field",
                 "insurer",
+                "link_review_state",
                 "policy_status",
                 "product_name",
                 "renewable",
+                "required",
+                "rider_id",
                 "rider_key",
                 "rider_name",
                 "rider_status",
-                "sum_assured"
+                "rule_kind",
+                "rule_operator",
+                "sum_assured",
+                "terms_edition_id",
+                "unit"
               ],
               "title": "Field Id",
               "type": "string"
@@ -3871,6 +4373,116 @@
         ]
       }
     },
+    "/api/v1/review-items/{review_item_id}/fields/{field_id}": {
+      "patch": {
+        "description": "Create a child version from one generated typed field correction.",
+        "operationId": "correct_typed_review_item_field_api_v1_review_items__review_item_id__fields__field_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "field_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "benefit_type",
+                "clause_id",
+                "contract_end",
+                "contract_start",
+                "coverage_end",
+                "coverage_start",
+                "currency",
+                "date_boundary",
+                "decimal_boundary",
+                "fact_field",
+                "insurer",
+                "link_review_state",
+                "policy_status",
+                "product_name",
+                "renewable",
+                "required",
+                "rider_id",
+                "rider_key",
+                "rider_name",
+                "rider_status",
+                "rule_kind",
+                "rule_operator",
+                "sum_assured",
+                "terms_edition_id",
+                "unit"
+              ],
+              "title": "Field Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Correct Typed Review Item Field",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
     "/api/v1/review-items/{review_item_id}/reject": {
       "post": {
         "operationId": "reject_candidate_api_v1_review_items__review_item_id__reject_post",
@@ -3941,6 +4553,279 @@
         "summary": "Reject Candidate",
         "tags": [
           "policy candidate review"
+        ]
+      }
+    },
+    "/api/v1/rider-clause-links/{link_id}/confirm": {
+      "post": {
+        "operationId": "confirm_rider_clause_link_api_v1_rider_clause_links__link_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiderClauseLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Confirm Rider Clause Link",
+        "tags": [
+          "clause search"
+        ]
+      }
+    },
+    "/api/v1/rider-clause-links/{link_id}/reject": {
+      "post": {
+        "operationId": "reject_rider_clause_link_api_v1_rider_clause_links__link_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "link_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Link Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RiderClauseLinkRejectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RiderClauseLinkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Reject Rider Clause Link",
+        "tags": [
+          "clause search"
+        ]
+      }
+    },
+    "/api/v1/riders/{rider_id}/clause-links": {
+      "get": {
+        "operationId": "list_rider_clause_links_api_v1_riders__rider_id__clause_links_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rider_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Rider Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RiderClauseLinkResponse"
+                  },
+                  "title": "Response List Rider Clause Links Api V1 Riders  Rider Id  Clause Links Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped terms edition not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Search index version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClauseErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Rider Clause Links",
+        "tags": [
+          "clause search"
         ]
       }
     },

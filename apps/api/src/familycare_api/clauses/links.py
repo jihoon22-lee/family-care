@@ -56,6 +56,8 @@ class RiderClauseLink:
     updated_at: datetime
     deleted_at: datetime | None
     evidence: tuple[EvidenceRef, ...] = ()
+    rider_label: str | None = None
+    clause_label: str | None = None
 
     def __post_init__(self) -> None:
         if not all(
@@ -89,6 +91,11 @@ class RiderClauseLink:
             raise ValueError("link version must be positive") from None
         if not all(isinstance(item, EvidenceRef) for item in self.evidence):
             raise ValueError("link evidence must contain EvidenceRef values")
+        if any(
+            value is not None and (not isinstance(value, str) or not value or len(value) > 160)
+            for value in (self.rider_label, self.clause_label)
+        ):
+            raise ValueError("link labels must be bounded")
 
 
 @dataclass(frozen=True)

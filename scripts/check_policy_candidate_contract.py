@@ -27,7 +27,13 @@ FORBIDDEN_FIELDS = {
     "raw_provider_response",
 }
 CANDIDATE_STATUSES = ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED", "rejected"]
-CANDIDATE_KINDS = ["policy_contract", "policy_party", "rider"]
+CANDIDATE_KINDS = [
+    "policy_contract",
+    "policy_party",
+    "rider",
+    "rider_clause",
+    "coverage_rule",
+]
 FIELD_IDS = [
     "insurer",
     "product_name",
@@ -43,6 +49,17 @@ FIELD_IDS = [
     "coverage_end",
     "renewable",
     "rider_status",
+    "rider_id",
+    "terms_edition_id",
+    "clause_id",
+    "link_review_state",
+    "rule_kind",
+    "rule_operator",
+    "fact_field",
+    "unit",
+    "decimal_boundary",
+    "date_boundary",
+    "required",
 ]
 ISSUE_CODES = [
     "MISSING_EVIDENCE",
@@ -52,6 +69,10 @@ ISSUE_CODES = [
     "LOW_CONFIDENCE",
     "INVALID_UNIT",
     "INVALID_DATE",
+    "WRONG_EDITION",
+    "STALE_EVIDENCE",
+    "UNSUPPORTED_DSL",
+    "COMMON_SPECIAL_TERMS_CONFLICT",
 ]
 ERROR_CODES = [
     "VERSION_CONFLICT",

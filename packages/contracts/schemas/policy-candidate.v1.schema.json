@@ -67,7 +67,9 @@
       "enum": [
         "policy_contract",
         "policy_party",
-        "rider"
+        "rider",
+        "rider_clause",
+        "coverage_rule"
       ],
       "title": "CandidateKind",
       "type": "string"
@@ -87,7 +89,18 @@
         "coverage_start",
         "coverage_end",
         "renewable",
-        "rider_status"
+        "rider_status",
+        "rider_id",
+        "terms_edition_id",
+        "clause_id",
+        "link_review_state",
+        "rule_kind",
+        "rule_operator",
+        "fact_field",
+        "unit",
+        "decimal_boundary",
+        "date_boundary",
+        "required"
       ],
       "title": "PolicyCandidateFieldId",
       "type": "string"
@@ -100,7 +113,11 @@
         "UNSUPPORTED_STRUCTURE",
         "LOW_CONFIDENCE",
         "INVALID_UNIT",
-        "INVALID_DATE"
+        "INVALID_DATE",
+        "WRONG_EDITION",
+        "STALE_EVIDENCE",
+        "UNSUPPORTED_DSL",
+        "COMMON_SPECIAL_TERMS_CONFLICT"
       ],
       "title": "CandidateIssueCode",
       "type": "string"

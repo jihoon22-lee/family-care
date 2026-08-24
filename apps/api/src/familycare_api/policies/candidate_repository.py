@@ -299,19 +299,35 @@ class CandidateRepository:
         scope: HouseholdScope,
         *,
         status: str = "NEEDS_REVIEW",
+        domain: str = "policy",
     ) -> list[PolicyReviewItem]:
-        if status not in _VISIBLE_STATUSES:
+        if status not in _VISIBLE_STATUSES or domain not in {
+            "policy",
+            "rider_clause",
+            "coverage_rule",
+        }:
             return []
+        domain_predicate = (
+            "candidate_kind IN ('policy_contract', 'policy_party', 'rider')"
+            if domain == "policy"
+            else "candidate_kind = %(domain)s"
+        )
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 rows = connection.execute(
-                    """
+                    f"""
                     SELECT * FROM analysis_candidate_versions
-                    WHERE household_space_id = %s AND status = %s
+                    WHERE household_space_id = %(household_space_id)s
+                      AND status = %(status)s
+                      AND {domain_predicate}
                       AND is_current AND deleted_at IS NULL
                     ORDER BY created_at, id
                     """,
-                    (scope.household_space_id, status),
+                    {
+                        "household_space_id": scope.household_space_id,
+                        "status": status,
+                        "domain": domain,
+                    },
                 ).fetchall()
                 return [self._review_item(connection, row) for row in rows]
         except psycopg.Error:
@@ -485,7 +501,11 @@ class CandidateRepository:
                     rejection_reason=rejection_reason,
                     copy_payload=True,
                 )
-                if status == "USER_CONFIRMED":
+                if status == "USER_CONFIRMED" and current["candidate_kind"] in {
+                    "policy_contract",
+                    "policy_party",
+                    "rider",
+                }:
                     published = self._publish_projection(
                         connection,
                         scope.household_space_id,

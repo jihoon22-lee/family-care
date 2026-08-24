@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 from importlib import import_module
 from pathlib import Path
@@ -24,6 +25,10 @@ CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.s
 CANDIDATE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-candidate.v1.json"
 CLAUSE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/clause-search.v1.schema.json"
 CLAUSE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/clause-search.v1.json"
+RIDER_CLAUSE_RULES_SCHEMA_PATH = (
+    ROOT / "packages/contracts/schemas/rider-clause-rules.v1.schema.json"
+)
+RIDER_CLAUSE_RULES_EXAMPLE_PATH = ROOT / "packages/contracts/examples/rider-clause-rules.v1.json"
 BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 WEB_OUTPUT_PATH = ROOT / "apps/web/src/api/generated.ts"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -38,6 +43,79 @@ POLICY_FORBIDDEN_FIELDS = {
     "source_path",
 }
 CLAUSE_FORBIDDEN_FIELDS = POLICY_FORBIDDEN_FIELDS | {"full_text", "raw_query"}
+RIDER_CLAUSE_RULES_FORBIDDEN_FIELDS = CLAUSE_FORBIDDEN_FIELDS | {
+    "document_path",
+    "document_text",
+    "extraction_text",
+    "file_path",
+    "full_text",
+    "ocr_text",
+    "path",
+    "pdf_path",
+    "prompt",
+    "raw_provider_response",
+    "raw_text",
+    "source_key",
+    "text",
+    "url",
+}
+RIDER_CLAUSE_RULES_FIELD_PATHS = [
+    "MedicalEvent.event_date",
+    "MedicalEvent.classification",
+    "MedicalEvent.admission_days",
+    "PolicyContract.contract_start",
+    "PolicyContract.contract_end",
+    "Rider.status",
+    "Rider.insured_amount",
+    "ClaimHistory.counted_occurrence",
+]
+RIDER_CLAUSE_RULE_KINDS = [
+    "eligibility",
+    "classification",
+    "temporal",
+    "exclusion",
+    "frequency",
+    "fixed_amount",
+    "rate_amount",
+    "indemnity_eligibility",
+    "deductible",
+    "limit",
+    "required_document",
+]
+RIDER_CLAUSE_RULE_EXPRESSION_OPERATORS = [
+    "all",
+    "any",
+    "not",
+    "present",
+    "equals",
+    "in",
+    "range",
+    "date_between",
+    "days_since",
+    "count_before",
+]
+RIDER_CLAUSE_RULE_CALCULATION_OPERATORS = [
+    "add",
+    "subtract",
+    "multiply",
+    "min",
+    "max",
+    "round",
+]
+RIDER_CLAUSE_RULE_ROUNDING_MODES = ["half_up", "half_even", "up", "down"]
+RIDER_CLAUSE_RULE_REVIEW_STATES = ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"]
+RIDER_CLAUSE_LINK_REVIEW_STATES = [
+    "AI_VERIFIED",
+    "NEEDS_REVIEW",
+    "USER_CONFIRMED",
+    "rejected",
+]
+RIDER_CLAUSE_LINK_REJECTION_REASONS = [
+    "USER_REJECTED",
+    "WRONG_CLAUSE",
+    "WRONG_EDITION",
+    "NOT_APPLICABLE",
+]
 
 
 def _load_document_contract_checker() -> Any:
@@ -151,11 +229,17 @@ def validate_openapi() -> list[str]:
         "/api/v1/review-items",
         "/api/v1/review-items/{review_item_id}",
         "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
+        "/api/v1/review-items/{review_item_id}/fields/{field_id}",
         "/api/v1/review-items/{review_item_id}/confirm",
         "/api/v1/review-items/{review_item_id}/reject",
         "/api/v1/terms-editions",
         "/api/v1/terms-editions/{terms_edition_id}/clauses",
         "/api/v1/clauses/search",
+        "/api/v1/riders/{rider_id}/clause-links",
+        "/api/v1/rider-clause-links/{link_id}/confirm",
+        "/api/v1/rider-clause-links/{link_id}/reject",
+        "/api/v1/coverage-rules/{rule_id}/versions",
+        "/api/v1/coverage-rules/{rule_id}/publish",
     }
     if set(paths) != expected_paths:
         errors.append(
@@ -175,6 +259,20 @@ def validate_openapi() -> list[str]:
     if clause_request.get("$ref") != "#/components/schemas/ClauseSearchQuery":
         errors.append("Clause search must use the strict JSON request body")
 
+    schemas = document.get("components", {}).get("schemas", {})
+    rule_publish = paths["/api/v1/coverage-rules/{rule_id}/publish"].get("post", {})
+    publish_request = (
+        rule_publish.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+    )
+    if publish_request.get("$ref") != "#/components/schemas/CoverageRulePublishRequest":
+        errors.append("CoverageRule publish must select one stored version")
+    publish_properties = schemas.get("CoverageRulePublishRequest", {}).get("properties", {})
+    if set(publish_properties) != {"expected_version", "version_id"}:
+        errors.append("CoverageRule publish request must not accept an arbitrary rule body")
+
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})
     if set(post.get("responses", {})) != {"202", "422", "503"}:
@@ -186,7 +284,6 @@ def validate_openapi() -> list[str]:
         if "synthetic-only" not in description or "not production-safe" not in description:
             errors.append("analysis routes must state their local synthetic-only safety boundary")
 
-    schemas = document.get("components", {}).get("schemas", {})
     request_schema = schemas.get("DocumentAnalysisRequest", {})
     if set(request_schema.get("properties", {})) != {
         "schema_version",
@@ -378,6 +475,22 @@ def _object_schemas(value: Any) -> list[dict[str, Any]]:
     return []
 
 
+def _schema_values(value: Any) -> list[Any]:
+    """Return every nested JSON Schema node for generic shape checks."""
+
+    if isinstance(value, dict):
+        nodes: list[Any] = [value]
+        for child in value.values():
+            nodes.extend(_schema_values(child))
+        return nodes
+    if isinstance(value, list):
+        nodes = []
+        for child in value:
+            nodes.extend(_schema_values(child))
+        return nodes
+    return []
+
+
 def validate_clause_search_contract() -> list[str]:
     """Validate the strict Clause search schema and its synthetic example."""
 
@@ -465,6 +578,299 @@ def _forbidden_clause_keys(value: Any, path: str = "$") -> list[str]:
         for child_path, key in _nested_keys(value, path)
         if key.lower() in CLAUSE_FORBIDDEN_FIELDS
     ]
+
+
+def _forbidden_rider_clause_rules_keys(value: Any, path: str = "$") -> list[str]:
+    """Return Rider-Clause contract paths crossing a private data boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in RIDER_CLAUSE_RULES_FORBIDDEN_FIELDS
+    ]
+
+
+def _rider_clause_rules_string_values(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    """Return example string values so path-like data cannot cross the contract boundary."""
+
+    if isinstance(value, dict):
+        strings: list[tuple[str, str]] = []
+        for key, child in value.items():
+            strings.extend(_rider_clause_rules_string_values(child, f"{path}.{key}"))
+        return strings
+    if isinstance(value, list):
+        strings = []
+        for index, child in enumerate(value):
+            strings.extend(_rider_clause_rules_string_values(child, f"{path}[{index}]"))
+        return strings
+    if isinstance(value, str):
+        return [(path, value)]
+    return []
+
+
+def _validate_synthetic_uuid(value: Any, path: str, errors: list[str]) -> None:
+    """Require example identifiers to use the repository's obvious synthetic UUID range."""
+
+    if not valid_uuid4(value):
+        errors.append(f"rider-clause-rules {path} must be a UUIDv4")
+    elif not str(value).startswith("00000000-0000-4000-8000-"):
+        errors.append(f"rider-clause-rules {path} must use a synthetic UUID")
+
+
+def _validate_rule_evidence_example(evidence: Any, path: str, errors: list[str]) -> set[str]:
+    """Validate evidence identity, page, bbox, and synthetic content-hash bounds."""
+
+    if not isinstance(evidence, list):
+        errors.append(f"rider-clause-rules {path} must be an array")
+        return set()
+    if not 2 <= len(evidence) <= 16:
+        errors.append(f"rider-clause-rules {path} must contain 2 to 16 items")
+    evidence_ids: set[str] = set()
+    for index, item in enumerate(evidence):
+        item_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            continue
+        evidence_id = item.get("evidence_id")
+        if evidence_id in evidence_ids:
+            errors.append(f"rider-clause-rules {item_path}.evidence_id is duplicated")
+        if isinstance(evidence_id, str):
+            evidence_ids.add(evidence_id)
+        _validate_synthetic_uuid(evidence_id, f"{item_path}.evidence_id", errors)
+        _validate_synthetic_uuid(
+            item.get("document_version_id"), f"{item_path}.document_version_id", errors
+        )
+        content_sha256 = item.get("content_sha256")
+        if not isinstance(content_sha256, str) or SHA256_PATTERN.fullmatch(content_sha256) is None:
+            errors.append(f"rider-clause-rules {item_path}.content_sha256 is not a SHA-256 value")
+        elif len(set(content_sha256)) != 1 or content_sha256 not in {"a" * 64, "b" * 64}:
+            errors.append(f"rider-clause-rules {item_path}.content_sha256 must be synthetic")
+        page = item.get("physical_page")
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= 500:
+            errors.append(f"rider-clause-rules {item_path}.physical_page must be 1 through 500")
+        bbox = item.get("bbox")
+        if bbox is not None:
+            if not isinstance(bbox, list) or len(bbox) != 4:
+                errors.append(f"rider-clause-rules {item_path}.bbox must contain four coordinates")
+            elif any(
+                isinstance(coordinate, bool)
+                or not isinstance(coordinate, (int, float))
+                or not math.isfinite(float(coordinate))
+                or not 0 <= coordinate <= 1_000_000
+                for coordinate in bbox
+            ):
+                errors.append(f"rider-clause-rules {item_path}.bbox contains an invalid coordinate")
+    return evidence_ids
+
+
+def _validate_rider_clause_rules_example(example: dict[str, Any]) -> list[str]:
+    """Validate semantic and synthetic-only invariants not covered by the local schema subset."""
+
+    errors: list[str] = []
+    if example.get("schema_version") != "1":
+        errors.append("rider-clause-rules example schema_version must be 1")
+    links = example.get("rider_clause_links")
+    if not isinstance(links, list) or not 1 <= len(links) <= 64:
+        errors.append("rider-clause-rules example links must contain 1 to 64 items")
+    else:
+        for index, link in enumerate(links):
+            path = f"$.rider_clause_links[{index}]"
+            if not isinstance(link, dict):
+                continue
+            for field in (
+                "id",
+                "rider_id",
+                "terms_edition_id",
+                "clause_id",
+                "candidate_version_id",
+            ):
+                _validate_synthetic_uuid(link.get(field), f"{path}.{field}", errors)
+            for field in ("rider_label", "clause_label", "terms_edition_label"):
+                if field in link and (
+                    not isinstance(link[field], str) or not link[field].startswith("Synthetic ")
+                ):
+                    errors.append(f"rider-clause-rules {path}.{field} must be synthetic")
+            _validate_rule_evidence_example(link.get("evidence"), f"{path}.evidence", errors)
+
+    versions = example.get("coverage_rule_versions")
+    if not isinstance(versions, list) or not 1 <= len(versions) <= 64:
+        errors.append("rider-clause-rules example rule versions must contain 1 to 64 items")
+    else:
+        for index, version in enumerate(versions):
+            path = f"$.coverage_rule_versions[{index}]"
+            if not isinstance(version, dict):
+                continue
+            for field in ("id", "coverage_rule_id", "candidate_version_id"):
+                _validate_synthetic_uuid(version.get(field), f"{path}.{field}", errors)
+            expression_present = "expression" in version
+            calculation_present = "calculation" in version
+            if expression_present == calculation_present:
+                errors.append(
+                    f"rider-clause-rules {path} must contain exactly one expression or calculation"
+                )
+            if version.get("executable") is True and version.get("review_state") not in {
+                "AI_VERIFIED",
+                "USER_CONFIRMED",
+            }:
+                errors.append(
+                    f"rider-clause-rules {path}.executable requires a verified review_state"
+                )
+            for field in ("generator_version", "verifier_version"):
+                if not isinstance(version.get(field), str) or not version[field].startswith(
+                    "synthetic-"
+                ):
+                    errors.append(f"rider-clause-rules {path}.{field} must be synthetic")
+            reason_code = version.get("result_reason_code")
+            if not isinstance(reason_code, str) or not reason_code.startswith("SYNTHETIC_"):
+                errors.append(f"rider-clause-rules {path}.result_reason_code must be synthetic")
+            input_paths = version.get("input_field_paths")
+            if isinstance(input_paths, list) and len(input_paths) != len(set(input_paths)):
+                errors.append(f"rider-clause-rules {path}.input_field_paths must be unique")
+            _validate_rule_evidence_example(version.get("evidence"), f"{path}.evidence", errors)
+    return errors
+
+
+def validate_rider_clause_rules_contract() -> list[str]:
+    """Validate Rider-Clause links, data-only rules, and their synthetic example."""
+
+    try:
+        schema = load_json(RIDER_CLAUSE_RULES_SCHEMA_PATH)
+        example = load_json(RIDER_CLAUSE_RULES_EXAMPLE_PATH)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("rider-clause-rules schema must use JSON Schema draft 2020-12")
+    if schema.get("title") != "RiderClauseRules":
+        errors.append("rider-clause-rules schema title changed")
+    if schema.get("type") != "object":
+        errors.append("rider-clause-rules schema root must be an object")
+    if schema.get("required") != [
+        "schema_version",
+        "rider_clause_links",
+        "coverage_rule_versions",
+    ]:
+        errors.append("rider-clause-rules root required fields changed")
+    if schema.get("additionalProperties") is not False:
+        errors.append("rider-clause-rules root must reject additional properties")
+    object_schemas = _object_schemas(schema)
+    if not object_schemas or any(
+        object_schema.get("additionalProperties") is not False for object_schema in object_schemas
+    ):
+        errors.append("rider-clause-rules nested objects must reject additional properties")
+    if _forbidden_rider_clause_rules_keys(schema):
+        errors.append("rider-clause-rules schema contains a forbidden field")
+    if _forbidden_rider_clause_rules_keys(example):
+        errors.append("rider-clause-rules example contains a forbidden field")
+    for path, value in _rider_clause_rules_string_values(example):
+        if (
+            "\n" in value
+            or "\r" in value
+            or "\\" in value
+            or "://" in value
+            or value.startswith(("/", "~/"))
+            or re.match(r"^[A-Za-z]:[\\/]", value) is not None
+        ):
+            errors.append(f"rider-clause-rules example contains a path-like value at {path}")
+    errors.extend(
+        f"rider-clause-rules example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+
+    definitions = schema.get("$defs", {})
+    enum_expectations = {
+        "FieldPath": RIDER_CLAUSE_RULES_FIELD_PATHS,
+        "RuleKind": RIDER_CLAUSE_RULE_KINDS,
+        "CalculationOperator": RIDER_CLAUSE_RULE_CALCULATION_OPERATORS,
+        "RoundingMode": RIDER_CLAUSE_RULE_ROUNDING_MODES,
+        "RuleReviewState": RIDER_CLAUSE_RULE_REVIEW_STATES,
+        "LinkReviewState": RIDER_CLAUSE_LINK_REVIEW_STATES,
+    }
+    for definition_name, expected in enum_expectations.items():
+        if definitions.get(definition_name, {}).get("enum") != expected:
+            errors.append(f"rider-clause-rules {definition_name} enum changed")
+    reject_reason = (
+        definitions.get("RejectRiderClauseLinkRequest", {})
+        .get("properties", {})
+        .get("reason_code", {})
+    )
+    if reject_reason.get("enum") != RIDER_CLAUSE_LINK_REJECTION_REASONS:
+        errors.append("rider-clause-rules link rejection reason enum changed")
+
+    expression = definitions.get("RuleExpression", {})
+    expression_branches = expression.get("anyOf", [])
+    expression_operators = [
+        branch.get("properties", {}).get("op", {}).get("const")
+        for branch in expression_branches
+        if isinstance(branch, dict)
+    ]
+    if expression_operators != RIDER_CLAUSE_RULE_EXPRESSION_OPERATORS:
+        errors.append("rider-clause-rules expression operator allowlist changed")
+    if len(expression_branches) != len(RIDER_CLAUSE_RULE_EXPRESSION_OPERATORS):
+        errors.append("rider-clause-rules expression branches changed")
+    literal = definitions.get("RuleLiteral", {})
+    literal_branches = literal.get("anyOf", [])
+    if len(literal_branches) != 3:
+        errors.append("rider-clause-rules literals must be string, number, or boolean only")
+    elif (
+        literal_branches[0].get("type") != "string"
+        or literal_branches[0].get("minLength") != 1
+        or literal_branches[0].get("maxLength") != 160
+        or literal_branches[1].get("type") != "number"
+        or literal_branches[1].get("minimum") != 0
+        or literal_branches[1].get("maximum") != 1_000_000_000_000_000
+        or literal_branches[2].get("type") != "boolean"
+    ):
+        errors.append("rider-clause-rules literal bounds or types changed")
+
+    for array_schema in (
+        candidate
+        for candidate in _schema_values(schema)
+        if isinstance(candidate, dict) and candidate.get("type") == "array"
+    ):
+        if not isinstance(array_schema.get("maxItems"), int):
+            errors.append("rider-clause-rules every array must have a maxItems bound")
+            break
+        if array_schema["maxItems"] > 64:
+            errors.append("rider-clause-rules array maxItems must not exceed 64")
+            break
+
+    page_number = definitions.get("PageNumber", {})
+    if page_number.get("minimum") != 1 or page_number.get("maximum") != 500:
+        errors.append("rider-clause-rules page numbers must be bounded from 1 through 500")
+    bbox = definitions.get("BoundingBox", {})
+    bbox_item = bbox.get("items", {})
+    if (
+        bbox.get("minItems") != 4
+        or bbox.get("maxItems") != 4
+        or bbox_item.get("minimum") != 0
+        or bbox_item.get("maximum") != 1_000_000
+    ):
+        errors.append("rider-clause-rules bounding boxes must be four bounded coordinates")
+    for definition_name in ("RiderClauseLink", "CoverageRuleVersion"):
+        evidence_schema = (
+            definitions.get(definition_name, {}).get("properties", {}).get("evidence", {})
+        )
+        if evidence_schema.get("minItems") != 2 or evidence_schema.get("maxItems") != 16:
+            errors.append(f"rider-clause-rules {definition_name} evidence bounds changed")
+    input_paths = (
+        definitions.get("CoverageRuleVersion", {})
+        .get("properties", {})
+        .get("input_field_paths", {})
+    )
+    if (
+        input_paths.get("minItems") != 1
+        or input_paths.get("maxItems") != 8
+        or input_paths.get("uniqueItems") is not True
+    ):
+        errors.append("rider-clause-rules input field paths must be unique and bounded")
+    for property_name, max_items in (("rider_clause_links", 64), ("coverage_rule_versions", 64)):
+        property_schema = schema.get("properties", {}).get(property_name, {})
+        if property_schema.get("maxItems") != max_items:
+            errors.append(f"rider-clause-rules {property_name} must be bounded at {max_items}")
+
+    errors.extend(_validate_rider_clause_rules_example(example))
+    return errors
 
 
 def validate_web_generated_outputs() -> list[str]:
@@ -557,6 +963,7 @@ def main() -> int:
         *validate_policy_contract(),
         *validate_policy_candidate_contract(),
         *validate_clause_search_contract(),
+        *validate_rider_clause_rules_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -564,7 +971,8 @@ def main() -> int:
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
-        "policy-ledger.v1, policy-candidate.v1, clause-search.v1, and generated Web contracts)"
+        "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
+        "rider-clause-rules.v1, and generated Web contracts)"
     )
     return 0
 
