@@ -238,6 +238,26 @@ def test_expression_operator_allowlist_is_exact_and_versioned() -> None:
     )
 
 
+def test_expression_rejects_more_than_sixteen_children() -> None:
+    expression = {
+        "op": "any",
+        "args": [{"op": "present", "field": "MedicalEvent.event_date"} for _ in range(17)],
+    }
+
+    assert _error_code(validate_expression, expression) == "INVALID_ARGUMENTS"
+
+
+def test_expression_rejects_excessive_recursive_depth() -> None:
+    expression: dict[str, object] = {
+        "op": "present",
+        "field": "MedicalEvent.event_date",
+    }
+    for _ in range(17):
+        expression = {"op": "not", "args": [expression]}
+
+    assert _error_code(validate_expression, expression) == "INVALID_ARGUMENTS"
+
+
 @pytest.mark.parametrize(
     "operator",
     ["python", "eval", "exec", "lookup", "contains", "", "ALL"],

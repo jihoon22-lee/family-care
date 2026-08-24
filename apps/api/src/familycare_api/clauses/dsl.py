@@ -79,6 +79,9 @@ EXPRESSION_OPERATORS = frozenset(
 CALCULATION_OPERATORS = frozenset({"add", "subtract", "multiply", "min", "max", "round"})
 UNIT_REGISTRY = frozenset({"date", "days", "occurrences", "amount", "currency"})
 ROUNDING_MODES = frozenset({"half_up", "half_even", "up", "down"})
+MAX_RULE_DEPTH = 16
+MAX_RULE_NODES = 256
+MAX_RULE_ITEMS = 16
 FIELD_PATHS = frozenset(
     {
         "MedicalEvent.event_date",
@@ -447,7 +450,20 @@ def _expression_keys(
 
 
 def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
-    """Validate and compile one recursive data-only expression node."""
+    """Validate and compile one bounded, recursive data-only expression node."""
+
+    return _validate_expression(value, depth=0, remaining_nodes=[MAX_RULE_NODES])
+
+
+def _validate_expression(
+    value: Mapping[str, object],
+    *,
+    depth: int,
+    remaining_nodes: list[int],
+) -> CompiledExpression:
+    if depth > MAX_RULE_DEPTH or remaining_nodes[0] <= 0:
+        raise RuleValidationError("INVALID_ARGUMENTS")
+    remaining_nodes[0] -= 1
 
     node = _mapping(value, executable_string=True)
     _require_keys(node, required=frozenset({"op"}), allowed=_EXPRESSION_NODE_KEYS)
@@ -465,10 +481,15 @@ def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
             allowed=frozenset({"op", "args"}),
         )
         raw_args = _sequence(node["args"])
-        if not raw_args:
+        if not raw_args or len(raw_args) > MAX_RULE_ITEMS:
             raise RuleValidationError("INVALID_ARGUMENTS")
         children = tuple(
-            validate_expression(cast(Mapping[str, object], argument)) for argument in raw_args
+            _validate_expression(
+                cast(Mapping[str, object], argument),
+                depth=depth + 1,
+                remaining_nodes=remaining_nodes,
+            )
+            for argument in raw_args
         )
         if operator == "all":
             _check_conflicting_definitions(children)
@@ -483,7 +504,11 @@ def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
         raw_args = _sequence(node["args"])
         if len(raw_args) != 1:
             raise RuleValidationError("INVALID_ARGUMENTS")
-        child = validate_expression(cast(Mapping[str, object], raw_args[0]))
+        child = _validate_expression(
+            cast(Mapping[str, object], raw_args[0]),
+            depth=depth + 1,
+            remaining_nodes=remaining_nodes,
+        )
         return CompiledExpression(operator, (child,), child.referenced_fields)
 
     if operator == "present":
@@ -509,7 +534,7 @@ def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
             literal = _literal_for_field(field, spec, node["value"])
             return CompiledExpression(operator, (field, literal), (field,))
         values = _sequence(node["value"])
-        if not values:
+        if not values or len(values) > MAX_RULE_ITEMS:
             raise RuleValidationError("INVALID_ARGUMENTS")
         literals = tuple(_literal_for_field(field, spec, item) for item in values)
         return CompiledExpression(operator, (field, literals), (field,))
@@ -552,10 +577,19 @@ def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
     return CompiledExpression(operator, (field, threshold, unit), (field,))
 
 
-def _calculation_operand(value: object) -> tuple[object, tuple[str, ...]]:
+def _calculation_operand(
+    value: object,
+    *,
+    depth: int,
+    remaining_nodes: list[int],
+) -> tuple[object, tuple[str, ...]]:
     operand = _mapping(value, executable_string=True)
     if "op" in operand:
-        compiled = validate_calculation(operand)
+        compiled = _validate_calculation(
+            operand,
+            depth=depth,
+            remaining_nodes=remaining_nodes,
+        )
         return compiled, compiled.referenced_fields
     if "field" in operand:
         _require_keys(operand, required=frozenset({"field"}), allowed=frozenset({"field"}))
@@ -568,7 +602,20 @@ def _calculation_operand(value: object) -> tuple[object, tuple[str, ...]]:
 
 
 def validate_calculation(value: Mapping[str, object]) -> CompiledCalculation:
-    """Validate and compile one recursive decimal calculation node."""
+    """Validate and compile one bounded, recursive decimal calculation node."""
+
+    return _validate_calculation(value, depth=0, remaining_nodes=[MAX_RULE_NODES])
+
+
+def _validate_calculation(
+    value: Mapping[str, object],
+    *,
+    depth: int,
+    remaining_nodes: list[int],
+) -> CompiledCalculation:
+    if depth > MAX_RULE_DEPTH or remaining_nodes[0] <= 0:
+        raise RuleValidationError("INVALID_ARGUMENTS")
+    remaining_nodes[0] -= 1
 
     node = _mapping(value, executable_string=True)
     _require_keys(
@@ -583,6 +630,8 @@ def validate_calculation(value: Mapping[str, object]) -> CompiledCalculation:
         raise RuleValidationError("UNKNOWN_OPERATOR")
     operator = cast(CalculationOperator, operator_value)
     raw_args = _sequence(node["args"])
+    if len(raw_args) > MAX_RULE_ITEMS:
+        raise RuleValidationError("INVALID_ARGUMENTS")
     if operator == "round":
         if len(raw_args) != 1:
             raise RuleValidationError("INVALID_ARGUMENTS")
@@ -599,7 +648,11 @@ def validate_calculation(value: Mapping[str, object]) -> CompiledCalculation:
     compiled_operands: list[object] = []
     referenced_fields: list[str] = []
     for raw_operand in raw_args:
-        compiled, fields = _calculation_operand(raw_operand)
+        compiled, fields = _calculation_operand(
+            raw_operand,
+            depth=depth + 1,
+            remaining_nodes=remaining_nodes,
+        )
         compiled_operands.append(compiled)
         for field in fields:
             if field not in referenced_fields:
@@ -671,7 +724,7 @@ def validate_rule_document(
         raise RuleValidationError("INVALID_RULE_TYPE")
 
     raw_input_paths = _sequence(document["input_field_paths"])
-    if not raw_input_paths:
+    if not raw_input_paths or len(raw_input_paths) > MAX_RULE_ITEMS:
         raise RuleValidationError("MISSING_REQUIRED_FIELD")
     input_paths: list[str] = []
     for raw_path in raw_input_paths:
@@ -686,7 +739,7 @@ def validate_rule_document(
         raise RuleValidationError("INVALID_VALUE")
 
     raw_evidence_ids = _sequence(document["evidence_ids"])
-    if not raw_evidence_ids:
+    if not raw_evidence_ids or len(raw_evidence_ids) > MAX_RULE_ITEMS:
         raise RuleValidationError("MISSING_EVIDENCE")
     evidence_ids: list[EvidenceId] = []
     evidence_keys: set[str] = set()
