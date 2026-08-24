@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 from uuid import UUID
 
@@ -34,7 +34,7 @@ from familycare_api.decisions.errors import (
     MedicalEventNotFound,
 )
 from familycare_api.decisions.facts import FactNormalizationError, normalize_facts
-from familycare_api.policies.errors import VersionConflict
+from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
 
 
 def _database_url(value: str) -> str:
@@ -695,30 +695,15 @@ class DecisionRepository:
     ) -> DecisionRunResult:
         evaluation_rows = connection.execute(
             """
-            SELECT evaluation.*,
-                   evidence.id AS evidence_id,
-                   evidence.document_version_id, evidence.extraction_id,
-                   evidence.content_sha256, evidence.physical_page,
-                   evidence.x0, evidence.y0, evidence.x1, evidence.y1,
-                   evidence.review_state AS evidence_review_state
+            SELECT evaluation.*
             FROM rule_evaluations AS evaluation
-            LEFT JOIN rule_evaluation_evidence AS linked
-              ON linked.rule_evaluation_id = evaluation.id
-            LEFT JOIN evidence ON evidence.id = linked.evidence_id
             WHERE evaluation.decision_run_id = %s
             ORDER BY evaluation.rider_id, evaluation.coverage_rule_version_id,
-                     evidence.physical_page NULLS LAST, evidence.id NULLS LAST
+                     evaluation.id
             """,
             (run["id"],),
         ).fetchall()
-        grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
-        for row in evaluation_rows:
-            evaluation_id = cast(UUID, row["id"])
-            grouped.setdefault(evaluation_id, (row, []))
-            evidence = _evidence(row)
-            if evidence is not None:
-                grouped[evaluation_id][1].append(evidence)
-        evaluations = tuple(_rule_evaluation(row, evidence) for row, evidence in grouped.values())
+        evaluations = tuple(_rule_evaluation(row) for row in evaluation_rows)
         candidate_rows = connection.execute(
             """
             SELECT * FROM claim_candidates
@@ -978,18 +963,23 @@ def _evidence_snapshot(evidence: Sequence[EvidenceRef]) -> list[dict[str, object
 
 def _evidence_snapshot_values(value: object) -> tuple[EvidenceRef, ...]:
     if not isinstance(value, list):
-        return ()
+        raise DecisionRepositoryUnavailable
     evidence: list[EvidenceRef] = []
     for raw in value:
         if not isinstance(raw, Mapping):
-            return ()
+            raise DecisionRepositoryUnavailable
         bbox_raw = raw.get("bbox")
         bbox = None
-        if isinstance(bbox_raw, list) and len(bbox_raw) == 4:
+        if bbox_raw is not None:
+            if not isinstance(bbox_raw, list) or len(bbox_raw) != 4:
+                raise DecisionRepositoryUnavailable
             try:
                 bbox = cast(Any, tuple(Decimal(str(item)) for item in bbox_raw))
-            except Exception:
-                return ()
+            except InvalidOperation, TypeError, ValueError:
+                raise DecisionRepositoryUnavailable from None
+        physical_page = raw.get("physical_page")
+        if not isinstance(physical_page, int) or isinstance(physical_page, bool):
+            raise DecisionRepositoryUnavailable
         try:
             evidence.append(
                 EvidenceRef(
@@ -997,17 +987,17 @@ def _evidence_snapshot_values(value: object) -> tuple[EvidenceRef, ...]:
                     document_version_id=UUID(str(raw.get("document_version_id"))),
                     extraction_id=UUID(str(raw.get("extraction_id"))),
                     content_sha256=cast(str, raw.get("content_sha256")),
-                    physical_page=int(cast(Any, raw.get("physical_page"))),
+                    physical_page=physical_page,
                     bbox=bbox,
                     review_state=cast(Any, raw.get("review_state")),
                 )
             )
-        except TypeError, ValueError:
-            return ()
+        except EvidenceInvalid, InvalidOperation, TypeError, ValueError:
+            raise DecisionRepositoryUnavailable from None
     return tuple(evidence)
 
 
-def _rule_evaluation(row: Mapping[str, Any], evidence: Sequence[EvidenceRef]) -> RuleEvaluation:
+def _rule_evaluation(row: Mapping[str, Any]) -> RuleEvaluation:
     facts_json = row.get("facts_json")
     facts: dict[str, FactValue] = {}
     if isinstance(facts_json, Mapping):
@@ -1023,7 +1013,6 @@ def _rule_evaluation(row: Mapping[str, Any], evidence: Sequence[EvidenceRef]) ->
                 evidence_ids=_uuid_values(raw.get("evidence_ids")),
             )
     snapshot_evidence = _evidence_snapshot_values(row.get("evidence_snapshot_json"))
-    resolved_evidence = snapshot_evidence or tuple(evidence)
     missing = _strings(row.get("missing_fields_json"))
     conflicting = _strings(row.get("conflicting_fields_json"))
     return RuleEvaluation(
@@ -1037,8 +1026,8 @@ def _rule_evaluation(row: Mapping[str, Any], evidence: Sequence[EvidenceRef]) ->
         fact_paths=tuple(dict.fromkeys((*facts, *missing, *conflicting))),
         missing_fields=missing,
         conflicting_fields=conflicting,
-        evidence_ids=tuple(item.evidence_id for item in resolved_evidence),
-        evidence=resolved_evidence,
+        evidence_ids=tuple(item.evidence_id for item in snapshot_evidence),
+        evidence=snapshot_evidence,
         evaluator_version=cast(str, row["evaluator_version"]),
     )
 
