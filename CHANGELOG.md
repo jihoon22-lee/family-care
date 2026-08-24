@@ -23,6 +23,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Descriptor-based local PDF intake with no-follow traversal, structural validation, bounded hashing, private workspaces, and resource-limited parser-child supervision.
 - Deterministic synthetic PDF fixtures and descriptor-only pdfplumber extraction for words, tables, cells, evidence coordinates, and versioned page-quality metrics.
 - Third-party parser inventory with pdfplumber and pypdf as Worker runtime dependencies and reportlab restricted to development/test fixtures.
+- PostgreSQL AnalysisJob claims with `SKIP LOCKED`, owner leases and heartbeats, bounded retry classification, cancellation, and max-attempt recovery.
+- A single-job Analyzer runner with descriptor-only parser execution, shutdown cancellation, sanitized cleanup failure handling, strict child-result validation, and transactional extraction persistence.
+- Idempotent DocumentVersion and succeeded Extraction reuse for matching content and extractor configuration identities.
 
 ### Changed
 
@@ -34,6 +37,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - The unprivileged Web runtime is pinned to `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`.
 - Phase 1 document contracts and the eight-table ingestion model were merged in PR #8 at `9802781c98c0a6aee3fcd7018dfc020da087fee9`; all seven PR and post-merge `main` checks passed.
 - Phase 1 PDF intake and parser-child isolation were merged in PR #9 at `523bd68be3d951e37a9f4ba19b858d9ac9bdcfcc`; all seven PR and post-merge `main` checks passed.
+- Phase 1 synthetic PDF extraction was merged in PR #10 at `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, along with the local post-merge extraction checks.
 
 ### Deprecated
 
@@ -52,5 +56,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Document contracts reject absolute, traversal, Windows-style, multiline, password-bearing, and client-hashed intake requests; PostgreSQL enforces job, extraction, evidence-review, and successful-extraction identity states.
 - Parser-child IPC accepts only bounded canonical JSON and never unpickles child-controlled values in the parent process.
 - The extraction child receives an exact password-free post-intake settings object, preserves the validated descriptor identity, and sanitizes corrupt or invalid-password failures to stable codes.
+- Queue payloads are revalidated against their server-computed config hash before processing, and lease ownership is required for heartbeat, failure, and success transitions.
+- Malformed parser output is rejected before persistence; extraction rows and job success commit atomically, while temporary-cleanup failure is permanently failed and logged only with a job UUID.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

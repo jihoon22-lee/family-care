@@ -340,6 +340,34 @@ def test_timeout_terminates_and_joins_parser_child(tmp_path: Path) -> None:
     assert time.monotonic() - started < 2
 
 
+def test_parent_progress_callback_can_cancel_and_reap_parser_child(tmp_path: Path) -> None:
+    fd = _make_source(tmp_path)
+    callbacks = 0
+    started = time.monotonic()
+
+    def cancel() -> bool:
+        nonlocal callbacks
+        callbacks += 1
+        return False
+
+    try:
+        outcome = run_isolated_parser(
+            fd,
+            "{}",
+            parser=_sleeping_parser,
+            on_progress=cancel,
+            progress_interval_seconds=0.01,
+        )
+    finally:
+        os.close(fd)
+
+    assert outcome.success is False
+    assert outcome.error_code is None
+    assert outcome.metadata == {"cancelled": True}
+    assert callbacks == 1
+    assert time.monotonic() - started < 2
+
+
 def test_oversized_serialized_result_is_rejected(tmp_path: Path) -> None:
     fd = _make_source(tmp_path)
     try:

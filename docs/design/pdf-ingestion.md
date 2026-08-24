@@ -164,7 +164,11 @@ AnalysisJob은 다음 상태만 사용합니다.
 - `permanently_failed`
 - `cancelled`
 
-각 job은 lease owner, lease expiry, heartbeat, attempts를 갖습니다. lease가 만료되면 다른 worker가 가져갈 수 있으며, content hash와 extractor config hash가 동일한 succeeded extraction을 중복 생성하지 않게 합니다.
+각 job은 lease owner, lease expiry, heartbeat, attempts를 갖습니다. Worker는 `FOR UPDATE SKIP LOCKED`로 due job 하나를 claim하고 attempt를 한 번 증가시킵니다. production 기본 lease는 180초이고 parser supervisor가 30초마다 현재 owner의 lease를 heartbeat합니다. lease가 만료되면 job은 `retryable_failed`로 회수되며 이미 max attempts에 도달한 job은 `permanently_failed`가 됩니다. retryable timeout/resource failure의 `available_at`은 `2 ** attempts`초 지수 backoff를 사용하되 최대 300초로 제한합니다.
+
+Worker intake는 열린 descriptor에서 검증한 content identity에 대해 `document_versions`를 먼저 생성하거나 재사용합니다. parser child Evidence에 그 UUID가 필요하기 때문에 이 짧은 transaction은 extraction transaction보다 먼저 commit됩니다. child 결과는 exact shape, hash/config identity, 1-based page, 순차 reading order, 품질 규칙, 좌표 범위를 다시 검증한 뒤 `extractions`와 모든 page/block/table/cell, Evidence coordinate, job 성공 전이를 하나의 transaction에 기록합니다. 파싱이나 결과 검증이 실패하면 유효한 DocumentVersion identity는 남을 수 있지만 partial Extraction은 남지 않습니다. 같은 content hash/config의 succeeded extraction은 재사용합니다.
+
+SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor progress callback이 child 작업을 취소하고 bounded join/terminate/kill 순서로 회수합니다. 현재 job 종료 전에는 다음 job을 claim하지 않습니다.
 
 ## Error codes
 
@@ -208,7 +212,9 @@ AnalysisJob은 다음 상태만 사용합니다.
 - top-left coordinate, 3-decimal rounding, 1-based page, 0-based reading order
 - table/cell bounding boxes와 page cache close after each page
 - 네 가지 `quality-v1` threshold 경계와 `TEXT_SUFFICIENT`
-- success·failure·cancelled cleanup, lease recovery, heartbeat, attempts
+- success·failure·cancelled cleanup, concurrent `SKIP LOCKED` claim, lease recovery, owner-only heartbeat, max attempts, bounded retry backoff
+- malformed child result의 transaction 전 거부와 duplicate succeeded extraction 재사용
+- shutdown/lease-loss progress cancellation과 parser child 회수
 - API payload과 logs에 password·absolute path·document body가 없는지 검사
 
 ## Security considerations

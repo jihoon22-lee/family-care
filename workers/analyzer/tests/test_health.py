@@ -1,9 +1,37 @@
+import math
 import sys
 from threading import Event
+from typing import Any
 
-from familycare_worker.__main__ import main, run_idle
+import psycopg
+import pytest
+from familycare_worker.__main__ import main, run_idle, run_worker_loop
 from familycare_worker.health import database_is_ready, health_payload
 from pytest import CaptureFixture, MonkeyPatch
+
+
+class _FakeResult:
+    def __init__(self, value: bool) -> None:
+        self.value = value
+
+    def fetchone(self) -> tuple[bool]:
+        return (self.value,)
+
+
+class _FakeConnection:
+    def __init__(self, *, analysis_jobs_exists: bool) -> None:
+        self.analysis_jobs_exists = analysis_jobs_exists
+        self.queries: list[str] = []
+
+    def __enter__(self) -> _FakeConnection:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        return None
+
+    def execute(self, query: str) -> _FakeResult:
+        self.queries.append(query)
+        return _FakeResult(self.analysis_jobs_exists)
 
 
 def test_health_payload_reports_analyzer_identity() -> None:
@@ -52,11 +80,80 @@ def test_database_probe_is_unavailable_for_invalid_url() -> None:
     assert database_is_ready("not-a-database-url") is False
 
 
+def test_database_probe_checks_public_analysis_jobs_table(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = _FakeConnection(analysis_jobs_exists=True)
+    monkeypatch.setattr(psycopg, "connect", lambda _: connection)
+
+    assert database_is_ready("postgresql://synthetic") is True
+    assert any("public" in query and "analysis_jobs" in query for query in connection.queries)
+
+
+def test_database_probe_is_unavailable_when_analysis_jobs_table_is_missing(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    connection = _FakeConnection(analysis_jobs_exists=False)
+    monkeypatch.setattr(psycopg, "connect", lambda _: connection)
+
+    assert database_is_ready("postgresql://synthetic") is False
+
+
 def test_idle_process_stops_without_external_access() -> None:
     stop_event = Event()
     stop_event.set()
 
     assert run_idle(stop_event, interval_seconds=0) == 0
+
+
+def test_worker_loop_runs_one_job_at_a_time_and_stops_cleanly() -> None:
+    stop_event = Event()
+
+    class SyntheticRunner:
+        calls = 0
+        active = False
+
+        def run_once(self, worker_id: str) -> bool:
+            assert worker_id == "worker-a"
+            assert self.active is False
+            self.active = True
+            self.calls += 1
+            self.active = False
+            if self.calls == 2:
+                stop_event.set()
+            return True
+
+    runner = SyntheticRunner()
+
+    assert (
+        run_worker_loop(
+            stop_event,
+            runner,
+            worker_id="worker-a",
+            poll_interval_seconds=0,
+        )
+        == 0
+    )
+    assert runner.calls == 2
+    assert runner.active is False
+
+
+def test_worker_loop_rejects_non_finite_poll_interval() -> None:
+    stop_event = Event()
+    stop_event.set()
+
+    class SyntheticRunner:
+        def run_once(self, worker_id: str) -> bool:
+            raise AssertionError("runner must not be called")
+
+    for invalid_interval in (True, math.nan, math.inf, -math.inf):
+        with pytest.raises(ValueError, match="poll interval"):
+            run_worker_loop(
+                stop_event,
+                SyntheticRunner(),
+                worker_id="worker-a",
+                poll_interval_seconds=invalid_interval,
+            )
 
 
 def test_console_entrypoint_reads_process_arguments(

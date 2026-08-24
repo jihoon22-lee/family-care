@@ -465,9 +465,11 @@ git add workers/analyzer/pyproject.toml workers/analyzer/src/familycare_worker/p
 git commit -m "feat(pdf): extract synthetic pages and tables"
 ~~~
 
-- [ ] **Step 7: Complete the PR checkpoint**
+- [x] **Step 7: Complete the PR checkpoint**
 
 The root agent reviews the full feat/synthetic-pdf-extraction diff once, checking the exact parser versions and notices, source-to-sink descriptor boundary, coordinate normalization, page closure, quality thresholds, deterministic fixture authorship, and password tests. Then push, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, rerun the complete extraction suite on post-merge main, and record the merge commit before beginning feat/analysis-job-worker.
+
+Completed in PR #10 at merge commit `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, and the local post-merge extraction checks passed. Task 4 remains pending.
 
 ---
 
@@ -484,17 +486,20 @@ The root agent reviews the full feat/synthetic-pdf-extraction diff once, checkin
 - Create: workers/analyzer/tests/test_analysis_job_runner.py
 - Modify: workers/analyzer/src/familycare_worker/__main__.py
 - Modify: workers/analyzer/src/familycare_worker/health.py to add the queue repository readiness probe
+- Modify: workers/analyzer/src/familycare_worker/pdf/isolation.py to expose bounded heartbeat/cancellation progress
 - Modify: workers/analyzer/tests/test_health.py for the queue readiness contract
+- Modify: workers/analyzer/tests/test_pdf_isolation.py for progress cancellation and child reaping
 
 **Interfaces:**
 
 - Consumes: the eight physical tables, validated ExtractionResult, and the isolated descriptor-based parser runner.
-- Produces: claim_next_job(worker_id: str, lease_seconds: int) -> AnalysisJob, heartbeat(job_id: UUID, worker_id: str) -> None, complete_job(job_id: UUID, result: ExtractionResult) -> None, fail_job(job_id: UUID, code: ErrorCode) -> None, cancel_job(job_id: UUID) -> None, and run_job(job_id: UUID, worker_id: str) -> None.
+- Produces: `JobQueue.claim_next_job`, `heartbeat`, `fail_job`, `cancel_job`; `ExtractionRepository.prepare_document_version`, `complete_with_existing`, `persist_success`; and `AnalysisJobRunner.run_once`.
 - Job claim uses PostgreSQL FOR UPDATE SKIP LOCKED, increments attempts once per claim, sets running/lease/heartbeat atomically, and refuses a claim after max attempts.
-- complete_job writes `document_versions`, `extractions`, `extraction_pages`, `extraction_blocks`, `extraction_tables`, `extraction_cells`, and Evidence coordinates in one transaction. It enforces `document_versions(document_id, content_sha256)` and `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`; DocumentVersion represents the content hash and Extraction has no redundant content_sha256 column.
+- The production Worker lease is 180 seconds, heartbeat interval is 30 seconds, and retry backoff is exponential from `2 ** attempts` seconds with a 300-second cap. Queue tests may request shorter explicit leases.
+- Intake prepares or reuses `document_versions` in a short transaction before the parser child starts because the child Evidence contract requires the DocumentVersion UUID. A failed parse can therefore leave a valid content-identity row but cannot leave a partial Extraction. Successful persistence writes `extractions`, `extraction_pages`, `extraction_blocks`, `extraction_tables`, `extraction_cells`, Evidence coordinates, and the job success transition in one transaction. It enforces `document_versions(document_id, content_sha256)` and `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`; DocumentVersion represents the content hash and Extraction has no redundant content_sha256 column.
 - Retryable failures are limited to parser timeout, resource limit, and transient database errors, with bounded backoff through `available_at`. Path, magic, page, password, corruption, contract, and temporary-cleanup errors are permanently failed. `TEMP_CLEANUP_FAILED` additionally emits a sanitized security event and is never retried automatically.
 
-- [ ] **Step 1: Write failing queue and runner tests**
+- [x] **Step 1: Write failing queue and runner tests**
 
 Add PostgreSQL-marked tests for two concurrent workers claiming distinct queued jobs, lease-expired job recovery, heartbeat extension by the lease owner only, attempt increment and max-attempt handling, cancellation, and exact state transition rejection. Add runner tests for success, duplicate-success idempotency, PASSWORD_REQUIRED, PASSWORD_INVALID from direct adapter only, retryable timeout, permanently failed corruption, cleanup in every path, and no password in serialized payload.
 
@@ -517,19 +522,19 @@ FAMILYCARE_DATABASE_URL=postgresql+psycopg://postgres:ci-only-password@127.0.0.1
 
 Expected: FAIL because queue repository, runner, and persistence functions do not yet exist.
 
-- [ ] **Step 2: Implement transactional queue operations**
+- [x] **Step 2: Implement transactional queue operations**
 
 Implement claim_next_job with a single transaction: make expired running jobs eligible for recovery, select one queued or due retryable job (`available_at <= now()`) with FOR UPDATE SKIP LOCKED, set running, lease_owner, lease_expires_at, heartbeat_at, and attempts, and commit. Jobs at max attempts become permanently_failed instead of being reclaimed. heartbeat must require the current lease owner and a non-expired lease. cancel_job must reject succeeded jobs and be idempotent for cancelled jobs. State transitions must be represented by the exact six enum values and no free-form strings.
 
-- [ ] **Step 3: Implement extraction persistence and idempotency**
+- [x] **Step 3: Implement extraction persistence and idempotency**
 
 Persist or reuse one DocumentVersion by `(document_id, content_sha256)` and one Extraction by `(document_version_id, extractor_config_hash)` transactionally. Store TextBlock words, table/cell bounding boxes, page quality metrics, warning codes, extractor name/version, extractor config hash, and quality-v1. Before insert, look up a succeeded extraction by document version and extractor_config_hash; return the existing extraction without creating a second succeeded row. Never store original bytes, password, or absolute source path.
 
-- [ ] **Step 4: Implement runner, retries, cleanup, and bounded shutdown**
+- [x] **Step 4: Implement runner, retries, cleanup, and bounded shutdown**
 
 run_job claims the source key from the database, opens the final source descriptor through the intake module, creates the mode-0700 workspace, invokes run_isolated_parser with the descriptor, stores results, updates succeeded, and cleans up in finally. It sends heartbeat at a bounded interval shorter than the lease, exits on cancellation, and maps each error code to retryable_failed or permanently_failed. It must not print document text, source key, absolute path, password, or serialized settings. The idle Worker process handles SIGTERM/SIGINT without starting a second job.
 
-- [ ] **Step 5: Run the complete Worker integration and static checks**
+- [x] **Step 5: Run the complete Worker integration and static checks**
 
 ~~~bash
 FAMILYCARE_DATABASE_URL=postgresql+psycopg://postgres:ci-only-password@127.0.0.1:55432/postgres TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_analysis_job_queue.py workers/analyzer/tests/test_analysis_job_runner.py -m integration -q
@@ -542,7 +547,9 @@ git diff --check
 
 Expected: PostgreSQL queue and synthetic extraction suites pass serially, static checks pass, and no private path or password appears in captured logs.
 
-- [ ] **Step 6: Commit the independently reviewable branch**
+Local pre-PR evidence: 159 non-integration tests and 24 PostgreSQL integration tests passed; Ruff format/lint, mypy, contracts, container/workflow policies, documentation, repository safety, Web checks, and `git diff --check` passed. The Worker image built successfully, ran as UID/GID 10002, and reported ready against a migrated synthetic PostgreSQL database. The first manual image command used the wrong Dockerfile path and the first runtime probe passed `--health` as the executable; both failed before creating a persistent container and were corrected with the repository Dockerfile and explicit `familycare-worker --health` invocation.
+
+- [x] **Step 6: Commit the independently reviewable branch**
 
 ~~~bash
 git add workers/analyzer/src/familycare_worker workers/analyzer/tests workers/analyzer/pyproject.toml

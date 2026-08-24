@@ -119,6 +119,19 @@ Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeo
 
 문서 parser child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하며 network client나 external URL resolution을 제공하지 않습니다. OS egress enforcement와 실제 private-data acceptance는 approved runtime boundary가 마련될 때까지 수행하지 않습니다.
 
+### Run the synthetic Analyzer Worker locally
+
+Analyzer queue 실행은 migration `0002_document_ingestion`까지 적용된 합성 개발용 PostgreSQL과 저장소 밖의 absolute document/work root가 모두 있을 때만 활성화됩니다. 세 환경변수 중 하나라도 없으면 Worker는 Foundation idle mode를 유지합니다. 기본 Compose에는 document root mount가 없으므로 이 절차는 direct local/test 실행 전용입니다.
+
+```bash
+FAMILYCARE_DATABASE_URL=postgresql+psycopg://familycare:development-only@127.0.0.1:5432/familycare \
+FAMILYCARE_DOCUMENT_ROOT=/absolute/synthetic/document/root \
+FAMILYCARE_WORK_ROOT=/absolute/synthetic/work/root \
+TMPDIR=/tmp uv run familycare-worker
+```
+
+위 값은 형식 예시일 뿐 실제 credential이나 경로가 아닙니다. 두 root는 미리 생성된 directory여야 하고 이 단계에서는 처음부터 만든 합성 PDF만 넣습니다. Worker는 한 번에 job 하나만 실행하며 기본 180초 lease를 30초마다 갱신합니다. SIGTERM/SIGINT를 받으면 현재 parser child를 회수한 뒤 다음 job을 시작하지 않습니다. readiness는 DB 연결뿐 아니라 `public.analysis_jobs` table 존재까지 확인합니다.
+
 ### Before every commit
 
 ```bash
