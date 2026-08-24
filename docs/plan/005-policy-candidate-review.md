@@ -677,7 +677,7 @@ Expected: component tests and the synthetic browser flow pass; no network reques
 - Consumes: all Task 1–5 outputs and the root agent's current `main` comparison.
 - Produces: one reviewable branch, one PR, passing required checks, and a post-merge focused verification record.
 
-- [ ] **Step 1: Run the complete feature checks serially**
+- [x] **Step 1: Run the complete feature checks serially**
 
 ```bash
 python3 scripts/check_documentation.py
