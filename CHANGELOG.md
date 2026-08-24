@@ -6,6 +6,11 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Added
 
+- Approved v0.1 product design for Phases 2 through 8, targeting a usable private WSL/Tailscale release.
+- AI-assisted policy, clause, and rule structuring with an independent verifier and deterministic evidence/schema validation.
+- Hybrid pre-visit and post-treatment input, fixed-benefit and partial indemnity calculation, and action-first mobile results.
+- Local two-admin authentication, encrypted family-scoped PDF batches, managed encrypted archive, selective Korean/English OCR, and claim metadata/checklists in the v0.1 design.
+
 - 프로젝트 기반 설계와 전체 단계별 로드맵
 - 공개 저장소 개인정보 경계와 개발 지침
 - 브랜치 및 Conventional Commits 규칙과 자동 검증
@@ -29,6 +34,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - A default-disabled local synthetic document-analysis API with asynchronous enqueue/status routes, strict v1 request validation, and sanitized extraction summaries.
 
 ### Changed
+
+- The roadmap now records Phase 1 as complete and defines the independent PR sequence and acceptance gate for `v0.1.0`.
+- OpenAI document structuring moves into v0.1 while Google Drive automation, Gemini, insurer submission, Cloud Run, and host disk/swap changes remain deferred.
 
 - 로컬 검증 명령은 WSL 임시파일 경로와 고정 pnpm 버전을 재현 가능하게 사용합니다.
 - Foundation completion is recorded at PR #1 merge commit `0f632989df891ae944c012bfcce6c838009867a9`; PR and post-merge CI had seven successful jobs. Tag/GHCR, Cloud Run, and real/private-data verification remain outside that evidence.

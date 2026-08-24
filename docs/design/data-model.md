@@ -1,7 +1,8 @@
 # Data model design
 
-- 상태: Phase 1·Phase 2 설계 기준
-- 적용 단계: Phase 1은 최소 문서 ingestion 모델, Phase 2는 Policy Ledger 모델
+- 상태: Phase 1 완료, v0.1 확장 설계 승인 및 문서 검토 대기
+- 적용 단계: Phase 1 ingestion 모델과 Phase 2~8 업무 모델
+- 상위 기준: `docs/design/v0.1-product.md`
 
 ## Scope
 
@@ -40,7 +41,7 @@ Phase 1의 API POST는 source_key 형식만 검증하고 `documents` row를 sour
 
 Worker는 parser Evidence에 필요한 UUID를 확정하기 위해 validated intake 직후 DocumentVersion을 별도 짧은 transaction에서 생성하거나 재사용합니다. 이후 child 결과의 전체 shape와 identity를 검증하고 Extraction, page/block/table/cell, Evidence coordinates, AnalysisJob 성공 전이를 하나의 transaction에 저장합니다. 따라서 parser 실패나 잘못된 child result는 유효한 content-identity DocumentVersion을 남길 수 있지만 partial Extraction을 남기지 않습니다. 동일 content/config의 기존 succeeded Extraction이 있으면 child 실행과 중복 row 생성을 건너뛰고 그 결과로 job만 성공 전이합니다.
 
-Phase 1의 API에는 인증 provider가 없고 인증·인가를 제공하지 않습니다. 따라서 이 모델과 endpoint는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다. Authentication provider는 Phase 7에 남깁니다. Phase 2 이후의 모든 business record는 `HouseholdSpace` scope를 소유하거나 명시적인 `household_space_id` foreign key를 가져야 하며, 클라이언트가 보낸 household/user ID를 권위로 사용하지 않습니다.
+Phase 1 API에는 인증이 없으므로 historical implementation은 local synthetic-only 개발 경계입니다. Phase 7은 `docs/design/authentication.md`의 두 로컬 관리자와 PostgreSQL session을 추가합니다. Phase 2 이후의 모든 business record는 `HouseholdSpace` scope를 소유하거나 명시적인 `household_space_id` foreign key를 가지며, 클라이언트가 보낸 household/user ID를 권위로 사용하지 않습니다.
 
 ## Phase 1 asynchronous API projection
 
@@ -70,17 +71,22 @@ Evidence는 `DocumentVersion` UUID와 1-based PDF page를 필수로 가지며, �
 
 ### AppUser
 
-앱에 로그인하는 계정입니다. Foundation 이후 허용된 관리자 두 명만 생성하며 같은 `HouseholdSpace`에 동일 권한으로 연결합니다.
+앱에 로그인하는 로컬 계정입니다. 관리자 두 명까지만 생성하며 같은 `HouseholdSpace`에 동일 권한으로 연결합니다.
 
 핵심 필드:
 
 - 내부 UUID
-- 인증 제공자와 제공자 subject
+- 정규화한 local username
+- Argon2id password hash
 - 표시 이름
 - 활성 상태
 - 생성·수정·비활성 시각
 
-이메일은 인증 allowlist에 필요할 때 최소 수집하며 공개 fixture에 실제 주소를 넣지 않습니다.
+이메일과 외부 인증 provider subject는 v0.1 핵심 모델에 저장하지 않습니다. raw password는 어떤 모델에도 저장하지 않습니다.
+
+### AppSession
+
+opaque browser session의 서버 측 레코드입니다. session token hash, AppUser, 생성·마지막 활동·만료·폐기 시각, 최소 device label을 가집니다. 원본 session token은 DB에 저장하지 않습니다.
 
 ### HouseholdSpace
 
@@ -104,7 +110,7 @@ Evidence는 `DocumentVersion` UUID와 1-based PDF page를 필수로 가지며, �
 
 ### Document
 
-저장소 밖 원본의 논리 식별자입니다.
+저장소 밖 import source와 application-encrypted managed archive의 논리 식별자입니다.
 
 - 문서 종류: policy, terms, application, amendment, claim, supporting
 - 원본 제공자와 비공개 외부 참조
@@ -112,6 +118,8 @@ Evidence는 `DocumentVersion` UUID와 1-based PDF page를 필수로 가지며, �
 - 문서 작성·수집·수정 시각
 - 처리와 검수 상태
 - soft delete 시각
+
+v0.1의 archive metadata는 encrypted object key, encryption scheme/version, nonce, wrapped data key, ciphertext size와 integrity tag를 가집니다. archive master key와 PDF password는 저장하지 않습니다.
 
 외부 참조는 API 응답과 일반 로그에 노출하지 않습니다.
 
@@ -193,6 +201,10 @@ PolicyContract와 FamilyMember 사이의 역할 연결입니다.
 
 지급사유, 정의, 보장개시, 감액, 면책, 횟수 제한, 계산식을 명시적 구조로 표현합니다. 규칙 버전과 Clause Evidence가 필수입니다.
 
+### AnalysisCandidateVersion
+
+PolicyContract, Rider, Clause, RiderClauseLink, CoverageRule 후보의 생성·검증·사용자 수정 이력을 공통으로 표현합니다. generator/verifier/schema version, `AI_VERIFIED`·`NEEDS_REVIEW`·`USER_CONFIRMED`, source Evidence, parent version, created/published 시각을 가집니다. raw 추출과 사용자 확정값을 덮어쓰지 않습니다.
+
 ## Event and decision boundary
 
 ### MedicalEvent
@@ -207,7 +219,11 @@ PolicyContract와 FamilyMember 사이의 역할 연결입니다.
 - 원인과 비용 자료 가용성
 - 입력 출처와 확인 수준
 
-필드 부재는 null로 보존하고 임의 값으로 보완하지 않습니다.
+필드 부재는 null로 보존하고 임의 값으로 보완하지 않습니다. 의료 문서 file과 page image는 MedicalEvent에 저장하지 않습니다.
+
+### ReceiptLine
+
+MedicalEvent의 수동 비용 항목입니다. 통원·입원·약제비, 급여 본인부담·비급여·제외 가능 분류, 실제 지출액, 통화, 확인 수준을 가집니다. 원본 영수증 image나 PDF를 저장하지 않습니다.
 
 ### RuleEvaluation
 
@@ -228,11 +244,11 @@ Rider별 평가 집계입니다. 지급 결정이나 ClaimCase가 아닙니다. 
 
 ### ClaimCase
 
-실제 청구 단위입니다. 상태는 preparing, submitted, supplementation_requested, reviewing, paid, partially_paid, denied, closed를 사용합니다.
+실제 청구 단위입니다. 상태는 preparing, submitted, supplementation_requested, paid, partially_paid, denied, closed를 사용합니다. submitted는 FamilyCare가 전송했다는 뜻이 아니라 사용자가 보험사 channel에서 접수한 사실을 수동 기록한 상태입니다.
 
 ### ClaimHistory
 
-지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. 제출 문서 원본은 저장소 밖 참조로 관리합니다.
+지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. 필요서류는 checklist metadata만 가지며 진단서·영수증·처방전 file이나 외부 file 참조를 관리하지 않습니다.
 
 ## Evidence
 
@@ -257,6 +273,9 @@ Evidence는 다음을 가집니다.
 6. AppUser 삭제가 FamilyMember·PolicyContract를 연쇄 삭제하지 않습니다.
 7. soft-deleted 엔터티는 기본 조회에서 제외되고 명시적 휴지통 조회에서만 나타납니다.
 8. 원시 추출과 관리자 확정 데이터는 서로 덮어쓰지 않습니다.
+9. `NEEDS_REVIEW` candidate는 executable current version이 될 수 없습니다.
+10. ReceiptLine과 ClaimCase에는 의료 document binary가 없습니다.
+11. AppSession 원본 token, PDF password, archive master key는 저장되지 않습니다.
 
 ## Failure behavior
 
@@ -282,10 +301,15 @@ Evidence는 다음을 가집니다.
 - 약관 전용 특약의 Rider 생성 거부
 - 갱신 상태 미확인의 `UNKNOWN`
 - Evidence 없는 검수 확정 거부
+- AI candidate version과 publish 상태 전이
+- AppSession hash, 7일 inactivity, 30일 absolute expiry
+- ReceiptLine partial indemnity calculation input
+- ClaimCase checklist-only와 medical document field 부재
+- encrypted archive metadata와 key/password 비저장
 - soft delete, 휴지통, 복원, 중복 복원
 - 문서 해시 중복과 버전 교체
 - 1-based 페이지 일관성
 
 ## Deferred decisions
 
-Phase 1의 여덟 ingestion tables와 성공 extraction unique rule은 `docs/plan/002-synthetic-pdf-ingestion.md`에서 구현합니다. 그 밖의 인덱스 조정, 암호화 키 관리, 보존 기간, 실제 증권번호 저장 필요성은 해당 구현 단계에서 별도 ADR로 확정합니다. 이 지연은 합성 데이터로 구현 가능한 Phase 1 범위에 영향을 주지 않습니다.
+Phase 1의 여덟 ingestion table과 성공 extraction unique rule은 완료되었습니다. v0.1 archive key metadata는 `docs/design/private-data-runtime.md`, session은 `docs/design/authentication.md`를 따릅니다. 보존 기간, 실제 증권번호 저장 필요성, 운영 backup policy는 v0.1 이후 별도 결정으로 남깁니다.

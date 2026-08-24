@@ -1,15 +1,30 @@
 # PDF ingestion design
 
-- 상태: Phase 1 승인 기준
-- 적용 단계: Phase 1 — Synthetic PDF Ingestion
+- 상태: Phase 1 완료 기준, v0.1 확장 승인 및 문서 검토 대기
+- 적용 단계: Phase 1 baseline과 Phase 8 encrypted private import
 - 구현 계획: `docs/plan/002-synthetic-pdf-ingestion.md`
 - 기술 결정: `docs/adr/0006-permissive-pdf-parser-stack.md`
 
 ## Scope
 
-Phase 1은 공개 저장소와 CI에서 처음부터 만든 합성 PDF를 안전하게 검증하고, 텍스트·표·페이지 좌표를 근거와 함께 저장하는 최소 ingestion 경계를 구현합니다. 실제 PDF, 실제 보험·의료 자료, private external root는 Phase 1 구현과 CI에서 열지 않습니다. 테스트는 합성 fixture를 checkout 밖의 임시 root에 복사한 뒤 그 복사본만 엽니다.
+Phase 1은 공개 저장소와 CI에서 처음부터 만든 합성 PDF를 안전하게 검증하고, 텍스트·표·페이지 좌표를 근거와 함께 저장하는 최소 ingestion 경계를 구현했습니다. 실제 PDF, 실제 보험·의료 자료, private external root는 Phase 1 구현과 CI에서 열지 않았습니다. 테스트는 합성 fixture를 checkout 밖의 임시 root에 복사한 뒤 그 복사본만 열었습니다.
 
-인증 provider는 Phase 7 범위입니다. 따라서 Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-safe endpoint가 아닙니다. Policy Ledger, OCR 실행, 약관 연결, 보험 자격·금액 판정은 이 단계의 책임이 아닙니다.
+Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-safe endpoint가 아닙니다. v0.1은 이 baseline을 변경해 실제 경로를 몰래 활성화하지 않고, 인증된 family-scoped batch import, runtime-only password, selective local OCR, managed encrypted archive를 별도 계약으로 추가합니다.
+
+## v0.1 encrypted batch extension
+
+`docs/design/private-data-runtime.md`가 Phase 8의 권위 있는 runtime 설계입니다. v0.1 extension은 다음 경계를 사용합니다.
+
+1. 한 batch는 정확히 한 `FamilyMember`를 가집니다.
+2. password는 인증된 request에서 batch runtime으로만 전달하고 process memory에서 동일 batch file에 재사용합니다.
+3. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
+4. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다.
+5. native extraction 뒤 `OCR_REQUIRED` page만 local Korean/English OCR을 실행합니다.
+6. 성공 source는 document별 data key로 암호화해 managed archive에 저장하고 key는 runtime master key로 wrap합니다.
+7. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
+8. Google Drive source를 수정·삭제하거나 Drive API를 호출하지 않습니다.
+
+Phase 1의 `PASSWORD_REQUIRED`는 기존 password-free synthetic endpoint의 정확한 결과로 유지합니다. v0.1 encrypted batch API는 이 endpoint에 password field를 추가하는 방식이 아니라 인증·batch 수명주기와 in-memory secret channel을 가진 별도 use case입니다.
 
 ## Local asynchronous API boundary
 
@@ -235,6 +250,17 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 - shutdown/lease-loss progress cancellation과 parser child 회수
 - API payload과 logs에 password·absolute path·document body가 없는지 검사
 
+v0.1 extension tests:
+
+- 한 FamilyMember batch와 cross-member file 혼합 거부
+- 한 번 입력한 in-memory password 재사용과 실패 file만 재입력
+- password가 DB, persisted job, response, log에 없는지 검사
+- encrypted archive round-trip, tamper, wrong/missing master key
+- `OCR_REQUIRED` page만 local Korean/English OCR 실행
+- native/OCR extraction provenance와 page Evidence 분리
+- 성공·실패·취소·shutdown에서 decrypted PDF와 OCR image cleanup
+- managed archive를 통한 password 없는 reanalysis
+
 ## Security considerations
 
 - Parser child는 부모가 연 read-only source descriptor와 canonical JSON settings만 받고 network client나 URL resolver를 갖지 않습니다.
@@ -247,4 +273,4 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 
 ## Deferred decisions
 
-OCR engine 실행, production sandbox runtime, OS-level egress enforcement, private-data acceptance 표본, 인증 provider, 실제 외부 storage 연결은 해당 단계의 승인과 별도 검증이 필요합니다. Phase 1은 이 항목들을 구현하거나 실제 자료로 확인하지 않습니다.
+Phase 1은 OCR 실행, encrypted batch, authentication, private-data acceptance를 구현하거나 실제 자료로 확인하지 않았습니다. 이 항목의 v0.1 계약은 `docs/design/private-data-runtime.md`와 `docs/design/authentication.md`에서 승인되었습니다. OS-level egress enforcement, Google Drive 자동 연결, Windows descriptor behavior와 public production sandbox는 v0.1 이후로 남깁니다.

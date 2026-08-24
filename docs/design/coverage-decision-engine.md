@@ -1,7 +1,8 @@
 # Coverage decision engine design
 
-- 상태: 후속 구현 기준
-- 적용 단계: Coverage Decision Engine
+- 상태: v0.1 대화 설계 승인 완료, 문서 검토 대기
+- 적용 단계: Phase 4 — Coverage Decision Engine
+- 상위 기준: `docs/design/v0.1-product.md`
 
 ## Scope
 
@@ -16,8 +17,9 @@ MedicalEvent와 실제 가입 Rider, 계약 상태, 약관 CoverageRule을 결�
 - 버전이 있는 CoverageRule
 - 과거 ClaimHistory
 - 정액형 가입금액 또는 실손 계산에 필요한 비용 자료
+- `AI_VERIFIED` 또는 `USER_CONFIRMED` 상태의 실행 가능한 CoverageRule
 
-입력 필드에는 값과 확인 수준, 선택적 Evidence를 함께 둡니다.
+입력 필드에는 값과 확인 수준, 선택적 Evidence를 함께 둡니다. 자연어 사건을 AI가 구조화할 수 있지만 사용자가 수정할 수 있는 사실 레코드로 저장한 뒤에만 이 엔진의 입력이 됩니다.
 
 ## Outputs
 
@@ -92,7 +94,9 @@ Rider별 ClaimCandidate:
 
 ## Indemnity handling
 
-실손형은 영수증, 급여·비급여, 본인부담, 한도, 자기부담, 중복 계약 자료가 있어야 계산합니다. 자료가 없으면 관련 Rider 후보와 필요한 서류를 반환하되 금액을 확정하지 않습니다. 비례보상은 계약별 결과를 단순 합산하지 않습니다.
+실손형은 사용자가 수동 입력한 통원·입원·약제비 영수증 항목, 급여 본인부담금, 비급여, 실제 지출액, 한도, 자기부담, 중복 계약 자료로 계산합니다. 일부 자료만 있어도 확인된 청구 검토 금액, 추가 확인 금액, 제외 금액과 이유를 분리해 반환합니다. 자료가 없으면 관련 Rider 후보와 필요한 서류를 반환하되 금액을 확정하지 않습니다.
+
+복수 실손 Rider가 발견되면 계약별 독립 예상액을 더하지 않습니다. 공통 청구 검토 항목과 각 계약의 조건을 보여주고 최종 비례분담은 `UNKNOWN`입니다.
 
 ## Evidence contract
 
@@ -122,6 +126,8 @@ MedicalEvent fact
 
 설명 계층은 구조화 판정만 읽습니다. `MATCH`를 지급 확정으로 바꾸거나 `UNKNOWN` 정보를 추측할 수 없습니다. AI를 사용하면 출력 스키마를 검증하고 허용된 사실·근거 ID만 참조하게 합니다.
 
+문서 구조화 AI와 별도 verifier는 `docs/design/ai-document-analysis.md`에 따라 CoverageRule 후보를 만들 수 있습니다. 두 AI 단계와 deterministic validator를 통과한 `AI_VERIFIED`, 또는 사용자가 Evidence를 확인한 `USER_CONFIRMED` 규칙만 엔진이 읽습니다. AI는 이 엔진의 tri-state나 금액을 직접 반환하지 않습니다.
+
 ## Failure behavior
 
 - 규칙 버전을 찾지 못하면 Rider 후보는 `UNKNOWN`입니다.
@@ -129,13 +135,17 @@ MedicalEvent fact
 - 조항 연결이 검수되지 않았으면 조건 판정을 확정하지 않습니다.
 - 계산 overflow, 단위 불일치, 음수 비용은 안정적인 validation 오류입니다.
 - 하나의 Rider 평가 실패가 다른 Rider 결과를 제거하지 않습니다.
+- AI verifier 실패, 지원하지 않는 DSL, Evidence 상충은 종속 규칙을 `UNKNOWN`으로 남깁니다.
+- 계산 예외를 0원 또는 `NO_MATCH`로 변환하지 않습니다.
 
 ## Security considerations
 
 - 엔진 로그에는 MedicalEvent 원문을 남기지 않습니다.
 - 판정 재현에는 내부 ID와 규칙 버전을 사용합니다.
 - 사용자에게 필요 없는 개인 필드는 엔진 입력에서 제거합니다.
-- AI 설명 제공자에게 전체 계약이나 PDF를 전달하지 않습니다.
+- AI 제공자에게 PDF binary, page image, password, archive key, 실제 path를 전달하지 않습니다.
+- 문서 구조화는 필요한 page text batch와 Evidence token만 Worker에서 전송합니다.
+- `OPENAI_API_KEY`는 Worker runtime에만 주입하고 DB·job·log에 저장하지 않습니다.
 
 ## Tests
 
@@ -146,10 +156,13 @@ MedicalEvent fact
 - 최초 1회 지급 이력 미확인과 확인
 - 정액형 수식·반올림·통화
 - 실손 자료 부족과 중복 계약
+- 실손 영수증 일부 항목만 확인된 partial calculation
+- 복수 실손 계약의 독립 예상액 비합산과 비례분담 `UNKNOWN`
 - 충돌 근거와 stale Evidence
 - 추가 질문 없이 현재 후보 반환
 - AI 계층 없이 동일한 판정 재현
+- `NEEDS_REVIEW` 규칙의 실행 거부와 verifier 실패의 `UNKNOWN`
 
 ## Deferred decisions
 
-초기 지원 CoverageRule DSL, KCD·수술분류 버전 관리, 실손 계산 범위는 대표 합성 사례 설계에서 확정합니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.
+초기 CoverageRule DSL은 `docs/design/ai-document-analysis.md`의 data-only allowlist를 사용합니다. KCD·수술분류 사전의 확대와 복수 실손 비례분담 자동 계산은 v0.1 이후로 미룹니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.

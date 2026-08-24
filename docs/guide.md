@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation 개발환경과 Phase 1 합성 PDF 계획의 안전한 사용법을 설명합니다. 실제 보험·의료 자료 분석 기능은 제공하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1 개발환경의 사용법을 설명합니다. Phase 2~8의 v0.1 기능은 설계 승인 상태이며 아직 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현 완료 전에는 아래 synthetic endpoint에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -59,7 +59,17 @@ Foundation 서비스:
 - API readiness: `http://127.0.0.1:8000/health/ready`
 - PostgreSQL: 로컬 개발 포트 5432
 
-Phase 1의 문서 endpoint와 analyzer는 인증 provider가 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아니며, 인증 provider는 Phase 7에서 다룹니다.
+Phase 1의 문서 endpoint와 analyzer는 인증이 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아닙니다. Phase 7은 외부 provider가 아니라 `docs/design/authentication.md`의 두 로컬 관리자와 server-side session을 추가합니다.
+
+### Planned v0.1 local runtime
+
+v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 실제 실행 명령과 migration은 해당 feature PR이 merge된 뒤 이 guide에 추가합니다.
+
+- existing WSL `OPENAI_API_KEY`는 Worker container에만 주입합니다.
+- Gemini와 Google Drive API는 사용하지 않습니다.
+- encrypted PDF password는 family-scoped batch process memory에서만 사용합니다.
+- managed archive key는 저장소 밖 file secret으로 제공합니다.
+- LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
 
 ### Use the local synthetic document-analysis API
 
@@ -138,7 +148,7 @@ FAMILYCARE_WORK_ROOT=/absolute/path/outside/repository/work
 
 위 문자열은 경로 형식 예시이며 실제 경로가 아닙니다. 실제 값을 문서, 이슈, PR, 로그에 복사하지 않습니다.
 
-Foundation Compose에는 문서 경로 mount가 없습니다. 실제 자료를 연결하는 변경은 Private-data Acceptance 단계의 설계와 사용자 승인이 필요합니다.
+현재 Compose에는 문서 경로 mount가 없습니다. 실제 자료 연결은 Phase 8 구현과 사용자가 지정한 source path의 별도 acceptance가 완료된 뒤에만 사용합니다.
 
 Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
 

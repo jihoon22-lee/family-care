@@ -4,6 +4,7 @@
 - 작성일: 2026-08-23
 - 적용 범위: 공개 저장소의 문서, 개발환경, 최소 실행 골격, CI, GHCR 릴리스
 - 완료 근거: PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, PR 및 post-merge CI 일곱 required job 성공
+- 후속 상태: Phase 1 완료, Phase 2~8 기준은 `docs/design/v0.1-product.md`
 
 ## 1. 목적
 
@@ -301,7 +302,7 @@ Required approving review count는 `0`입니다. Ruleset 상태와 required chec
 ## 14. 단계별 전달 계획
 
 1. **Foundation (Phase 0, 완료)**: 문서, 안전장치, 실행 골격, CI, GHCR 릴리스
-2. **Synthetic ingestion (Phase 1, 계획)**: 합성 PDF 추출, 페이지 근거, 임시 파일 수명주기
+2. **Synthetic ingestion (Phase 1, 완료)**: 합성 PDF 추출, 페이지 근거, 임시 파일 수명주기
 3. **Policy ledger**: 계약 당사자, 실제 가입 담보, 계약 상태, 관리자 검수
 4. **Clause linking**: 담보와 약관 조항·별표 연결, 검색 인덱스
 5. **Decision engine**: 3값 판정, 부족 정보, 정액·실손 분기, 근거 추적
@@ -309,8 +310,8 @@ Required approving review count는 `0`입니다. Ruleset 상태와 required chec
 7. **Claim workflow**: 서류 체크리스트, 접수·보완·지급 이력, soft delete
 8. **Authentication**: 동일 권한 관리자 두 명, 허용 계정, 세션 보안
 9. **Private-data acceptance**: 저장소 밖 실제 문서로 수동 승인된 검증
-10. **Optional integrations**: 읽기 전용 Drive와 최소 공개 원칙의 AI 보조
-11. **Production deployment**: Cloud Run 포함 운영 대상, 비용, 백업, 키 관리 재설계
+10. **v0.1 container release**: Phase 2~8 acceptance 후 GHCR Web/API/Worker publish
+11. **Deferred integrations and deployment**: Google Drive, multi-provider AI, Cloud Run은 별도 미래 승인
 
 각 단계는 별도의 상세 설계와 구현 계획을 승인받은 뒤 시작한다. 이전 단계의 테스트와 데이터 경계를 깨뜨리는 변경은 다음 단계의 일부로 묵시적으로 포함하지 않는다.
 
@@ -318,7 +319,7 @@ Required approving review count는 `0`입니다. Ruleset 상태와 required chec
 
 Foundation은 PR #1에서 merge commit `0f632989df891ae944c012bfcce6c838009867a9`로 `main`에 병합되었고, PR 및 post-merge GitHub Actions의 일곱 required job이 성공했다. 이 증거는 Foundation 코드와 CI 검증을 의미한다. 태그 생성과 GHCR publish, Cloud Run 배포, Windows·실제 기기 확인, 실제 보험 자료와 private external root 확인은 수행하지 않았으며 Foundation 완료 주장에 포함하지 않는다.
 
-Phase 1은 `docs/design/pdf-ingestion.md`와 `docs/plan/002-synthetic-pdf-ingestion.md`의 합성 전용 계획을 따른다. 구현과 CI는 실제 PDF와 private external root를 열지 않고, 합성 fixture를 checkout 밖의 임시 root에 복사해서만 실행한다. 인증 provider는 Phase 7에 남아 있으므로 Phase 1 API는 local synthetic-only 개발 경계이며 production-safe endpoint가 아니다. Phase 1이 만드는 최소 Document·DocumentVersion·Extraction·ExtractionPage·ExtractionBlock·ExtractionTable·ExtractionCell·AnalysisJob 모델은 Policy Ledger(Phase 2)의 선행 의존성이다.
+Phase 1은 `docs/design/pdf-ingestion.md`와 `docs/plan/002-synthetic-pdf-ingestion.md`의 합성 전용 계획에 따라 완료되었다. 구현과 CI는 실제 PDF와 private external root를 열지 않고, 합성 fixture를 checkout 밖의 임시 root에 복사해서만 실행했다. Phase 1 API는 인증이 없는 local synthetic-only 개발 경계이며 production-safe endpoint가 아니다. Phase 1이 만든 최소 Document·DocumentVersion·Extraction·ExtractionPage·ExtractionBlock·ExtractionTable·ExtractionCell·AnalysisJob 모델은 Policy Ledger(Phase 2)의 선행 의존성이다. v0.1 인증과 private-data runtime은 각각 `docs/design/authentication.md`와 `docs/design/private-data-runtime.md`를 따른다.
 
 ## 16. 완료 조건
 

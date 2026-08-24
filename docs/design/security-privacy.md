@@ -1,11 +1,11 @@
 # Security and privacy design
 
-- 상태: Foundation 및 Phase 1 보안 기준
-- 대상: 공개 저장소, 합성 전용 로컬 개발, 향후 운영
+- 상태: Foundation·Phase 1 기준과 v0.1 pragmatic baseline 승인
+- 대상: 공개 저장소, WSL Docker Compose, Tailscale private family use
 
 ## Scope
 
-보험·의료 자료의 기밀성, 판정 무결성, 서비스 가용성, 공개 저장소의 공급망 위험을 다룹니다. Foundation은 완료되었고 Phase 1은 실제 데이터·private external root·운영 인증 없이 합성 fixture만 사용하지만, 이후 단계가 넘어서는 안 될 경계를 먼저 강제합니다.
+보험·의료 자료의 기밀성, 판정 무결성, 서비스 가용성, 공개 저장소의 공급망 위험을 다룹니다. Foundation과 Phase 1은 합성 fixture만 사용해 완료되었습니다. v0.1은 개인 WSL에서 실제 자료를 처리하므로 Tailscale private access, local app login, managed archive encryption, 외부 AI 최소 전송을 추가하되 호스트 전체 암호화와 swap 재구성은 범위에서 제외합니다.
 
 ## Inputs
 
@@ -137,9 +137,9 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - 주민번호 전체·일부를 기능 데이터로 수집하지 않습니다.
 - 증권번호는 필요성이 확인되기 전 저장하지 않습니다.
 - 사용자 화면에는 최소 식별 정보만 표시합니다.
-- 원문은 외부 저장소에 두고 DB에는 필요한 구조와 Evidence만 저장합니다.
+- Google Drive 원본은 그대로 두고 수동 import한 성공 문서는 application-encrypted managed archive에 저장합니다. DB에는 업무 구조, Evidence, encrypted object metadata와 wrapped data key만 저장합니다.
 - Phase 1 source key는 `FAMILYCARE_DOCUMENT_ROOT`에 상대적인 값이며 absolute path를 request, job payload, log에 넣지 않습니다.
-- password는 DB, job payload, log에 저장하지 않습니다.
+- PDF password는 batch process memory에서만 사용하고 DB, persisted job payload, response, log에 저장하지 않습니다.
 - 로그와 telemetry는 allowlist 필드 방식으로 구성합니다.
 
 ## Security considerations
@@ -149,14 +149,37 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - 신뢰하지 않는 PDF는 API 프로세스와 분리하고 resource limit을 적용합니다.
 - 브라우저 cache와 로그를 데이터 저장소로 간주해 같은 최소화 원칙을 적용합니다.
 - GitHub workflow는 외부 PR 코드와 write 권한·secret이 만나는 경로를 만들지 않습니다.
-- Drive·AI 연동은 최소 권한과 전송 필드 allowlist가 승인된 뒤에만 추가합니다.
+- v0.1 OpenAI 연동은 Worker만 수행하며 PDF binary·image·password·path 없이 필요한 page text와 Evidence token만 전송합니다.
+- Google Drive API와 자동 동기화는 v0.1에 추가하지 않습니다.
+
+## v0.1 pragmatic runtime baseline
+
+포함:
+
+- Tailscale private access와 local app login
+- server-derived HouseholdSpace authorization
+- repository leak prevention과 allowlist logging
+- browser no-store와 app-shell-only service-worker cache
+- temporary plaintext/OCR image cleanup
+- application-encrypted managed archive
+- Compose internal network와 single Web gateway
+
+제외:
+
+- LUKS, BitLocker, encrypted swap, WSL swap 변경
+- 별도 고정 크기 encrypted volume
+- stolen/unlocked host와 fully compromised PC에 대한 forensic protection
+
+제외 항목은 v0.1 기능 구현을 막지 않으며 사용자 요청 없이 system configuration을 변경하지 않습니다.
 
 ## Secrets
 
 - `.env`는 로컬 전용이며 commit하지 않습니다.
 - 공개 CI는 외부 비밀값 없이 실행됩니다.
 - GHCR 릴리스는 단기 `GITHUB_TOKEN`만 사용합니다.
-- 운영은 장기 서비스 계정 키 파일보다 workload identity를 우선합니다.
+- `OPENAI_API_KEY`는 현재 WSL environment에서 Worker container에만 주입하고 Compose file, image, DB, log에 넣지 않습니다.
+- archive master key는 저장소 밖 mode `0600` file에서 read-only secret mount하며 환경변수 값으로 전달하지 않습니다.
+- encrypted KDBX recovery vault는 사용자가 별도로 관리하며 FamilyCare가 Google Drive에서 읽지 않습니다.
 - 비밀값 회전과 폐기는 Git 이력 정리와 별도 작업입니다.
 
 ## Logging allowlist
@@ -182,14 +205,14 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 
 ## Encryption
 
-전송 구간 TLS는 운영 필수입니다. 저장 암호화는 운영 PostgreSQL과 외부 원본 저장소에 적용합니다. 필드 수준 암호화는 증권번호 등 저장 필요성이 확정된 민감 필드에 대해 키 수명주기와 함께 설계합니다. 암호화가 과도한 수집을 정당화하지 않습니다.
+Tailscale device access는 Secure cookie를 사용할 수 있는 HTTPS gateway를 사용합니다. managed archive는 per-document data key와 runtime master key wrapping을 적용합니다. PostgreSQL field encryption은 증권번호처럼 저장 필요성이 확정된 필드에만 key lifecycle과 함께 추가합니다. 암호화가 과도한 수집을 정당화하지 않습니다.
 
 ## Retention and deletion
 
 - 애플리케이션 삭제는 soft delete와 휴지통을 사용합니다.
 - 물리 삭제 기간은 운영 백업·법적 요구와 함께 결정합니다.
 - 임시 평문·페이지 이미지는 작업 종료 즉시 삭제 대상입니다.
-- 외부 AI 제공자 보존 정책은 연동 승인 조건입니다.
+- OpenAI request는 문서별 job lifecycle과 분리하고 raw prompt/response를 일반 log나 공개 artifact에 보존하지 않습니다.
 - 감사 기록은 원문 대신 행위와 변경 메타데이터만 보존합니다.
 
 ## Incident response
@@ -212,7 +235,11 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 5. 외부 제공자 전송은 명시적 기능 설계와 최소 필드 정책이 있어야 합니다.
 6. 각 계층은 내부 UUID만으로 접근 권한을 결정하지 않습니다.
 7. Phase 1 implementation과 CI는 실제 PDF나 private external root를 열지 않습니다.
-8. Phase 1 endpoint는 인증 provider가 없는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다.
+8. Phase 1 endpoint는 인증이 없는 historical local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다.
+9. v0.1 private route는 local two-admin session과 HouseholdSpace authorization을 요구합니다.
+10. PDF password, archive master key, OpenAI key는 DB, persisted job, log, Git, image에 없습니다.
+11. `AI_VERIFIED` 또는 `USER_CONFIRMED`가 아닌 rule은 실행되지 않습니다.
+12. LUKS, BitLocker와 WSL swap 변경은 v0.1 완료 조건이 아닙니다.
 
 ## Failure behavior
 
@@ -231,6 +258,12 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - PDF resource limit와 임시 파일 삭제
 - PDF path symlink traversal, magic bytes, 1 MiB streaming hash, and quality-v1 thresholds
 - encrypted PDF `PASSWORD_REQUIRED`와 direct one-shot `PASSWORD_INVALID`
+- family-scoped batch password one-time reuse, failed-file re-prompt, memory-only lifecycle
+- managed archive encrypt/decrypt, tamper, wrong/missing key와 wrapped-key rotation
+- OpenAI payload allowlist와 key/prompt/response log 부재
+- local two-admin session, CSRF, object scope
+- Tailscale/Compose single gateway와 internal service exposure
+- selective OCR image cleanup
 - 객체 scope 인가
 - 로그 capture에서 금지 필드 부재
 - Evidence 없는 판정 거부
@@ -238,4 +271,4 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 
 ## Deferred decisions
 
-운영 리전, 데이터베이스 서비스, field encryption, 백업 보존, 인증 제공자, Drive·AI 데이터 처리 계약은 관련 단계에서 승인합니다. Foundation에 실제 secret placeholder나 운영 리소스를 미리 만들지 않습니다.
+운영 리전, managed database, field encryption, backup 보존, Google Drive API, Cloud Run과 public ingress는 v0.1 이후 별도 승인합니다. v0.1 AI·local authentication·archive 계약은 각각 `docs/design/ai-document-analysis.md`, `docs/design/authentication.md`, `docs/design/private-data-runtime.md`가 기준입니다.
