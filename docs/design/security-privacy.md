@@ -75,6 +75,9 @@ PDF가 파서 취약점, 과도한 메모리·CPU 사용, embedded action, 경�
 - parser dedicated child process와 64 open descriptor limit
 - 25 MiB input, 500 page, 120초 parent wall, 90초 child CPU, 1536 MiB address-space, 64 MiB output-file 제한
 - child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하고 external URL resolution을 제공하지 않음
+- fork 후 parser 호출 전 source와 supervision pipe 외의 inherited application file·socket descriptor를 닫음
+- parser child의 stdout·stderr를 폐기해 library 출력이 Worker log로 유입되지 않게 함
+- child 결과 IPC는 64 MiB 이하 canonical JSON만 허용하고 parent에서 `pickle` 같은 임의 객체 역직렬화를 사용하지 않음
 - 외부 실행·네트워크 client 비활성화
 - 파서 버전 갱신과 합성 회귀 corpus
 

@@ -20,6 +20,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - ADR 0006 selecting pdfplumber 0.11.10, pypdf 6.16.2, and reportlab 5.0.1 for the permissive synthetic-only parser stack.
 - Versioned document-ingestion, pre-intake analysis-job, and evidence-preserving extraction-result contracts with deterministic API/Worker TypedDict generation.
 - Alembic `0002_document_ingestion` with the eight-table Phase 1 document, extraction, evidence-coordinate, and analysis-job model.
+- Descriptor-based local PDF intake with no-follow traversal, structural validation, bounded hashing, private workspaces, and resource-limited parser-child supervision.
 
 ### Changed
 
@@ -29,6 +30,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Web Vitest runs with `--maxWorkers=1` to avoid the measured WSL worker-start timeout under memory pressure; this serializes workers without reducing test coverage.
 - Dependabot policy ignores semver-major updates for npm `typescript` and Docker `node`/`postgres`, ignores semver-minor and semver-major updates for Docker `python`, and therefore leaves Python 3.14 patch updates eligible; `check_workflows.py` validates the official update-type syntax.
 - The unprivileged Web runtime is pinned to `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`.
+- Phase 1 document contracts and the eight-table ingestion model were merged in PR #8 at `9802781c98c0a6aee3fcd7018dfc020da087fee9`; all seven PR and post-merge `main` checks passed.
 
 ### Deprecated
 
@@ -45,5 +47,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - 실제 보험 문서와 파생 데이터의 저장소 유입을 금지하는 정책 수립
 - Phase 1 parser boundary records that passwords never enter database rows, job payloads, or logs and that production acceptance waits for an approved runtime boundary.
 - Document contracts reject absolute, traversal, Windows-style, multiline, password-bearing, and client-hashed intake requests; PostgreSQL enforces job, extraction, evidence-review, and successful-extraction identity states.
+- Parser-child IPC accepts only bounded canonical JSON and never unpickles child-controlled values in the parent process.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.
