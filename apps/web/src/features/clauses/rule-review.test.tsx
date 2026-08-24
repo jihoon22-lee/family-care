@@ -47,7 +47,7 @@ const linkReview = {
       value: "NEEDS_REVIEW",
     },
   ],
-  issues: [{ code: "WRONG_EDITION", field_id: "terms_edition_id" }],
+  issues: [{ code: "LOW_CONFIDENCE", field_id: "terms_edition_id" }],
   review_item_id: LINK_REVIEW_ID,
   status: "NEEDS_REVIEW",
 } satisfies PolicyReviewItem;
@@ -127,22 +127,32 @@ function response(body: unknown, status = 200): Response {
   });
 }
 
-function installFetch({ conflict = false } = {}) {
+function installFetch({
+  conflict = false,
+  linkItem = linkReview,
+  ruleItem = ruleReview,
+  ruleVersions = versions,
+}: {
+  conflict?: boolean;
+  linkItem?: PolicyReviewItem;
+  ruleItem?: PolicyReviewItem;
+  ruleVersions?: CoverageRuleVersionsResponse;
+} = {}) {
   const fetchMock = vi.fn(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), window.location.origin);
       if (url.pathname === "/api/v1/review-items") {
         return response(
           url.searchParams.get("domain") === "rider_clause"
-            ? [linkReview]
-            : [ruleReview],
+            ? [linkItem]
+            : [ruleItem],
         );
       }
       if (url.pathname === `/api/v1/riders/${RIDER_ID}/clause-links`) {
         return response([link]);
       }
       if (url.pathname === `/api/v1/coverage-rules/${RULE_ID}/versions`) {
-        return response(versions);
+        return response(ruleVersions);
       }
       if (
         url.pathname ===
@@ -204,7 +214,7 @@ describe("Rider clause and CoverageRule review", () => {
       await screen.findByRole("heading", { name: "담보와 약관 연결" }),
     ).toBeVisible();
     expect(screen.getByRole("heading", { name: "보장 규칙" })).toBeVisible();
-    expect(screen.getByText("WRONG_EDITION")).toBeVisible();
+    expect(screen.getByText("LOW_CONFIDENCE")).toBeVisible();
     expect(screen.getByText("UNSUPPORTED_DSL")).toBeVisible();
     const rendered = document.body.textContent ?? "";
     for (const marker of PRIVATE_MARKERS)
@@ -212,7 +222,9 @@ describe("Rider clause and CoverageRule review", () => {
   });
 
   it("shows exact Evidence and confirms only the selected stored link version", async () => {
-    const fetchMock = installFetch();
+    const fetchMock = installFetch({
+      linkItem: { ...linkReview, status: "AI_VERIFIED" },
+    });
     const user = userEvent.setup();
     renderWithProviders(<RuleReviewPage />);
 
@@ -257,6 +269,38 @@ describe("Rider clause and CoverageRule review", () => {
     await user.keyboard("{Shift>}{Tab}{/Shift}");
     expect(reject).toHaveFocus();
   });
+
+  it.each([
+    ["TERMS_ONLY_RIDER", "rider_id"],
+    ["WRONG_EDITION", "terms_edition_id"],
+    ["STALE_EVIDENCE", "clause_id"],
+  ] as const)(
+    "blocks confirmation for %s and keeps rejection available",
+    async (code, fieldId) => {
+      installFetch({
+        linkItem: {
+          ...linkReview,
+          status: "AI_VERIFIED",
+          issues: [{ code, field_id: fieldId }],
+        },
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<RuleReviewPage />);
+
+      await user.click(
+        await screen.findByRole("button", { name: /연결 검토/ }),
+      );
+      const dialog = await screen.findByRole("dialog", {
+        name: /담보와 약관 연결 검토/,
+      });
+      expect(
+        within(dialog).getByRole("button", { name: "연결 확인" }),
+      ).toBeDisabled();
+      expect(
+        within(dialog).getByRole("button", { name: "연결 제외" }),
+      ).toBeEnabled();
+    },
+  );
 
   it("uses a typed child-version correction and keeps the draft on conflict", async () => {
     installFetch({ conflict: true });
@@ -333,5 +377,45 @@ describe("Rider clause and CoverageRule review", () => {
     expect(
       within(dialog).getByRole("button", { name: "규칙 게시" }),
     ).toBeDisabled();
+  });
+
+  it("publishes only an approved, evidence-backed stored rule version", async () => {
+    const fetchMock = installFetch({
+      ruleItem: {
+        ...ruleReview,
+        issues: [{ code: "LOW_CONFIDENCE", field_id: "rule_operator" }],
+        status: "AI_VERIFIED",
+      },
+      ruleVersions: {
+        ...versions,
+        versions: [
+          {
+            ...versions.versions[0],
+            review_state: "AI_VERIFIED",
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<RuleReviewPage />);
+
+    await user.click(await screen.findByRole("button", { name: /규칙 검토/ }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /보장 규칙 검토/,
+    });
+    await user.click(within(dialog).getByRole("button", { name: "규칙 게시" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([input, init]) => {
+          const url = new URL(String(input), window.location.origin);
+          return (
+            url.pathname === `/api/v1/coverage-rules/${RULE_ID}/publish` &&
+            init?.method === "POST" &&
+            JSON.parse(String(init.body)).version_id === RULE_VERSION_ID
+          );
+        }),
+      ).toBe(true),
+    );
   });
 });

@@ -9,6 +9,20 @@ import { listCoverageRuleVersions, publishCoverageRule } from "../../api/rules";
 import { EvidenceDrawer } from "../../components/EvidenceDrawer";
 import { RuleExpressionEditor } from "./RuleExpressionEditor";
 
+const APPROVED_STATUSES = new Set(["AI_VERIFIED", "USER_CONFIRMED"]);
+const PUBLICATION_BLOCKERS = new Set([
+  "COMMON_SPECIAL_TERMS_CONFLICT",
+  "CONFLICTING_EVIDENCE",
+  "INVALID_DATE",
+  "INVALID_UNIT",
+  "MISSING_EVIDENCE",
+  "STALE_EVIDENCE",
+  "TERMS_ONLY_RIDER",
+  "UNSUPPORTED_DSL",
+  "UNSUPPORTED_STRUCTURE",
+  "WRONG_EDITION",
+]);
+
 function drawerEvidence(item: PolicyReviewItem): EvidenceRef[] {
   return item.evidence.map((evidence) => ({
     bbox: evidence.bbox,
@@ -85,12 +99,14 @@ export function CoverageRuleReviewDialog({
   const unsupported = item.issues.some(
     (issue) => issue.code === "UNSUPPORTED_DSL",
   );
+  const publicationBlocked =
+    !APPROVED_STATUSES.has(item.status) ||
+    item.issues.some((issue) => PUBLICATION_BLOCKERS.has(issue.code));
   const canPublish = Boolean(
     latest &&
     !latest.executable &&
-    (latest.review_state === "AI_VERIFIED" ||
-      latest.review_state === "USER_CONFIRMED") &&
-    !unsupported &&
+    APPROVED_STATUSES.has(latest.review_state) &&
+    !publicationBlocked &&
     latest.evidence.length > 0,
   );
 

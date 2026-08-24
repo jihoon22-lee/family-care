@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApiError } from "../../api/errors";
 import type { PolicyReviewItem } from "../../api/generated";
 import { useQueryCache, useResource } from "../../api/query-cache";
-import { listRuleReviewItems, type RuleReviewDomain } from "../../api/rules";
+import {
+  listRuleReviewItems,
+  type RuleReviewDomain,
+  type RuleReviewStatus,
+} from "../../api/rules";
 import { CoverageRuleReviewDialog } from "./CoverageRuleReviewDialog";
 import { RiderClauseReviewDialog } from "./RiderClauseReviewDialog";
 
@@ -53,9 +57,21 @@ function ReviewColumn({
   eyebrow: string;
   onOpen: (item: PolicyReviewItem, opener: HTMLButtonElement) => void;
 }) {
-  const resource = useResource(`rule-review:${domain}`, (signal) =>
-    listRuleReviewItems(domain, signal),
-  );
+  const resource = useResource(`rule-review:${domain}`, async (signal) => {
+    const statuses: RuleReviewStatus[] = [
+      "NEEDS_REVIEW",
+      "AI_VERIFIED",
+      "USER_CONFIRMED",
+    ];
+    const responses = await Promise.all(
+      statuses.map((status) => listRuleReviewItems(domain, status, signal)),
+    );
+    return [
+      ...new Map(
+        responses.flat().map((item) => [item.review_item_id, item]),
+      ).values(),
+    ];
+  });
   const items = resource.data ?? [];
   return (
     <section
@@ -92,6 +108,7 @@ function ReviewColumn({
                   {complete ? "근거 연결됨" : "근거 필요"}
                 </span>
               </div>
+              <small>{item.status}</small>
               <p>{ISSUE_COPY[issue?.code ?? "LOW_CONFIDENCE"]}</p>
               <button
                 type="button"
@@ -140,13 +157,14 @@ export function RuleReviewPage() {
           <p className="eyebrow">가입 담보에서 판정 규칙까지 이어지는 근거선</p>
           <h1 id="rule-review-title">보장 규칙 검토</h1>
           <p>
-            자동 분석이 확정하지 못한 연결만 모아 보여줍니다. 왼쪽에서 실제 가입
-            담보와 약관 조항을 연결하고, 오른쪽에서 구조화된 규칙을 확인합니다.
+            추가 확인이 필요하거나 게시 준비가 끝난 연결을 모아 보여줍니다.
+            왼쪽에서 실제 가입 담보와 약관 조항을 연결하고, 오른쪽에서 구조화된
+            규칙을 확인합니다.
           </p>
         </div>
         <aside className="rule-review-boundary" aria-label="자동 판정 경계">
           <span>AI_VERIFIED</span>
-          <strong>검증된 항목은 바로 다음 단계로 이동합니다.</strong>
+          <strong>검증된 저장 버전만 다음 단계로 게시할 수 있습니다.</strong>
           <small>
             지원하지 않는 문장과 근거가 부족한 항목은 판정에 사용하지 않습니다.
           </small>

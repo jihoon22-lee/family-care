@@ -11,13 +11,16 @@ import type {
 import { apiRequest } from "./http";
 
 export type RuleReviewDomain = "rider_clause" | "coverage_rule";
+export type RuleReviewStatus =
+  "NEEDS_REVIEW" | "AI_VERIFIED" | "USER_CONFIRMED";
 
 export const listRuleReviewItems = (
   domain: RuleReviewDomain,
+  status: RuleReviewStatus,
   signal?: AbortSignal,
 ) =>
   apiRequest<PolicyReviewItem[]>(
-    `/api/v1/review-items?domain=${domain}&status=NEEDS_REVIEW`,
+    `/api/v1/review-items?domain=${domain}&status=${status}`,
     { signal },
   );
 

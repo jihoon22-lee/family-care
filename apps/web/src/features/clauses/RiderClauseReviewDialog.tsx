@@ -12,6 +12,16 @@ import {
 } from "../../api/rules";
 import { EvidenceDrawer } from "../../components/EvidenceDrawer";
 
+const APPROVED_STATUSES = new Set(["AI_VERIFIED", "USER_CONFIRMED"]);
+const CONFIRMATION_BLOCKERS = new Set([
+  "COMMON_SPECIAL_TERMS_CONFLICT",
+  "CONFLICTING_EVIDENCE",
+  "MISSING_EVIDENCE",
+  "STALE_EVIDENCE",
+  "TERMS_ONLY_RIDER",
+  "WRONG_EDITION",
+]);
+
 function fieldValue(
   item: PolicyReviewItem,
   fieldId: string,
@@ -48,6 +58,9 @@ export function RiderClauseReviewDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const close = useCallback(onClose, [onClose]);
   const riderId = fieldValue(item, "rider_id");
+  const confirmationBlocked =
+    !APPROVED_STATUSES.has(item.status) ||
+    item.issues.some((issue) => CONFIRMATION_BLOCKERS.has(issue.code));
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -98,7 +111,7 @@ export function RiderClauseReviewDialog({
   }, [close, evidenceOpen]);
 
   async function confirm() {
-    if (!link || item.evidence.length === 0) return;
+    if (!link || item.evidence.length === 0 || confirmationBlocked) return;
     setWorking(true);
     setError(undefined);
     try {
@@ -190,11 +203,21 @@ export function RiderClauseReviewDialog({
           </>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
+        {confirmationBlocked ? (
+          <p className="rule-informational" role="status">
+            후보 검증과 차단 사유 해소가 끝난 뒤 연결을 확인할 수 있습니다.
+          </p>
+        ) : null}
         <footer className="dialog-actions">
           <button
             type="button"
             className="primary-button"
-            disabled={working || !link || item.evidence.length === 0}
+            disabled={
+              working ||
+              !link ||
+              item.evidence.length === 0 ||
+              confirmationBlocked
+            }
             onClick={confirm}
           >
             연결 확인

@@ -35,7 +35,7 @@ const ruleReview = {
   ],
   issues: [{ code: "LOW_CONFIDENCE", field_id: "rule_operator" }],
   review_item_id: REVIEW_ID,
-  status: "NEEDS_REVIEW",
+  status: "AI_VERIFIED",
 } satisfies PolicyReviewItem;
 
 const versions = {

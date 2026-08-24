@@ -513,7 +513,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Produces: `/app/clauses/review`, separate exception queues for Rider-Clause links and CoverageRules, exact Evidence disclosure, typed correction, confirmation/rejection, and publication state.
 - The UI does not offer a textarea or code editor for DSL; it renders only generated field/operator/unit options and never marks an unsupported user-confirmed rule executable.
 
-- [x] **Step 1: Write failing review, conflict, and accessibility tests.** Cover `AI_VERIFIED` immediate publication, `NEEDS_REVIEW` queue visibility, terms-only Rider rejection, wrong edition, stale Evidence, typed correction as a child version, `409 VERSION_CONFLICT` draft preservation, unsupported DSL remaining informational, dialog focus, and no raw Clause/provider/path output.
+- [x] **Step 1: Write failing review, conflict, and accessibility tests.** Cover `AI_VERIFIED` stored-version publication eligibility, `NEEDS_REVIEW` queue visibility, terms-only Rider rejection, wrong edition, stale Evidence, typed correction as a child version, `409 VERSION_CONFLICT` draft preservation, unsupported DSL remaining informational, dialog focus, and no raw Clause/provider/path output.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
