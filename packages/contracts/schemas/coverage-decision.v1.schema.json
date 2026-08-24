@@ -79,7 +79,7 @@
       "type": "string"
     },
     "DateTime": {
-      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
       "title": "DateTime",
       "type": "string"
     },
@@ -110,7 +110,7 @@
       "items": {
         "maximum": 1000000,
         "minimum": 0,
-        "multipleOf": 0.001,
+        "multipleOf": 0.0001,
         "type": "number"
       },
       "maxItems": 4,
