@@ -312,6 +312,24 @@ def test_create_medical_event_supports_pre_and_post_modes(
                 }
             },
         },
+        {
+            **_event_request(),
+            "facts": {
+                "MedicalEvent.event_date": {
+                    "value": "2026-08-25",
+                    "confirmation": "user",
+                }
+            },
+        },
+        {
+            **_event_request(),
+            "facts": {
+                "MedicalEvent.classification": {
+                    "value": "x" * 161,
+                    "confirmation": "user",
+                }
+            },
+        },
     ],
 )
 def test_create_rejects_raw_description_tri_state_amount_and_client_scope(
@@ -349,6 +367,19 @@ def test_patch_requires_expected_version_and_returns_conflict_for_stale_write(
     assert stale.json() == {"error_code": "VERSION_CONFLICT", "message": "version conflict"}
     assert service.updated_requests
     _assert_no_store(stale)
+
+
+@pytest.mark.parametrize("field", ["facts", "mode"])
+def test_patch_rejects_explicit_null_for_non_nullable_fields(
+    client: TestClient,
+    field: str,
+) -> None:
+    response = client.patch(
+        f"/api/v1/medical-events/{EVENT_ID}",
+        json={"expected_version": 1, field: None},
+    )
+
+    _assert_value_free_error(response)
 
 
 @pytest.mark.parametrize(
@@ -439,6 +470,12 @@ def test_get_missing_result_version_is_404(
 
     assert response.status_code == 404
     _assert_no_store(response)
+
+
+def test_result_version_must_be_positive(client: TestClient) -> None:
+    response = client.get(f"/api/v1/medical-events/{EVENT_ID}/results/0")
+
+    _assert_value_free_error(response)
 
 
 def test_medical_event_delete_trash_and_restore_are_explicitly_versioned(

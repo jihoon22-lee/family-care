@@ -24,8 +24,6 @@ from familycare_api.decisions.domain import (
 FactScalar = str | int | Decimal | date | None
 _EVENT_FIELDS = frozenset(
     {
-        "MedicalEvent.event_date",
-        "MedicalEvent.visit_date",
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
     }
@@ -63,6 +61,10 @@ class MedicalEventUpdateRequest(StrictModel):
 
     @model_validator(mode="after")
     def validate_update(self) -> Self:
+        if "mode" in self.model_fields_set and self.mode is None:
+            raise ValueError("mode cannot be null")
+        if "facts" in self.model_fields_set and self.facts is None:
+            raise ValueError("facts cannot be null")
         if self.facts is not None:
             _require_event_fields(self.facts)
         if self.model_fields_set <= {"expected_version"}:
@@ -240,6 +242,16 @@ class DecisionErrorResponse(StrictModel):
 def _require_event_fields(facts: dict[str, FactInput]) -> None:
     if any(field not in _EVENT_FIELDS for field in facts):
         raise ValueError("unsupported fact field")
+    classification = facts.get("MedicalEvent.classification")
+    if classification is not None and classification.value is not None:
+        value = classification.value
+        if not isinstance(value, str) or not value.strip() or len(value) > 160:
+            raise ValueError("invalid event classification")
+    admission_days = facts.get("MedicalEvent.admission_days")
+    if admission_days is not None and admission_days.value is not None:
+        value = admission_days.value
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 36_500:
+            raise ValueError("invalid admission days")
 
 
 __all__ = [

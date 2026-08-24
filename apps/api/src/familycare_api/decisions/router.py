@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Path, Response, status
 
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.decisions.schemas import (
@@ -139,7 +139,7 @@ def analyze_medical_event(
 )
 def get_decision_result(
     event_id: UUID,
-    version: int,
+    version: Annotated[int, Path(ge=1, le=2_147_483_647)],
     response: Response,
     service: ServiceDependency,
 ) -> CoverageDecisionResponse:
