@@ -482,7 +482,7 @@ separately below; this plan does not claim a PR, CI result, or merge.
 
   Expected: deterministic analysis responses and OpenAPI paths pass; no raw event description or internal SQL error is echoed.
 
-- [ ] **Step 5: Commit the decision HTTP boundary.**
+- [x] **Step 5: Commit the decision HTTP boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/repository.py apps/api/src/familycare_api/decisions/service.py apps/api/src/familycare_api/decisions/schemas.py apps/api/src/familycare_api/decisions/router.py apps/api/src/familycare_api/decisions/errors.py apps/api/tests/test_decision_api.py
@@ -531,7 +531,7 @@ separately below; this plan does not claim a PR, CI result, or merge.
 
   Expected: all deterministic decision, PostgreSQL, contract, privacy, and static checks pass without OpenAI or private files.
 
-- [ ] **Step 5: Commit the complete engine acceptance.**
+- [x] **Step 5: Commit the complete engine acceptance.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions packages/contracts/schemas/coverage-decision.v1.schema.json packages/contracts/examples/coverage-decision.v1.json apps/api/tests/test_decision_contracts.py apps/api/tests/test_decision_integration.py apps/api/tests/test_decision_privacy.py
