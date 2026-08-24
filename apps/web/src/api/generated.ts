@@ -401,7 +401,11 @@ export type CandidateIssueCode =
   | "COMMON_SPECIAL_TERMS_CONFLICT";
 
 export type CandidateKind =
-  "policy_contract" | "policy_party" | "rider" | "rider_clause" | "coverage_rule";
+  | "policy_contract"
+  | "policy_party"
+  | "rider"
+  | "rider_clause"
+  | "coverage_rule";
 
 export type CandidateRejectionReason =
   | "NOT_ENROLLED"

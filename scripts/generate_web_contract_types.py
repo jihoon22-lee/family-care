@@ -122,7 +122,7 @@ def _render_union_alias(name: str, union: str) -> list[str]:
     one_line = f"export type {name} = {union};"
     if len(one_line) <= PRINT_WIDTH:
         return [one_line]
-    if len(union) <= PRINT_WIDTH:
+    if len(union) + len("  ;") <= PRINT_WIDTH:
         return [f"export type {name} =", f"  {union};"]
     members = union.split(" | ")
     return [
