@@ -540,6 +540,11 @@ def test_valid_link_confirmation_and_rule_publication_commit_exact_evidence(
     database_url: str,
     seed: Seed,
 ) -> None:
+    rule_repository = CoverageRuleRepository(database_url)
+    initial_versions = rule_repository.list_versions(seed.scope_a, seed.rule_id)
+    assert initial_versions.expected_version == 1
+    assert tuple(item.id for item in initial_versions.versions) == (seed.rule_version_id,)
+
     link = RiderClauseLinkRepository(database_url).confirm(
         seed.scope_a,
         seed.link_id,
@@ -549,7 +554,7 @@ def test_valid_link_confirmation_and_rule_publication_commit_exact_evidence(
     assert link.version == 2
     assert {item.evidence_id for item in link.evidence} == seed.evidence_ids
 
-    published = CoverageRuleRepository(database_url).publish(
+    published = rule_repository.publish(
         seed.scope_a,
         seed.rule_id,
         seed.rule_version_id,
@@ -558,6 +563,9 @@ def test_valid_link_confirmation_and_rule_publication_commit_exact_evidence(
     assert published.executable is True
     assert published.version_number == 2
     assert {item.evidence_id for item in published.evidence} == seed.evidence_ids
+    current_versions = rule_repository.list_versions(seed.scope_a, seed.rule_id)
+    assert current_versions.expected_version == 2
+    assert tuple(item.version_number for item in current_versions.versions) == (1, 2)
 
     link_row = _row(
         database_url,

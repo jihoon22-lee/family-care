@@ -919,6 +919,11 @@
       "CoverageRuleVersionsResponse": {
         "additionalProperties": false,
         "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
           "rule_id": {
             "format": "uuid",
             "title": "Rule Id",
@@ -935,6 +940,7 @@
         },
         "required": [
           "rule_id",
+          "expected_version",
           "versions"
         ],
         "title": "CoverageRuleVersionsResponse",

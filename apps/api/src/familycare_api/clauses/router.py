@@ -232,11 +232,12 @@ def list_coverage_rule_versions(
     service: RuleServiceDependency,
 ) -> CoverageRuleVersionsResponse:
     _no_store(response)
+    collection = service.list_rule_versions(scope, rule_id)
     return CoverageRuleVersionsResponse(
         rule_id=rule_id,
+        expected_version=collection.expected_version,
         versions=tuple(
-            CoverageRuleVersionResponse.from_domain(version)
-            for version in service.list_rule_versions(scope, rule_id)
+            CoverageRuleVersionResponse.from_domain(version) for version in collection.versions
         ),
     )
 

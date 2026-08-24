@@ -39,6 +39,7 @@ from familycare_api.clauses.rules import (
     CandidateRuleReviewState,
     CoverageRule,
     CoverageRuleVersion,
+    CoverageRuleVersionCollection,
     LinkPublicationState,
     RulePublicationContext,
     RuleReviewState,
@@ -1302,12 +1303,13 @@ class CoverageRuleRepository:
         self,
         scope: HouseholdScope,
         rule_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]:
+    ) -> CoverageRuleVersionCollection:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 rows = connection.execute(
                     f"""
-                    SELECT {_RULE_VERSION_COLUMNS}, {_EVIDENCE_COLUMNS}
+                    SELECT rule.version AS aggregate_version,
+                           {_RULE_VERSION_COLUMNS}, {_EVIDENCE_COLUMNS}
                     FROM coverage_rule_versions AS version
                     JOIN coverage_rules AS rule
                       ON rule.id = version.coverage_rule_id
@@ -1325,7 +1327,13 @@ class CoverageRuleRepository:
                 ).fetchall()
         except psycopg.Error:
             raise ClauseRepositoryUnavailable from None
-        return self._versions_from_rows(rows)
+        if not rows:
+            raise CoverageRuleInvalid("RULE_NOT_ACTIVE")
+        return CoverageRuleVersionCollection(
+            rule_id=rule_id,
+            expected_version=int(rows[0]["aggregate_version"]),
+            versions=self._versions_from_rows(rows),
+        )
 
     def publish(
         self,

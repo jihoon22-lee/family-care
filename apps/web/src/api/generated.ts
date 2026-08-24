@@ -516,6 +516,7 @@ export interface CoverageRuleVersionResponse {
 }
 
 export interface CoverageRuleVersionsResponse {
+  expected_version: number;
   rule_id: string;
   versions: Array<CoverageRuleVersionResponse>;
 }

@@ -148,6 +148,25 @@ class CoverageRuleVersion:
 
 
 @dataclass(frozen=True)
+class CoverageRuleVersionCollection:
+    """Immutable version list paired with the aggregate concurrency token."""
+
+    rule_id: UUID
+    expected_version: int
+    versions: tuple[CoverageRuleVersion, ...]
+
+    def __post_init__(self) -> None:
+        if not _nonzero_uuid(self.rule_id):
+            raise ValueError("rule identifier must be a non-zero UUID")
+        try:
+            require_expected_version(self.expected_version)
+        except InvalidVersion:
+            raise ValueError("expected version must be positive") from None
+        if any(version.coverage_rule_id != self.rule_id for version in self.versions):
+            raise ValueError("rule version collection must contain one aggregate")
+
+
+@dataclass(frozen=True)
 class RulePublicationContext:
     """All rows locked and resolved inside the publisher transaction."""
 
@@ -232,7 +251,7 @@ class CoverageRuleStore(Protocol):
         self,
         scope: HouseholdScope,
         rule_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]: ...
+    ) -> CoverageRuleVersionCollection: ...
 
     def publish(
         self,
@@ -261,7 +280,7 @@ class CoverageRuleService:
         self,
         scope: HouseholdScope,
         rule_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]:
+    ) -> CoverageRuleVersionCollection:
         if not _nonzero_uuid(rule_id):
             _invalid("RULE_NOT_ACTIVE")
         return self.repository.list_versions(scope, rule_id)
@@ -294,6 +313,7 @@ __all__ = [
     "CoverageRuleService",
     "CoverageRuleStore",
     "CoverageRuleVersion",
+    "CoverageRuleVersionCollection",
     "LinkPublicationState",
     "RulePublicationContext",
     "RuleReviewState",

@@ -14,7 +14,7 @@ import pytest
 from familycare_api.clauses import router as clause_router_module
 from familycare_api.clauses.dsl import RULE_SCHEMA_VERSION
 from familycare_api.clauses.links import RiderClauseLink
-from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.clauses.rules import CoverageRuleVersion, CoverageRuleVersionCollection
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.errors import ApiBoundaryError, install_error_handlers
@@ -271,11 +271,15 @@ class _FakeRuleService:
         self,
         scope: HouseholdScope,
         rule_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]:
+    ) -> CoverageRuleVersionCollection:
         self.list_calls.append((scope, rule_id))
         if scope != SCOPE_A or rule_id != RULE_ID:
             raise _RuleNotFound
-        return (self.current,)
+        return CoverageRuleVersionCollection(
+            rule_id=rule_id,
+            expected_version=7,
+            versions=(self.current,),
+        )
 
     def publish_coverage_rule(
         self,
@@ -603,6 +607,7 @@ def test_get_rule_versions_is_scoped_no_store_and_exposes_only_bounded_projectio
     _assert_no_store(response)
     body = response.json()
     assert body["rule_id"] == str(RULE_ID)
+    assert body["expected_version"] == 7
     assert body["versions"][0]["version_id"] == str(RULE_VERSION_ID)
     assert body["versions"][0]["version_number"] == 1
     assert body["versions"][0]["review_state"] == "AI_VERIFIED"

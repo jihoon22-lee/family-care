@@ -284,6 +284,7 @@ class CoverageRuleVersionsResponse(BaseModel):
     model_config = _STRICT
 
     rule_id: UUID
+    expected_version: int = Field(ge=1)
     versions: tuple[CoverageRuleVersionResponse, ...] = Field(max_length=100)
 
 
