@@ -407,16 +407,19 @@ def validate_openapi() -> list[str]:
     }
     if set(decision_response.get("properties", {})) != expected_decision_fields:
         errors.append("coverage decision response fields drifted from v1")
-    if "amount" in json.dumps(
-        [
-            event_request,
-            schemas.get("MedicalEventUpdateRequest", {}),
-            decision_response,
-            schemas.get("ClaimCandidateResponse", {}),
-            schemas.get("RuleEvaluationResponse", {}),
-        ],
-        sort_keys=True,
-    ).lower():
+    if (
+        "amount"
+        in json.dumps(
+            [
+                event_request,
+                schemas.get("MedicalEventUpdateRequest", {}),
+                decision_response,
+                schemas.get("ClaimCandidateResponse", {}),
+                schemas.get("RuleEvaluationResponse", {}),
+            ],
+            sort_keys=True,
+        ).lower()
+    ):
         errors.append("MedicalEvent and decision OpenAPI must not expose amount fields")
     return errors
 

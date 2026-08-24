@@ -225,9 +225,7 @@ class DecisionReaders:
 
 
 class CoverageDecisionEngine(Protocol):
-    def evaluate(
-        self, scope: HouseholdScope, event: MedicalEvent
-    ) -> DecisionRunResult: ...
+    def evaluate(self, scope: HouseholdScope, event: MedicalEvent) -> DecisionRunResult: ...
 ```
 
 Core pure functions:
