@@ -23,7 +23,15 @@ from familycare_api.clauses.errors import (
     ClauseRepositoryUnavailable,
     ClauseStateConflict,
     ClauseVersionConflict,
+    RiderClauseLinkInvalid,
     TermsEditionNotFound,
+)
+from familycare_api.clauses.links import (
+    CandidateReviewState,
+    LinkReviewState,
+    RiderClauseLink,
+    RiderClauseLinkValidationContext,
+    validate_rider_clause_link,
 )
 from familycare_api.clauses.normalization import NORMALIZATION_VERSION
 from familycare_api.common.evidence import EvidenceBbox, EvidenceRef, EvidenceReviewState
@@ -770,9 +778,447 @@ class ClauseSearchRepository:
         )
 
 
+_LINK_COLUMNS = """
+    link.id, link.household_space_id, link.rider_id,
+    link.terms_edition_id, link.clause_id, link.candidate_version_id,
+    link.review_state, link.applicability_reason_code, link.version,
+    link.created_at, link.updated_at, link.deleted_at
+"""
+
+
+def _rider_clause_link(row: dict[str, Any], evidence: Sequence[EvidenceRef]) -> RiderClauseLink:
+    return RiderClauseLink(
+        id=cast(UUID, row["id"]),
+        household_space_id=cast(UUID, row["household_space_id"]),
+        rider_id=cast(UUID, row["rider_id"]),
+        terms_edition_id=cast(UUID, row["terms_edition_id"]),
+        clause_id=cast(UUID, row["clause_id"]),
+        candidate_version_id=cast(UUID, row["candidate_version_id"]),
+        review_state=cast(LinkReviewState, row["review_state"]),
+        applicability_reason_code=cast(str, row["applicability_reason_code"]),
+        version=int(row["version"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        deleted_at=row.get("deleted_at"),
+        evidence=tuple(evidence),
+    )
+
+
+class RiderClauseLinkRepository:
+    """Persist link transitions after one transaction-local validation snapshot."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = _database_url(database_url)
+
+    def list_for_rider(
+        self,
+        scope: HouseholdScope,
+        rider_id: UUID,
+    ) -> tuple[RiderClauseLink, ...]:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT {_LINK_COLUMNS}, {_EVIDENCE_COLUMNS}
+                    FROM rider_clause_links AS link
+                    JOIN riders AS rider
+                      ON rider.id = link.rider_id
+                     AND rider.household_space_id = link.household_space_id
+                     AND rider.deleted_at IS NULL
+                    JOIN policy_contracts AS policy
+                      ON policy.id = rider.policy_contract_id
+                     AND policy.household_space_id = link.household_space_id
+                     AND policy.deleted_at IS NULL
+                    LEFT JOIN rider_clause_link_evidence AS linked
+                      ON linked.rider_clause_link_id = link.id
+                    LEFT JOIN evidence ON evidence.id = linked.evidence_id
+                    WHERE link.household_space_id = %s
+                      AND link.rider_id = %s
+                      AND link.deleted_at IS NULL
+                    ORDER BY link.created_at, link.id,
+                             evidence.physical_page NULLS LAST,
+                             evidence.id NULLS LAST
+                    """,
+                    (scope.household_space_id, rider_id),
+                ).fetchall()
+        except psycopg.Error:
+            raise ClauseRepositoryUnavailable from None
+
+        grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
+        for row in rows:
+            link_id = cast(UUID, row["id"])
+            if link_id not in grouped:
+                grouped[link_id] = (row, [])
+            evidence = _evidence(row)
+            if evidence is not None:
+                grouped[link_id][1].append(evidence)
+        return tuple(_rider_clause_link(row, evidence) for row, evidence in grouped.values())
+
+    def confirm(
+        self,
+        scope: HouseholdScope,
+        link_id: UUID,
+        *,
+        expected_version: int,
+    ) -> RiderClauseLink:
+        version = require_expected_version(expected_version)
+        invalid: RiderClauseLinkInvalid | None = None
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                link_row = self._locked_link(
+                    connection,
+                    scope,
+                    link_id,
+                    expected_version=version,
+                )
+                if link_row is None:
+                    raise ClauseVersionConflict
+                try:
+                    context = self._validation_context(connection, scope, link_row)
+                    validate_rider_clause_link(scope, context)
+                    updated = self._transition(
+                        connection,
+                        scope,
+                        link_id,
+                        expected_version=version,
+                        review_state="USER_CONFIRMED",
+                        reason_code="APPLICABLE",
+                    )
+                except RiderClauseLinkInvalid as error:
+                    invalid = error
+                    updated = self._transition(
+                        connection,
+                        scope,
+                        link_id,
+                        expected_version=version,
+                        review_state="NEEDS_REVIEW",
+                        reason_code=error.reason_code,
+                    )
+        except ClauseVersionConflict:
+            raise
+        except psycopg.Error:
+            raise ClauseRepositoryUnavailable from None
+        if invalid is not None:
+            raise invalid
+        return updated
+
+    def reject(
+        self,
+        scope: HouseholdScope,
+        link_id: UUID,
+        *,
+        expected_version: int,
+        reason_code: str,
+    ) -> RiderClauseLink:
+        if reason_code not in {
+            "USER_REJECTED",
+            "WRONG_CLAUSE",
+            "WRONG_EDITION",
+            "NOT_APPLICABLE",
+        }:
+            raise RiderClauseLinkInvalid("INVALID_REJECTION_REASON")
+        version = require_expected_version(expected_version)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                if (
+                    self._locked_link(
+                        connection,
+                        scope,
+                        link_id,
+                        expected_version=version,
+                    )
+                    is None
+                ):
+                    raise ClauseVersionConflict
+                return self._transition(
+                    connection,
+                    scope,
+                    link_id,
+                    expected_version=version,
+                    review_state="rejected",
+                    reason_code=reason_code,
+                )
+        except ClauseVersionConflict:
+            raise
+        except psycopg.Error:
+            raise ClauseRepositoryUnavailable from None
+
+    @staticmethod
+    def _locked_link(
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        link_id: UUID,
+        *,
+        expected_version: int,
+    ) -> dict[str, Any] | None:
+        return connection.execute(
+            f"""
+            SELECT {_LINK_COLUMNS}
+            FROM rider_clause_links AS link
+            WHERE link.id = %s
+              AND link.household_space_id = %s
+              AND link.version = %s
+              AND link.deleted_at IS NULL
+            FOR UPDATE
+            """,
+            (link_id, scope.household_space_id, expected_version),
+        ).fetchone()
+
+    def _validation_context(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        link_row: dict[str, Any],
+    ) -> RiderClauseLinkValidationContext:
+        policy_row = connection.execute(
+            """
+            SELECT
+              policy.id AS policy_contract_id,
+              policy.household_space_id AS policy_household_space_id,
+              policy.contract_date, policy.insurer_key AS policy_insurer_key,
+              policy.product_key AS policy_product_key,
+              policy.source_document_version_id AS policy_document_version_id,
+              rider.policy_contract_id AS rider_policy_contract_id,
+              document.document_kind AS rider_document_kind,
+              source.id AS source_id,
+              source.document_version_id AS source_document_version_id,
+              source.extraction_id AS source_extraction_id,
+              source.content_sha256 AS source_content_sha256,
+              source.physical_page AS source_physical_page,
+              source.x0 AS source_x0, source.y0 AS source_y0,
+              source.x1 AS source_x1, source.y1 AS source_y1,
+              source.review_state AS source_review_state,
+              version.content_sha256 AS policy_content_sha256,
+              version.page_count AS policy_page_count,
+              extraction.status AS source_extraction_status,
+              page.width_points AS source_page_width,
+              page.height_points AS source_page_height
+            FROM riders AS rider
+            JOIN policy_contracts AS policy ON policy.id = rider.policy_contract_id
+            JOIN document_versions AS version
+              ON version.id = policy.source_document_version_id
+            JOIN documents AS document ON document.id = version.document_id
+            JOIN evidence AS source ON source.id = rider.source_evidence_id
+            JOIN extractions AS extraction ON extraction.id = source.extraction_id
+            JOIN extraction_pages AS page
+              ON page.extraction_id = extraction.id
+             AND page.page_number = source.physical_page
+            WHERE rider.id = %s
+              AND rider.household_space_id = %s
+              AND policy.household_space_id = %s
+              AND source.household_space_id = %s
+              AND rider.deleted_at IS NULL
+              AND policy.deleted_at IS NULL
+              AND document.deleted_at IS NULL
+            """,
+            (
+                link_row["rider_id"],
+                scope.household_space_id,
+                scope.household_space_id,
+                scope.household_space_id,
+            ),
+        ).fetchone()
+        if policy_row is None:
+            raise RiderClauseLinkInvalid("LINK_EVIDENCE_INVALID")
+        rider_evidence = _evidence(policy_row, "source")
+        if rider_evidence is None:
+            raise RiderClauseLinkInvalid("LINK_EVIDENCE_INVALID")
+
+        edition_row = connection.execute(
+            f"""
+            SELECT {_TERMS_COLUMNS}
+            FROM terms_editions
+            WHERE id = %s AND household_space_id = %s AND deleted_at IS NULL
+            """,
+            (link_row["terms_edition_id"], scope.household_space_id),
+        ).fetchone()
+        if edition_row is None:
+            raise RiderClauseLinkInvalid("TERMS_EDITION_MISMATCH")
+        edition = _terms_edition(edition_row)
+        clauses = ClauseRepository._hierarchy_with_connection(
+            ClauseRepository(self.database_url),
+            connection,
+            scope,
+            edition.id,
+            clause_id=cast(UUID, link_row["clause_id"]),
+        )
+        if len(clauses) != 1:
+            raise RiderClauseLinkInvalid("CLAUSE_DOCUMENT_MISMATCH")
+
+        candidate = connection.execute(
+            """
+            SELECT candidate_kind, aggregate_id, status, issues
+            FROM analysis_candidate_versions
+            WHERE id = %s AND household_space_id = %s
+              AND is_current AND deleted_at IS NULL
+            """,
+            (link_row["candidate_version_id"], scope.household_space_id),
+        ).fetchone()
+        if candidate is None:
+            raise RiderClauseLinkInvalid("CANDIDATE_DOMAIN_MISMATCH")
+
+        link_evidence, link_evidence_valid = self._link_evidence(
+            connection,
+            scope,
+            cast(UUID, link_row["id"]),
+        )
+        link = _rider_clause_link(link_row, link_evidence)
+        evidence_integrity_valid = link_evidence_valid and self._policy_evidence_valid(
+            policy_row, rider_evidence
+        )
+        issues = candidate.get("issues")
+        common_special_conflict = isinstance(issues, list) and any(
+            item == "COMMON_SPECIAL_TERMS_CONFLICT"
+            or (isinstance(item, dict) and item.get("code") == "COMMON_SPECIAL_TERMS_CONFLICT")
+            for item in issues
+        )
+        return RiderClauseLinkValidationContext(
+            link=link,
+            policy_contract_id=cast(UUID, policy_row["policy_contract_id"]),
+            policy_household_space_id=cast(UUID, policy_row["policy_household_space_id"]),
+            contract_date=cast(date | None, policy_row.get("contract_date")),
+            policy_insurer_key=cast(str, policy_row["policy_insurer_key"]),
+            policy_product_key=cast(str, policy_row["policy_product_key"]),
+            policy_document_version_id=cast(UUID, policy_row["policy_document_version_id"]),
+            rider_policy_contract_id=cast(UUID, policy_row["rider_policy_contract_id"]),
+            rider_document_kind=cast(str, policy_row["rider_document_kind"]),
+            rider_source_evidence=rider_evidence,
+            terms_edition=edition,
+            clause=clauses[0],
+            candidate_kind=cast(str, candidate["candidate_kind"]),
+            candidate_aggregate_id=cast(UUID | None, candidate.get("aggregate_id")),
+            candidate_review_state=cast(CandidateReviewState, candidate["status"]),
+            evidence_integrity_valid=evidence_integrity_valid,
+            common_special_terms_conflict=common_special_conflict,
+        )
+
+    @staticmethod
+    def _policy_evidence_valid(row: dict[str, Any], evidence: EvidenceRef) -> bool:
+        width = row.get("source_page_width")
+        height = row.get("source_page_height")
+        return bool(
+            row.get("rider_document_kind") == "policy"
+            and evidence.document_version_id == row.get("policy_document_version_id")
+            and evidence.content_sha256 == row.get("policy_content_sha256")
+            and evidence.review_state in {"AI_VERIFIED", "USER_CONFIRMED"}
+            and row.get("source_extraction_status") == "succeeded"
+            and evidence.physical_page <= int(row.get("policy_page_count") or 0)
+            and (
+                evidence.bbox is None
+                or (
+                    isinstance(width, Decimal)
+                    and isinstance(height, Decimal)
+                    and evidence.bbox[2] <= width
+                    and evidence.bbox[3] <= height
+                )
+            )
+        )
+
+    @staticmethod
+    def _link_evidence(
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        link_id: UUID,
+    ) -> tuple[tuple[EvidenceRef, ...], bool]:
+        rows = connection.execute(
+            """
+            SELECT
+              evidence.id AS evidence_id,
+              evidence.document_version_id AS evidence_document_version_id,
+              evidence.extraction_id AS evidence_extraction_id,
+              evidence.content_sha256 AS evidence_content_sha256,
+              evidence.physical_page AS evidence_physical_page,
+              evidence.x0 AS evidence_x0, evidence.y0 AS evidence_y0,
+              evidence.x1 AS evidence_x1, evidence.y1 AS evidence_y1,
+              evidence.review_state AS evidence_review_state,
+              version.content_sha256 AS document_content_sha256,
+              version.page_count AS document_page_count,
+              extraction.status AS extraction_status,
+              extraction.document_version_id AS extraction_document_version_id,
+              page.width_points, page.height_points
+            FROM rider_clause_link_evidence AS linked
+            JOIN evidence ON evidence.id = linked.evidence_id
+            JOIN document_versions AS version
+              ON version.id = evidence.document_version_id
+            JOIN extractions AS extraction ON extraction.id = evidence.extraction_id
+            JOIN extraction_pages AS page
+              ON page.extraction_id = extraction.id
+             AND page.page_number = evidence.physical_page
+            WHERE linked.rider_clause_link_id = %s
+              AND evidence.household_space_id = %s
+            ORDER BY evidence.physical_page, evidence.id
+            """,
+            (link_id, scope.household_space_id),
+        ).fetchall()
+        evidence: list[EvidenceRef] = []
+        valid = bool(rows)
+        for row in rows:
+            item = _evidence(row)
+            if item is None:
+                valid = False
+                continue
+            width = row.get("width_points")
+            height = row.get("height_points")
+            valid = valid and bool(
+                item.content_sha256 == row.get("document_content_sha256")
+                and item.document_version_id == row.get("extraction_document_version_id")
+                and row.get("extraction_status") == "succeeded"
+                and item.physical_page <= int(row.get("document_page_count") or 0)
+                and item.review_state in {"AI_VERIFIED", "USER_CONFIRMED"}
+                and (
+                    item.bbox is None
+                    or (
+                        isinstance(width, Decimal)
+                        and isinstance(height, Decimal)
+                        and item.bbox[2] <= width
+                        and item.bbox[3] <= height
+                    )
+                )
+            )
+            evidence.append(item)
+        return tuple(evidence), valid
+
+    @staticmethod
+    def _transition(
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        link_id: UUID,
+        *,
+        expected_version: int,
+        review_state: LinkReviewState,
+        reason_code: str,
+    ) -> RiderClauseLink:
+        row = connection.execute(
+            f"""
+            UPDATE rider_clause_links AS link
+            SET review_state = %s,
+                applicability_reason_code = %s,
+                version = version + 1,
+                updated_at = clock_timestamp()
+            WHERE link.id = %s
+              AND link.household_space_id = %s
+              AND link.version = %s
+              AND link.deleted_at IS NULL
+            RETURNING {_LINK_COLUMNS}
+            """,
+            (
+                review_state,
+                reason_code,
+                link_id,
+                scope.household_space_id,
+                expected_version,
+            ),
+        ).fetchone()
+        if row is None:
+            raise ClauseVersionConflict
+        evidence, _ = RiderClauseLinkRepository._link_evidence(connection, scope, link_id)
+        return _rider_clause_link(row, evidence)
+
+
 __all__ = [
     "ClauseRepository",
     "ClauseSearchRepository",
+    "RiderClauseLinkRepository",
     "SEARCH_SQL",
     "TermsEditionRepository",
 ]

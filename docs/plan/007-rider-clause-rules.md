@@ -285,7 +285,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 2: Implement the data-only DSL validator
 
-**Status:** `in_progress`
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/dsl.py`
@@ -296,9 +296,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: JSON Schema rule shape, Evidence index, and the fixed field/operator lists in this plan.
 - Produces: `validate_field_path`, `validate_expression`, `validate_calculation`, `validate_rule_document`, `CompiledExpression`, `CompiledCalculation`, and stable validation reason codes.
 
-- [ ] **Step 1: Write failing decision-table tests.** Cover every allowed expression/calculation operator, unknown operator, unknown field, nested dynamic path, wrong type/unit, missing required field, unsupported cross-reference, conflicting definition, and arbitrary executable string.
+- [x] **Step 1: Write failing decision-table tests.** Cover every allowed expression/calculation operator, unknown operator, unknown field, nested dynamic path, wrong type/unit, missing required field, unsupported cross-reference, conflicting definition, and arbitrary executable string.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_dsl.py -q
@@ -306,7 +306,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because `familycare_api.clauses.dsl` and its compiler/validator symbols do not exist.
 
-- [ ] **Step 3: Implement the minimum recursive allowlist validator.** Reject keys outside the schema, require an operator at each expression node, validate operands against the field registry and unit registry, and return typed compiled data without evaluating a fact.
+- [x] **Step 3: Implement the minimum recursive allowlist validator.** Reject keys outside the schema, require an operator at each expression node, validate operands against the field registry and unit registry, and return typed compiled data without evaluating a fact.
 
   ```python
   def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
@@ -321,7 +321,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
       )
   ```
 
-- [ ] **Step 4: Run DSL tests and static checks.**
+- [x] **Step 4: Run DSL tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_dsl.py -q
@@ -341,6 +341,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 3: Implement scoped Rider-Clause link validation
 
+**Status:** `completed`
+
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/links.py`
 - Modify: `apps/api/src/familycare_api/clauses/repository.py`
@@ -352,9 +354,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: policy/Rider repository, TermsEdition/Clause repository, Evidence validation, candidate review status, and `HouseholdScope`.
 - Produces: `RiderClauseLink`, `list_rider_clause_links`, `confirm_rider_clause_link`, `reject_rider_clause_link`, and deterministic applicability/error codes.
 
-- [ ] **Step 1: Write failing link tests.** Cover verified policy Rider success, Terms-only Rider rejection, wrong contract-date TermsEdition, Clause from another DocumentVersion, missing/stale Evidence, conflicting common/special terms, cross-household denial, soft delete, and stale link version.
+- [x] **Step 1: Write failing link tests.** Cover verified policy Rider success, Terms-only Rider rejection, wrong contract-date TermsEdition, Clause from another DocumentVersion, missing/stale Evidence, conflicting common/special terms, cross-household denial, soft delete, and stale link version.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules.py -q
@@ -362,9 +364,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because link domain/service functions are not implemented.
 
-- [ ] **Step 3: Implement validation before state transition.** Load all parents under the server scope, verify policy Evidence and TermsEdition applicability, validate every Evidence reference, and transition only after all invariants pass. Preserve a failed candidate as `NEEDS_REVIEW` with a reason code rather than selecting a different row.
+- [x] **Step 3: Implement validation before state transition.** Load all parents under the server scope, verify policy Evidence and TermsEdition applicability, validate every Evidence reference, and transition only after all invariants pass. Preserve a failed candidate as `NEEDS_REVIEW` with a reason code rather than selecting a different row.
 
-- [ ] **Step 4: Run link tests and direct SQL static checks.**
+- [x] **Step 4: Run link tests and direct SQL static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules.py -q
@@ -383,6 +385,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 4: Implement CoverageRule versions and executable publication
+
+**Status:** `in_progress`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/rules.py`

@@ -13,6 +13,7 @@ from familycare_api.clauses.errors import (
     ClauseRepositoryUnavailable,
     TermsEditionNotFound,
 )
+from familycare_api.clauses.links import RiderClauseLinkService
 from familycare_api.clauses.normalization import (
     NORMALIZATION_VERSION,
     normalize_clause_text,
@@ -175,4 +176,4 @@ class ClauseCatalogService:
         return clauses
 
 
-__all__ = ["ClauseCatalogService"]
+__all__ = ["ClauseCatalogService", "RiderClauseLinkService"]
