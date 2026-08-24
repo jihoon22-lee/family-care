@@ -135,6 +135,7 @@ def test_primary_and_foreign_keys_are_uuid_with_exact_lineage() -> None:
     assert foreign_keys(operations.tables["policy_contracts"]) == {
         "household_space_id": "household_spaces.id",
         "source_document_version_id": "document_versions.id",
+        "source_evidence_id": "evidence.id",
         "status_evidence_id": "evidence.id",
     }
     assert foreign_keys(operations.tables["policy_parties"]) == {

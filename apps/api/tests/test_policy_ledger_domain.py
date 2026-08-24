@@ -186,6 +186,7 @@ def test_evidence_repository_requires_same_scope_document_extraction_and_policy(
         ("extraction_document_version_id", uuid4()),
         ("document_kind", "terms"),
         ("physical_page", 0),
+        ("review_state", "NEEDS_REVIEW"),
     ],
 )
 def test_evidence_repository_rejects_stale_or_non_policy_lineage(

@@ -183,6 +183,7 @@ def upgrade() -> None:
             sa.ForeignKey("document_versions.id", ondelete="RESTRICT"),
             nullable=False,
         ),
+        _evidence_foreign_key("source_evidence_id"),
         sa.Column("insurer_display", sa.String(length=160), nullable=False),
         sa.Column("insurer_key", sa.String(length=160), nullable=False),
         sa.Column("product_display", sa.String(length=200), nullable=False),

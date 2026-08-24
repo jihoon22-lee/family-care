@@ -8,9 +8,15 @@ from uuid import UUID
 
 from fastapi import Request
 
+from familycare_api.errors import ApiBoundaryError
 
-class HouseholdScopeUnavailable(RuntimeError):
+
+class HouseholdScopeUnavailable(ApiBoundaryError):
     """Raised when no authenticated server context can provide a household."""
+
+    status_code = 401
+    error_code = "AUTHENTICATION_REQUIRED"
+    public_message = "authentication required"
 
 
 @dataclass(frozen=True)

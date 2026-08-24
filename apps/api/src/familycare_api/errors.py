@@ -14,7 +14,7 @@ class ApiBoundaryError(RuntimeError):
     """Base exception with a fixed public error code and no request data."""
 
     status_code: int
-    error_code: ErrorCode
+    error_code: str
     public_message: str
 
     def __init__(self) -> None:
@@ -38,7 +38,7 @@ class ErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: ErrorCode
+    error_code: str
     message: str
     fields: list[str] | None = None
 

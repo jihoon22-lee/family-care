@@ -8,6 +8,8 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
+from familycare_api.common.evidence import EvidenceRef
+
 PolicyStatus = Literal["active", "inactive", "expired", "cancelled", "unknown"]
 BenefitType = Literal["fixed", "indemnity"]
 PartyRole = Literal[
@@ -33,11 +35,12 @@ class FamilyMember:
 @dataclass(frozen=True)
 class PolicyParty:
     id: UUID
+    policy_contract_id: UUID
     family_member_id: UUID
     role: PartyRole
     effective_from: date | None
     effective_to: date | None
-    evidence_id: UUID
+    evidence: EvidenceRef
     version: int
 
 
@@ -54,8 +57,8 @@ class Rider:
     coverage_end_date: date | None
     renewable: bool | None
     status: PolicyStatus
-    source_evidence_id: UUID
-    status_evidence_id: UUID | None
+    source_evidence: EvidenceRef
+    status_evidence: EvidenceRef | None
     version: int
 
 
@@ -64,6 +67,7 @@ class PolicyContract:
     id: UUID
     household_space_id: UUID
     source_document_version_id: UUID
+    source_evidence: EvidenceRef
     insurer_display: str
     insurer_key: str
     product_display: str
@@ -72,15 +76,26 @@ class PolicyContract:
     coverage_start_date: date | None
     coverage_end_date: date | None
     status: PolicyStatus
-    status_evidence_id: UUID | None
+    status_evidence: EvidenceRef | None
+    parties: tuple[PolicyParty, ...]
     version: int
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
 
 
+@dataclass(frozen=True)
+class CreatePolicyParty:
+    family_member_id: UUID
+    role: PartyRole
+    effective_from: date | None
+    effective_to: date | None
+    evidence: EvidenceRef
+
+
 __all__ = [
     "BenefitType",
+    "CreatePolicyParty",
     "FamilyMember",
     "PartyRole",
     "PolicyContract",

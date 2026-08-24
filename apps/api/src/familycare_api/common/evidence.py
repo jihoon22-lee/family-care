@@ -116,6 +116,7 @@ class EvidenceRepository:
                       AND document.document_kind = 'policy'
                       AND document.deleted_at IS NULL
                       AND extraction.status = 'succeeded'
+                      AND evidence.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
                     """,
                     (evidence_id, scope.household_space_id, document_version_id),
                 ).fetchone()
@@ -132,6 +133,7 @@ class EvidenceRepository:
             or row.get("extraction_document_version_id") != expected_document_version_id
             or row.get("document_kind") != "policy"
             or row.get("evidence_hash") != row.get("document_hash")
+            or row.get("review_state") not in {"AI_VERIFIED", "USER_CONFIRMED"}
         ):
             raise EvidenceInvalid
         coordinates = (row.get("x0"), row.get("y0"), row.get("x1"), row.get("y1"))
