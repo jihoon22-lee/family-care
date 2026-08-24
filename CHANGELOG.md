@@ -40,6 +40,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 PDF intake and parser-child isolation were merged in PR #9 at `523bd68be3d951e37a9f4ba19b858d9ac9bdcfcc`; all seven PR and post-merge `main` checks passed.
 - Phase 1 synthetic PDF extraction was merged in PR #10 at `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, along with the local post-merge extraction checks.
 - Phase 1 AnalysisJob queue and Worker runner were merged in PR #11 at `cc651436cab884109dc6fdc7f793c8b32e9c86d4`; PR and post-merge `main` CI each passed 7/7, with 23 local queue tests and 59 local extraction tests passing after merge.
+- Phase 1 local synthetic document-analysis API was merged in PR #12 at `1c77f019c9d2b150053e431c31171b97ff3d90c3`; PR and post-merge `main` CI each passed 7/7.
+- Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
 
 ### Deprecated
 

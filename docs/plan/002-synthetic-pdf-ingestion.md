@@ -709,9 +709,11 @@ git add apps/api/src/familycare_api apps/api/tests/test_document_analysis_api.py
 git commit -m "feat(api): expose document analysis jobs"
 ~~~
 
-- [ ] **Step 9: Complete the PR checkpoint**
+- [x] **Step 9: Complete the PR checkpoint**
 
 The root agent reviews the full feat/document-analysis-api diff once, checking the two-variable route gate and disabled 404 behavior, strict request parsing, custom `INVALID_REQUEST` handling, async state/error semantics, generated OpenAPI opt-in, no-password transport, local-only copy, unchanged Foundation health routes, the PostgreSQL/temp-root POST → Worker → GET E2E test, and absence of Policy Ledger or decision logic. Then push, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, run the complete synthetic API-to-Worker path on post-merge main, and record the merge commit.
+
+Completed in PR #12 at merge commit `1c77f019c9d2b150053e431c31171b97ff3d90c3`; PR run `32703651544` and post-merge `main` run `32703792722` each passed all seven required jobs. The verified post-merge main worktree passed the complete synthetic API-to-Worker path and the full Phase 1 verification recorded below.
 
 ---
 
@@ -741,22 +743,36 @@ git diff --check
 
 For PostgreSQL integration, apply migration 0002 against a fresh PostgreSQL 18 database, run the queue and end-to-end synthetic tests, downgrade only when the migration test requires it, and rerun upgrade head. Build Web, API, and Worker images one at a time. Do not tag or push an image during this plan.
 
+### Final verification record
+
+Verified on `main` merge commit `1c77f019c9d2b150053e431c31171b97ff3d90c3` after PR #12 and post-merge CI completed:
+
+- Documentation contract passed for 21 files, and repository safety passed for 134 paths.
+- Web formatting, lint, TypeScript compilation, one Vitest regression test, production build, and PWA service-worker generation passed serially.
+- Ruff format/lint and mypy passed for the API, Worker, and scripts.
+- The complete non-integration Python suite passed 178 tests with 27 integration tests deselected.
+- The PostgreSQL integration suite passed all 27 tests; the focused queue/runner files passed 22 tests, and the focused API-to-Worker E2E file passed all three tests.
+- The focused PDF intake/isolation/extraction/password boundary passed 59 tests, and the focused API contract file passed 19 tests.
+- OpenAPI/JSON contracts, container definitions, workflow policy, and `git diff --check` passed.
+- Web, API, and Worker images built one at a time from verified main as local `phase-one-final` images. No image was tagged for release or pushed.
+- The PostgreSQL 18 integration database and all PDF fixtures were repository-owned synthetic test resources; fixtures lived below checkout-external temporary roots. No unrelated process or container was stopped.
+
 ## Acceptance checklist
 
-- [ ] All five approved branches have one conventional commit purpose, one root-agent whole-diff review before push, one PR, seven successful GitHub CI jobs, a merge commit, and a post-merge main verification record.
-- [ ] THIRD_PARTY_NOTICES.md exists only after pdfplumber, pypdf, and reportlab are present in uv.lock and records their exact versions and distribution boundary.
-- [ ] No implementation or CI command opens a real PDF or private external root. Synthetic fixtures are generated or copied into checkout-external temporary roots.
-- [ ] Relative source_key, root containment, regular-file, symlink, PDF magic, 25 MiB size, 500-page, 1 MiB hash, and 0700/0600 rules have regression tests.
-- [ ] Dedicated child process applies 120-second parent wall, 90-second child CPU, 1536 MiB address-space, 64 MiB `RLIMIT_FSIZE` plus supervisor result cap, and 64 descriptor limits; child receives only the inherited or duplicated read-only source descriptor and canonical JSON settings.
-- [ ] pdfplumber is the primary extractor, pypdf validates structure/page/encryption, and reportlab creates deterministic fixtures. PyMuPDF remains explicitly rejected in ADR 0006.
-- [ ] Coordinates, TextBlock words, table/cell bboxes, per-page cache closure, quality-v1 classification, and OCR exclusion have regression tests.
-- [ ] PASSWORD_REQUIRED is returned for encrypted asynchronous input; direct one-shot PASSWORD_INVALID is tested; no password appears in DB, job payload, or logs.
-- [ ] Eight minimum physical tables and their parent-scoped uniqueness constraints exist; DocumentVersion represents content identity, and one succeeded extraction is enforced per document-version content plus extractor config hash.
-- [ ] AnalysisJob uses exactly six states with lease, heartbeat, attempts, recovery, retry classification, and cancellation tests.
-- [ ] The API is explicitly local synthetic-only and unauthenticated; Authentication provider remains Phase 7 and no endpoint is described as production-safe.
-- [ ] Synthetic routes are registered only when `FAMILYCARE_ENV=development` and `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`; the default-disabled runtime returns 404, while contract generation explicitly opts in without changing health routes.
-- [ ] API validation returns stable `INVALID_REQUEST` for 422 responses, unknown jobs return `ANALYSIS_JOB_NOT_FOUND`, and the PostgreSQL/temp-root E2E test covers POST → Worker → GET `succeeded` plus encrypted → `PASSWORD_REQUIRED`.
-- [ ] Policy Ledger, OCR execution, external URLs, external AI, Drive, real-data acceptance, Cloud Run, and production deployment remain outside this plan.
+- [x] All five approved branches have one conventional commit purpose, one root-agent whole-diff review before push, one PR, seven successful GitHub CI jobs, a merge commit, and a post-merge main verification record.
+- [x] THIRD_PARTY_NOTICES.md exists only after pdfplumber, pypdf, and reportlab are present in uv.lock and records their exact versions and distribution boundary.
+- [x] No implementation or CI command opens a real PDF or private external root. Synthetic fixtures are generated or copied into checkout-external temporary roots.
+- [x] Relative source_key, root containment, regular-file, symlink, PDF magic, 25 MiB size, 500-page, 1 MiB hash, and 0700/0600 rules have regression tests.
+- [x] Dedicated child process applies 120-second parent wall, 90-second child CPU, 1536 MiB address-space, 64 MiB `RLIMIT_FSIZE` plus supervisor result cap, and 64 descriptor limits; child receives only the inherited or duplicated read-only source descriptor and canonical JSON settings.
+- [x] pdfplumber is the primary extractor, pypdf validates structure/page/encryption, and reportlab creates deterministic fixtures. PyMuPDF remains explicitly rejected in ADR 0006.
+- [x] Coordinates, TextBlock words, table/cell bboxes, per-page cache closure, quality-v1 classification, and OCR exclusion have regression tests.
+- [x] PASSWORD_REQUIRED is returned for encrypted asynchronous input; direct one-shot PASSWORD_INVALID is tested; no password appears in DB, job payload, or logs.
+- [x] Eight minimum physical tables and their parent-scoped uniqueness constraints exist; DocumentVersion represents content identity, and one succeeded extraction is enforced per document-version content plus extractor config hash.
+- [x] AnalysisJob uses exactly six states with lease, heartbeat, attempts, recovery, retry classification, and cancellation tests.
+- [x] The API is explicitly local synthetic-only and unauthenticated; Authentication provider remains Phase 7 and no endpoint is described as production-safe.
+- [x] Synthetic routes are registered only when `FAMILYCARE_ENV=development` and `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`; the default-disabled runtime returns 404, while contract generation explicitly opts in without changing health routes.
+- [x] API validation returns stable `INVALID_REQUEST` for 422 responses, unknown jobs return `ANALYSIS_JOB_NOT_FOUND`, and the PostgreSQL/temp-root E2E test covers POST → Worker → GET `succeeded` plus encrypted → `PASSWORD_REQUIRED`.
+- [x] Policy Ledger, OCR execution, external URLs, external AI, Drive, real-data acceptance, Cloud Run, and production deployment remain outside this plan.
 
 ## Explicitly unverified boundaries
 
