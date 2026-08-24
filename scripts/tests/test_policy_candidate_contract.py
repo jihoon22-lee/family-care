@@ -12,6 +12,7 @@ CONTRACT_ROOT = ROOT / "packages/contracts"
 SCHEMA_PATH = CONTRACT_ROOT / "schemas/policy-candidate.v1.schema.json"
 EXAMPLE_PATH = CONTRACT_ROOT / "examples/policy-candidate.v1.json"
 GENERATED_PATH = ROOT / "apps/web/src/api/generated.ts"
+GENERATED_BUSINESS_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -88,3 +89,12 @@ def test_candidate_checker_and_web_generator_report_clean_artifacts() -> None:
 
     assert validate_policy_candidate_contract() == []
     assert GENERATED_PATH.read_text(encoding="utf-8") == render_module()
+
+
+def test_api_business_types_include_the_candidate_contract() -> None:
+    text = GENERATED_BUSINESS_PATH.read_text(encoding="utf-8")
+
+    assert "CandidateStatus = Literal[" in text
+    assert "PolicyCandidateFieldId = Literal[" in text
+    assert "class PolicyReviewItem(TypedDict):" in text
+    assert "class CandidateCorrectionRequest(TypedDict):" in text
