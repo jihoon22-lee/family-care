@@ -85,6 +85,7 @@ SQLite로 PostgreSQL 행 잠금·전문검색 동작을 대체 검증하지 않�
 - Dockerfile build context
 - `.env`와 Git metadata 미포함
 - Web static cache header
+- Web runtime image pin `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`과 `scripts/check_containers.py` exact expectation
 
 ### Browser and PWA tests
 
@@ -110,6 +111,8 @@ Phase 1 security tests additionally verify 25 MiB input, 500 pages, 120초 paren
 
 정적 검사만 수행한 경우 동적 공격 재현을 수행했다고 보고하지 않습니다.
 
+WSL의 측정된 메모리 압력에서는 Vitest worker 시작 timeout을 피하기 위해 Web `test` script가 `vitest run --maxWorkers=1`을 사용합니다. 이는 테스트 범위를 줄이지 않고 worker 동시성만 직렬화하며, Web 검증은 Python·컨테이너 검증과 함께 직렬로 실행합니다.
+
 ## Foundation command matrix
 
 | Area | Command | External secret |
@@ -124,7 +127,7 @@ Phase 1 security tests additionally verify 25 MiB input, 500 pages, 120초 paren
 | Contracts | `uv run python scripts/check_contracts.py` | 없음 |
 | Migrations | `uv run alembic ... upgrade head` | 합성 로컬 DB |
 | Containers | 개별 `docker compose ... build` | 없음 |
-| Workflows | `uv run python scripts/check_workflows.py` | 없음 |
+| Workflows | `uv run python scripts/check_workflows.py` (Dependabot ignore policy 포함) | 없음 |
 
 Phase 1 feature branches also run:
 

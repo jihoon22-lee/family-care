@@ -17,7 +17,7 @@ COPY apps/web/public apps/web/public
 COPY apps/web/src apps/web/src
 RUN pnpm web:build
 
-FROM nginxinc/nginx-unprivileged:1.29.8-alpine3.23 AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.2-alpine3.23 AS runtime
 
 COPY --chown=101:101 infra/containers/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder --chown=101:101 /workspace/apps/web/dist /usr/share/nginx/html

@@ -9,7 +9,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CI_PATH = ROOT / ".github/workflows/ci.yml"
 RELEASE_PATH = ROOT / ".github/workflows/release.yml"
+DEPENDABOT_PATH = ROOT / ".github/dependabot.yml"
 REQUIRED_CI_JOBS = {"containers", "integration", "python", "repository-safety", "web"}
+REQUIRED_DEPENDABOT_IGNORES = {
+    ("npm", "/", "typescript"): frozenset({"version-update:semver-major"}),
+    ("docker", "/infra/containers", "node"): frozenset({"version-update:semver-major"}),
+    ("docker", "/infra/compose", "postgres"): frozenset({"version-update:semver-major"}),
+    ("docker", "/infra/containers", "python"): frozenset(
+        {"version-update:semver-minor", "version-update:semver-major"}
+    ),
+}
 EXPECTED_ACTIONS = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
     "actions/setup-node": ("820762786026740c76f36085b0efc47a31fe5020", "v7.0.0"),
@@ -85,6 +94,55 @@ def validate_ci(content: str) -> list[str]:
     return errors
 
 
+def _dependabot_ignored_update_types(
+    content: str,
+) -> dict[tuple[str, str, str], frozenset[str]]:
+    """Extract dependency ignore policies from the small Dependabot YAML shape we use."""
+
+    policies: dict[tuple[str, str, str], frozenset[str]] = {}
+    package_pattern = re.compile(
+        r"(?ms)^  - package-ecosystem:\s*(?P<ecosystem>[^\s#]+)\s*$\n"
+        r"(?P<body>.*?)(?=^  - package-ecosystem:|\Z)"
+    )
+    ignore_pattern = re.compile(
+        r"(?ms)^      - dependency-name:\s*(?P<name>\"[^\"]+\"|'[^']+'|[^\s#]+)\s*$\n"
+        r"(?P<body>.*?)(?=^      - dependency-name:|\Z)"
+    )
+    update_type_pattern = re.compile(r"(?m)^\s+-\s*(?P<update_type>\"[^\"]+\"|'[^']+'|[^\s#]+)\s*$")
+
+    for package_match in package_pattern.finditer(content):
+        ecosystem = package_match.group("ecosystem")
+        package_body = package_match.group("body")
+        directory_match = re.search(r"(?m)^    directory:\s*([^\s#]+)\s*$", package_body)
+        directory = directory_match.group(1).strip("\"'") if directory_match else ""
+        for ignore_match in ignore_pattern.finditer(package_body):
+            name = ignore_match.group("name").strip("\"'")
+            types = frozenset(
+                match.group("update_type").strip("\"'")
+                for match in update_type_pattern.finditer(ignore_match.group("body"))
+            )
+            policies[(ecosystem, directory, name)] = types
+    return policies
+
+
+def validate_dependabot(content: str) -> list[str]:
+    """Require the documented semver ceilings for risky dependency majors/minors."""
+
+    relative = DEPENDABOT_PATH.relative_to(ROOT)
+    policies = _dependabot_ignored_update_types(content)
+    errors: list[str] = []
+    for (ecosystem, directory, dependency), expected in REQUIRED_DEPENDABOT_IGNORES.items():
+        actual = policies.get((ecosystem, directory, dependency))
+        if actual != expected:
+            expected_text = ", ".join(sorted(expected))
+            actual_text = ", ".join(sorted(actual or ())) or "none"
+            errors.append(
+                f"{relative}: {ecosystem} dependency {dependency!r} in {directory} must ignore "
+                f"{expected_text}; found {actual_text}"
+            )
+    return errors
+
+
 def validate_release(content: str) -> list[str]:
     """Validate the semantic-tag-only GHCR publishing boundary."""
 
@@ -132,13 +190,14 @@ def validate_release(content: str) -> list[str]:
 def main() -> int:
     """Run workflow policy validation."""
 
-    missing = [path for path in (CI_PATH, RELEASE_PATH) if not path.is_file()]
+    missing = [path for path in (CI_PATH, RELEASE_PATH, DEPENDABOT_PATH) if not path.is_file()]
     if missing:
         print("\n".join(f"missing workflow: {path.relative_to(ROOT)}" for path in missing))
         return 1
     errors = [
         *validate_ci(CI_PATH.read_text(encoding="utf-8")),
         *validate_release(RELEASE_PATH.read_text(encoding="utf-8")),
+        *validate_dependabot(DEPENDABOT_PATH.read_text(encoding="utf-8")),
     ]
     if errors:
         print("\n".join(errors))

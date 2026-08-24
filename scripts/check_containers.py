@@ -12,7 +12,7 @@ COMPOSE_PATH = ROOT / "infra/compose/compose.yaml"
 ENV_PATH = ROOT / ".env.example"
 EXPECTED_SERVICES = {"api", "db", "web", "worker"}
 DOCKERFILES = {
-    "web": (ROOT / "infra/containers/web.Dockerfile", "node:24.19.0-alpine", "1.29.8-alpine3.23"),
+    "web": (ROOT / "infra/containers/web.Dockerfile", "node:24.19.0-alpine", "1.31.2-alpine3.23"),
     "api": (ROOT / "infra/containers/api.Dockerfile", "python:3.14.7-slim", "uv:0.12.5"),
     "worker": (
         ROOT / "infra/containers/worker.Dockerfile",
