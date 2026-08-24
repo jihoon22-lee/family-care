@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1과 구현된 Phase 2 core ledger 개발환경의 사용법을 설명합니다. Phase 2 candidate review와 Phase 3~8의 v0.1 기능은 아직 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현 완료 전에는 아래 synthetic endpoint에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1, 구현·merge된 Phase 2 core ledger와 candidate review, 그리고 Phase 4 Clause search 개발환경의 경계를 설명합니다. Clause search는 합성 corpus와 인증 연결 전 fail-closed scope 경계까지만 검증되었으며 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -69,9 +69,25 @@ Policy route는 항상 등록되지만 클라이언트가 `household_space_id`�
 
 계약 원장 발행에 사용하는 Evidence는 같은 household의 성공 extraction과 실제 policy 문서 버전, 1-based physical page, page 범위 안의 선택 좌표, 일치하는 content SHA-256을 가져야 합니다. `AI_VERIFIED` 또는 `USER_CONFIRMED`만 현재 원장에 발행할 수 있고 `NEEDS_REVIEW`와 terms-only Evidence는 거부됩니다.
 
+### Phase 4 Clause search boundary
+
+Phase 2 candidate review는 main PR #16에 merge되었습니다. Phase 4 Clause search는 `TermsEdition`과 parent-child `Clause` hierarchy, PostgreSQL `simple` full-text search와 `pg_trgm` title relevance, household/date/edition/insurer/product scope, bounded Evidence-backed results를 제공합니다. 검색은 가입 Rider나 지급 가능액을 확정하지 않는 조사 도구이며, Evidence는 항상 1-based PDF physical page를 가리킵니다.
+
+검색 API는 다음과 같습니다.
+
+- `GET /api/v1/terms-editions`
+- `GET /api/v1/terms-editions/{id}/clauses`
+- `POST /api/v1/clauses/search`
+
+검색어는 no-store JSON POST body로만 전송하고 URL, browser history, 일반 log 또는 Web Storage에 저장하지 않습니다. 모든 route는 server-derived `HouseholdScope`를 사용하며 클라이언트가 household를 선택할 수 없습니다. 기본 scope resolver는 인증 연결 전까지 `401 AUTHENTICATION_REQUIRED`로 fail-closed하므로 합성 테스트에서 resolver를 주입한 경우 외에는 현재 실제 인증된 route로 사용할 수 없습니다. 인증을 우회하는 local household 환경변수나 header는 제공하지 않습니다.
+
+v0.1에는 별도 live search-index rebuild endpoint가 없습니다. 초기 normalization version은 DB constraint로 고정합니다. 향후 version bump가 필요하면 PostgreSQL transaction migration이 old committed state를 transaction commit 전까지 유지하고, commit 시 새 version으로 원자적으로 전환합니다. 앱/DB mismatch나 stale hit는 `SEARCH_INDEX_VERSION_MISMATCH`로 명시적으로 실패하며 silent fallback하지 않습니다.
+
+이 Phase 4 변경은 실제 보험 자료, 외부 AI, Google Drive, 운영 배포를 사용하거나 검증하지 않았습니다. 현재 검증은 처음부터 만든 합성 한국어·영어 corpus와 합성 Evidence만 사용합니다.
+
 ### Planned v0.1 local runtime
 
-v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 실제 실행 명령과 migration은 해당 feature PR이 merge된 뒤 이 guide에 추가합니다.
+v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 이 문서는 인증 연결과 운영 migration 적용을 완료로 표시하지 않으며, 실제 운영 사용 절차는 별도 승인과 acceptance 뒤에 추가합니다.
 
 - existing WSL `OPENAI_API_KEY`는 Worker container에만 주입합니다.
 - Gemini와 Google Drive API는 사용하지 않습니다.

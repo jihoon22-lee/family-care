@@ -13,9 +13,11 @@
 ## Global Constraints
 
 - Migration `0005_clause_search.py` revises `0004_policy_candidate_review`; `0004` is the preceding approved candidate-review migration and remains unchanged by this plan.
+- Phase 2 candidate review is already merged into `main` in PR #16; this plan records the downstream Phase 4 Clause search slice.
 - The migration preserves every Phase 1 document, DocumentVersion, Extraction, Evidence-coordinate, AnalysisJob state, JSON Schema, and generated document type contract.
 - PostgreSQL is the only search engine in v0.1. Use built-in `simple` text search and `pg_trgm`; do not add Redis, Elasticsearch, a vector database, embeddings, or a second search service.
 - Search normalizes Unicode NFC, whitespace, and punctuation deterministically. The normalization version is persisted with indexed content and query results.
+- v0.1 has no separate live search-index rebuild endpoint. The initial normalization version is fixed by a database constraint; a future version bump is a PostgreSQL transaction migration that keeps the old committed state until commit and switches versions atomically at commit. App/DB mismatch or stale hits fail explicitly with `SEARCH_INDEX_VERSION_MISMATCH`; there is no silent fallback.
 - 목차 표시 page와 PDF physical page를 구분하고 Evidence에는 항상 1-based physical page를 저장합니다.
 - Search is an investigation tool. A search hit never creates a Rider, CoverageRule, `MATCH`, `NO_MATCH`, or payment amount.
 - Every Clause Evidence points to the exact `DocumentVersion`, content hash, physical page, and optional bbox. Missing or stale Evidence is surfaced, never silently substituted.
@@ -331,7 +333,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because repository/search modules and PostgreSQL Clause rows are not implemented.
 
-- [x] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and preserve existing index version when a rebuild is in progress.
+- [x] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and enforce the fixed normalization version. v0.1 has no runtime rebuild endpoint; future version bumps follow the transaction-migration boundary in Global Constraints.
 
   ```python
   def search(
@@ -490,13 +492,13 @@ POST /api/v1/clauses/search
 **Files:**
 - Create: `apps/api/tests/test_clause_privacy.py`
 - Modify: `apps/api/tests/test_clause_search.py` for stale normalization/index cases
-- Modify: `apps/api/tests/test_clause_search_integration.py` for atomic rebuild and partial Clause parse cases
+- Modify: `apps/api/tests/test_clause_search_integration.py` for the atomic transaction-version boundary and partial Clause parse cases
 - Test: `apps/api/tests/test_clause_privacy.py`
 - Test: `apps/api/tests/test_clause_search_integration.py`
 
 **Interfaces:**
 - Consumes: complete migration, normalization, repository/search service, HTTP contract, and Evidence repository.
-- Produces: synthetic proof that searchable Clauses survive an individual parse failure, old index versions remain available until atomic swap, wrong scope/date editions are excluded, and logs/responses contain no query or full text.
+- Produces: synthetic proof that searchable Clauses survive an individual parse failure, stale versions fail explicitly, wrong scope/date editions are excluded, and logs/responses contain no query or full text. A future normalization-version migration owns its own atomic-visibility acceptance test when that migration is implemented.
 
 - [x] **Step 1: Write failing stale/partial/privacy tests.** Assert one malformed synthetic Clause does not remove other rows, normalization-version mismatch is explicit rather than silent fallback, and captured logs omit raw query/result text/path.
 
@@ -506,9 +508,9 @@ POST /api/v1/clauses/search
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_privacy.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py -q
   ```
 
-  Expected: FAIL until stale-version checks, partial rebuild behavior, and redaction are implemented.
+  Expected: FAIL until stale-version checks, transaction-version boundary behavior, and redaction are implemented.
 
-- [x] **Step 3: Implement the minimum stale/index and redaction behavior.** Keep the previous normalized/search version readable until the new rows and indexes are complete; return a stable `SEARCH_INDEX_VERSION_MISMATCH` warning/error without exposing SQL or document text.
+- [x] **Step 3: Implement the minimum stale/index and redaction behavior.** v0.1 has no live search-index rebuild endpoint. The initial normalization version is DB-constrained; future version bumps use a PostgreSQL transaction migration that keeps old committed state readable until commit and switches atomically. Return a stable `SEARCH_INDEX_VERSION_MISMATCH` error for app/DB mismatch or stale hits without exposing SQL or document text.
 
 - [x] **Step 4: Run the complete focused feature suite.**
 
@@ -523,12 +525,25 @@ POST /api/v1/clauses/search
 
   Expected: all focused tests and static checks pass with a wholly synthetic corpus and no external service.
 
-- [ ] **Step 5: Commit the verified search acceptance.**
+- [x] **Step 5: Commit the verified search acceptance.**
 
   ```bash
   git add apps/api/tests/test_clause_privacy.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py
   git commit -m "test(clauses): verify scoped search boundaries"
   ```
+
+## Focused validation record
+
+The current Phase 4 PR was validated with wholly synthetic inputs only:
+
+- Web Vitest: 7 passed.
+- Playwright: 1 passed at 320 CSS px.
+- `corepack pnpm@11.22.0 web:check`: 28 passed.
+- API focused tests: 50 passed.
+- PostgreSQL integration: 5 passed.
+- Contracts, Ruff format/check, and mypy: passed.
+
+The Post-Merge Verification checkboxes below remain intentionally incomplete. No post-merge, production, or real/private-data validation is recorded here.
 
 ## Focused Post-Merge Verification
 
