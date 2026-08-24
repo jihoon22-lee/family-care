@@ -213,9 +213,9 @@ POST /api/v1/clauses/search
 - Consumes: `0004_policy_candidate_review`, `household_spaces`, `evidence`, `document_versions`, and the existing Alembic migration-spy conventions.
 - Produces: `revision = "0005_clause_search"`, `down_revision = "0004_policy_candidate_review"`, four terms/search tables, pg_trgm indexes, named checks, and reverse dependency downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert the revision chain, exact table/column names, Clause parent FK, Evidence join FK, 1-based page checks, normalization version, tsvector column, GIN/trigram indexes, and preservation of all Phase 1 table names.
+- [x] **Step 1: Write failing migration tests.** Assert the revision chain, exact table/column names, Clause parent FK, Evidence join FK, 1-based page checks, normalization version, tsvector column, GIN/trigram indexes, and preservation of all Phase 1 table names.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py -q
@@ -223,7 +223,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because `0005_clause_search.py` is absent and no terms/search tables exist.
 
-- [ ] **Step 3: Implement the minimum additive migration.** Use `op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")`, `sa.dialects.postgresql.TSVECTOR`, named indexes, and no destructive extension drop in downgrade.
+- [x] **Step 3: Implement the minimum additive migration.** Use `op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")`, `sa.dialects.postgresql.TSVECTOR`, named indexes, and no destructive extension drop in downgrade.
 
   ```python
   revision = "0005_clause_search"
@@ -238,7 +238,7 @@ POST /api/v1/clauses/search
   )
   ```
 
-- [ ] **Step 4: Run migration-shape and PostgreSQL migration checks.**
+- [x] **Step 4: Run migration-shape and PostgreSQL migration checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py -q
@@ -247,7 +247,7 @@ POST /api/v1/clauses/search
 
   Expected: migration-shape tests pass and a synthetic PostgreSQL reaches `0005_clause_search` with `pg_trgm` available.
 
-- [ ] **Step 5: Commit the migration.**
+- [x] **Step 5: Commit the migration.**
 
   ```bash
   git add apps/api/migrations/versions/0005_clause_search.py apps/api/tests/test_clause_search_migration.py
