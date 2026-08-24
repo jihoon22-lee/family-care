@@ -17,7 +17,18 @@ ClauseBoundaryErrorCode = Literal[
     "CLAUSE_NOT_FOUND",
     "SEARCH_INDEX_VERSION_MISMATCH",
 ]
-ApiErrorCode = ErrorCode | PolicyErrorCode | CandidateErrorCode | ClauseBoundaryErrorCode
+DecisionBoundaryErrorCode = Literal[
+    "MEDICAL_EVENT_NOT_FOUND",
+    "DECISION_RESULT_NOT_FOUND",
+    "DECISION_INVALID",
+]
+ApiErrorCode = (
+    ErrorCode
+    | PolicyErrorCode
+    | CandidateErrorCode
+    | ClauseBoundaryErrorCode
+    | DecisionBoundaryErrorCode
+)
 
 
 class ApiBoundaryError(RuntimeError):

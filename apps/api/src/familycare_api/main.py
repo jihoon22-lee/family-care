@@ -5,6 +5,7 @@ import os
 from fastapi import FastAPI, Response, status
 
 from familycare_api.clauses.router import router as clause_search_router
+from familycare_api.decisions.router import router as coverage_decision_router
 from familycare_api.documents.router import router as document_analysis_router
 from familycare_api.errors import install_error_handlers
 from familycare_api.health import (
@@ -64,6 +65,7 @@ def create_app(
     app.include_router(policy_ledger_router)
     app.include_router(policy_candidate_router)
     app.include_router(clause_search_router)
+    app.include_router(coverage_decision_router)
 
     return app
 

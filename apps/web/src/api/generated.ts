@@ -11,6 +11,12 @@ export const API_PATHS = [
   "/api/v1/family-members/trash",
   "/api/v1/family-members/{member_id}",
   "/api/v1/family-members/{member_id}/restore",
+  "/api/v1/medical-events",
+  "/api/v1/medical-events/trash",
+  "/api/v1/medical-events/{event_id}",
+  "/api/v1/medical-events/{event_id}/analyze",
+  "/api/v1/medical-events/{event_id}/restore",
+  "/api/v1/medical-events/{event_id}/results/{version}",
   "/api/v1/policies",
   "/api/v1/policies/trash",
   "/api/v1/policies/{policy_id}",
@@ -98,6 +104,49 @@ export const API_OPERATIONS = [
     path: "/api/v1/family-members/{member_id}/restore",
     operationId:
       "restore_family_member_api_v1_family_members__member_id__restore_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events",
+    operationId: "create_medical_event_api_v1_medical_events_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-events/trash",
+    operationId: "list_deleted_medical_events_api_v1_medical_events_trash_get",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/medical-events/{event_id}",
+    operationId: "delete_medical_event_api_v1_medical_events__event_id__delete",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-events/{event_id}",
+    operationId: "get_medical_event_api_v1_medical_events__event_id__get",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/medical-events/{event_id}",
+    operationId: "update_medical_event_api_v1_medical_events__event_id__patch",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/analyze",
+    operationId:
+      "analyze_medical_event_api_v1_medical_events__event_id__analyze_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/restore",
+    operationId:
+      "restore_medical_event_api_v1_medical_events__event_id__restore_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-events/{event_id}/results/{version}",
+    operationId:
+      "get_decision_result_api_v1_medical_events__event_id__results__version__get",
   },
   {
     method: "GET",
@@ -431,6 +480,18 @@ export type CandidateStatus =
 
 export type CandidateVersionId = string;
 
+export interface ClaimCandidateResponse {
+  aggregate_result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  candidate_id: string;
+  hold_reason_codes: Array<string>;
+  questions: Array<QuestionResponse>;
+  required_match_count: number;
+  required_no_match_count: number;
+  required_unknown_count: number;
+  rider_id: string;
+  rider_type: "fixed" | "indemnity";
+}
+
 export interface ClauseErrorResponse {
   error_code:
     | "AUTHENTICATION_REQUIRED"
@@ -499,6 +560,19 @@ export interface ClauseSearchResponse {
   schema_version: "1";
 }
 
+export interface CoverageDecisionResponse {
+  candidates: Array<ClaimCandidateResponse>;
+  engine_version: string;
+  evaluations: Array<RuleEvaluationResponse>;
+  event_version: number;
+  medical_event_id: string;
+  policy_snapshot_at: string;
+  rule_set_version: string;
+  run_id: string;
+  schema_version?: "1";
+  stale: boolean;
+}
+
 export interface CoverageRulePublishRequest {
   expected_version: number;
   version_id: string;
@@ -523,6 +597,11 @@ export interface CoverageRuleVersionsResponse {
   expected_version: number;
   rule_id: string;
   versions: Array<CoverageRuleVersionResponse>;
+}
+
+export interface DecisionErrorResponse {
+  error_code: string;
+  message: string;
 }
 
 export interface DocumentAnalysisRequest {
@@ -565,15 +644,6 @@ export interface EvidenceRef {
   page: number;
 }
 
-export interface EvidenceResponse {
-  bbox: [number, number, number, number] | null;
-  content_sha256: string;
-  document_version_id: string;
-  evidence_id: string;
-  physical_page: number;
-  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
-}
-
 export interface ExpectedVersionRequest {
   expected_version: number;
 }
@@ -589,6 +659,16 @@ export interface ExtractorConfigRequest {
   profile: "quality-v1";
   quality_rule_version: "quality-v1";
   table_strategy: "auto" | "lines" | "text";
+}
+
+export interface FactInput {
+  confirmation: "user" | "ai_structured" | "unconfirmed" | "conflicting";
+  value: string | number | null;
+}
+
+export interface FactResponse {
+  confirmation: "user" | "ai_structured" | "unconfirmed" | "conflicting";
+  value: string | number | null;
 }
 
 export interface FamilyMemberCreateRequest {
@@ -614,6 +694,33 @@ export interface HealthResponse {
   service?: "api";
   status: "ok" | "ready" | "unavailable";
   version?: string;
+}
+
+export interface MedicalEventCreateRequest {
+  event_date?: string | null;
+  facts?: Record<string, unknown>;
+  family_member_id: string;
+  mode: "pre_visit" | "post_treatment";
+  visit_date?: string | null;
+}
+
+export interface MedicalEventResponse {
+  deleted: boolean;
+  event_date: string | null;
+  facts: Record<string, unknown>;
+  family_member_id: string;
+  id: string;
+  mode: "pre_visit" | "post_treatment";
+  version: number;
+  visit_date: string | null;
+}
+
+export interface MedicalEventUpdateRequest {
+  event_date?: string | null;
+  expected_version: number;
+  facts?: Record<string, unknown> | null;
+  mode?: "pre_visit" | "post_treatment" | null;
+  visit_date?: string | null;
 }
 
 export interface PolicyCandidate {
@@ -700,7 +807,7 @@ export interface PolicyPartyCreateRequest {
 export interface PolicyPartyResponse {
   effective_from: string | null;
   effective_to: string | null;
-  evidence: EvidenceResponse;
+  evidence: familycare_api__policies__schemas__EvidenceResponse;
   family_member_id: string;
   id: string;
   role:
@@ -720,9 +827,9 @@ export interface PolicyResponse {
   product_display: string;
   product_key: string;
   source_document_version_id: string;
-  source_evidence: EvidenceResponse;
+  source_evidence: familycare_api__policies__schemas__EvidenceResponse;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
-  status_evidence: EvidenceResponse | null;
+  status_evidence: familycare_api__policies__schemas__EvidenceResponse | null;
   version: number;
 }
 
@@ -751,6 +858,11 @@ export interface PolicyUpdateRequest {
 }
 
 export type PositiveVersion = number;
+
+export interface QuestionResponse {
+  field_path: string;
+  reason_code: string;
+}
 
 export interface ReviewIssue {
   code:
@@ -826,10 +938,24 @@ export interface RiderResponse {
   normalized_key: string;
   policy_contract_id: string;
   renewable: boolean | null;
-  source_evidence: EvidenceResponse;
+  source_evidence: familycare_api__policies__schemas__EvidenceResponse;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
-  status_evidence: EvidenceResponse | null;
+  status_evidence: familycare_api__policies__schemas__EvidenceResponse | null;
   version: number;
+}
+
+export interface RuleEvaluationResponse {
+  conflicting_fields: Array<string>;
+  engine_version: string;
+  evaluation_id: string;
+  evidence: Array<familycare_api__decisions__schemas__EvidenceResponse>;
+  fact_paths: Array<string>;
+  missing_fields: Array<string>;
+  reason_code: string;
+  required: boolean;
+  result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  rider_id: string;
+  rule_version_id: string;
 }
 
 export interface TermsEditionResponse {
@@ -844,4 +970,23 @@ export interface TermsEditionResponse {
   product_display: string;
   product_key: string;
   version: number;
+}
+
+export interface familycare_api__decisions__schemas__EvidenceResponse {
+  bbox: [number, number, number, number] | null;
+  content_sha256: string;
+  document_version_id: string;
+  evidence_id: string;
+  extraction_id: string;
+  physical_page: number;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
+}
+
+export interface familycare_api__policies__schemas__EvidenceResponse {
+  bbox: [number, number, number, number] | null;
+  content_sha256: string;
+  document_version_id: string;
+  evidence_id: string;
+  physical_page: number;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
 }

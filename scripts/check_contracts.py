@@ -249,10 +249,16 @@ def validate_openapi() -> list[str]:
         "/api/v1/rider-clause-links/{link_id}/reject",
         "/api/v1/coverage-rules/{rule_id}/versions",
         "/api/v1/coverage-rules/{rule_id}/publish",
+        "/api/v1/medical-events",
+        "/api/v1/medical-events/trash",
+        "/api/v1/medical-events/{event_id}",
+        "/api/v1/medical-events/{event_id}/analyze",
+        "/api/v1/medical-events/{event_id}/restore",
+        "/api/v1/medical-events/{event_id}/results/{version}",
     }
     if set(paths) != expected_paths:
         errors.append(
-            "OpenAPI paths must contain health, policy, Clause, and gated analysis routes"
+            "OpenAPI paths must contain health, policy, Clause, analysis, and decision routes"
         )
         return errors
 
@@ -362,6 +368,56 @@ def validate_openapi() -> list[str]:
         sort_keys=True,
     ):
         errors.append("analysis response examples must not expose source keys")
+
+    event_create = paths["/api/v1/medical-events"].get("post", {})
+    event_request_ref = (
+        event_create.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+        .get("$ref")
+    )
+    if event_request_ref != "#/components/schemas/MedicalEventCreateRequest":
+        errors.append("MedicalEvent create must use the strict structured request")
+    event_request = schemas.get("MedicalEventCreateRequest", {})
+    if event_request.get("additionalProperties") is not False:
+        errors.append("MedicalEvent create must reject additional properties")
+    if set(event_request.get("properties", {})) != {
+        "family_member_id",
+        "mode",
+        "event_date",
+        "visit_date",
+        "facts",
+    }:
+        errors.append("MedicalEvent create exposes fields outside the structured event boundary")
+    decision_response = schemas.get("CoverageDecisionResponse", {})
+    if decision_response.get("additionalProperties") is not False:
+        errors.append("coverage decision response must reject additional properties")
+    expected_decision_fields = {
+        "schema_version",
+        "run_id",
+        "medical_event_id",
+        "event_version",
+        "engine_version",
+        "rule_set_version",
+        "policy_snapshot_at",
+        "stale",
+        "candidates",
+        "evaluations",
+    }
+    if set(decision_response.get("properties", {})) != expected_decision_fields:
+        errors.append("coverage decision response fields drifted from v1")
+    if "amount" in json.dumps(
+        [
+            event_request,
+            schemas.get("MedicalEventUpdateRequest", {}),
+            decision_response,
+            schemas.get("ClaimCandidateResponse", {}),
+            schemas.get("RuleEvaluationResponse", {}),
+        ],
+        sort_keys=True,
+    ).lower():
+        errors.append("MedicalEvent and decision OpenAPI must not expose amount fields")
     return errors
 
 
