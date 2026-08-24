@@ -8,7 +8,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "test": "vitest run",
+    "test": "vitest run --maxWorkers=1",
     "build": "tsc -b && vite build"
   },
   "dependencies": {

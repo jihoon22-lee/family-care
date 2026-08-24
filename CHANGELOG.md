@@ -24,6 +24,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - 로컬 검증 명령은 WSL 임시파일 경로와 고정 pnpm 버전을 재현 가능하게 사용합니다.
 - Foundation completion is recorded at PR #1 merge commit `0f632989df891ae944c012bfcce6c838009867a9`; PR and post-merge CI had seven successful jobs. Tag/GHCR, Cloud Run, and real/private-data verification remain outside that evidence.
 - Phase 1 documentation uses pnpm 11.22.0 and explicitly keeps implementation and CI synthetic-only.
+- Web Vitest runs with `--maxWorkers=1` to avoid the measured WSL worker-start timeout under memory pressure; this serializes workers without reducing test coverage.
+- Dependabot policy ignores semver-major updates for npm `typescript` and Docker `node`/`postgres`, ignores semver-minor and semver-major updates for Docker `python`, and therefore leaves Python 3.14 patch updates eligible; `check_workflows.py` validates the official update-type syntax.
+- The unprivileged Web runtime is pinned to `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`.
 
 ### Deprecated
 

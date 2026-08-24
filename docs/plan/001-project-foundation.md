@@ -633,7 +633,7 @@ Expected: exit `1` identifying `infra/containers/web.Dockerfile` as missing.
 
 - [x] **Step 3: Create Web, API, and Worker Dockerfiles**
 
-- Web builder uses `node:24.19.0-alpine`, Corepack pnpm 11.22.0, frozen lockfile, and `pnpm web:build`; runtime uses an exact `nginxinc/nginx-unprivileged` 1.29 Alpine tag and `USER 101`.
+- Web builder uses `node:24.19.0-alpine`, Corepack pnpm 11.22.0, frozen lockfile, and `pnpm web:build`; runtime uses the exact `nginxinc/nginx-unprivileged:1.31.2-alpine3.23` tag and `USER 101`.
 - API builder and runtime use `python:3.14.7-slim`; copy uv 0.12.5 from the official uv image; sync only API runtime dependencies; runtime uses a numeric non-root UID and starts Uvicorn on port 8000.
 - Worker uses the same Python and uv versions, installs only Worker runtime dependencies, uses a numeric non-root UID, and runs a Foundation idle process with signal-aware shutdown plus a separate `--health` command.
 - No Dockerfile copies `.env`, fixture PDFs, `.git`, or the repository root wholesale.
@@ -740,7 +740,7 @@ CI behavior:
 
 - [x] **Step 4: Add Dependabot and PR privacy checklist**
 
-Dependabot runs weekly for npm at `/`, pip at `/`, Docker for each Dockerfile directory, and GitHub Actions at `/`. Group development dependencies separately from runtime updates.
+Dependabot runs weekly for npm at `/`, pip at `/`, Docker at `/infra/containers` and `/infra/compose`, and GitHub Actions at `/`. Group development dependencies separately from runtime updates. Its checked ignore policies use the official `version-update:semver-*` syntax: npm `typescript` ignores semver-major; Docker `node` and `postgres` ignore semver-major; Docker `python` ignores semver-minor and semver-major so Python 3.14 patch updates remain eligible.
 
 PR checklist requires confirmation that fixtures are synthetic, no real document or derived text is present, no secret or identifier is present, logs are sanitized, tests are listed, and inaccessible external checks are reported as unverified.
 
