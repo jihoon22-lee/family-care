@@ -12,7 +12,7 @@ from uuid import UUID
 import psycopg
 import pytest
 from familycare_api.clauses.domain import ClauseSearchFilters, ClauseType, TermsEdition
-from familycare_api.clauses.errors import ClauseEvidenceInvalid
+from familycare_api.clauses.errors import ClauseEvidenceInvalid, ClauseVersionConflict
 from familycare_api.clauses.repository import (
     ClauseRepository,
     ClauseSearchRepository,
@@ -242,6 +242,9 @@ def test_postgres_search_is_scoped_bounded_and_evidence_backed(database_url: str
     assert hits[0].evidence[0].physical_page == 2
     assert hits[0].evidence[0].content_sha256 == source_a.content_sha256
 
+    compact_hits = search.search(source_a.scope, "입원의료비", ClauseSearchFilters())
+    assert [hit.clause_id for hit in compact_hits] == [expected.id]
+
 
 def test_filters_apply_inclusive_dates_keys_and_edition_scope(database_url: str) -> None:
     source = _seed_source(database_url, suffix="filters", hash_character="c")
@@ -399,3 +402,83 @@ def test_clause_creation_rejects_cross_document_evidence_atomically(database_url
     assert [clause.id for clause in catalog.get_clause_hierarchy(source.scope, edition.id)] == [
         valid.id
     ]
+
+
+def test_hierarchy_rejects_evidence_that_is_no_longer_verified(database_url: str) -> None:
+    source = _seed_source(database_url, suffix="stale-evidence", hash_character="3")
+    catalog, _, _ = _services(database_url)
+    edition = _edition(catalog, source)
+    _clause(
+        catalog,
+        source,
+        edition,
+        title="검증 상태 조항",
+        text="합성 근거의 검증 상태 변경을 확인합니다.",
+        page=2,
+    )
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "UPDATE evidence SET review_state = 'NEEDS_REVIEW' WHERE id = %s",
+            (source.evidence_ids[1],),
+        )
+
+    with pytest.raises(ClauseEvidenceInvalid):
+        catalog.get_clause_hierarchy(source.scope, edition.id)
+
+
+def test_restore_under_deleted_edition_does_not_commit_partial_state(
+    database_url: str,
+) -> None:
+    source = _seed_source(database_url, suffix="restore", hash_character="4")
+    catalog, _, repository = _services(database_url)
+    edition = _edition(catalog, source)
+    clause = _clause(
+        catalog,
+        source,
+        edition,
+        title="복원 경계 조항",
+        text="삭제된 판본 아래에서는 복원되지 않는 합성 조항입니다.",
+        page=2,
+    )
+    repository.soft_delete(source.scope, clause.id, expected_version=clause.version)
+    catalog.terms_repository.soft_delete(
+        source.scope,
+        edition.id,
+        expected_version=edition.version,
+    )
+
+    with pytest.raises(ClauseVersionConflict):
+        repository.restore(source.scope, clause.id, expected_version=clause.version + 1)
+
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        row = connection.execute(
+            "SELECT deleted_at FROM clauses WHERE id = %s",
+            (clause.id,),
+        ).fetchone()
+    assert row is not None
+    assert row["deleted_at"] is not None
+
+
+def test_clause_creation_rejects_bbox_outside_extracted_page(database_url: str) -> None:
+    source = _seed_source(database_url, suffix="bbox", hash_character="5")
+    catalog, _, _ = _services(database_url)
+    edition = _edition(catalog, source)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            UPDATE evidence
+            SET x0 = 0, y0 = 0, x1 = 700, y1 = 800
+            WHERE id = %s
+            """,
+            (source.evidence_ids[1],),
+        )
+
+    with pytest.raises(ClauseEvidenceInvalid):
+        _clause(
+            catalog,
+            source,
+            edition,
+            title="페이지 밖 좌표",
+            text="합성 페이지 범위를 벗어난 좌표입니다.",
+            page=2,
+        )

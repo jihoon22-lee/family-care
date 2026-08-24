@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -148,6 +149,20 @@ def test_clause_search_schema_rejects_unknown_fields_and_invalid_bounds() -> Non
 
     for mutation in mutations:
         assert validate_schema_instance(schema, mutation), mutation
+
+
+def test_clause_search_schema_accepts_database_bbox_precision() -> None:
+    schema = load_json(SCHEMA_PATH)
+    example = deepcopy(load_json(EXAMPLE_PATH))
+    validate_schema_instance = load_schema_validator()
+    example["hits"][0]["evidence"][0]["bbox"] = [
+        72.0001,
+        144.0002,
+        468.0003,
+        198.0004,
+    ]
+
+    assert not validate_schema_instance(schema, example)
 
 
 def test_clause_search_checker_reports_clean_artifacts() -> None:

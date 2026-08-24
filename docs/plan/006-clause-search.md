@@ -321,7 +321,7 @@ POST /api/v1/clauses/search
 
 **Interfaces:**
 - Consumes: normalized domain types and migration indexes from Tasks 1–2.
-- Produces: `TermsEditionRepository.list/get/create`, `ClauseRepository.create_tree/get_hierarchy`, `ClauseSearchService.search`, date/scope filters, bounded excerpts, and deterministic ranking.
+- Produces: `TermsEditionRepository.list/get/create`, individually transactional `ClauseRepository.create/get_hierarchy`, `ClauseSearchService.search`, date/scope filters, bounded excerpts, and deterministic ranking. Individual Clause transactions intentionally preserve earlier searchable rows when a later parse candidate fails.
 
 - [x] **Step 1: Write failing repository and search tests.** Unit-test parameter construction and ranking tie-breakers. Integration-test a synthetic corpus for exact phrase-ish matches, whitespace variants, Korean query normalization, terms-date boundaries, insurer/product filters, scope exclusion, and same-title different-definition separation.
 
@@ -539,8 +539,8 @@ The current Phase 4 PR was validated with wholly synthetic inputs only:
 - Web Vitest: 7 passed.
 - Playwright: 1 passed at 320 CSS px.
 - `corepack pnpm@11.22.0 web:check`: 28 passed.
-- API focused tests: 50 passed.
-- PostgreSQL integration: 5 passed.
+- API focused tests: 51 passed.
+- PostgreSQL integration: 8 passed.
 - Contracts, Ruff format/check, and mypy: passed.
 
 The Post-Merge Verification checkboxes below remain intentionally incomplete. No post-merge, production, or real/private-data validation is recorded here.

@@ -169,7 +169,10 @@ class ClauseCatalogService:
         terms_edition_id: UUID,
     ) -> tuple[Clause, ...]:
         self.get_terms_edition(scope, terms_edition_id)
-        return self.clause_repository.get_hierarchy(scope, terms_edition_id)
+        clauses = self.clause_repository.get_hierarchy(scope, terms_edition_id)
+        if any(not clause.evidence for clause in clauses):
+            raise ClauseEvidenceInvalid
+        return clauses
 
 
 __all__ = ["ClauseCatalogService"]

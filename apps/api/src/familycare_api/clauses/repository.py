@@ -415,6 +415,12 @@ class ClauseRepository:
                           AND evidence.physical_page BETWEEN %(page_start)s AND %(page_end)s
                           AND evidence.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
                           AND extraction.status = 'succeeded'
+                          AND (
+                            evidence.x0 IS NULL OR (
+                              evidence.x1 <= page.width_points
+                              AND evidence.y1 <= page.height_points
+                            )
+                          )
                         RETURNING evidence_id
                         """,
                         {
@@ -491,6 +497,22 @@ class ClauseRepository:
              AND evidence.physical_page BETWEEN clause.physical_page_start
                                              AND clause.physical_page_end
              AND evidence.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
+             AND EXISTS (
+               SELECT 1
+               FROM extractions AS extraction
+               JOIN extraction_pages AS page
+                 ON page.extraction_id = extraction.id
+                AND page.page_number = evidence.physical_page
+               WHERE extraction.id = evidence.extraction_id
+                 AND extraction.document_version_id = evidence.document_version_id
+                 AND extraction.status = 'succeeded'
+                 AND (
+                   evidence.x0 IS NULL OR (
+                     evidence.x1 <= page.width_points
+                     AND evidence.y1 <= page.height_points
+                   )
+                 )
+             )
             WHERE clause.household_space_id = %(household_space_id)s
               AND clause.terms_edition_id = %(terms_edition_id)s
               AND clause.deleted_at IS NULL
@@ -552,6 +574,18 @@ class ClauseRepository:
         version = require_expected_version(expected_version)
         source_predicate = "deleted_at IS NOT NULL" if restore else "deleted_at IS NULL"
         target = "NULL" if restore else "clock_timestamp()"
+        edition_predicate = (
+            """
+                      AND EXISTS (
+                        SELECT 1 FROM terms_editions AS edition
+                        WHERE edition.id = clauses.terms_edition_id
+                          AND edition.household_space_id = clauses.household_space_id
+                          AND edition.deleted_at IS NULL
+                      )
+            """
+            if restore
+            else ""
+        )
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 row = connection.execute(
@@ -561,6 +595,7 @@ class ClauseRepository:
                         updated_at = clock_timestamp()
                     WHERE id = %s AND household_space_id = %s AND version = %s
                       AND {source_predicate}
+                      {edition_predicate}
                     RETURNING terms_edition_id
                     """,
                     (clause_id, scope.household_space_id, version),
@@ -613,7 +648,13 @@ WITH ranked AS (
     WHERE c.household_space_id = %(household_space_id)s
       AND c.deleted_at IS NULL
       AND t.deleted_at IS NULL
-      AND plainto_tsquery('simple', %(normalized_query)s) @@ c.search_vector
+      AND (
+        plainto_tsquery('simple', %(normalized_query)s) @@ c.search_vector
+        OR (
+          c.normalized_title %% %(normalized_query)s
+          AND similarity(c.normalized_title, %(normalized_query)s) >= 0.4
+        )
+      )
       AND (
         CAST(%(terms_edition_id)s AS uuid) IS NULL
         OR c.terms_edition_id = CAST(%(terms_edition_id)s AS uuid)

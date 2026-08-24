@@ -27,7 +27,7 @@ v0.1은 PostgreSQL만 사용한다.
 
 - Unicode NFC, whitespace와 punctuation normalization
 - `simple` text-search configuration의 versioned normalized tokens
-- normalized title에 `pg_trgm` similarity 보조
+- normalized title에 `pg_trgm` similarity 보조; FTS가 놓친 공백 차이는 similarity `0.4` 이상일 때만 후보로 포함
 - curated synonym table with version and audit
 - server-derived household/date/edition/insurer/product scope filter
 - simple FTS match and Evidence page projection
