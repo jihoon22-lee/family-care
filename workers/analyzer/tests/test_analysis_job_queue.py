@@ -67,7 +67,7 @@ def _reset_ingestion_tables(database_url: str) -> None:
 
     table_list = ", ".join(_INGESTION_TABLES)
     with psycopg.connect(_psycopg_url(database_url), autocommit=True) as connection:
-        connection.execute(f"TRUNCATE TABLE {table_list} RESTART IDENTITY")
+        connection.execute(f"TRUNCATE TABLE {table_list} RESTART IDENTITY CASCADE")
 
 
 @pytest.fixture()
