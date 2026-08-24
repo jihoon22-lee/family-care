@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/clause-search.v1.schema.json",
+  "title": "ClauseSearchResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "normalization_version",
+    "query_matched_count",
+    "hits"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "normalization_version": {
+      "const": "unicode-nfc-v1",
+      "type": "string"
+    },
+    "query_matched_count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "hits": {
+      "items": {
+        "$ref": "#/$defs/ClauseSearchHit"
+      },
+      "maxItems": 50,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "ClauseId": {
+      "format": "uuid",
+      "title": "ClauseId",
+      "type": "string"
+    },
+    "TermsEditionId": {
+      "format": "uuid",
+      "title": "TermsEditionId",
+      "type": "string"
+    },
+    "EvidenceId": {
+      "format": "uuid",
+      "title": "EvidenceId",
+      "type": "string"
+    },
+    "DocumentVersionId": {
+      "format": "uuid",
+      "title": "DocumentVersionId",
+      "type": "string"
+    },
+    "ContentSha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "ContentSha256",
+      "type": "string"
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/EvidenceId"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/DocumentVersionId"
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/ContentSha256"
+        },
+        "page_number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "multipleOf": 0.001,
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "content_sha256",
+        "page_number",
+        "bbox"
+      ],
+      "title": "EvidenceRef"
+    },
+    "ClauseSearchHit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clause_id": {
+          "$ref": "#/$defs/ClauseId"
+        },
+        "label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 320,
+          "minLength": 1,
+          "type": "string"
+        },
+        "terms_edition_id": {
+          "$ref": "#/$defs/TermsEditionId"
+        },
+        "physical_page_start": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "physical_page_end": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "normalization_version": {
+          "const": "unicode-nfc-v1",
+          "type": "string"
+        },
+        "relevance": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "clause_id",
+        "label",
+        "excerpt",
+        "terms_edition_id",
+        "physical_page_start",
+        "physical_page_end",
+        "evidence",
+        "normalization_version"
+      ],
+      "title": "ClauseSearchHit"
+    }
+  }
+}

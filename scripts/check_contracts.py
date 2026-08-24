@@ -22,6 +22,8 @@ POLICY_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.
 POLICY_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-ledger.v1.json"
 CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json"
 CANDIDATE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-candidate.v1.json"
+CLAUSE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/clause-search.v1.schema.json"
+CLAUSE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/clause-search.v1.json"
 BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 WEB_OUTPUT_PATH = ROOT / "apps/web/src/api/generated.ts"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -35,6 +37,7 @@ POLICY_FORBIDDEN_FIELDS = {
     "raw_pdf",
     "source_path",
 }
+CLAUSE_FORBIDDEN_FIELDS = POLICY_FORBIDDEN_FIELDS | {"full_text", "raw_query"}
 
 
 def _load_document_contract_checker() -> Any:
@@ -324,6 +327,128 @@ def validate_policy_contract() -> list[str]:
     return errors
 
 
+def _nested_keys(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    """Return every nested object key for contract privacy checks."""
+
+    if isinstance(value, dict):
+        keys: list[tuple[str, str]] = []
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            keys.append((child_path, str(key)))
+            keys.extend(_nested_keys(child, child_path))
+        return keys
+    if isinstance(value, list):
+        keys = []
+        for index, child in enumerate(value):
+            keys.extend(_nested_keys(child, f"{path}[{index}]"))
+        return keys
+    return []
+
+
+def _object_schemas(value: Any) -> list[dict[str, Any]]:
+    """Return all object schemas in a JSON Schema document."""
+
+    if isinstance(value, dict):
+        schemas = [value] if value.get("type") == "object" else []
+        for child in value.values():
+            schemas.extend(_object_schemas(child))
+        return schemas
+    if isinstance(value, list):
+        schemas = []
+        for child in value:
+            schemas.extend(_object_schemas(child))
+        return schemas
+    return []
+
+
+def validate_clause_search_contract() -> list[str]:
+    """Validate the strict Clause search schema and its synthetic example."""
+
+    try:
+        schema = load_json(CLAUSE_SCHEMA_PATH)
+        example = load_json(CLAUSE_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("clause-search schema must use JSON Schema draft 2020-12")
+    if schema.get("additionalProperties") is not False:
+        errors.append("clause-search schema must reject additional properties")
+    if _forbidden_clause_keys(schema):
+        errors.append("clause-search schema contains a forbidden field")
+    if _forbidden_clause_keys(example):
+        errors.append("clause-search example contains a forbidden field")
+    if not all(
+        object_schema.get("additionalProperties") is False
+        for object_schema in _object_schemas(schema)
+    ):
+        errors.append("clause-search schema object definitions must reject additional properties")
+
+    required = {
+        "schema_version",
+        "normalization_version",
+        "query_matched_count",
+        "hits",
+    }
+    if set(schema.get("required", [])) != required:
+        errors.append("clause-search schema required properties are inconsistent")
+    hit_required = {
+        "clause_id",
+        "label",
+        "excerpt",
+        "terms_edition_id",
+        "physical_page_start",
+        "physical_page_end",
+        "evidence",
+        "normalization_version",
+    }
+    hit_schema = schema.get("$defs", {}).get("ClauseSearchHit", {})
+    if set(hit_schema.get("required", [])) != hit_required:
+        errors.append("clause-search hit required properties are inconsistent")
+    if schema.get("properties", {}).get("hits", {}).get("maxItems") != 50:
+        errors.append("clause-search hits must be bounded at 50")
+
+    errors.extend(
+        f"clause-search example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+    if example.get("schema_version") != "1":
+        errors.append("clause-search example schema_version must be 1")
+    if example.get("normalization_version") != "unicode-nfc-v1":
+        errors.append("clause-search example normalization version is not current")
+    hits = example.get("hits")
+    if not isinstance(hits, list):
+        errors.append("clause-search example hits must be an array")
+    else:
+        matched_count = example.get("query_matched_count")
+        if isinstance(matched_count, int) and matched_count < len(hits):
+            errors.append("clause-search matched count cannot be below returned hits")
+        for hit in hits:
+            if not isinstance(hit, dict):
+                continue
+            if len(str(hit.get("excerpt", ""))) > 320:
+                errors.append("clause-search example excerpt exceeds 320 characters")
+            if hit.get("normalization_version") != "unicode-nfc-v1":
+                errors.append("clause-search hit normalization version is not current")
+            evidence = hit.get("evidence")
+            if isinstance(evidence, list) and any(
+                not isinstance(item, dict) or item.get("page_number", 0) < 1 for item in evidence
+            ):
+                errors.append("clause-search evidence page_number must be 1-based")
+    return errors
+
+
+def _forbidden_clause_keys(value: Any, path: str = "$") -> list[str]:
+    """Return nested Clause contract paths crossing a prohibited boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in CLAUSE_FORBIDDEN_FIELDS
+    ]
+
+
 def validate_web_generated_outputs() -> list[str]:
     """Regenerate the Web consumer in a temporary directory and compare bytes."""
 
@@ -413,6 +538,7 @@ def main() -> int:
         *validate_document_contracts(),
         *validate_policy_contract(),
         *validate_policy_candidate_contract(),
+        *validate_clause_search_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -420,7 +546,7 @@ def main() -> int:
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
-        "policy-ledger.v1, policy-candidate.v1, and generated Web contracts)"
+        "policy-ledger.v1, policy-candidate.v1, clause-search.v1, and generated Web contracts)"
     )
     return 0
 

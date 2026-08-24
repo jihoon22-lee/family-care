@@ -1,0 +1,31 @@
+{
+  "schema_version": "1",
+  "normalization_version": "unicode-nfc-v1",
+  "query_matched_count": 1,
+  "hits": [
+    {
+      "clause_id": "00000000-0000-4000-8000-000000000601",
+      "label": "Sample Terms Article",
+      "excerpt": "Synthetic clause text for a sample terms edition.",
+      "terms_edition_id": "00000000-0000-4000-8000-000000000602",
+      "physical_page_start": 3,
+      "physical_page_end": 4,
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000603",
+          "document_version_id": "00000000-0000-4000-8000-000000000604",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "page_number": 3,
+          "bbox": [
+            72,
+            144,
+            468,
+            198
+          ]
+        }
+      ],
+      "normalization_version": "unicode-nfc-v1",
+      "relevance": 0.87
+    }
+  ]
+}
