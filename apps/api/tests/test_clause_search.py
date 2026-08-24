@@ -16,11 +16,27 @@ from familycare_api.clauses.errors import (
 from familycare_api.clauses.normalization import NORMALIZATION_VERSION
 from familycare_api.clauses.repository import SEARCH_SQL
 from familycare_api.clauses.search import ClauseSearchService
+from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 
 SCOPE = HouseholdScope(UUID("00000000-0000-4000-8000-000000000301"))
 EDITION_ID = UUID("00000000-0000-4000-8000-000000000302")
 CLAUSE_ID = UUID("00000000-0000-4000-8000-000000000303")
+EVIDENCE_ID = UUID("00000000-0000-4000-8000-000000000304")
+DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000305")
+EXTRACTION_ID = UUID("00000000-0000-4000-8000-000000000306")
+
+
+def _evidence() -> EvidenceRef:
+    return EvidenceRef(
+        evidence_id=EVIDENCE_ID,
+        document_version_id=DOCUMENT_VERSION_ID,
+        extraction_id=EXTRACTION_ID,
+        content_sha256="a" * 64,
+        physical_page=3,
+        bbox=None,
+        review_state="USER_CONFIRMED",
+    )
 
 
 def _hit() -> ClauseSearchHit:
@@ -31,7 +47,7 @@ def _hit() -> ClauseSearchHit:
         terms_edition_id=EDITION_ID,
         physical_page_start=3,
         physical_page_end=3,
-        evidence=(),
+        evidence=(_evidence(),),
         relevance=Decimal("0.625"),
         normalization_version=NORMALIZATION_VERSION,
     )

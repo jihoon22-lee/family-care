@@ -153,10 +153,11 @@ def test_terms_editions_preserve_document_lineage_and_applicability() -> None:
     edition_checks = checks(editions)
     assert "^[0-9a-f]{64}$" in edition_checks["ck_terms_editions_content_sha256"]
     assert "unicode-nfc-v1" in edition_checks["ck_terms_editions_normalization_version"]
-    assert "applicability_end >= applicability_start" in edition_checks[
-        "ck_terms_editions_applicability_dates"
-    ]
-    assert "version >= 1" == edition_checks["ck_terms_editions_version"]
+    assert (
+        "applicability_end >= applicability_start"
+        in edition_checks["ck_terms_editions_applicability_dates"]
+    )
+    assert edition_checks["ck_terms_editions_version"] == "version >= 1"
 
 
 def test_clauses_have_strict_hierarchy_pages_and_search_vector() -> None:
@@ -174,11 +175,12 @@ def test_clauses_have_strict_hierarchy_pages_and_search_vector() -> None:
     type_check = clause_checks["ck_clauses_type"]
     assert all(clause_type in type_check for clause_type in CLAUSE_TYPES)
     assert clause_checks["ck_clauses_physical_page_start"] == "physical_page_start >= 1"
-    assert "physical_page_end >= physical_page_start" in clause_checks[
-        "ck_clauses_physical_page_range"
-    ]
+    assert (
+        "physical_page_end >= physical_page_start"
+        in clause_checks["ck_clauses_physical_page_range"]
+    )
     assert "unicode-nfc-v1" in clause_checks["ck_clauses_normalization_version"]
-    assert "label <> ''" == clause_checks["ck_clauses_label_nonempty"]
+    assert clause_checks["ck_clauses_label_nonempty"] == "label <> ''"
 
 
 def test_evidence_join_and_synonyms_are_household_scoped() -> None:
@@ -196,10 +198,10 @@ def test_evidence_join_and_synonyms_are_household_scoped() -> None:
     }
     assert foreign_keys(synonyms) == {"household_space_id": "household_spaces.id"}
     synonym_checks = checks(synonyms)
-    assert "synonym_key <> ''" == synonym_checks["ck_clause_search_synonyms_key_nonempty"]
-    assert "replacement_text <> ''" == synonym_checks[
-        "ck_clause_search_synonyms_replacement_nonempty"
-    ]
+    assert synonym_checks["ck_clause_search_synonyms_key_nonempty"] == "synonym_key <> ''"
+    assert (
+        synonym_checks["ck_clause_search_synonyms_replacement_nonempty"] == "replacement_text <> ''"
+    )
 
 
 def test_search_indexes_cover_fts_trigram_scope_and_dates() -> None:

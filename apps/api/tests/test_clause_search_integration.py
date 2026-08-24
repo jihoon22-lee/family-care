@@ -373,6 +373,14 @@ def test_clause_creation_rejects_cross_document_evidence_atomically(database_url
     wrong = _seed_source(database_url, suffix="wrong", hash_character="2")
     catalog, _, _ = _services(database_url)
     edition = _edition(catalog, source)
+    valid = _clause(
+        catalog,
+        source,
+        edition,
+        title="기존 검색 조항",
+        text="이 합성 조항은 뒤의 개별 파싱 실패 후에도 남습니다.",
+        page=2,
+    )
 
     with pytest.raises(ClauseEvidenceInvalid):
         catalog.create_clause(
@@ -388,4 +396,6 @@ def test_clause_creation_rejects_cross_document_evidence_atomically(database_url
             evidence_ids=(wrong.evidence_ids[3],),
         )
 
-    assert catalog.get_clause_hierarchy(source.scope, edition.id) == ()
+    assert [clause.id for clause in catalog.get_clause_hierarchy(source.scope, edition.id)] == [
+        valid.id
+    ]

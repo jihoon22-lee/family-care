@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Protocol
 
 from familycare_api.clauses.domain import ClauseSearchFilters, ClauseSearchHit
-from familycare_api.clauses.errors import InvalidSearchQuery, SearchIndexVersionMismatch
+from familycare_api.clauses.errors import (
+    ClauseEvidenceInvalid,
+    InvalidSearchQuery,
+    SearchIndexVersionMismatch,
+)
 from familycare_api.clauses.normalization import (
     MAX_SEARCH_QUERY_LENGTH,
     NORMALIZATION_VERSION,
@@ -59,6 +63,8 @@ class ClauseSearchService:
         )
         if any(hit.normalization_version != NORMALIZATION_VERSION for hit in hits):
             raise SearchIndexVersionMismatch
+        if any(not hit.evidence for hit in hits):
+            raise ClauseEvidenceInvalid
         return hits
 
 

@@ -476,7 +476,7 @@ POST /api/v1/clauses/search
 
   Expected: search, filters, Evidence navigation, focus, 320 CSS px layout, and browser privacy assertions pass.
 
-- [ ] **Step 4: Commit the Web search slice.**
+- [x] **Step 4: Commit the Web search slice.**
 
   ```bash
   git add apps/web/src/api/clauses.ts apps/web/src/features/clauses \
@@ -498,9 +498,9 @@ POST /api/v1/clauses/search
 - Consumes: complete migration, normalization, repository/search service, HTTP contract, and Evidence repository.
 - Produces: synthetic proof that searchable Clauses survive an individual parse failure, old index versions remain available until atomic swap, wrong scope/date editions are excluded, and logs/responses contain no query or full text.
 
-- [ ] **Step 1: Write failing stale/partial/privacy tests.** Assert one malformed synthetic Clause does not remove other rows, normalization-version mismatch is explicit rather than silent fallback, and captured logs omit raw query/result text/path.
+- [x] **Step 1: Write failing stale/partial/privacy tests.** Assert one malformed synthetic Clause does not remove other rows, normalization-version mismatch is explicit rather than silent fallback, and captured logs omit raw query/result text/path.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_privacy.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py -q
@@ -508,9 +508,9 @@ POST /api/v1/clauses/search
 
   Expected: FAIL until stale-version checks, partial rebuild behavior, and redaction are implemented.
 
-- [ ] **Step 3: Implement the minimum stale/index and redaction behavior.** Keep the previous normalized/search version readable until the new rows and indexes are complete; return a stable `SEARCH_INDEX_VERSION_MISMATCH` warning/error without exposing SQL or document text.
+- [x] **Step 3: Implement the minimum stale/index and redaction behavior.** Keep the previous normalized/search version readable until the new rows and indexes are complete; return a stable `SEARCH_INDEX_VERSION_MISMATCH` warning/error without exposing SQL or document text.
 
-- [ ] **Step 4: Run the complete focused feature suite.**
+- [x] **Step 4: Run the complete focused feature suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search_migration.py apps/api/tests/test_clause_normalization.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_api.py apps/api/tests/test_clause_search_contracts.py apps/api/tests/test_clause_privacy.py -q
