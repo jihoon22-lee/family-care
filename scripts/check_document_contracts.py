@@ -323,15 +323,14 @@ def validate_schema_shapes(
         errors.append("analysis-job state enum changed")
     if job_schema.get("$defs", {}).get("ErrorCode", {}).get("enum") != list(ERROR_CODES):
         errors.append("analysis-job error-code enum changed")
-    if (
-        extraction_schema.get("$defs", {})
-        .get("TextBlock", {})
-        .get("properties", {})
-        .get("reading_order", {})
-        .get("minimum")
-        != 0
-    ):
+    text_block = extraction_schema.get("$defs", {}).get("TextBlock", {})
+    if text_block.get("properties", {}).get("reading_order", {}).get("minimum") != 0:
         errors.append("TextBlock reading_order must be non-negative")
+    if (
+        "page_number" not in text_block.get("required", [])
+        or text_block.get("properties", {}).get("page_number", {}).get("minimum") != 1
+    ):
+        errors.append("TextBlock page_number must be required and 1-based")
     bbox = extraction_schema.get("$defs", {}).get("BoundingBox", {})
     if bbox.get("minItems") != 4 or bbox.get("maxItems") != 4:
         errors.append("BoundingBox must contain exactly four PDF coordinates")

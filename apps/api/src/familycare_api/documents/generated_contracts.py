@@ -161,5 +161,6 @@ class PageQuality(TypedDict):
 
 class TextBlock(TypedDict):
     bbox: BoundingBox
+    page_number: int
     reading_order: int
     text: str

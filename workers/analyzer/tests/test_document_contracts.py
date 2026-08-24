@@ -47,6 +47,7 @@ def test_extraction_result_uses_versioned_quality_and_evidence_coordinates() -> 
     assert result["pages"][0]["quality"]["rule_version"] == "quality-v1"
     assert result["pages"][0]["quality"]["classification"] == "TEXT_SUFFICIENT"
     assert result["pages"][0]["blocks"][0]["reading_order"] == 0
+    assert result["pages"][0]["blocks"][0]["page_number"] == 1
     assert result["pages"][0]["blocks"][0]["bbox"] == [10.0, 20.0, 30.0, 40.0]
     assert result["pages"][0]["tables"][0]["cells"][0]["bbox"] == [10.0, 40.0, 30.0, 60.0]
     assert result["evidence"][0]["document_version_id"].endswith("0002")
@@ -55,6 +56,7 @@ def test_extraction_result_uses_versioned_quality_and_evidence_coordinates() -> 
     assert schema["$defs"]["BoundingBox"]["minItems"] == 4
     assert schema["$defs"]["BoundingBox"]["maxItems"] == 4
     assert schema["$defs"]["TextBlock"]["properties"]["reading_order"]["minimum"] == 0
+    assert schema["$defs"]["TextBlock"]["properties"]["page_number"]["minimum"] == 1
 
 
 def test_generated_worker_contract_types_are_checked_in() -> None:
@@ -124,3 +126,15 @@ def test_contract_checker_rejects_quality_classification_mismatch() -> None:
     errors = CONTRACT_CHECKER.validate_examples(document, mutation, job)
 
     assert "extraction page quality classification violates quality-v1" in errors
+
+
+def test_contract_checker_rejects_text_block_page_number_drift() -> None:
+    document = load_json("schemas/document-ingestion.v1.schema.json")
+    extraction = load_json("schemas/extraction-result.v1.schema.json")
+    job = load_json("schemas/analysis-job.v1.schema.json")
+    mutation = deepcopy(extraction)
+    mutation["$defs"]["TextBlock"]["required"].remove("page_number")
+
+    errors = CONTRACT_CHECKER.validate_schema_shapes(document, mutation, job)
+
+    assert "TextBlock page_number must be required and 1-based" in errors

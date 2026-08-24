@@ -72,7 +72,7 @@
 - workers/analyzer/tests/synthetic_pdf_factory.py: reportlab-only deterministic PDF builders that write to a caller-provided temporary path.
 - workers/analyzer/tests/test_pdf_extraction.py: text/table/coordinate/quality regression corpus.
 - workers/analyzer/tests/test_pdf_passwords.py: direct one-shot runtime-password classification without queued transport.
-- workers/analyzer/pyproject.toml and uv.lock: pypdf 6.16.2, pdfplumber 0.11.10, reportlab 5.0.1 test/runtime dependency changes.
+- workers/analyzer/pyproject.toml, root pyproject.toml, and uv.lock: pypdf 6.16.2 and pdfplumber 0.11.10 Worker runtime dependencies plus reportlab 5.0.1 development/test fixtures.
 
 ### Analysis job worker
 
@@ -335,9 +335,11 @@ git add workers/analyzer/pyproject.toml workers/analyzer/src/familycare_worker/p
 git commit -m "feat(pdf): enforce intake safety"
 ~~~
 
-- [ ] **Step 7: Complete the PR checkpoint**
+- [x] **Step 7: Complete the PR checkpoint**
 
 The root agent reviews the full feat/pdf-intake-safety diff once, checking path source-to-sink behavior, symlink handling, limit application before parsing, sanitized errors, permissions, and synthetic-only tests. Then push, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, rerun the intake and repository safety checks on post-merge main, and record the merge commit before beginning feat/synthetic-pdf-extraction.
+
+Completed in PR #9 at merge commit `523bd68be3d951e37a9f4ba19b858d9ac9bdcfcc`; all seven PR and post-merge `main` checks passed, and the post-merge intake, mypy, documentation, and repository-safety checks passed locally.
 
 ---
 
@@ -353,22 +355,28 @@ The root agent reviews the full feat/pdf-intake-safety diff once, checking path 
 - Create: workers/analyzer/tests/synthetic_pdf_factory.py
 - Create: workers/analyzer/tests/test_pdf_extraction.py
 - Create: workers/analyzer/tests/test_pdf_passwords.py
+- Create: workers/analyzer/tests/test_pdf_quality.py
+- Create: workers/analyzer/tests/test_synthetic_pdf_factory.py
 - Create: THIRD_PARTY_NOTICES.md after uv.lock contains all three parser dependencies
-- Modify: workers/analyzer/pyproject.toml to add pdfplumber==0.11.10 and reportlab==5.0.1
+- Modify: workers/analyzer/pyproject.toml to add pdfplumber==0.11.10
+- Modify: root pyproject.toml to add reportlab==5.0.1 to the development/test group only
 - Modify: uv.lock
-- Modify: workers/analyzer/src/familycare_worker/pdf/isolation.py to call the extractor child entrypoint
-- Modify: packages/contracts/examples/extraction-result.v1.json to add the finalized synthetic extraction shape
+- Modify: packages/contracts/schemas/extraction-result.v1.schema.json and its example to finalize the required TextBlock page_number
+- Regenerate: API and Worker document contract types
+- Modify: scripts/check_document_contracts.py and Worker contract tests to reject page-number drift
+- Modify: workers/analyzer/src/familycare_worker/pdf/errors.py to add the sanitized PASSWORD_INVALID exception
 
 **Interfaces:**
 
 - Consumes: the validated read-only source descriptor and canonical settings from feat/pdf-intake-safety.
 - Produces: PdfPlumberExtractor.extract(source_fd: int, settings: ExtractionSettings) -> ExtractionResult, normalize_bbox(x0: float, top: float, x1: float, bottom: float) -> list[float], classify_page_quality(text: str, rule_version: Literal["quality-v1"]) -> PageQuality, and deterministic reportlab fixture builders.
+- `ExtractionSettings` is a Worker-internal post-intake shape containing only document_version_id, content_sha256, extractor_config_hash, quality_rule_version, and table_strategy. It is serialized as exact canonical JSON for the child and is not the client or queued AnalysisJob settings contract.
 - Every extracted word becomes one TextBlock. Each TextBlock has page_number, text, bbox, and reading_order. Table and cell candidates retain page-relative bounding boxes. `extract_words` x0/top/x1/bottom values are bounds-checked directly, rounded, appended or serialized before page.close(), and never converted from bottom-origin coordinates. The extractor does not persist to DB.
 - The parser adapter exposes a one-shot password argument only in a direct function used by test_password_invalid; no queued schema or job field is added.
 
-- [ ] **Step 1: Write failing extraction and quality tests**
+- [x] **Step 1: Write failing extraction and quality tests**
 
-Build text, table, low-quality, replacement-character, and repeated-character PDFs with reportlab in pytest tmp_path or a context-managed TemporaryDirectory. Copy each wholly synthetic fixture into a second checkout-external root before running intake. The expected assertions use synthetic strings only.
+Build text, table, low-quality, and encrypted PDFs with reportlab in pytest tmp_path or a context-managed TemporaryDirectory. Copy each wholly synthetic fixture used by intake into a second checkout-external root before opening it. Exercise replacement-character and repeated-character threshold boundaries directly against the deterministic quality function. The expected assertions use synthetic strings only.
 
 ~~~python
 def test_words_are_text_blocks_with_pdf_point_contract(tmp_path: Path) -> None:
@@ -395,13 +403,13 @@ TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_pdf_extraction.py workers/
 
 Expected: FAIL because pdfplumber, reportlab, extractor, coordinate, quality, and password adapter implementations are absent.
 
-- [ ] **Step 2: Add the exact parser dependencies and notices**
+- [x] **Step 2: Add the exact parser dependencies and notices**
 
-Add pdfplumber 0.11.10 and reportlab 5.0.1 to the Worker dependency set, regenerate uv.lock, and run the package metadata inspection needed to record each direct and relevant transitive package in THIRD_PARTY_NOTICES.md. Include exact package version, project source URL, declared license text or SPDX identifier, and the statement that this repository has no LICENSE and does not grant reuse permission by default. Do not copy license text beyond the amount allowed by the package terms.
+Add pdfplumber 0.11.10 to the Worker runtime dependency set and reportlab 5.0.1 to the root development/test group only, regenerate uv.lock, and run package metadata inspection to record each direct and relevant transitive package in THIRD_PARTY_NOTICES.md. Include exact package version, project source URL, declared license text or SPDX identifier, and the statement that this repository has no LICENSE and does not grant reuse permission by default. Do not copy license text beyond the amount allowed by the package terms.
 
 This is the first step allowed to create THIRD_PARTY_NOTICES.md. The file is not created in the planning branch before dependencies land.
 
-- [ ] **Step 3: Implement coordinate normalization and quality-v1**
+- [x] **Step 3: Implement coordinate normalization and quality-v1**
 
 Use pdfplumber's x0/top/x1/bottom values directly as top-left PDF points; bounds-check 0 <= x0 <= x1 <= page.width and 0 <= top <= bottom <= page.height, then round the four values to three decimal places. Do not subtract from page height or describe a bottom-origin conversion. Preserve page width/height in points. Assign reading_order by the stable word sequence returned for each page, starting at zero. Implement quality-v1 metrics exactly:
 
@@ -432,13 +440,13 @@ def classify_page_quality(text: str, rule_version: Literal["quality-v1"]) -> Pag
 
 The implementation must return every metric and rule_version so a future threshold change is distinguishable. It must not execute OCR.
 
-- [ ] **Step 4: Implement pdfplumber word/table extraction and page-cache closure**
+- [x] **Step 4: Implement pdfplumber word/table extraction and page-cache closure**
 
 Open a duplicate of the inherited read-only descriptor as a file-like handle in the child, construct a pdfplumber PDF, iterate pages one at a time, call extract_words for TextBlock records, and detect table/cell candidates with their bboxes. Append or serialize each page result before closing that page's cache, then explicitly close the page and release references. The repository layer persists after extraction returns; the extractor does not write DB rows. Close the overall PDF in a finally block. Reject network URLs, embedded-file actions, and parser calls that do not originate from the local intake descriptor.
 
 For encrypted PDFs, the direct adapter accepts a one-shot runtime password only when called directly by the password test. A wrong runtime password maps to PASSWORD_INVALID. The queued AnalysisJob JSON remains password-free.
 
-- [ ] **Step 5: Run extraction, password, and static checks**
+- [x] **Step 5: Run extraction, password, and static checks**
 
 ~~~bash
 TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_pdf_extraction.py workers/analyzer/tests/test_pdf_passwords.py -q
@@ -450,7 +458,7 @@ git diff --check
 
 Expected: all commands exit 0; tests cover text, table, cell, coordinate rounding, page numbering, reading order, all quality-v1 boundaries, direct PASSWORD_INVALID, and no OCR execution.
 
-- [ ] **Step 6: Commit the independently reviewable branch**
+- [x] **Step 6: Commit the independently reviewable branch**
 
 ~~~bash
 git add workers/analyzer/pyproject.toml workers/analyzer/src/familycare_worker/pdf workers/analyzer/tests THIRD_PARTY_NOTICES.md uv.lock packages/contracts/examples/extraction-result.v1.json
