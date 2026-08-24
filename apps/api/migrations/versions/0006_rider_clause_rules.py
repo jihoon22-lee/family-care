@@ -93,6 +93,16 @@ def upgrade() -> None:
         "analysis_candidate_fields",
         f"field_id IN ({_CANDIDATE_FIELD_IDS_V2})",
     )
+    op.drop_constraint(
+        "ck_candidate_evidence_field_id",
+        "analysis_candidate_evidence",
+        type_="check",
+    )
+    op.create_check_constraint(
+        "ck_candidate_evidence_field_id",
+        "analysis_candidate_evidence",
+        f"field_id IN ({_CANDIDATE_FIELD_IDS_V2})",
+    )
 
     op.create_table(
         "rider_clause_links",
@@ -200,6 +210,7 @@ def upgrade() -> None:
         "coverage_rule_versions",
         _uuid("id", primary_key=True),
         _foreign_uuid("coverage_rule_id", "coverage_rules.id"),
+        _foreign_uuid("candidate_version_id", "analysis_candidate_versions.id"),
         sa.Column("version_number", sa.Integer(), nullable=False),
         sa.Column("schema_version", sa.String(length=32), nullable=False),
         sa.Column("rule_kind", sa.String(length=48), nullable=False),
@@ -278,6 +289,11 @@ def upgrade() -> None:
         ["coverage_rule_id", "version_number"],
     )
     op.create_index(
+        "ix_coverage_rule_versions_candidate",
+        "coverage_rule_versions",
+        ["candidate_version_id", "id"],
+    )
+    op.create_index(
         "ix_coverage_rule_versions_review_executable",
         "coverage_rule_versions",
         ["review_state", "executable", "published_at", "id"],
@@ -310,6 +326,10 @@ def downgrade() -> None:
         table_name="coverage_rule_versions",
     )
     op.drop_index(
+        "ix_coverage_rule_versions_candidate",
+        table_name="coverage_rule_versions",
+    )
+    op.drop_index(
         "ix_coverage_rule_versions_rule_version",
         table_name="coverage_rule_versions",
     )
@@ -328,6 +348,16 @@ def downgrade() -> None:
     op.drop_index("ix_rider_clause_links_rider_state", table_name="rider_clause_links")
     op.drop_index("ix_rider_clause_links_household_active", table_name="rider_clause_links")
     op.drop_table("rider_clause_links")
+    op.drop_constraint(
+        "ck_candidate_evidence_field_id",
+        "analysis_candidate_evidence",
+        type_="check",
+    )
+    op.create_check_constraint(
+        "ck_candidate_evidence_field_id",
+        "analysis_candidate_evidence",
+        f"field_id IN ({_CANDIDATE_FIELD_IDS_V1})",
+    )
     op.drop_constraint(
         "ck_candidate_fields_field_id",
         "analysis_candidate_fields",

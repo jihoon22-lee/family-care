@@ -141,6 +141,7 @@ def test_upgrade_extends_generic_review_domains_and_typed_fields() -> None:
     assert {(item["table_name"], item["name"]) for item in operations.dropped_constraints} >= {
         ("analysis_candidate_versions", "ck_candidate_versions_kind"),
         ("analysis_candidate_fields", "ck_candidate_fields_field_id"),
+        ("analysis_candidate_evidence", "ck_candidate_evidence_field_id"),
     }
     kinds = operations.created_checks["ck_candidate_versions_kind"]
     assert kinds["table_name"] == "analysis_candidate_versions"
@@ -171,6 +172,9 @@ def test_upgrade_extends_generic_review_domains_and_typed_fields() -> None:
             "required",
         )
     )
+    evidence_fields = operations.created_checks["ck_candidate_evidence_field_id"]
+    assert evidence_fields["table_name"] == "analysis_candidate_evidence"
+    assert evidence_fields["condition"] == fields["condition"]
 
 
 def test_rider_clause_links_preserve_scope_candidate_and_parent_lineage() -> None:
@@ -246,7 +250,10 @@ def test_rule_versions_are_immutable_typed_json_documents() -> None:
     _, operations = run_upgrade()
     versions = operations.tables["coverage_rule_versions"]
 
-    assert foreign_keys(versions) == {"coverage_rule_id": ("coverage_rules.id", "RESTRICT")}
+    assert foreign_keys(versions) == {
+        "coverage_rule_id": ("coverage_rules.id", "RESTRICT"),
+        "candidate_version_id": ("analysis_candidate_versions.id", "RESTRICT"),
+    }
     assert isinstance(versions.c.input_field_paths.type, postgresql.JSONB)
     assert isinstance(versions.c.expression_json.type, postgresql.JSONB)
     assert frozenset({"coverage_rule_id", "version_number"}) in unique_column_sets(versions)
