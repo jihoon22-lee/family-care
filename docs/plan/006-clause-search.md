@@ -321,9 +321,9 @@ POST /api/v1/clauses/search
 - Consumes: normalized domain types and migration indexes from Tasks 1–2.
 - Produces: `TermsEditionRepository.list/get/create`, `ClauseRepository.create_tree/get_hierarchy`, `ClauseSearchService.search`, date/scope filters, bounded excerpts, and deterministic ranking.
 
-- [ ] **Step 1: Write failing repository and search tests.** Unit-test parameter construction and ranking tie-breakers. Integration-test a synthetic corpus for exact phrase-ish matches, whitespace variants, Korean query normalization, terms-date boundaries, insurer/product filters, scope exclusion, and same-title different-definition separation.
+- [x] **Step 1: Write failing repository and search tests.** Unit-test parameter construction and ranking tie-breakers. Integration-test a synthetic corpus for exact phrase-ish matches, whitespace variants, Korean query normalization, terms-date boundaries, insurer/product filters, scope exclusion, and same-title different-definition separation.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py -q
@@ -331,7 +331,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because repository/search modules and PostgreSQL Clause rows are not implemented.
 
-- [ ] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and preserve existing index version when a rebuild is in progress.
+- [x] **Step 3: Implement direct-psycopg repository and search service.** Use only bound parameters, derive all scope filters from `HouseholdScope`, select no full body in search responses, use `simple` FTS plus trigram rank, and preserve existing index version when a rebuild is in progress.
 
   ```python
   def search(
@@ -358,7 +358,7 @@ POST /api/v1/clauses/search
       return tuple(_row_to_hit(row) for row in rows)
   ```
 
-- [ ] **Step 4: Run unit, PostgreSQL, and static checks.**
+- [x] **Step 4: Run unit, PostgreSQL, and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_search.py -q
@@ -370,7 +370,7 @@ POST /api/v1/clauses/search
 
   Expected: unit and real PostgreSQL FTS/trigram tests pass; no SQLite substitute is accepted.
 
-- [ ] **Step 5: Commit the search implementation.**
+- [x] **Step 5: Commit the search implementation.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/repository.py apps/api/src/familycare_api/clauses/search.py apps/api/src/familycare_api/clauses/service.py apps/api/tests/test_clause_search.py apps/api/tests/test_clause_search_integration.py
