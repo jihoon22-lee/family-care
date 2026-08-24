@@ -114,6 +114,7 @@ rule_evaluations(
   required boolean not null,
   reason_code varchar(64) not null,
   facts_json jsonb not null,
+  evidence_snapshot_json jsonb not null,
   missing_fields_json jsonb not null,
   conflicting_fields_json jsonb not null,
   evaluator_version varchar(64) not null,
@@ -224,9 +225,7 @@ class DecisionReaders:
 
 
 class CoverageDecisionEngine(Protocol):
-    def evaluate(
-        self, scope: HouseholdScope, event: MedicalEvent, *, history: ClaimHistoryReader
-    ) -> DecisionRunResult: ...
+    def evaluate(self, scope: HouseholdScope, event: MedicalEvent) -> DecisionRunResult: ...
 ```
 
 Core pure functions:
@@ -259,19 +258,32 @@ Aggregation is deterministic: any required `NO_MATCH` yields a decisive mismatch
 ### HTTP contract
 
 ```text
-POST  /api/v1/medical-events
-PATCH /api/v1/medical-events/{id}
-POST  /api/v1/medical-events/{id}/analyze
-GET   /api/v1/medical-events/{id}/results/{version}
+POST   /api/v1/medical-events
+GET    /api/v1/medical-events/{id}
+PATCH  /api/v1/medical-events/{id}
+DELETE /api/v1/medical-events/{id}
+GET    /api/v1/medical-events/trash
+POST   /api/v1/medical-events/{id}/restore
+POST   /api/v1/medical-events/{id}/analyze
+GET    /api/v1/medical-events/{id}/results/{version}
 ```
 
 Create/PATCH accepts structured facts, dates, mode, and confirmation levels only. It does not accept tri-state or amount fields from the client. Analyze returns a run ID, event version, engine/rule versions, Rider candidates, RuleEvaluations, questions, and Evidence references. It never says payment is guaranteed. `UNKNOWN` is a successful normal result, not HTTP failure.
+
+All decision responses use `Cache-Control: no-store`. Every repository read derives the household scope from server-side request context; a client-supplied household or family-member scope is not an authorization input. The default scope resolver remains fail-closed until Phase 7 authentication is connected, so the routes are exercised in synthetic tests with an injected scope at this phase.
 
 ### JSON Schema contract
 
 `coverage-decision.v1.schema.json` uses `additionalProperties: false`; `result` is an enum of exactly `MATCH`, `NO_MATCH`, `UNKNOWN`; every RuleEvaluation requires `rule_version_id`, `result`, `reason_code`, `evidence`, and `engine_version`; `amount` is absent from this plan's base result or explicitly represented as a `calculation_pending` state. Synthetic examples include a missing fact producing `UNKNOWN` and a deterministic exclusion producing `NO_MATCH` without medical document text.
 
 ## Tasks
+
+## PR6 implementation checkpoint
+
+The deterministic engine, migration, HTTP service, contract artifacts, and
+synthetic PostgreSQL/privacy tests described below are implemented in the
+current worktree. The local commit and shared PR gate are deliberately tracked
+separately below; this plan does not claim a PR, CI result, or merge.
 
 ### Task 1: Define MedicalEvent, run, evaluation, and candidate migration
 
@@ -284,9 +296,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 - Consumes: `0006_rider_clause_rules`, policy/Rider/rule/Evidence tables, and migration-spy conventions.
 - Produces: `revision = "0007_coverage_decision_engine"`, `down_revision = "0006_rider_clause_rules"`, five tables, UUID FKs, tri-state/count/date checks, scope indexes, and reverse-order downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert exact table/column sets, event mode checks, tri-state checks, evaluation/candidate FKs, Evidence join uniqueness, soft-delete/version fields, and absence of any medical-file/path column.
+- [x] **Step 1: Write failing migration tests.** Assert exact table/column sets, event mode checks, tri-state checks, evaluation/candidate FKs, Evidence join uniqueness, soft-delete/version fields, and absence of any medical-file/path column.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_migration.py -q
@@ -294,9 +306,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: FAIL because `0007_coverage_decision_engine.py` is absent.
 
-- [ ] **Step 3: Implement the additive migration.** Store normalized facts/confirmation as JSONB with no document binary/text fields, use exact tri-state CHECK constraints, and separate Evidence join rows from evaluations.
+- [x] **Step 3: Implement the additive migration.** Store normalized facts/confirmation as JSONB with no document binary/text fields, use exact tri-state CHECK constraints, and separate Evidence join rows from evaluations. Each evaluation also stores an immutable Evidence metadata/hash snapshot for historical result reconstruction.
 
-- [ ] **Step 4: Run migration tests and upgrade.**
+- [x] **Step 4: Run migration tests and upgrade.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_migration.py -q
@@ -305,7 +317,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: migration shape passes and synthetic PostgreSQL reaches `0007_coverage_decision_engine` without changing Phase 1 or prior domain tables.
 
-- [ ] **Step 5: Commit the decision schema.**
+- [x] **Step 5: Commit the decision schema.**
 
   ```bash
   git add apps/api/migrations/versions/0007_coverage_decision_engine.py apps/api/tests/test_decision_migration.py
@@ -329,9 +341,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 - Consumes: compiled allowlist expressions from `familycare_api.clauses.dsl` and the exact `ClaimHistoryReader`/`PolicySnapshotReader`/`RuleReader` protocols in this plan.
 - Produces: `FactValue`, `FactContext`, deterministic operator outcomes, date/range/count evaluation, and no-AI engine inputs.
 
-- [ ] **Step 1: Write failing fact/operator tests.** Cover missing/null, user-confirmed vs unconfirmed/conflicting values, date boundary, `all/any/not`, `present/equals/in/range`, `date_between`, `days_since`, `count_before`, decimal comparisons, and absent history.
+- [x] **Step 1: Write failing fact/operator tests.** Cover missing/null, user-confirmed vs unconfirmed/conflicting values, date boundary, `all/any/not`, `present/equals/in/range`, `date_between`, `days_since`, `count_before`, decimal comparisons, and absent history.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_facts.py apps/api/tests/test_decision_operators.py -q
@@ -339,7 +351,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: FAIL because facts/operators/runtime modules do not exist.
 
-- [ ] **Step 3: Implement pure deterministic operators.** Treat missing, unconfirmed, conflicting, and stale Evidence values as `UNKNOWN`; raise only structural validation errors such as an invalid decimal/unit, never convert them to `NO_MATCH`.
+- [x] **Step 3: Implement pure deterministic operators.** Treat missing, unconfirmed, conflicting, and stale Evidence values as `UNKNOWN`; raise only structural validation errors such as an invalid decimal/unit, never convert them to `NO_MATCH`.
 
   ```python
   def compare_required(value: FactValue | None, expected: object) -> OperatorOutcome:
@@ -354,7 +366,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
       )
   ```
 
-- [ ] **Step 4: Run operator/fact tests and static checks.**
+- [x] **Step 4: Run operator/fact tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_facts.py apps/api/tests/test_decision_operators.py -q
@@ -365,7 +377,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: all operator decision-table rows pass and strict static checks pass.
 
-- [ ] **Step 5: Commit the deterministic runtime primitives.**
+- [x] **Step 5: Commit the deterministic runtime primitives.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/__init__.py apps/api/src/familycare_api/decisions/domain.py apps/api/src/familycare_api/decisions/facts.py apps/api/src/familycare_api/decisions/operators.py apps/api/src/familycare_api/decisions/rule_runtime.py apps/api/tests/test_decision_facts.py apps/api/tests/test_decision_operators.py
@@ -383,9 +395,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 - Consumes: facts/operators/protocols from Task 2, policy snapshot/Rider state, executable rule versions, Evidence repository, and a fake empty ClaimHistoryReader.
 - Produces: `CoverageDecisionEngine.evaluate`, `evaluate_rule`, `evaluate_event`, `aggregate_required_results`, follow-up questions, and immutable run/candidate objects.
 
-- [ ] **Step 1: Write failing engine decision-table tests.** Include event/policy boundaries, non-insured member, inactive/unconfirmed Rider, waiting/reduction period, decisive exclusion, missing renewal state, missing history, stale Evidence, unsupported/non-executable rule, multiple Rider partial failure, and optional-rule aggregation.
+- [x] **Step 1: Write failing engine decision-table tests.** Include event/policy boundaries, non-insured member, inactive/unconfirmed Rider, waiting/reduction period, decisive exclusion, missing renewal state, missing history, stale Evidence, unsupported/non-executable rule, multiple Rider partial failure, and optional-rule aggregation.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_engine.py -q
@@ -393,7 +405,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: FAIL because `CoverageDecisionEngine` and aggregation functions are absent.
 
-- [ ] **Step 3: Implement the fixed evaluation order and tri-state aggregation.** Filter to actual subscribed Riders first, evaluate each required rule exactly once, preserve every evaluation/reason/Evidence, and return an `UNKNOWN` candidate whenever required information is absent or conflicting.
+- [x] **Step 3: Implement the fixed evaluation order and tri-state aggregation.** Filter to actual subscribed Riders first, evaluate each required rule exactly once, preserve every evaluation/reason/Evidence, and return an `UNKNOWN` candidate whenever required information is absent or conflicting.
 
   ```python
   def aggregate_required_results(evaluations: Sequence[RuleEvaluation]) -> TriState:
@@ -405,7 +417,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
       return "MATCH"
   ```
 
-- [ ] **Step 4: Run engine tests and static checks.**
+- [x] **Step 4: Run engine tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_engine.py -q
@@ -416,7 +428,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: every tri-state and evidence-chain case passes without AI/provider calls.
 
-- [ ] **Step 5: Commit the engine.**
+- [x] **Step 5: Commit the engine.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/engine.py apps/api/tests/test_decision_engine.py
@@ -436,11 +448,11 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
 **Interfaces:**
 - Consumes: engine result and direct-psycopg migration tables.
-- Produces: `create_medical_event`, `update_medical_event(expected_version)`, `analyze_medical_event`, `get_decision_result`, strict schemas, and the four routes in this plan.
+- Produces: the versioned MedicalEvent lifecycle, analysis/result operations, strict schemas, and the routes in this plan.
 
-- [ ] **Step 1: Write failing HTTP tests.** Assert pre/post event create/update, structured facts only, scope denial, stale update `409`, analysis returns `UNKNOWN` normally, no amount/guarantee wording, and Evidence/result version fields.
+- [x] **Step 1: Write failing HTTP tests.** Assert pre/post event create/update, structured facts only, scope denial, stale update `409`, analysis returns `UNKNOWN` normally, no amount/guarantee wording, and Evidence/result version fields.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_api.py -q
@@ -448,7 +460,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: FAIL because decisions router/service/schemas are absent.
 
-- [ ] **Step 3: Implement scoped service and routes.** Persist normalized facts and confirmation levels, invoke only the deterministic engine, store a new decision run/evaluation set transactionally, and map missing facts to HTTP 200 with `UNKNOWN` results.
+- [x] **Step 3: Implement scoped service and routes.** Persist normalized facts and confirmation levels, invoke only the deterministic engine, store a new decision run/evaluation set transactionally, and map missing facts to HTTP 200 with `UNKNOWN` results. The boundary also provides explicit soft-delete/trash/restore operations and optimistic version checks.
 
   ```python
   class MedicalEventCreateRequest(BaseModel):
@@ -460,7 +472,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
       facts: dict[str, FactInput]
   ```
 
-- [ ] **Step 4: Run API tests and route contract generation.**
+- [x] **Step 4: Run API tests and route contract generation.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_api.py -q
@@ -470,7 +482,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: deterministic analysis responses and OpenAPI paths pass; no raw event description or internal SQL error is echoed.
 
-- [ ] **Step 5: Commit the decision HTTP boundary.**
+- [x] **Step 5: Commit the decision HTTP boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/repository.py apps/api/src/familycare_api/decisions/service.py apps/api/src/familycare_api/decisions/schemas.py apps/api/src/familycare_api/decisions/router.py apps/api/src/familycare_api/decisions/errors.py apps/api/tests/test_decision_api.py
@@ -494,9 +506,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 - Consumes: complete deterministic engine/service/router and previous migrations.
 - Produces: strict `coverage-decision.v1`, synthetic PostgreSQL proof of reproducibility/immutability, and log/response/cache-safe boundaries.
 
-- [ ] **Step 1: Write failing schema/integration/privacy tests.** Assert exact tri-state enum, required rule/Evidence/version fields, immutable prior run after reanalysis, one failed Rider not hiding another, stale Evidence warning, no medical document field, and no raw fact/log output.
+- [x] **Step 1: Write failing schema/integration/privacy tests.** Assert exact tri-state enum, required rule/Evidence/version fields, immutable prior run after reanalysis, one failed Rider not hiding another, stale Evidence warning, no medical document field, and no raw fact/log output.
 
-- [ ] **Step 2: Run the focused RED commands.**
+- [x] **Step 2: Run the focused RED commands.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_contracts.py apps/api/tests/test_decision_integration.py apps/api/tests/test_decision_privacy.py -q
@@ -504,9 +516,9 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: FAIL because contract artifacts and PostgreSQL persistence/integration are incomplete.
 
-- [ ] **Step 3: Implement the strict schema and transactional persistence.** The schema rejects client-provided tri-state/amount fields and disallows extra properties; the repository writes event version, decision run, evaluations, Evidence joins, and candidates in one transaction after the engine returns.
+- [x] **Step 3: Implement the strict schema and transactional persistence.** The schema rejects client-provided tri-state/amount fields and disallows extra properties; the repository writes event version, decision run, evaluations, Evidence joins, and candidates in one transaction after the engine returns. Evidence metadata and content hashes are snapshotted with each evaluation so later source-row changes do not rewrite an already persisted result.
 
-- [ ] **Step 4: Run the complete focused suite.**
+- [x] **Step 4: Run the complete focused suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_migration.py apps/api/tests/test_decision_facts.py apps/api/tests/test_decision_operators.py apps/api/tests/test_decision_engine.py apps/api/tests/test_decision_api.py apps/api/tests/test_decision_contracts.py apps/api/tests/test_decision_privacy.py -q
@@ -519,7 +531,7 @@ Create/PATCH accepts structured facts, dates, mode, and confirmation levels only
 
   Expected: all deterministic decision, PostgreSQL, contract, privacy, and static checks pass without OpenAI or private files.
 
-- [ ] **Step 5: Commit the complete engine acceptance.**
+- [x] **Step 5: Commit the complete engine acceptance.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions packages/contracts/schemas/coverage-decision.v1.schema.json packages/contracts/examples/coverage-decision.v1.json apps/api/tests/test_decision_contracts.py apps/api/tests/test_decision_integration.py apps/api/tests/test_decision_privacy.py

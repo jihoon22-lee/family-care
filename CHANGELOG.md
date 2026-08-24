@@ -43,6 +43,10 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Generic `rider_clause` and `coverage_rule` review domains with typed child-version corrections and optimistic concurrency metadata.
 - `/app/clauses/review` with separate link/rule queues, Evidence disclosure, generated typed controls, and no raw DSL editor.
 - Synthetic Web review coverage including a 320px Playwright flow for Evidence disclosure, stored-version publication, and browser-storage privacy.
+- Phase 6 deterministic Coverage Decision Engine with structured pre-visit/post-treatment MedicalEvent lifecycle, household-scoped soft-delete/trash/restore, and optimistic version checks.
+- Exact `MATCH`/`NO_MATCH`/`UNKNOWN` aggregation for actually subscribed Riders and published executable CoverageRules, with bounded follow-up questions and Evidence lineage.
+- Transactional decision runs, RuleEvaluations, and Rider candidates with immutable Evidence metadata/content-hash snapshots for reproducible result reads.
+- Strict `coverage-decision.v1` contract and no-store MedicalEvent create/update/analyze/result HTTP boundary, including synthetic PostgreSQL integration and privacy tests.
 
 ### Changed
 

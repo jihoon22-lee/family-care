@@ -405,6 +405,80 @@
           }
         ]
       },
+      "ClaimCandidateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregate_result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Aggregate Result",
+            "type": "string"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "hold_reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hold Reason Codes",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionResponse"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "required_match_count": {
+            "minimum": 0.0,
+            "title": "Required Match Count",
+            "type": "integer"
+          },
+          "required_no_match_count": {
+            "minimum": 0.0,
+            "title": "Required No Match Count",
+            "type": "integer"
+          },
+          "required_unknown_count": {
+            "minimum": 0.0,
+            "title": "Required Unknown Count",
+            "type": "integer"
+          },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          },
+          "rider_type": {
+            "enum": [
+              "fixed",
+              "indemnity"
+            ],
+            "title": "Rider Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "rider_id",
+          "rider_type",
+          "aggregate_result",
+          "required_match_count",
+          "required_unknown_count",
+          "required_no_match_count",
+          "questions",
+          "hold_reason_codes"
+        ],
+        "title": "ClaimCandidateResponse",
+        "type": "object"
+      },
       "ClauseErrorResponse": {
         "additionalProperties": false,
         "description": "Fixed error envelope; request values and Clause text are never fields.",
@@ -799,6 +873,76 @@
         "title": "ClauseSearchResponse",
         "type": "object"
       },
+      "CoverageDecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCandidateResponse"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "engine_version": {
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "evaluations": {
+            "items": {
+              "$ref": "#/components/schemas/RuleEvaluationResponse"
+            },
+            "title": "Evaluations",
+            "type": "array"
+          },
+          "event_version": {
+            "minimum": 1.0,
+            "title": "Event Version",
+            "type": "integer"
+          },
+          "medical_event_id": {
+            "format": "uuid",
+            "title": "Medical Event Id",
+            "type": "string"
+          },
+          "policy_snapshot_at": {
+            "format": "date-time",
+            "title": "Policy Snapshot At",
+            "type": "string"
+          },
+          "rule_set_version": {
+            "title": "Rule Set Version",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "run_id",
+          "medical_event_id",
+          "event_version",
+          "engine_version",
+          "rule_set_version",
+          "policy_snapshot_at",
+          "stale",
+          "candidates",
+          "evaluations"
+        ],
+        "title": "CoverageDecisionResponse",
+        "type": "object"
+      },
       "CoverageRulePublishRequest": {
         "additionalProperties": false,
         "properties": {
@@ -946,6 +1090,25 @@
         "title": "CoverageRuleVersionsResponse",
         "type": "object"
       },
+      "DecisionErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "DecisionErrorResponse",
+        "type": "object"
+      },
       "DocumentAnalysisRequest": {
         "additionalProperties": false,
         "description": "Exact v1 request; files and credentials are intentionally absent.",
@@ -1048,77 +1211,6 @@
         "title": "ErrorResponse",
         "type": "object"
       },
-      "EvidenceResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "bbox": {
-            "anyOf": [
-              {
-                "maxItems": 4,
-                "minItems": 4,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bbox"
-          },
-          "content_sha256": {
-            "pattern": "^[0-9a-f]{64}$",
-            "title": "Content Sha256",
-            "type": "string"
-          },
-          "document_version_id": {
-            "format": "uuid",
-            "title": "Document Version Id",
-            "type": "string"
-          },
-          "evidence_id": {
-            "format": "uuid",
-            "title": "Evidence Id",
-            "type": "string"
-          },
-          "physical_page": {
-            "minimum": 1.0,
-            "title": "Physical Page",
-            "type": "integer"
-          },
-          "review_state": {
-            "enum": [
-              "AI_VERIFIED",
-              "NEEDS_REVIEW",
-              "USER_CONFIRMED"
-            ],
-            "title": "Review State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "evidence_id",
-          "document_version_id",
-          "content_sha256",
-          "physical_page",
-          "bbox",
-          "review_state"
-        ],
-        "title": "EvidenceResponse",
-        "type": "object"
-      },
       "ExpectedVersionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1196,6 +1288,95 @@
           "table_strategy"
         ],
         "title": "ExtractorConfigRequest",
+        "type": "object"
+      },
+      "FactInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "enum": [
+              "user",
+              "ai_structured",
+              "unconfirmed",
+              "conflicting"
+            ],
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "confirmation"
+        ],
+        "title": "FactInput",
+        "type": "object"
+      },
+      "FactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmation": {
+            "enum": [
+              "user",
+              "ai_structured",
+              "unconfirmed",
+              "conflicting"
+            ],
+            "title": "Confirmation",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "value",
+          "confirmation"
+        ],
+        "title": "FactResponse",
         "type": "object"
       },
       "FamilyMemberCreateRequest": {
@@ -1328,6 +1509,205 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "MedicalEventCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "event_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Date"
+          },
+          "facts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FactInput"
+            },
+            "maxProperties": 16,
+            "title": "Facts",
+            "type": "object"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "pre_visit",
+              "post_treatment"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "visit_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Date"
+          }
+        },
+        "required": [
+          "family_member_id",
+          "mode"
+        ],
+        "title": "MedicalEventCreateRequest",
+        "type": "object"
+      },
+      "MedicalEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "event_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Date"
+          },
+          "facts": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FactResponse"
+            },
+            "title": "Facts",
+            "type": "object"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "pre_visit",
+              "post_treatment"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "visit_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Date"
+          }
+        },
+        "required": [
+          "id",
+          "family_member_id",
+          "mode",
+          "event_date",
+          "visit_date",
+          "facts",
+          "version",
+          "deleted"
+        ],
+        "title": "MedicalEventResponse",
+        "type": "object"
+      },
+      "MedicalEventUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "event_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Date"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "facts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FactInput"
+                },
+                "maxProperties": 16,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facts"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pre_visit",
+                  "post_treatment"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "visit_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Date"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "MedicalEventUpdateRequest",
         "type": "object"
       },
       "PolicyCreateRequest": {
@@ -1576,7 +1956,7 @@
             "title": "Effective To"
           },
           "evidence": {
-            "$ref": "#/components/schemas/EvidenceResponse"
+            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
           },
           "family_member_id": {
             "format": "uuid",
@@ -1693,7 +2073,7 @@
             "type": "string"
           },
           "source_evidence": {
-            "$ref": "#/components/schemas/EvidenceResponse"
+            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
           },
           "status": {
             "enum": [
@@ -1709,7 +2089,7 @@
           "status_evidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EvidenceResponse"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
               },
               {
                 "type": "null"
@@ -1889,6 +2269,25 @@
           "expected_version"
         ],
         "title": "PolicyUpdateRequest",
+        "type": "object"
+      },
+      "QuestionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "field_path": {
+            "title": "Field Path",
+            "type": "string"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field_path",
+          "reason_code"
+        ],
+        "title": "QuestionResponse",
         "type": "object"
       },
       "ReviewIssue": {
@@ -2165,7 +2564,7 @@
             "title": "Renewable"
           },
           "source_evidence": {
-            "$ref": "#/components/schemas/EvidenceResponse"
+            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
           },
           "status": {
             "enum": [
@@ -2181,7 +2580,7 @@
           "status_evidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/EvidenceResponse"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
               },
               {
                 "type": "null"
@@ -2211,6 +2610,90 @@
           "version"
         ],
         "title": "RiderResponse",
+        "type": "object"
+      },
+      "RuleEvaluationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "conflicting_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Conflicting Fields",
+            "type": "array"
+          },
+          "engine_version": {
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "format": "uuid",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/familycare_api__decisions__schemas__EvidenceResponse"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "fact_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fact Paths",
+            "type": "array"
+          },
+          "missing_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "reason_code": {
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          },
+          "rule_version_id": {
+            "format": "uuid",
+            "title": "Rule Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "rider_id",
+          "rule_version_id",
+          "result",
+          "required",
+          "reason_code",
+          "fact_paths",
+          "missing_fields",
+          "conflicting_fields",
+          "evidence",
+          "engine_version"
+        ],
+        "title": "RuleEvaluationResponse",
         "type": "object"
       },
       "TermsEditionResponse": {
@@ -2306,6 +2789,155 @@
           "version"
         ],
         "title": "TermsEditionResponse",
+        "type": "object"
+      },
+      "familycare_api__decisions__schemas__EvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "extraction_id": {
+            "format": "uuid",
+            "title": "Extraction Id",
+            "type": "string"
+          },
+          "physical_page": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "extraction_id",
+          "content_sha256",
+          "physical_page",
+          "bbox",
+          "review_state"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
+      "familycare_api__policies__schemas__EvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "physical_page": {
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "content_sha256",
+          "physical_page",
+          "bbox",
+          "review_state"
+        ],
+        "title": "EvidenceResponse",
         "type": "object"
       }
     }
@@ -3267,6 +3899,690 @@
         "summary": "Restore Family Member",
         "tags": [
           "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/medical-events": {
+      "post": {
+        "operationId": "create_medical_event_api_v1_medical_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalEventCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicalEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Create Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/trash": {
+      "get": {
+        "operationId": "list_deleted_medical_events_api_v1_medical_events_trash_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MedicalEventResponse"
+                  },
+                  "title": "Response List Deleted Medical Events Api V1 Medical Events Trash Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Deleted Medical Events",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}": {
+      "delete": {
+        "operationId": "delete_medical_event_api_v1_medical_events__event_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Delete Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      },
+      "get": {
+        "operationId": "get_medical_event_api_v1_medical_events__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicalEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      },
+      "patch": {
+        "operationId": "update_medical_event_api_v1_medical_events__event_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MedicalEventUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicalEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/analyze": {
+      "post": {
+        "operationId": "analyze_medical_event_api_v1_medical_events__event_id__analyze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Analyze Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/restore": {
+      "post": {
+        "operationId": "restore_medical_event_api_v1_medical_events__event_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MedicalEventResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Restore Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/results/{version}": {
+      "get": {
+        "operationId": "get_decision_result_api_v1_medical_events__event_id__results__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageDecisionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Decision Result",
+        "tags": [
+          "coverage decisions"
         ]
       }
     },

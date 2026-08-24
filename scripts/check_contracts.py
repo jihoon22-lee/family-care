@@ -116,6 +116,15 @@ RIDER_CLAUSE_LINK_REJECTION_REASONS = [
     "WRONG_EDITION",
     "NOT_APPLICABLE",
 ]
+DECISION_SCHEMA_PATH = ROOT / "packages/contracts/schemas/coverage-decision.v1.schema.json"
+DECISION_EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v1.json"
+DECISION_FORBIDDEN_FIELDS = RIDER_CLAUSE_RULES_FORBIDDEN_FIELDS | {
+    "diagnosis_text",
+    "file_id",
+    "image_bytes",
+    "pdf_bytes",
+}
+DECISION_TRI_STATES = ["MATCH", "NO_MATCH", "UNKNOWN"]
 
 
 def _load_document_contract_checker() -> Any:
@@ -240,10 +249,16 @@ def validate_openapi() -> list[str]:
         "/api/v1/rider-clause-links/{link_id}/reject",
         "/api/v1/coverage-rules/{rule_id}/versions",
         "/api/v1/coverage-rules/{rule_id}/publish",
+        "/api/v1/medical-events",
+        "/api/v1/medical-events/trash",
+        "/api/v1/medical-events/{event_id}",
+        "/api/v1/medical-events/{event_id}/analyze",
+        "/api/v1/medical-events/{event_id}/restore",
+        "/api/v1/medical-events/{event_id}/results/{version}",
     }
     if set(paths) != expected_paths:
         errors.append(
-            "OpenAPI paths must contain health, policy, Clause, and gated analysis routes"
+            "OpenAPI paths must contain health, policy, Clause, analysis, and decision routes"
         )
         return errors
 
@@ -353,6 +368,59 @@ def validate_openapi() -> list[str]:
         sort_keys=True,
     ):
         errors.append("analysis response examples must not expose source keys")
+
+    event_create = paths["/api/v1/medical-events"].get("post", {})
+    event_request_ref = (
+        event_create.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+        .get("$ref")
+    )
+    if event_request_ref != "#/components/schemas/MedicalEventCreateRequest":
+        errors.append("MedicalEvent create must use the strict structured request")
+    event_request = schemas.get("MedicalEventCreateRequest", {})
+    if event_request.get("additionalProperties") is not False:
+        errors.append("MedicalEvent create must reject additional properties")
+    if set(event_request.get("properties", {})) != {
+        "family_member_id",
+        "mode",
+        "event_date",
+        "visit_date",
+        "facts",
+    }:
+        errors.append("MedicalEvent create exposes fields outside the structured event boundary")
+    decision_response = schemas.get("CoverageDecisionResponse", {})
+    if decision_response.get("additionalProperties") is not False:
+        errors.append("coverage decision response must reject additional properties")
+    expected_decision_fields = {
+        "schema_version",
+        "run_id",
+        "medical_event_id",
+        "event_version",
+        "engine_version",
+        "rule_set_version",
+        "policy_snapshot_at",
+        "stale",
+        "candidates",
+        "evaluations",
+    }
+    if set(decision_response.get("properties", {})) != expected_decision_fields:
+        errors.append("coverage decision response fields drifted from v1")
+    if (
+        "amount"
+        in json.dumps(
+            [
+                event_request,
+                schemas.get("MedicalEventUpdateRequest", {}),
+                decision_response,
+                schemas.get("ClaimCandidateResponse", {}),
+                schemas.get("RuleEvaluationResponse", {}),
+            ],
+            sort_keys=True,
+        ).lower()
+    ):
+        errors.append("MedicalEvent and decision OpenAPI must not expose amount fields")
     return errors
 
 
@@ -873,6 +941,135 @@ def validate_rider_clause_rules_contract() -> list[str]:
     return errors
 
 
+def _forbidden_decision_keys(value: Any, path: str = "$") -> list[str]:
+    """Return decision-contract paths crossing the private-data boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in DECISION_FORBIDDEN_FIELDS or key.lower() == "amount"
+    ]
+
+
+def _validate_decision_example_uuid(value: Any, path: str, errors: list[str]) -> None:
+    """Require decision example identifiers to use the obvious synthetic range."""
+
+    if not valid_uuid4(value):
+        errors.append(f"coverage-decision {path} must be a UUIDv4")
+    elif not str(value).startswith("00000000-0000-4000-8000-"):
+        errors.append(f"coverage-decision {path} must use a synthetic UUID")
+
+
+def _validate_decision_example_evidence(evidence: Any, path: str, errors: list[str]) -> None:
+    """Validate bounded Evidence identity without accepting document content."""
+
+    if not isinstance(evidence, list) or not 1 <= len(evidence) <= 16:
+        errors.append(f"coverage-decision {path} must contain 1 to 16 items")
+        return
+    for index, item in enumerate(evidence):
+        item_path = f"{path}[{index}]"
+        if not isinstance(item, dict):
+            continue
+        for field in ("evidence_id", "document_version_id", "extraction_id"):
+            _validate_decision_example_uuid(item.get(field), f"{item_path}.{field}", errors)
+        content_sha256 = item.get("content_sha256")
+        if not isinstance(content_sha256, str) or len(content_sha256) != 64:
+            errors.append(f"coverage-decision {item_path}.content_sha256 is not a SHA-256 value")
+        elif content_sha256 not in {"a" * 64, "b" * 64}:
+            errors.append(f"coverage-decision {item_path}.content_sha256 must be synthetic")
+        page = item.get("physical_page")
+        if not isinstance(page, int) or isinstance(page, bool) or not 1 <= page <= 500:
+            errors.append(f"coverage-decision {item_path}.physical_page is out of bounds")
+
+
+def _validate_decision_example_ids(value: Any, path: str, errors: list[str]) -> None:
+    """Check every identifier in the example without traversing raw payload values."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key == "run_id" or key.endswith("_id") or key == "id":
+                _validate_decision_example_uuid(child, child_path, errors)
+            _validate_decision_example_ids(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_decision_example_ids(child, f"{path}[{index}]", errors)
+
+
+def validate_decision_contract() -> list[str]:
+    """Validate the strict deterministic decision response and synthetic example."""
+
+    try:
+        schema = load_json(DECISION_SCHEMA_PATH)
+        example = load_json(DECISION_EXAMPLE_PATH)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("coverage-decision schema must use JSON Schema draft 2020-12")
+    if schema.get("title") != "CoverageDecision":
+        errors.append("coverage-decision schema title changed")
+    if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
+        errors.append("coverage-decision root must be a strict object")
+    expected_required = [
+        "schema_version",
+        "run_id",
+        "medical_event_id",
+        "event_version",
+        "engine_version",
+        "rule_set_version",
+        "policy_snapshot_at",
+        "stale",
+        "candidates",
+        "evaluations",
+    ]
+    if schema.get("required") != expected_required:
+        errors.append("coverage-decision root required fields changed")
+    object_schemas = _object_schemas(schema)
+    if not object_schemas or any(
+        item.get("additionalProperties") is not False for item in object_schemas
+    ):
+        errors.append("coverage-decision nested objects must reject additional properties")
+    if _forbidden_decision_keys(schema):
+        errors.append("coverage-decision schema contains a forbidden field")
+    if _forbidden_decision_keys(example):
+        errors.append("coverage-decision example contains a forbidden field")
+    errors.extend(
+        f"coverage-decision example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+
+    definitions = schema.get("$defs", {})
+    if definitions.get("TriState", {}).get("enum") != DECISION_TRI_STATES:
+        errors.append("coverage-decision TriState enum changed")
+    evaluation_required = set(definitions.get("RuleEvaluation", {}).get("required", []))
+    if not {
+        "rule_version_id",
+        "result",
+        "reason_code",
+        "evidence",
+        "engine_version",
+    }.issubset(evaluation_required):
+        errors.append("coverage-decision RuleEvaluation lineage fields are incomplete")
+    if "amount" in json.dumps(schema, sort_keys=True):
+        errors.append("coverage-decision schema must not expose amount in v1")
+
+    _validate_decision_example_ids(example, "$", errors)
+
+    evaluations = example.get("evaluations")
+    if isinstance(evaluations, list):
+        for index, evaluation in enumerate(evaluations):
+            if not isinstance(evaluation, dict):
+                continue
+            _validate_decision_example_evidence(
+                evaluation.get("evidence"), f"$.evaluations[{index}].evidence", errors
+            )
+            if evaluation.get("engine_version") != example.get("engine_version"):
+                errors.append("coverage-decision evaluation engine version must match the run")
+    return errors
+
+
 def validate_web_generated_outputs() -> list[str]:
     """Regenerate the Web consumer in a temporary directory and compare bytes."""
 
@@ -964,6 +1161,7 @@ def main() -> int:
         *validate_policy_candidate_contract(),
         *validate_clause_search_contract(),
         *validate_rider_clause_rules_contract(),
+        *validate_decision_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -972,7 +1170,7 @@ def main() -> int:
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
-        "rider-clause-rules.v1, and generated Web contracts)"
+        "rider-clause-rules.v1, coverage-decision.v1, and generated Web contracts)"
     )
     return 0
 
