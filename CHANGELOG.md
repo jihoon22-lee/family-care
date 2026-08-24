@@ -21,6 +21,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Versioned document-ingestion, pre-intake analysis-job, and evidence-preserving extraction-result contracts with deterministic API/Worker TypedDict generation.
 - Alembic `0002_document_ingestion` with the eight-table Phase 1 document, extraction, evidence-coordinate, and analysis-job model.
 - Descriptor-based local PDF intake with no-follow traversal, structural validation, bounded hashing, private workspaces, and resource-limited parser-child supervision.
+- Deterministic synthetic PDF fixtures and descriptor-only pdfplumber extraction for words, tables, cells, evidence coordinates, and versioned page-quality metrics.
+- Third-party parser inventory with pdfplumber and pypdf as Worker runtime dependencies and reportlab restricted to development/test fixtures.
 
 ### Changed
 
@@ -31,6 +33,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Dependabot policy ignores semver-major updates for npm `typescript` and Docker `node`/`postgres`, ignores semver-minor and semver-major updates for Docker `python`, and therefore leaves Python 3.14 patch updates eligible; `check_workflows.py` validates the official update-type syntax.
 - The unprivileged Web runtime is pinned to `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`.
 - Phase 1 document contracts and the eight-table ingestion model were merged in PR #8 at `9802781c98c0a6aee3fcd7018dfc020da087fee9`; all seven PR and post-merge `main` checks passed.
+- Phase 1 PDF intake and parser-child isolation were merged in PR #9 at `523bd68be3d951e37a9f4ba19b858d9ac9bdcfcc`; all seven PR and post-merge `main` checks passed.
 
 ### Deprecated
 
@@ -48,5 +51,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 parser boundary records that passwords never enter database rows, job payloads, or logs and that production acceptance waits for an approved runtime boundary.
 - Document contracts reject absolute, traversal, Windows-style, multiline, password-bearing, and client-hashed intake requests; PostgreSQL enforces job, extraction, evidence-review, and successful-extraction identity states.
 - Parser-child IPC accepts only bounded canonical JSON and never unpickles child-controlled values in the parent process.
+- The extraction child receives an exact password-free post-intake settings object, preserves the validated descriptor identity, and sanitizes corrupt or invalid-password failures to stable codes.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

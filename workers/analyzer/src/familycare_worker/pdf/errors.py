@@ -56,6 +56,10 @@ class PasswordRequired(PdfIntakeError):
     code = IntakeErrorCode.PASSWORD_REQUIRED
 
 
+class PasswordInvalid(PdfIntakeError):
+    code = IntakeErrorCode.PASSWORD_INVALID
+
+
 class PdfCorrupt(PdfIntakeError):
     code = IntakeErrorCode.PDF_CORRUPT
 

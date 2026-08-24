@@ -79,6 +79,8 @@ def run_isolated_parser(
 def parse_local_pdf(source_fd: int, settings_json: str) -> ExtractionResult: ...
 ```
 
+`settings_json`은 intake 이후 Worker가 만드는 내부 계약입니다. 허용 필드는 `document_version_id`, `content_sha256`, `extractor_config_hash`, `quality_rule_version`, `table_strategy`뿐이며 exact canonical JSON object로 검증합니다. source path, source key, password, document body는 이 경계를 통과하지 않습니다. 이 내부 계약은 API request나 DB에 저장되는 pre-intake AnalysisJob settings와 구분됩니다.
+
 child에는 CPU 90초, address space 1536 MiB, file size 64 MiB, open descriptors 64개의 OS resource limit을 적용하고, supervisor에는 120초 parent wall timeout을 적용합니다. Fork 후 parser를 호출하기 전에 source와 supervisor control pipe를 제외한 inherited application file·socket descriptor를 닫습니다. Child 결과는 JSON 값만 허용하고 canonical UTF-8 JSON으로 직렬화하며, parent는 64 MiB를 넘는 결과를 읽지 않습니다. 격리 경계를 넘어 임의 객체 생성을 허용하는 `pickle` 역직렬화는 사용하지 않습니다. OS-level egress enforcement는 production hardening 항목입니다. 승인된 runtime boundary가 마련되기 전에는 실제 private-data acceptance를 수행하지 않습니다. Windows descriptor passing과 `RLIMIT_*` 동작은 미검증입니다.
 
 ## Parser stack
@@ -87,7 +89,7 @@ Phase 1의 parser stack은 다음 고정 버전을 사용합니다.
 
 - `pdfplumber==0.11.10`: primary text, word, coordinate, and table/cell candidate extractor
 - `pypdf==6.16.2`: structural, page-count, and encryption validation
-- `reportlab==5.0.1`: deterministic synthetic PDF fixture generator used by tests
+- `reportlab==5.0.1`: root development/test group에만 있는 deterministic synthetic PDF fixture generator; Worker runtime image에는 포함하지 않음
 
 PyMuPDF는 현재 선택하지 않습니다. AGPL/commercial dual license가 현재 저장소의 no-license/proprietary-distribution posture와 충돌할 수 있어 이 단계에서는 거부합니다. 이 문서는 법률 자문이 아니며, 미래에 명시적인 license decision이 승인되면 별도 ADR로 재검토합니다. 자세한 결정은 `docs/adr/0006-permissive-pdf-parser-stack.md`에 기록합니다.
 
@@ -149,7 +151,7 @@ class PageQuality(TypedDict):
     maximum_repeated_character_run: int
 ```
 
-`ExtractionTable`과 `ExtractionCell`은 page number와 bounding box를 필수로 갖습니다. Evidence는 `DocumentVersion` UUID, 1-based page, optional `[x0, top, x1, bottom]` bounding box, content hash, and review state를 가집니다. 원본 파일 자체와 password는 DB에 저장하지 않습니다.
+`ExtractionTable`과 `ExtractionCell`은 자신을 포함하는 `ExtractionPage`에서 1-based page number를 상속하고 bounding box를 필수로 갖습니다. `TextBlock`과 Evidence에는 1-based page number가 명시적으로 포함됩니다. Evidence는 `DocumentVersion` UUID, optional `[x0, top, x1, bottom]` bounding box, content hash, and review state도 가집니다. 원본 파일 자체와 password는 DB에 저장하지 않습니다.
 
 ## Job states
 
