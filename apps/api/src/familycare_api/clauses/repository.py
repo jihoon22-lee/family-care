@@ -23,6 +23,7 @@ from familycare_api.clauses.errors import (
     ClauseRepositoryUnavailable,
     ClauseStateConflict,
     ClauseVersionConflict,
+    CoverageRuleInvalid,
     RiderClauseLinkInvalid,
     TermsEditionNotFound,
 )
@@ -34,6 +35,16 @@ from familycare_api.clauses.links import (
     validate_rider_clause_link,
 )
 from familycare_api.clauses.normalization import NORMALIZATION_VERSION
+from familycare_api.clauses.rules import (
+    CandidateRuleReviewState,
+    CoverageRule,
+    CoverageRuleVersion,
+    LinkPublicationState,
+    RulePublicationContext,
+    RuleReviewState,
+    RuleStatus,
+    validate_publishable_rule,
+)
 from familycare_api.common.evidence import EvidenceBbox, EvidenceRef, EvidenceReviewState
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.common.versions import require_expected_version
@@ -1215,9 +1226,429 @@ class RiderClauseLinkRepository:
         return _rider_clause_link(row, evidence)
 
 
+_RULE_COLUMNS = """
+    rule.id, rule.household_space_id, rule.rider_clause_link_id,
+    rule.rule_key, rule.current_status, rule.version,
+    rule.created_at, rule.updated_at, rule.deleted_at
+"""
+
+_RULE_VERSION_COLUMNS = """
+    version.id, version.coverage_rule_id, version.candidate_version_id,
+    version.version_number, version.schema_version, version.rule_kind,
+    version.required, version.input_field_paths, version.expression_json,
+    version.result_reason_code, version.review_state, version.executable,
+    version.generator_version, version.verifier_version,
+    version.created_at, version.published_at
+"""
+
+
+def _coverage_rule(row: dict[str, Any]) -> CoverageRule:
+    return CoverageRule(
+        id=cast(UUID, row["id"]),
+        household_space_id=cast(UUID, row["household_space_id"]),
+        rider_clause_link_id=cast(UUID, row["rider_clause_link_id"]),
+        rule_key=cast(str, row["rule_key"]),
+        current_status=cast(RuleStatus, row["current_status"]),
+        version=int(row["version"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        deleted_at=row.get("deleted_at"),
+    )
+
+
+def _coverage_rule_version(
+    row: dict[str, Any], evidence: Sequence[EvidenceRef]
+) -> CoverageRuleVersion:
+    input_fields = row.get("input_field_paths")
+    rule_document = row.get("expression_json")
+    if not isinstance(input_fields, list) or not isinstance(rule_document, dict):
+        raise ClauseRepositoryUnavailable
+    return CoverageRuleVersion(
+        id=cast(UUID, row["id"]),
+        coverage_rule_id=cast(UUID, row["coverage_rule_id"]),
+        candidate_version_id=cast(UUID, row["candidate_version_id"]),
+        version_number=int(row["version_number"]),
+        schema_version=cast(str, row["schema_version"]),
+        rule_kind=cast(Any, row["rule_kind"]),
+        required=bool(row["required"]),
+        input_field_paths=tuple(cast(list[str], input_fields)),
+        rule_document=cast(dict[str, object], rule_document),
+        result_reason_code=cast(str, row["result_reason_code"]),
+        review_state=cast(RuleReviewState, row["review_state"]),
+        executable=bool(row["executable"]),
+        generator_version=cast(str, row["generator_version"]),
+        verifier_version=cast(str, row["verifier_version"]),
+        created_at=row["created_at"],
+        published_at=row.get("published_at"),
+        evidence=tuple(evidence),
+    )
+
+
+class CoverageRuleRepository:
+    """Publish a revalidated stored rule candidate in one SQL transaction."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = _database_url(database_url)
+
+    def list_versions(
+        self,
+        scope: HouseholdScope,
+        rule_id: UUID,
+    ) -> tuple[CoverageRuleVersion, ...]:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                rows = connection.execute(
+                    f"""
+                    SELECT {_RULE_VERSION_COLUMNS}, {_EVIDENCE_COLUMNS}
+                    FROM coverage_rule_versions AS version
+                    JOIN coverage_rules AS rule
+                      ON rule.id = version.coverage_rule_id
+                     AND rule.household_space_id = %s
+                     AND rule.deleted_at IS NULL
+                    LEFT JOIN coverage_rule_evidence AS linked
+                      ON linked.coverage_rule_version_id = version.id
+                    LEFT JOIN evidence ON evidence.id = linked.evidence_id
+                    WHERE version.coverage_rule_id = %s
+                    ORDER BY version.version_number,
+                             evidence.physical_page NULLS LAST,
+                             evidence.id NULLS LAST
+                    """,
+                    (scope.household_space_id, rule_id),
+                ).fetchall()
+        except psycopg.Error:
+            raise ClauseRepositoryUnavailable from None
+        return self._versions_from_rows(rows)
+
+    def publish(
+        self,
+        scope: HouseholdScope,
+        rule_id: UUID,
+        version_id: UUID,
+        *,
+        expected_version: int,
+    ) -> CoverageRuleVersion:
+        aggregate_version = require_expected_version(expected_version)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                rule_row = connection.execute(
+                    f"""
+                    SELECT {_RULE_COLUMNS}
+                    FROM coverage_rules AS rule
+                    WHERE rule.id = %s
+                      AND rule.household_space_id = %s
+                      AND rule.version = %s
+                      AND rule.deleted_at IS NULL
+                    FOR UPDATE
+                    """,
+                    (rule_id, scope.household_space_id, aggregate_version),
+                ).fetchone()
+                if rule_row is None:
+                    raise ClauseVersionConflict
+                rule = _coverage_rule(rule_row)
+
+                version_row = connection.execute(
+                    f"""
+                    SELECT {_RULE_VERSION_COLUMNS}
+                    FROM coverage_rule_versions AS version
+                    WHERE version.id = %s AND version.coverage_rule_id = %s
+                    FOR UPDATE
+                    """,
+                    (version_id, rule.id),
+                ).fetchone()
+                if version_row is None:
+                    raise ClauseVersionConflict
+                version_evidence, version_evidence_valid = self._rule_evidence(
+                    connection, scope, version_id
+                )
+                candidate_version = _coverage_rule_version(version_row, version_evidence)
+
+                link_row = connection.execute(
+                    f"""
+                    SELECT {_LINK_COLUMNS}
+                    FROM rider_clause_links AS link
+                    WHERE link.id = %s
+                      AND link.household_space_id = %s
+                      AND link.deleted_at IS NULL
+                    FOR UPDATE
+                    """,
+                    (rule.rider_clause_link_id, scope.household_space_id),
+                ).fetchone()
+                if link_row is None:
+                    raise CoverageRuleInvalid("RIDER_CLAUSE_LINK_NOT_APPROVED")
+                link_repository = RiderClauseLinkRepository(self.database_url)
+                link_context = link_repository._validation_context(connection, scope, link_row)
+                try:
+                    validate_rider_clause_link(scope, link_context)
+                except RiderClauseLinkInvalid:
+                    raise CoverageRuleInvalid("RIDER_CLAUSE_LINK_NOT_APPROVED") from None
+
+                candidate = connection.execute(
+                    """
+                    SELECT candidate_kind, aggregate_id, status, is_current
+                    FROM analysis_candidate_versions
+                    WHERE id = %s AND household_space_id = %s
+                      AND deleted_at IS NULL
+                    FOR UPDATE
+                    """,
+                    (candidate_version.candidate_version_id, scope.household_space_id),
+                ).fetchone()
+                if candidate is None:
+                    raise CoverageRuleInvalid("RULE_CANDIDATE_MISMATCH")
+                candidate_evidence_ids, candidate_evidence_valid = self._candidate_evidence_ids(
+                    connection,
+                    scope,
+                    candidate_version.candidate_version_id,
+                )
+                latest_version = connection.execute(
+                    """
+                    SELECT max(version_number) AS version_number
+                    FROM coverage_rule_versions
+                    WHERE coverage_rule_id = %s
+                    """,
+                    (rule.id,),
+                ).fetchone()
+                is_latest = bool(
+                    latest_version
+                    and int(latest_version["version_number"]) == candidate_version.version_number
+                )
+                context = RulePublicationContext(
+                    rule=rule,
+                    candidate_version=candidate_version,
+                    link_id=cast(UUID, link_row["id"]),
+                    link_review_state=cast(LinkPublicationState, link_row["review_state"]),
+                    link_evidence_ids=frozenset(
+                        item.evidence_id for item in link_context.link.evidence
+                    ),
+                    candidate_kind=cast(str, candidate["candidate_kind"]),
+                    candidate_aggregate_id=cast(UUID | None, candidate.get("aggregate_id")),
+                    candidate_review_state=cast(CandidateRuleReviewState, candidate["status"]),
+                    candidate_is_current=bool(candidate["is_current"]) and is_latest,
+                    candidate_evidence_ids=candidate_evidence_ids,
+                    evidence_integrity_valid=(version_evidence_valid and candidate_evidence_valid),
+                )
+                validate_publishable_rule(scope, context)
+                published_row = connection.execute(
+                    f"""
+                    INSERT INTO coverage_rule_versions AS version (
+                      coverage_rule_id, candidate_version_id, version_number,
+                      schema_version, rule_kind, required, input_field_paths,
+                      expression_json, result_reason_code, review_state,
+                      executable, generator_version, verifier_version,
+                      published_at
+                    )
+                    SELECT
+                      version.coverage_rule_id, version.candidate_version_id,
+                      version.version_number + 1, version.schema_version,
+                      version.rule_kind, version.required,
+                      version.input_field_paths, version.expression_json,
+                      version.result_reason_code, version.review_state,
+                      true, version.generator_version, version.verifier_version,
+                      clock_timestamp()
+                    FROM coverage_rule_versions AS version
+                    WHERE version.id = %s
+                    RETURNING {_RULE_VERSION_COLUMNS}
+                    """,
+                    (version_id,),
+                ).fetchone()
+                if published_row is None:
+                    raise ClauseRepositoryUnavailable
+                published_id = cast(UUID, published_row["id"])
+                connection.execute(
+                    """
+                    INSERT INTO coverage_rule_evidence (
+                      coverage_rule_version_id, evidence_id
+                    )
+                    SELECT %s, evidence_id
+                    FROM coverage_rule_evidence
+                    WHERE coverage_rule_version_id = %s
+                    """,
+                    (published_id, version_id),
+                )
+                updated_rule = connection.execute(
+                    """
+                    UPDATE coverage_rules
+                    SET current_status = 'published', version = version + 1,
+                        updated_at = clock_timestamp()
+                    WHERE id = %s AND household_space_id = %s AND version = %s
+                      AND deleted_at IS NULL
+                    RETURNING id
+                    """,
+                    (rule.id, scope.household_space_id, aggregate_version),
+                ).fetchone()
+                if updated_rule is None:
+                    raise ClauseVersionConflict
+                published_evidence, published_evidence_valid = self._rule_evidence(
+                    connection, scope, published_id
+                )
+                if not published_evidence_valid:
+                    raise ClauseRepositoryUnavailable
+                return _coverage_rule_version(
+                    published_row,
+                    published_evidence,
+                )
+        except CoverageRuleInvalid, ClauseVersionConflict:
+            raise
+        except psycopg.errors.UniqueViolation:
+            raise ClauseVersionConflict from None
+        except psycopg.Error:
+            raise ClauseRepositoryUnavailable from None
+
+    @staticmethod
+    def _versions_from_rows(
+        rows: Sequence[dict[str, Any]],
+    ) -> tuple[CoverageRuleVersion, ...]:
+        grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
+        for row in rows:
+            version_id = cast(UUID, row["id"])
+            if version_id not in grouped:
+                grouped[version_id] = (row, [])
+            evidence = _evidence(row)
+            if evidence is not None:
+                grouped[version_id][1].append(evidence)
+        return tuple(_coverage_rule_version(row, evidence) for row, evidence in grouped.values())
+
+    @staticmethod
+    def _rule_evidence(
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        version_id: UUID,
+    ) -> tuple[tuple[EvidenceRef, ...], bool]:
+        rows = connection.execute(
+            """
+            SELECT
+              evidence.id AS evidence_id,
+              evidence.document_version_id AS evidence_document_version_id,
+              evidence.extraction_id AS evidence_extraction_id,
+              evidence.content_sha256 AS evidence_content_sha256,
+              evidence.physical_page AS evidence_physical_page,
+              evidence.x0 AS evidence_x0, evidence.y0 AS evidence_y0,
+              evidence.x1 AS evidence_x1, evidence.y1 AS evidence_y1,
+              evidence.review_state AS evidence_review_state,
+              document_version.content_sha256 AS document_content_sha256,
+              document_version.page_count AS document_page_count,
+              extraction.document_version_id AS extraction_document_version_id,
+              extraction.status AS extraction_status,
+              page.width_points, page.height_points
+            FROM coverage_rule_evidence AS linked
+            JOIN evidence ON evidence.id = linked.evidence_id
+            JOIN document_versions AS document_version
+              ON document_version.id = evidence.document_version_id
+            JOIN extractions AS extraction ON extraction.id = evidence.extraction_id
+            JOIN extraction_pages AS page
+              ON page.extraction_id = extraction.id
+             AND page.page_number = evidence.physical_page
+            WHERE linked.coverage_rule_version_id = %s
+              AND evidence.household_space_id = %s
+            ORDER BY evidence.physical_page, evidence.id
+            """,
+            (version_id, scope.household_space_id),
+        ).fetchall()
+        return CoverageRuleRepository._validated_evidence_rows(rows)
+
+    @staticmethod
+    def _candidate_evidence_ids(
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        candidate_version_id: UUID,
+    ) -> tuple[frozenset[UUID], bool]:
+        rows = connection.execute(
+            """
+            SELECT
+              candidate.document_version_id AS candidate_document_version_id,
+              candidate.physical_page AS candidate_physical_page,
+              candidate.x0 AS candidate_x0, candidate.y0 AS candidate_y0,
+              candidate.x1 AS candidate_x1, candidate.y1 AS candidate_y1,
+              evidence.id AS evidence_id,
+              evidence.document_version_id AS evidence_document_version_id,
+              evidence.extraction_id AS evidence_extraction_id,
+              evidence.content_sha256 AS evidence_content_sha256,
+              evidence.physical_page AS evidence_physical_page,
+              evidence.x0 AS evidence_x0, evidence.y0 AS evidence_y0,
+              evidence.x1 AS evidence_x1, evidence.y1 AS evidence_y1,
+              evidence.review_state AS evidence_review_state,
+              version.content_sha256 AS document_content_sha256,
+              version.page_count AS document_page_count,
+              extraction.document_version_id AS extraction_document_version_id,
+              extraction.status AS extraction_status,
+              page.width_points, page.height_points
+            FROM analysis_candidate_evidence AS candidate
+            JOIN analysis_candidate_versions AS candidate_version
+              ON candidate_version.id = candidate.candidate_version_id
+             AND candidate_version.household_space_id = %s
+            JOIN evidence ON evidence.id = candidate.evidence_id
+            JOIN document_versions AS version
+              ON version.id = evidence.document_version_id
+            JOIN extractions AS extraction ON extraction.id = evidence.extraction_id
+            JOIN extraction_pages AS page
+              ON page.extraction_id = extraction.id
+             AND page.page_number = evidence.physical_page
+            WHERE candidate.candidate_version_id = %s
+              AND evidence.household_space_id = %s
+            ORDER BY evidence.physical_page, evidence.id
+            """,
+            (
+                scope.household_space_id,
+                candidate_version_id,
+                scope.household_space_id,
+            ),
+        ).fetchall()
+        evidence, valid = CoverageRuleRepository._validated_evidence_rows(rows)
+        for row, item in zip(rows, evidence, strict=False):
+            valid = valid and bool(
+                row.get("candidate_document_version_id") == item.document_version_id
+                and row.get("candidate_physical_page") == item.physical_page
+                and (
+                    row.get("candidate_x0"),
+                    row.get("candidate_y0"),
+                    row.get("candidate_x1"),
+                    row.get("candidate_y1"),
+                )
+                == (
+                    row.get("evidence_x0"),
+                    row.get("evidence_y0"),
+                    row.get("evidence_x1"),
+                    row.get("evidence_y1"),
+                )
+            )
+        return frozenset(item.evidence_id for item in evidence), valid
+
+    @staticmethod
+    def _validated_evidence_rows(
+        rows: Sequence[dict[str, Any]],
+    ) -> tuple[tuple[EvidenceRef, ...], bool]:
+        evidence: list[EvidenceRef] = []
+        valid = bool(rows)
+        for row in rows:
+            item = _evidence(row)
+            if item is None:
+                valid = False
+                continue
+            width = row.get("width_points")
+            height = row.get("height_points")
+            valid = valid and bool(
+                item.content_sha256 == row.get("document_content_sha256")
+                and item.document_version_id == row.get("extraction_document_version_id")
+                and row.get("extraction_status") == "succeeded"
+                and item.physical_page <= int(row.get("document_page_count") or 0)
+                and item.review_state in {"AI_VERIFIED", "USER_CONFIRMED"}
+                and (
+                    item.bbox is None
+                    or (
+                        isinstance(width, Decimal)
+                        and isinstance(height, Decimal)
+                        and item.bbox[2] <= width
+                        and item.bbox[3] <= height
+                    )
+                )
+            )
+            evidence.append(item)
+        return tuple(evidence), valid
+
+
 __all__ = [
     "ClauseRepository",
     "ClauseSearchRepository",
+    "CoverageRuleRepository",
     "RiderClauseLinkRepository",
     "SEARCH_SQL",
     "TermsEditionRepository",

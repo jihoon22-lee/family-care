@@ -386,7 +386,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 4: Implement CoverageRule versions and executable publication
 
-**Status:** `in_progress`
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/rules.py`
@@ -399,9 +399,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: validated DSL/compiler, Rider-Clause links, candidate versions, and Evidence index.
 - Produces: `CoverageRule`, `CoverageRuleVersion`, `list_rule_versions`, `publish_coverage_rule`, and the invariant that only `AI_VERIFIED`/`USER_CONFIRMED` validated versions become executable.
 
-- [ ] **Step 1: Write failing publication tests.** Assert `NEEDS_REVIEW`, unsupported DSL, invented/mismatched Evidence, wrong schema version, stale candidate, and missing Clause Evidence all remain non-executable; assert two-stage verified candidate plus exact Evidence publishes atomically.
+- [x] **Step 1: Write failing publication tests.** Assert `NEEDS_REVIEW`, unsupported DSL, invented/mismatched Evidence, wrong schema version, stale candidate, and missing Clause Evidence all remain non-executable; assert two-stage verified candidate plus exact Evidence publishes atomically.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_publication.py -q
@@ -409,7 +409,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because rule repository/publisher functions are absent.
 
-- [ ] **Step 3: Implement the minimum transactional publisher.** Revalidate the stored candidate and Evidence inside one `SELECT ... FOR UPDATE` transaction, write a new immutable version, and set `executable = true` only for the two approved review states.
+- [x] **Step 3: Implement the minimum transactional publisher.** Revalidate the stored candidate and Evidence inside one `SELECT ... FOR UPDATE` transaction, write a new immutable version, and set `executable = true` only for the two approved review states.
 
   ```python
   APPROVED_STATES = frozenset({"AI_VERIFIED", "USER_CONFIRMED"})
@@ -419,7 +419,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
       return review_state in APPROVED_STATES and validation.valid and validation.evidence_complete
   ```
 
-- [ ] **Step 4: Run publication tests and static checks.**
+- [x] **Step 4: Run publication tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_publication.py -q
@@ -438,6 +438,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 5: Add HTTP contracts, integration tests, and privacy checks
+
+**Status:** `in_progress`
 
 **Files:**
 - Modify: `apps/api/src/familycare_api/clauses/router.py`

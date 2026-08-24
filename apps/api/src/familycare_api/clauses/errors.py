@@ -28,6 +28,19 @@ RiderClauseReasonCode = Literal[
     "TERMS_ONLY_RIDER",
     "TERMS_SCOPE_CONFLICT",
 ]
+CoverageRuleReasonCode = Literal[
+    "RIDER_CLAUSE_LINK_NOT_APPROVED",
+    "RULE_CANDIDATE_MISMATCH",
+    "RULE_CANDIDATE_NOT_APPROVED",
+    "RULE_CANDIDATE_STALE",
+    "RULE_DSL_INVALID",
+    "RULE_EVIDENCE_INVALID",
+    "RULE_EVIDENCE_MISMATCH",
+    "RULE_NOT_ACTIVE",
+    "RULE_SCOPE_MISMATCH",
+    "RULE_VERSION_ALREADY_PUBLISHED",
+    "RULE_VERSION_NOT_APPROVED",
+]
 
 
 class ClauseError(ApiBoundaryError):
@@ -76,6 +89,18 @@ class RiderClauseLinkInvalid(ClauseError):
         super().__init__()
 
 
+class CoverageRuleInvalid(ClauseError):
+    """A stored rule candidate failed deterministic publication checks."""
+
+    status_code = 422
+    error_code: PolicyErrorCode = "EVIDENCE_INVALID"
+    public_message = "coverage rule is invalid"
+
+    def __init__(self, reason_code: CoverageRuleReasonCode) -> None:
+        self.reason_code = reason_code
+        super().__init__()
+
+
 class ClauseStateConflict(ClauseError):
     status_code = 409
     error_code: PolicyErrorCode = "POLICY_STATE_CONFLICT"
@@ -102,6 +127,8 @@ __all__ = [
     "ClauseRepositoryUnavailable",
     "ClauseStateConflict",
     "ClauseVersionConflict",
+    "CoverageRuleInvalid",
+    "CoverageRuleReasonCode",
     "InvalidSearchQuery",
     "RiderClauseLinkInvalid",
     "RiderClauseReasonCode",
