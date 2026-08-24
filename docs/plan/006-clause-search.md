@@ -268,9 +268,9 @@ POST /api/v1/clauses/search
 - Consumes: `EvidenceRef` and `HouseholdScope` from `familycare_api.common`.
 - Produces: `NORMALIZATION_VERSION`, `normalize_clause_text`, `normalize_search_query`, `bounded_excerpt`, `TermsEdition`, `Clause`, `ClauseSearchFilters`, `ClauseSearchHit`, and a fully synthetic Korean/English corpus.
 
-- [ ] **Step 1: Write failing normalization tests.** Cover NFC composition, repeated whitespace, punctuation boundaries, Korean synthetic terms, empty/overlong queries, deterministic bounded excerpts, and rejection of non-string values.
+- [x] **Step 1: Write failing normalization tests.** Cover NFC composition, repeated whitespace, punctuation boundaries, Korean synthetic terms, empty/overlong queries, deterministic bounded excerpts, and rejection of non-string values.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_normalization.py -q
@@ -278,7 +278,7 @@ POST /api/v1/clauses/search
 
   Expected: FAIL because the normalization module and versioned functions do not exist.
 
-- [ ] **Step 3: Implement the smallest deterministic normalizer.** Do not use external dictionaries or private document text. Preserve meaningful Unicode characters, collapse whitespace, normalize punctuation separators, and keep the normalization version explicit.
+- [x] **Step 3: Implement the smallest deterministic normalizer.** Do not use external dictionaries or private document text. Preserve meaningful Unicode characters, collapse whitespace, normalize punctuation separators, and keep the normalization version explicit.
 
   ```python
   def normalize_clause_text(text: str) -> str:
@@ -290,7 +290,7 @@ POST /api/v1/clauses/search
       return normalized.strip()
   ```
 
-- [ ] **Step 4: Run normalization and safety checks.**
+- [x] **Step 4: Run normalization and safety checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_clause_normalization.py -q
@@ -299,7 +299,7 @@ POST /api/v1/clauses/search
 
   Expected: all normalization cases pass and the corpus is accepted as wholly synthetic.
 
-- [ ] **Step 5: Commit the normalization boundary.**
+- [x] **Step 5: Commit the normalization boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/__init__.py apps/api/src/familycare_api/clauses/domain.py apps/api/src/familycare_api/clauses/normalization.py apps/api/tests/test_clause_normalization.py fixtures/synthetic/terms-search-corpus.json
