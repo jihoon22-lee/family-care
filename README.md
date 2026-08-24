@@ -6,21 +6,21 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Phase 0 (Foundation)은 완료되었습니다. [PR #1](https://github.com/jihoon22-lee/family-care/pull/1)의 merge commit은 `0f632989df891ae944c012bfcce6c838009867a9`이며, PR과 post-merge GitHub Actions의 일곱 required job이 모두 성공했습니다. 이 완료는 문서·코드·CI 경계를 확인한 것이며, 태그 생성, GHCR publish, Cloud Run, 실제 자료 검증을 포함하지 않습니다.
+Phase 0 (Foundation)과 Phase 1 (Synthetic PDF Ingestion)은 완료되었습니다. Phase 1은 PR #8~#12에서 구현되고 PR #13에서 완료 상태가 기록되었으며 현재 기준 main merge는 `8c6ceab`입니다. 합성 PDF의 descriptor-safe intake, extraction, PostgreSQL job queue와 local synthetic API가 구현됐지만 release tag, GHCR publish, 실제 자료 검증은 아직 수행하지 않았습니다.
 
-현재는 Phase 1 (Synthetic PDF Ingestion) 계획 단계입니다. Phase 1 구현과 CI는 처음부터 만든 합성 PDF만 사용하며, 실제 PDF나 private external root를 열지 않습니다. 테스트는 합성 fixture를 checkout 밖의 임시 root에 복사해 실행합니다. 인증 provider는 Phase 7 범위이므로 Phase 1 endpoint는 local synthetic-only 개발 경계이며 production-safe endpoint로 간주하지 않습니다.
+Phase 2부터 Phase 8까지의 첫 사용 가능 제품 범위가 승인되었고 정식 설계 문서를 검토 중입니다. 목표 릴리스는 `v0.1.0`이며 가족·보험 원장, 약관과 AI 검증, 결정론적 판정·정액/실손 계산, 행동 우선 PWA, 청구 이력, 두 로컬 관리자, 암호 PDF batch·선택적 OCR·개인 WSL/Tailscale acceptance를 포함합니다. 이 기능들은 아직 구현 완료로 간주하지 않습니다.
 
-구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`와 `docs/plan/002-synthetic-pdf-ingestion.md`에서 확인할 수 있습니다.
+승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
-Foundation에서 구현하지 않은 범위:
+v0.1에서 구현하지 않는 범위:
 
-- 실제 보험 PDF 수집·분석과 private-data acceptance
-- 로그인과 운영 계정
-- Google Drive 또는 외부 AI 연동
-- 보험금 자격·금액 판정
+- Google Drive 자동 연동
+- 보험사 직접 청구와 의료 문서 file 보관
 - Cloud Run을 포함한 운영 배포
+- LUKS, BitLocker, WSL swap과 고정 크기 암호화 volume 변경
+- 다중 가정, 공개 가입, 계정 초대와 역할 관리
 
-Phase 1에서도 OCR 실행, Policy Ledger, 보험금 자격·금액 판정은 구현하지 않습니다. 약관과 증권에 근거한 결과는 후속 단계의 명시적 규칙과 검수 경계를 거쳐야 합니다.
+v0.1은 기존 WSL의 `OPENAI_API_KEY`를 Worker에서 문서·입력 구조화와 별도 검증에 사용합니다. AI는 `MATCH / NO_MATCH / UNKNOWN`이나 보험금 예상액을 직접 결정하지 않으며, 약관 Evidence와 검증된 규칙을 결정론적 엔진이 평가합니다. 공개 CI는 외부 AI와 실제 secret을 사용하지 않습니다.
 
 ## Privacy boundary
 
@@ -41,9 +41,11 @@ Phase 1에서도 OCR 실행, Policy Ledger, 보험금 자격·금액 판정은 �
 ```text
 React PWA
     |
-FastAPI modular monolith
-    |
-PostgreSQL <-> Analyzer Worker
+Web gateway -> FastAPI modular monolith
+                    |
+       PostgreSQL <-> Analyzer Worker
+                          |
+              local OCR + OpenAI verification
 ```
 
 - `apps/web`: React + TypeScript PWA
@@ -87,7 +89,7 @@ make down
 
 ## Decision contract
 
-향후 보험 담보 조건은 다음 세 값만 사용합니다.
+보험 담보 조건은 다음 세 값만 사용합니다.
 
 - `MATCH`: 현재 확인된 사실이 규칙과 일치합니다.
 - `NO_MATCH`: 확인 가능한 근거로 규칙과 일치하지 않습니다.

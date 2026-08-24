@@ -1,6 +1,6 @@
 # Test strategy
 
-- 상태: Foundation 및 Phase 1 검증 기준
+- 상태: Foundation·Phase 1 완료, v0.1 검증 기준 승인
 - 원칙: 최신 실행 증거 없는 완료 주장을 하지 않음
 
 ## Scope
@@ -30,6 +30,8 @@
 - 비밀 검사는 실제 credential이 아닌 분할·조립한 합성 문자열을 사용합니다.
 - Phase 1 테스트는 reportlab으로 만든 wholly synthetic PDF를 checkout 밖 임시 root에 복사하고, `FAMILYCARE_DOCUMENT_ROOT`를 그 임시 root로만 설정합니다.
 - Phase 1 구현과 CI는 실제 PDF와 private external root를 열지 않습니다.
+- v0.1 공개 CI는 OpenAI를 호출하지 않고 처음부터 만든 request/response fixture로 structurer·verifier 계약을 검증합니다.
+- 실제 PDF와 OpenAI acceptance는 사용자가 지정한 저장소 밖 source와 local key로만 실행하고 CI 결과와 분리합니다.
 
 ## Test layers
 
@@ -75,7 +77,7 @@ SQLite로 PostgreSQL 행 잠금·전문검색 동작을 대체 검증하지 않�
 
 ### Integration tests
 
-합성 설정으로 API, PostgreSQL, Worker의 실제 경계를 검증합니다. 테스트는 독립 스키마 또는 transaction을 사용하고 외부 AI·Drive를 호출하지 않습니다.
+합성 설정으로 API, PostgreSQL, Worker의 실제 경계를 검증합니다. 테스트는 독립 schema 또는 transaction을 사용하고 공개 CI에서 외부 AI·Drive를 호출하지 않습니다. AI adapter는 합성 structurer/verifier response를 사용해 동일한 schema, retry, publish 경계를 통과합니다.
 
 ### Container tests
 
@@ -95,6 +97,10 @@ SQLite로 PostgreSQL 행 잠금·전문검색 동작을 대체 검증하지 않�
 - 서비스 워커 cache key
 - API/PDF no-store
 - installability
+- 두 관리자 login과 session expiry
+- 자연어 input, editable facts, manual receipt lines
+- 행동 우선 result cards와 Evidence viewer
+- ClaimCase checklist와 수동 상태 기록
 
 CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 결과로 보고합니다.
 
@@ -108,6 +114,8 @@ CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 �
 - dependency·container scan
 
 Phase 1 security tests additionally verify 25 MiB input, 500 pages, 120초 parent wall, 90초 child CPU, 1536 MiB address space, 64 MiB output, 64 open descriptors, mode `0700` work directories, mode `0600` files, 1 MiB streaming SHA-256, `%PDF-` magic, password absence, and symlink rejection.
+
+v0.1 security tests additionally verify family-scoped batch password reuse and disposal, encrypted archive round-trip and tamper detection, selective OCR cleanup, Worker-only OpenAI key injection, external payload allowlist, local session/CSRF/object scope, and gateway-only host exposure.
 
 정적 검사만 수행한 경우 동적 공격 재현을 수행했다고 보고하지 않습니다.
 
@@ -140,7 +148,7 @@ These commands use synthetic fixtures only. They do not discover, open, or copy 
 
 ## Resource policy
 
-현재 WSL 환경에서는 frontend, Python, Docker 검증을 직렬로 실행합니다. 컨테이너도 Web, API, Worker 순서로 하나씩 빌드합니다. Docker 작업 전 `free -h`, `docker ps`로 자원과 소유 대상을 확인합니다.
+현재 WSL 환경에서는 frontend, Python, Docker 검증을 직렬로 실행합니다. 컨테이너도 Web, API, Worker 순서로 하나씩 빌드합니다. Docker 작업 전 `free -h`, `docker ps`로 자원과 소유 대상을 확인합니다. v0.1 검증을 위해 WSL swap 설정을 변경하지 않습니다.
 
 메모리 부족으로 중단된 검사는 실패 또는 미완료이며 통과로 보고하지 않습니다.
 
@@ -209,10 +217,22 @@ CI 성공은 실제 보험 판정 정확도나 운영 배포를 증명하지 않
 - 인증과 객체 scope
 - 비공개 실제 자료 수동 검수 보고
 
+## v0.1 acceptance matrix
+
+- synthetic contract-to-claim E2E without external secrets
+- encrypted synthetic batch with one-time password and partial failure
+- native extraction plus local Korean/English OCR only for classified pages
+- AI structurer/verifier success, disagreement, invalid Evidence and provider failure
+- fixed and partial indemnity decision tables
+- two-admin login, CSRF, session expiry and device revoke
+- Docker Compose migration, restart, DB/archive persistence and job recovery
+- Tailscale address and real mobile PWA as separately reported manual checks
+- user-approved real PDF review without committing source, extraction or result
+
 ## Tests
 
 이 전략 자체는 `scripts/check_documentation.py`의 필수 heading 검사, CI command matrix와 로컬 Make target의 동등성 검사, PR 템플릿의 증거 필드 검사로 검증합니다. 각 기능 설계는 위 계층 중 적용 가능한 테스트를 구체적인 사례와 명령으로 다시 정의합니다.
 
 ## Deferred decisions
 
-브라우저 자동화 도구, 검색 품질 지표 목표, 실제 자료 acceptance 표본 크기, 운영 부하 목표는 해당 기능 설계에서 확정합니다.
+검색 품질 지표 목표, 실제 자료 acceptance 표본 수, 운영 부하 목표는 각 feature plan에서 합성 baseline을 먼저 정합니다. Google Drive, public deployment와 multi-provider AI acceptance는 v0.1 이후로 남깁니다.

@@ -1,374 +1,309 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: 승인된 프로젝트 기반 설계에서 파생
-- 기준 설계: `docs/design/project-foundation.md`
-- 계획 원칙: 각 단계는 독립된 설계 검토, 구현 계획, 자동 검증, 완료 보고를 가진다.
+- 상태: Phase 0·1 완료, Phase 2~8 및 v0.1 설계 승인
+- 기준 설계: `docs/design/v0.1-product.md`
+- 목표 릴리스: `v0.1.0`
+- 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
-## 1. 계획 운영 규칙
+## Plan rules
 
-1. 다음 단계는 선행 단계의 수용 조건이 증거와 함께 충족된 뒤 시작한다.
-2. 실제 보험 자료가 없어도 합성 데이터로 기능과 실패 경로를 먼저 완성한다.
-3. 실제 데이터, 외부 계정, 운영 인프라가 필요한 검증은 코드·CI 완료와 분리해 보고한다.
-4. 새 하위 시스템은 `docs/design/`의 설계 승인 후 `docs/plan/`의 구현 계획으로 전환한다.
-5. 모든 판정 기능은 근거 추적과 `UNKNOWN` 경로를 정상 동작으로 취급한다.
-6. 사용자 승인 없이 저장소 밖 자료를 이동하거나 외부 서비스에 전송하지 않는다.
+1. 각 기능은 독립적으로 검토 가능한 branch, Conventional Commit, PR, CI, merge commit을 가진다.
+2. 하나의 거대한 Phase 2~8 PR을 만들지 않는다.
+3. 각 PR 직전 root agent가 전체 diff와 최신 검증을 한 번 집중 검토한다.
+4. 기능·동작 변경은 실패하는 test를 먼저 작성한다.
+5. 공개 CI는 실제 자료, 외부 AI, Google Drive, 실제 secret 없이 실행한다.
+6. 실제 자료 acceptance, device 확인, release tag는 코드 검증과 분리해 증거를 기록한다.
+7. 이전 단계 결과를 깨뜨리는 변경은 다음 단계에 묵시적으로 포함하지 않는다.
 
-## 2. Phase status
+## Phase status
 
-| Phase | Status | Current evidence and dependency |
+| Phase | Status | Evidence or target |
 |---|---|---|
-| Phase 0 — Project Foundation | Complete | PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, and seven successful PR/post-merge CI jobs. No tag, GHCR publish, Cloud Run, or real/private-data verification was performed. |
-| Phase 1 — Synthetic PDF Ingestion | In planning | `docs/design/pdf-ingestion.md`, ADR 0006, and `docs/plan/002-synthetic-pdf-ingestion.md`; synthetic-only implementation and CI. |
-| Phase 2 — Policy Ledger | Planned | Starts after Phase 1 and its minimum document model are merged and verified. |
-| Phase 3 — Clause Linking and Search | Planned | Depends on the Policy Ledger and terms model. |
-| Phase 4 — Coverage Decision Engine | Planned | Depends on linked clauses and evidence contracts. |
-| Phase 5 — Event and Result PWA | Planned | Depends on the decision engine API contract. |
-| Phase 6 — Claim Workflow | Planned | Depends on the event/result flow and claim state model. |
-| Phase 7 — Authentication | Planned | Depends on local feature boundaries and the approved provider/runtime. |
-| Phase 8 — Private-data Acceptance | Planned | Requires explicit user approval and an approved runtime boundary. |
-| Phase 9 — Optional Drive and AI Integrations | Planned | Requires private-data acceptance and external-transfer policy. |
-| Phase 10 — Production Deployment | Planned | Requires a separately approved production design. |
+| Phase 0 — Project Foundation | Complete | PR #1, merge `0f632989df891ae944c012bfcce6c838009867a9`, required CI passed. |
+| Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation, PR #13 completion record, current main `8c6ceab`; no release tag or real-data acceptance. |
+| Phase 2 — Policy Ledger | Approved design | Family, contract, party, actual Rider, AI candidate review. |
+| Phase 3 — Clause Linking and Search | Approved design | TermsEdition, Clause, full-text search, Rider link, AI rule validation. |
+| Phase 4 — Coverage Decision Engine | Approved design | MedicalEvent, tri-state engine, fixed and indemnity calculation. |
+| Phase 5 — Event and Result PWA | Approved design | Hybrid input and action-first mobile result. |
+| Phase 6 — Claim Workflow | Approved design | Checklist and manually recorded submission/payment metadata. |
+| Phase 7 — Local Authentication | Approved design | Two equal local admins, server-side sessions and CSRF. |
+| Phase 8 — Private Local Acceptance | Approved design | Encrypted batch import, managed archive, selective OCR, WSL/Tailscale acceptance. |
+| v0.1.0 — Container release | Pending Phase 2~8 | Full regression, tag, Web/API/Worker GHCR publish. |
 
-## 3. 단계 의존성
+## Dependency flow
 
 ```text
-Foundation
-  -> Synthetic PDF Ingestion
-  -> Policy Ledger
-  -> Clause Linking and Search
-  -> Coverage Decision Engine
-  -> Event and Result PWA
-  -> Claim Workflow
-  -> Authentication
-  -> Private-data Acceptance
-  -> Optional Drive and AI Integrations
-  -> Production Deployment
+Phase 0 Foundation [complete]
+  -> Phase 1 Synthetic PDF Ingestion [complete]
+  -> Phase 2 Policy Ledger and AI candidate review
+  -> Phase 3 Clause search, linking, and executable rule validation
+  -> Phase 4 MedicalEvent, tri-state decision, fixed/indemnity calculation
+  -> Phase 5 Hybrid input and action-first PWA
+  -> Phase 6 Claim checklist and outcome history
+  -> Phase 7 Two-admin authentication and session boundary
+  -> Phase 8 Encrypted private import, local OCR, WSL/Tailscale acceptance
+  -> v0.1.0 tag and GHCR images
 ```
 
-검색 품질 실험은 Clause Linking 이후 병행할 수 있지만, 실제 판정 결과에 반영하려면 Decision Engine 수용 조건을 통과해야 한다. 인증 구현 전까지 모든 로컬 화면은 합성 데이터 전용 개발 기능으로 취급한다.
+AI adapters, encrypted archive, and OCR can be developed earlier with wholly synthetic fixtures, but actual private PDF use waits until the authenticated Phase 8 runtime boundary is present.
 
-## 4. Phase 0 — Project Foundation
+## Completed foundation
 
-### 목표
+### Phase 0 — Project Foundation
 
-공개 저장소의 보안 경계, 문서, 실행 가능한 최소 서비스, 로컬 PostgreSQL, CI, GHCR 이미지 릴리스를 확립한다.
+Completed scope:
 
-### 주요 산출물
+- repository documents, privacy boundary, branch and commit rules
+- React PWA, FastAPI, Analyzer Worker, PostgreSQL skeleton
+- OpenAPI and JSON Schema contracts
+- Docker Compose and non-root Web/API/Worker images
+- PR/main CI, safety checks, Dependabot, GHCR tag workflow
 
-- README, AGENTS, CHANGELOG, 기여·보안 정책
-- 시스템 아키텍처, 사용 가이드, 기능별 기준 설계, ADR
-- Web/API/Worker 최소 실행 골격과 헬스체크
-- 합성 fixture 및 언어 중립 계약 디렉터리
-- 저장소 안전 검사, secret scanning, 의존성 업데이트 설정
-- PR/main CI와 `v*` 태그 GHCR 릴리스
+Not claimed by Phase 0: release tag, GHCR publish, Cloud Run, actual device, real/private document verification.
 
-### 수용 조건
+### Phase 1 — Synthetic PDF Ingestion
 
-- 외부 비밀값 없이 Web과 Python의 lint, typecheck, test, build가 통과한다.
-- PostgreSQL 18에서 초기 마이그레이션을 새 데이터베이스에 적용한다.
-- 세 컨테이너가 빌드되고 비특권 사용자로 실행된다.
-- 금지 파일과 대표적인 가짜 비밀값을 검사 도구가 거부한다.
-- 실제 보험 자료와 개인정보가 Git 이력에 없다.
-- GHCR 워크플로는 태그 형식, 최소 권한, 이미지 이름을 자동 검사한다.
+Completed scope:
 
-### 상세 계획
+- descriptor-safe local PDF intake and content identity
+- pdfplumber text/table/coordinate extraction and pypdf validation
+- versioned page quality and `OCR_REQUIRED` classification
+- eight-table document/extraction/job model
+- PostgreSQL lease, heartbeat, retry, cancellation, idempotent reuse
+- default-disabled synthetic document analysis API
+- synthetic API-to-Worker PostgreSQL E2E
 
-`docs/plan/001-project-foundation.md`
+Phase 1 intentionally leaves encrypted asynchronous batch handling, OCR execution, external AI, policy ledger, authentication, and private-data acceptance to the approved v0.1 work.
 
-Foundation은 PR #1의 merge commit `0f632989df891ae944c012bfcce6c838009867a9`으로 완료되었습니다. PR과 post-merge CI의 일곱 required job이 성공했지만, 태그·GHCR publish·Cloud Run·실제 자료 검증은 수행하지 않았습니다.
+## Phase 2 — Policy Ledger
 
-## 5. Phase 1 — Synthetic PDF Ingestion
+### Goal
 
-### 선행 조건
+Turn evidence-bearing policy extraction into a family-scoped ledger of actual contracts and Riders that can be used without mandatory review of every field.
 
-Foundation 완료와 PDF 처리 보안 설계 승인.
+### Scope
 
-Phase 1은 `Document`, `DocumentVersion`, `Extraction`, `ExtractionPage`, `ExtractionBlock`, `ExtractionTable`, `ExtractionCell`, `AnalysisJob`의 최소 문서 모델을 만들고 Evidence 좌표를 저장합니다. 이 모델과 content hash·extractor config hash 멱등성은 Phase 2 Policy Ledger가 의존하는 물리 경계입니다. Phase 2는 이 모델을 다시 만들지 않고 문서 버전과 Evidence를 참조합니다.
+- HouseholdSpace and FamilyMember lifecycle
+- PolicyContract, PolicyParty, Rider, PolicyStatusSnapshot
+- policy document and field-level Evidence
+- AI structurer, independent verifier, deterministic schema/Evidence validation
+- `AI_VERIFIED`, `NEEDS_REVIEW`, `USER_CONFIRMED`
+- user correction as versioned audit, not raw-result overwrite
+- soft delete, trash, restore
+- ledger Web UI
 
-### 구현 범위
+### Acceptance
 
-- 처음부터 작성한 텍스트형·표형·스캔형 합성 PDF 세트
-- 파일 형식, 암호화, 페이지 수, 크기, 해시 검증
-- pdfplumber 0.11.10 primary text/word/coordinate/table extractor
-- pypdf 6.16.2 structural/page/encryption validation
-- reportlab 5.0.1 deterministic synthetic fixture generation
-- 텍스트 품질 임계치 미달 시에만 OCR 후보로 분류
-- 작업별 임시 디렉터리 생성, 권한 제한, 성공·실패·취소 시 삭제
-- 페이지별 텍스트 블록, 좌표, 추출기 버전, 품질 지표 저장
-- 동일 SHA-256 문서의 중복 분석 방지
-- Phase 1 API는 unencrypted PDF만 받고 encrypted input은 `PASSWORD_REQUIRED`로 반환하며 password transport를 만들지 않음
-- parser child resource limits, canonical JSON settings, network client와 external URL resolution 부재
+- a Terms-only Rider cannot become an actual subscribed Rider
+- AI-verified candidates are usable immediately and exceptions are visible
+- renewal status without current Evidence remains unconfirmed
+- AppUser and FamilyMember lifecycles are independent
+- all business records are server-scoped to one HouseholdSpace
 
-### 필수 실패 경로
+## Phase 3 — Clause Linking and Search
 
-- 손상 PDF, 잘못된 암호, 페이지 제한 초과, 크기 제한 초과
-- 임시 디렉터리 생성 실패와 삭제 실패
-- 파서 시간 제한과 Worker 강제 종료 후 lease 복구
-- 텍스트가 없는 문서를 성공 추출로 오판하지 않는 경로
-- 25 MiB input, 500 pages, 120-second parent wall, 90-second child CPU, 1536 MiB address-space, 64 MiB output, 64 open descriptors
+### Goal
 
-### 수용 조건
+Structure terms editions and connect only the relevant clauses and executable rules to confirmed Riders.
 
-- 각 합성 문서의 예상 페이지와 word-as-`TextBlock` records가 재현 가능하게 추출된다.
-- 결과의 모든 텍스트 조각이 원본 페이지와 좌표를 참조한다.
-- 좌표는 PDF points·top-left origin·3-decimal rounding, page는 1-based, reading order는 0부터 시작한다.
-- 임시 평문 PDF와 페이지 이미지가 작업 종료 후 남지 않는다.
-- 실패 로그에 문서 본문과 로컬 절대경로가 없다.
-- 동일 문서를 두 번 제출해도 분석 결과가 하나만 생성된다.
-- `quality-v1`은 non-whitespace `<20`, alphanumeric ratio `<0.25`, replacement ratio `>0.05`, max repeated run `>20` 중 하나이면 `OCR_REQUIRED`로 분류하고, OCR은 실행하지 않는다.
-- Phase 1 구현과 CI는 실제 PDF나 private external root를 열지 않고, 합성 fixture를 checkout 밖 임시 root에 복사한다.
+### Scope
 
-상세 계획은 `docs/plan/002-synthetic-pdf-ingestion.md`입니다. Policy Ledger는 Phase 1 최소 문서 모델과 Evidence contract가 merge되고 검증된 뒤 시작합니다.
+- TermsEdition, Clause hierarchy and appendix/table Evidence
+- PostgreSQL Korean full-text search and version/date filters
+- RiderClauseLink candidate, verifier, user correction history
+- CoverageRule DSL candidate and deterministic validation
+- executable publication only for `AI_VERIFIED` or `USER_CONFIRMED`
+- unsupported prose remains informational and causes dependent `UNKNOWN`
 
-## 6. Phase 2 — Policy Ledger
+### Acceptance
 
-### 선행 조건
+- linked Clause points to exact DocumentVersion, page and optional coordinates
+- contract date excludes the wrong terms edition by default
+- AI verifier cannot invent missing Evidence or facts
+- unknown DSL operator, field, unit or conflicting rule cannot publish
+- vector search is not a product dependency in v0.1
 
-Synthetic PDF Ingestion 완료와 데이터 모델 설계 승인.
+## Phase 4 — Coverage Decision Engine
 
-### 구현 범위
+### Goal
 
-- `AppUser`, `FamilyMember`, `PolicyParty`의 분리
-- 보험 계약, 계약 당사자, 보험기간, 계약 상태, 증권 문서 연결
-- 실제 가입 Rider, 가입금액, 납입·보험기간, 갱신 여부
-- AI/파서 추출값과 관리자가 확정한 값의 분리
-- 필드별 근거 페이지와 검수 상태
-- soft delete, 휴지통 조회, 복원
-- 계약 시점별 상태 스냅샷과 최신 상태 미확인 표시
+Evaluate verified contracts and rules against incomplete or detailed medical events with reproducible tri-state results and conditional estimates.
 
-### 필수 실패 경로
+### Scope
 
-- 약관만 있고 증권이 없는 계약
-- 동일 증권의 재발급·중복 파일
-- 피보험자와 계약자가 다른 계약
-- 갱신 상태와 특약 변경 이력이 없는 계약
-- 이미 삭제된 엔터티의 중복 삭제와 복원 충돌
+- shared pre-visit/post-treatment MedicalEvent model
+- AI natural-language fact structuring with user-editable fields
+- incident-date Policy/Rider validity filter
+- versioned rule evaluation and reason codes
+- `MATCH`, `NO_MATCH`, `UNKNOWN`
+- fixed-benefit calculation with intermediate values
+- manual receipt lines and indemnity category calculation
+- partial calculation and missing-information questions
+- multiple-indemnity detection without summing independent estimates
 
-### 수용 조건
+### Acceptance
 
-- 약관에만 존재하고 증권에서 확인되지 않은 Rider는 가입 담보가 되지 않는다.
-- 관리자는 추출값, 수정값, 근거, 확정자를 구분해 볼 수 있다.
-- 갱신형 특약은 최신 상태 증거가 없으면 활성으로 확정되지 않는다.
-- 사용자 계정 삭제나 변경이 FamilyMember 기록을 암묵적으로 삭제하지 않는다.
+- missing facts create `UNKNOWN`, not an exception or `NO_MATCH`
+- a decisive mismatch is required for `NO_MATCH`
+- AI does not directly produce tri-state or money
+- every amount has inputs, units, rounding, rule version and Evidence
+- multiple indemnity policies show shared claimable categories and unknown allocation
 
-## 7. Phase 3 — Clause Linking and Search
+## Phase 5 — Event and Result PWA
 
-### 선행 조건
+### Goal
 
-Policy Ledger 완료와 약관 조항 모델 승인.
+Provide a mobile-first flow from natural-language situation input to actionable, evidence-backed results.
 
-### 구현 범위
+### Scope
 
-- 약관 문서의 장·절·조·항·별표 구조화
-- 상품 공통 약관과 특약 약관의 SHA-256 중복 제거
-- Rider 명칭 정규화와 가입 담보-약관 조항 연결 후보
-- 관리자 연결 검수와 변경 이력
-- PostgreSQL 전문검색, 한글 정규화, 동의어 사전
-- 문서 버전·판매 시기·계약일을 반영한 검색 필터
-- 벡터 검색을 추가하기 전 전문검색 기준선 측정
+- family selection and natural-language first input
+- editable structured facts and optional questions
+- receipt line editor for post-treatment analysis
+- action-first result layout
+- groups for claim review, needs more information and decisive mismatch
+- conditional estimate, withheld amount and required-document display
+- expandable policy/terms page Evidence
+- small-screen, keyboard and PWA installability checks
+- app-shell-only service worker cache
 
-### 필수 실패 경로
+### Acceptance
 
-- 같은 이름이지만 정의가 다른 특약
-- 가입 시점과 다른 버전의 약관
-- 목차 페이지와 본문 페이지의 페이지 번호 불일치
-- 별표가 본문과 멀리 떨어져 있는 문서
-- 검색 결과는 있으나 가입 Rider와 연결되지 않는 조항
+- current candidates appear without requiring all optional questions
+- next action is visible before detailed legal Evidence
+- all displayed results trace to actual Rider and Clause Evidence
+- API/PDF/medical data do not remain in persistent browser cache
+- partial API or Rider failure does not hide successful results
 
-### 수용 조건
+## Phase 6 — Claim Workflow
 
-- 연결된 모든 조항이 Rider와 정확한 문서 페이지를 가리킨다.
-- 검색 결과는 문서 버전과 계약 범위를 벗어난 조항을 기본 제외한다.
-- 대표 합성 질의 세트에서 전문검색 기준 정확도와 재현율을 기록한다.
-- 벡터 검색은 기준선 대비 개선을 증명하기 전 제품 의존성이 되지 않는다.
-
-## 8. Phase 4 — Coverage Decision Engine
-
-### 선행 조건
-
-Clause Linking 완료와 판정 규칙 계약 승인.
-
-### 구현 범위
-
-- 불완전한 사전 입력과 상세한 사후 입력의 공통 사건 모델
-- 질병·상해, 진단, 수술, 입원, 통원, 응급실 정보
-- 실제 가입·보험기간·계약상태의 1차 필터
-- 약관 지급사유, 면책, 대기·감액기간, 횟수 제한 규칙
-- 규칙별 `MATCH`, `NO_MATCH`, `UNKNOWN`과 부족 정보
-- 정액형 계산과 실손형 계산 보류·필요서류 분리
-- 판정 결과에서 입력 사실, 규칙, 근거까지의 추적 경로
-
-### 필수 실패 경로
-
-- 진단코드·수술분류·사고일이 없는 사건
-- 계약 상태 또는 갱신 상태 미확인
-- 서로 충돌하는 증권과 약관 근거
-- 최초 1회 담보의 과거 지급 이력 미확인
-- 실손 영수증과 자기부담 조건 미입력
-
-### 수용 조건
-
-- 정보 누락은 예외가 아니라 `UNKNOWN`과 구체적인 추가 질문을 만든다.
-- 가입하지 않은 Rider는 어떤 약관 검색 결과로도 후보가 되지 않는다.
-- `NO_MATCH`는 근거가 명시된 결정적 불일치에만 사용한다.
-- 모든 금액에는 계산식·입력값·단위·반올림 규칙이 있다.
-- 규칙 엔진을 우회한 AI 단독 판정 경로가 없다.
-
-## 9. Phase 5 — Event and Result PWA
-
-### 선행 조건
-
-Coverage Decision Engine API 계약과 UX 설계 승인.
-
-### 구현 범위
-
-- 가족 선택과 사전·사후 사건 입력 모드
-- 현재 정보로 즉시 후보를 보는 기본 흐름
-- 정확도를 높이는 선택형 추가 질문
-- 정액형, 실손형, 추가 확인 후보의 분리
-- 근거 문서·페이지·조항을 여는 결과 카드
-- 미확인 조건, 제외 근거, 준비서류 표시
-- 모바일 설치, 키보드 접근성, 작은 화면 대응
-- 보험 데이터와 API 응답을 캐시하지 않는 서비스 워커
-
-### 필수 실패 경로
-
-- API 연결 실패, 일부 판정 실패, 오래된 결과
-- 근거 페이지를 열 수 없는 문서
-- 빈 후보 목록과 입력 부족 상태의 구분
-- 세션 만료 전 개발 모드에서 민감 데이터가 브라우저 저장소에 남지 않는지 확인
-
-### 수용 조건
-
-- 사용자는 추가 질문에 답하지 않고도 현재 후보를 볼 수 있다.
-- 지급 확정 표현 없이 판정, 근거, 미확인 조건을 구분한다.
-- 화면에 표시된 모든 후보가 증권과 약관 근거로 이동한다.
-- Lighthouse PWA·접근성 기준과 실제 모바일 브라우저 확인을 별도로 보고한다.
-
-## 10. Phase 6 — Claim Workflow
-
-### 선행 조건
-
-Event and Result PWA 완료와 청구 상태 모델 승인.
-
-### 구현 범위
-
-- 후보별 필요서류 체크리스트
-- 보험사·계약별 청구 항목 묶음
-- 준비, 접수, 보완요청, 심사, 지급, 일부지급, 거절, 종료 상태
-- 제출 문서 메타데이터와 저장소 외부 파일 참조
-- 지급 금액과 결정 사유 기록
-- 최초 1회·횟수 제한 판정에 사용할 청구 이력
-- soft delete와 감사 이력
-
-### 수용 조건
-
-- 판정 후보와 실제 청구·지급 결과를 혼동하지 않는다.
-- 파일 원문을 DB나 브라우저 로그에 넣지 않는다.
-- 과거 지급 이력이 후속 판정의 `UNKNOWN` 또는 제한 규칙에 반영된다.
-- 삭제·복원·상태 전이가 감사 가능하다.
-
-## 11. Phase 7 — Authentication
-
-### 선행 조건
-
-핵심 로컬 기능 완료와 인증 제공자·운영 URL 결정.
-
-### 구현 범위
-
-- 허용된 관리자 두 계정만 로그인
-- 두 계정의 동일 권한과 하나의 공동 관리 공간
-- Secure, HttpOnly, SameSite 세션 쿠키와 CSRF 방어
-- 세션 만료, 재인증, 로그아웃, 계정 비활성화
-- 인증 이벤트의 민감정보 없는 감사 로그
-- 공개 회원가입, 초대, 역할 관리가 없는 단순 경계
-
-### 사용자 확인 필요
-
-- 실제 인증 제공자와 허용 계정
-- 운영 도메인과 리디렉션 URL
-- 세션 유지 시간과 재인증 기준
-
-### 수용 조건
-
-- 허용 목록 밖 계정은 인증 제공자 성공 후에도 접근할 수 없다.
-- 한 관리자 계정의 비활성화가 다른 계정이나 가족 데이터를 삭제하지 않는다.
-- 브라우저 저장소에 장기 토큰을 보관하지 않는다.
-
-## 12. Phase 8 — Private-data Acceptance
-
-### 선행 조건
-
-인증을 포함한 핵심 기능 완료와 사용자의 명시적 실제 자료 사용 승인.
-
-### 구현 범위
-
-- 저장소 외부 입력 디렉터리와 출력 데이터 디렉터리 연결
-- 소수 계약을 사용한 파서·원장·연결·판정의 수동 검수
-- 오류 유형과 문서 형식별 개선 목록
-- Git 상태, 로그, 임시 파일, 브라우저 저장소 유출 점검
-- 합성 회귀 fixture로 일반화할 수 있는 구조만 별도 재작성
-
-### 수용 조건
-
-- 실제 문서와 파생물이 Git 미추적 파일에도 남지 않는다.
-- 검수 결과는 개인 식별정보 없이 통계와 오류 코드로만 기록한다.
-- 실제 데이터에서 발견한 예시는 공개 fixture에 복사하지 않고 새 합성 사례로 작성한다.
-- 실행하지 못한 보험사·문서 형식은 미검증으로 명시한다.
-
-## 13. Phase 9 — Optional Drive and AI Integrations
-
-### 선행 조건
-
-Private-data Acceptance 완료와 외부 전송 정책 승인.
-
-### 구현 범위
-
-- 특정 Google Drive 폴더의 읽기 전용 동기화
-- 파일 ID, 수정시각, 해시를 이용한 증분 수집
-- 장기 서비스 계정 키 파일 없이 실행하는 인증 방식
-- AI 전송 전 최소 조항 선택과 개인 식별정보 제거
-- AI 출력의 스키마 검증, 규칙 엔진 비권위 원칙, 제공자 장애 폴백
-- 외부 전송 감사와 제공자별 보존 정책 기록
-
-### 사용자 확인 필요
-
-- Google Cloud 프로젝트와 대상 폴더 공유
-- AI 제공자, 모델, 비용 한도, 데이터 보존·학습 정책
-- 외부 전송을 허용할 데이터 필드
-
-### 수용 조건
-
-- Drive 전체 읽기 권한 없이 지정 폴더만 처리한다.
-- 외부 AI 장애가 규칙 판정과 기존 근거 조회를 중단시키지 않는다.
-- 전체 PDF 또는 직접 식별자가 AI 요청에 포함되지 않는다.
-
-## 14. Phase 10 — Production Deployment
-
-### 선행 조건
-
-전체 기능과 비공개 수용 검증 완료, 운영 대상 별도 승인.
-
-### 설계에서 결정할 항목
-
-- Cloud Run 또는 다른 운영 환경의 비용·지역·가용성 비교
-- PostgreSQL 운영 서비스, 백업, 시점 복구, 암호화
-- 비밀 관리, 서비스 계정, 네트워크 접근, 도메인과 TLS
-- 컨테이너 이미지 승격과 롤백
-- 마이그레이션 실행 주체와 무중단 배포 기준
-- 모니터링, 보안 알림, 장애 대응, 데이터 삭제 절차
-
-### 수용 조건
-
-- 배포, 마이그레이션, 롤백을 staging에서 재현한다.
-- 백업 복원 훈련으로 실제 복구 가능성을 확인한다.
-- 운영 비밀값이 GitHub Actions 로그와 이미지 레이어에 없다.
-- 실제 운영 확인 전에는 GHCR 이미지 성공을 배포 성공으로 보고하지 않는다.
-
-## 15. 버전과 릴리스 전략
-
-- `0.y.z`: 가족 내부 사용 전 개발 단계
-- `1.0.0`: 인증, 핵심 판정, 청구 흐름, 비공개 자료 수용 검증 완료
-- 각 버전은 Keep a Changelog 형식의 변경 내역을 가진다.
-- `vMAJOR.MINOR.PATCH` Git 태그는 같은 버전의 Web/API/Worker 이미지를 만든다.
-- 운영 배포 전까지 태그 릴리스는 실행 가능한 이미지 산출물이며 서비스 가용성을 뜻하지 않는다.
+### Goal
+
+Track what to prepare, what the user submitted through insurer channels, and what was actually paid without becoming an insurer submission or medical document system.
+
+### Scope
+
+- ClaimCase per MedicalEvent and insurer/policy
+- candidate/rule/estimate/Evidence snapshot
+- required-document checklist only
+- preparing, submitted, supplementation_requested, paid, partially_paid, denied, closed
+- manually entered receipt number, dates, claimed amount, paid amount and reason
+- state transition audit, soft delete, restore
+- ClaimHistory input to first-payment/frequency rules
+
+### Acceptance
+
+- candidate and actual claim outcome remain separate
+- no insurer API submission exists
+- no diagnosis, receipt or prescription file is stored
+- later rule changes do not rewrite a submitted ClaimCase snapshot
+- paid/denied history affects later frequency evaluation without becoming a guess
+
+## Phase 7 — Local Authentication
+
+### Goal
+
+Replace the synthetic-only unauthenticated route boundary with exactly two equal local administrators and a shared HouseholdSpace.
+
+### Scope
+
+- TTY/stdin-only admin provisioning command
+- Argon2id password hashes
+- PostgreSQL opaque sessions
+- Secure, HttpOnly, SameSite Strict cookies
+- CSRF and same-origin checks
+- inactivity 7 days, absolute 30 days
+- reauthentication for sensitive account/session actions
+- device session list and revoke
+- no signup, email reset, invite or role management
+
+### Acceptance
+
+- raw passwords and session tokens are absent from DB, logs and shell arguments
+- a client cannot choose another HouseholdSpace
+- account deactivation revokes sessions without deleting family data
+- Tailscale access does not replace app login
+- service-worker and Web Storage do not hold long-lived credentials
+
+## Phase 8 — Private Local Acceptance
+
+### Goal
+
+Import actual user-selected PDFs safely enough for personal use and verify the full local WSL/Tailscale flow without expanding into host-security redesign.
+
+### Scope
+
+- one-FamilyMember document batch
+- encrypted PDF password once per batch in process memory
+- retry only failed password files
+- application-encrypted managed archive with per-document data keys
+- local Korean/English OCR only for `OCR_REQUIRED` pages
+- OpenAI structurer and verifier using Worker-only `OPENAI_API_KEY`
+- WSL Docker Compose with one exposed Web gateway
+- API/Worker/PostgreSQL on internal Compose network
+- Tailscale private device access and local app login
+- actual-data acceptance using only user-specified external paths
+- log, temp, browser storage and Git leakage inspection
+
+### Explicit exclusions
+
+- Google Drive API or automatic sync
+- Cloud Run or public ingress
+- LUKS, BitLocker and WSL swap changes
+- preallocated 32/40/128 GB encrypted volume
+- insurer submission and medical document storage
+
+### Acceptance
+
+- successful encrypted import does not ask for the original password on ordinary reanalysis
+- password, archive key and plaintext intermediates are not persisted in DB/job/log/Git
+- archive survives project Compose restart and can be read with the runtime key
+- only OCR-required pages are rendered and OCR images are cleaned on all paths
+- actual document findings are recorded only as sanitized error categories and new synthetic regressions
+- existing projects, containers, ports and WSL configuration are not modified
+- unavailable mobile/document formats remain explicitly unverified
+
+## Independently reviewable PR sequence
+
+The detailed file/task plan is written only after the v0.1 design document is reviewed. The approved review units are:
+
+1. `docs/v0-1-product-design`
+2. `feat/policy-ledger`
+3. `feat/policy-candidate-review`
+4. `feat/clause-search`
+5. `feat/rider-clause-rules`
+6. `feat/coverage-decision-engine`
+7. `feat/benefit-calculations`
+8. `feat/event-result-pwa`
+9. `feat/claim-workflow`
+10. `feat/local-authentication`
+11. `feat/encrypted-document-import`
+12. `feat/selective-ocr`
+13. `build/private-local-runtime`
+14. `release/v0-1-0`
+
+Branch names contain no `codex/` prefix. Each PR uses one logical Conventional Commit purpose unless a small follow-up fix is needed during review.
+
+## v0.1.0 release gate
+
+1. All Phase 2~8 feature PRs are merged with required CI success.
+2. Documentation, repository safety, Web, Python, PostgreSQL, contract, workflow and container checks pass on current main.
+3. Web/API/Worker images build one at a time.
+4. Docker Compose starts, migrates, restarts and preserves DB/archive state.
+5. The synthetic login-to-claim browser E2E passes.
+6. Private-data acceptance and unverified formats/devices are recorded honestly.
+7. `CHANGELOG.md` has a `0.1.0` release section.
+8. Only then is `v0.1.0` created and pushed.
+9. The GHCR workflow publishes version and commit-SHA tags for all three images.
+10. GHCR success is reported as container release, not Cloud Run deployment.
+
+## Deferred after v0.1
+
+- Google Drive read-only automatic synchronization
+- multi-provider AI and Gemini failover
+- direct insurer claim integration
+- medical document management
+- broader proportional indemnity allocation automation
+- multi-household identity and invitations
+- public/Cloud Run deployment, backups and disaster recovery
+- host disk and swap encryption changes
