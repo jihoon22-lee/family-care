@@ -13,6 +13,7 @@ from familycare_api.health import (
     liveness,
     readiness,
 )
+from familycare_api.policies.router import router as policy_ledger_router
 
 
 def _synthetic_ingestion_enabled() -> bool:
@@ -58,6 +59,7 @@ def create_app(
     )
     if enabled:
         app.include_router(document_analysis_router)
+    app.include_router(policy_ledger_router)
 
     return app
 

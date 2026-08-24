@@ -194,6 +194,7 @@ def validate_schema_instance(
         "integer": isinstance(value, int) and not isinstance(value, bool),
         "number": isinstance(value, (int, float)) and not isinstance(value, bool),
         "boolean": isinstance(value, bool),
+        "null": value is None,
     }
     if expected_type is not None:
         allowed_types = expected_type if isinstance(expected_type, list) else [expected_type]

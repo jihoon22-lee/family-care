@@ -8,6 +8,7 @@ import json
 import re
 from importlib import import_module
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
 
 from familycare_api.main import create_app
@@ -17,7 +18,20 @@ OPENAPI_PATH = ROOT / "packages/contracts/openapi/familycare.v1.json"
 JOB_SCHEMA_PATH = ROOT / "packages/contracts/schemas/analysis-job.v1.schema.json"
 JOB_EXAMPLE_PATH = ROOT / "packages/contracts/examples/analysis-job.v1.json"
 DOCUMENT_SCHEMA_PATH = ROOT / "packages/contracts/schemas/document-ingestion.v1.schema.json"
+POLICY_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json"
+POLICY_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-ledger.v1.json"
+BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+POLICY_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "archive_key",
+    "document_text",
+    "household_space_id",
+    "password",
+    "policy_number",
+    "raw_pdf",
+    "source_path",
+}
 
 
 def _load_document_contract_checker() -> Any:
@@ -32,7 +46,21 @@ def _load_document_contract_checker() -> Any:
 _DOCUMENT_CONTRACT_CHECKER = _load_document_contract_checker()
 is_relative_source_key = _DOCUMENT_CONTRACT_CHECKER.is_relative_source_key
 valid_uuid4 = _DOCUMENT_CONTRACT_CHECKER.valid_uuid4
+validate_schema_instance = _DOCUMENT_CONTRACT_CHECKER.validate_schema_instance
 validate_document_contracts = _DOCUMENT_CONTRACT_CHECKER.validate_document_contracts
+
+
+def _load_business_generator() -> Any:
+    """Load the business generator from package or direct-script context."""
+
+    try:
+        module = import_module("scripts.generate_business_contract_types")
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+        module = import_module("generate_business_contract_types")
+    return module.generate
+
+
+generate_business = _load_business_generator()
 
 
 def render_openapi() -> str:
@@ -76,9 +104,18 @@ def validate_openapi() -> list[str]:
         "/health/ready",
         "/api/v1/documents/analysis",
         "/api/v1/analysis-jobs/{job_id}",
+        "/api/v1/family-members",
+        "/api/v1/family-members/trash",
+        "/api/v1/family-members/{member_id}",
+        "/api/v1/family-members/{member_id}/restore",
+        "/api/v1/policies",
+        "/api/v1/policies/trash",
+        "/api/v1/policies/{policy_id}",
+        "/api/v1/policies/{policy_id}/restore",
+        "/api/v1/policies/{policy_id}/riders",
     }
     if set(paths) != expected_paths:
-        errors.append("OpenAPI paths must contain health and gated analysis routes only")
+        errors.append("OpenAPI paths must contain health, policy, and gated analysis routes")
         return errors
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
@@ -165,6 +202,79 @@ def validate_openapi() -> list[str]:
     return errors
 
 
+def _policy_forbidden_keys(value: Any, path: str = "$") -> list[str]:
+    """Return policy-contract paths that cross a prohibited data boundary."""
+
+    errors: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if str(key).lower() in POLICY_FORBIDDEN_FIELDS:
+                errors.append(child_path)
+            errors.extend(_policy_forbidden_keys(child, child_path))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            errors.extend(_policy_forbidden_keys(child, f"{path}[{index}]"))
+    return errors
+
+
+def validate_policy_contract() -> list[str]:
+    """Validate the policy-ledger schema, example, and generated API consumer."""
+
+    errors: list[str] = []
+    try:
+        schema = load_json(POLICY_SCHEMA_PATH)
+        example = load_json(POLICY_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    if schema.get("additionalProperties") is not False:
+        errors.append("policy-ledger schema must reject additional properties")
+    required = {
+        "schema_version",
+        "family_member_id",
+        "policy_id",
+        "rider_id",
+        "status",
+        "version",
+        "evidence",
+    }
+    if set(schema.get("required", [])) != required:
+        errors.append("policy-ledger schema required properties are inconsistent")
+    if _policy_forbidden_keys(schema):
+        errors.append("policy-ledger schema contains a forbidden field")
+    if _policy_forbidden_keys(example):
+        errors.append("policy-ledger example contains a forbidden field")
+    errors.extend(
+        f"policy-ledger example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+    policy_error_codes = schema.get("$defs", {}).get("PolicyErrorCode", {}).get("enum")
+    if policy_error_codes != [
+        "AUTHENTICATION_REQUIRED",
+        "EVIDENCE_INVALID",
+        "FAMILY_MEMBER_NOT_FOUND",
+        "POLICY_NOT_FOUND",
+        "POLICY_STATE_CONFLICT",
+        "VERSION_CONFLICT",
+    ]:
+        errors.append("policy error-code enum changed")
+
+    if not BUSINESS_OUTPUT_PATH.is_file():
+        errors.append("generated business contract module is missing")
+    else:
+        with TemporaryDirectory() as directory:
+            generated = Path(directory) / "generated_business.py"
+            try:
+                generate_business(generated)
+            except (OSError, ValueError, json.JSONDecodeError) as error:
+                errors.append(f"business contract generation failed: {error}")
+            else:
+                if BUSINESS_OUTPUT_PATH.read_bytes() != generated.read_bytes():
+                    errors.append("generated business contract module is stale")
+    return errors
+
+
 def validate_job_contract() -> list[str]:
     """Validate the versioned analyzer job schema and its synthetic example."""
 
@@ -232,7 +342,12 @@ def main() -> int:
         print(f"wrote {OPENAPI_PATH.relative_to(ROOT)}")
         return 0
 
-    errors = [*validate_openapi(), *validate_job_contract(), *validate_document_contracts()]
+    errors = [
+        *validate_openapi(),
+        *validate_job_contract(),
+        *validate_document_contracts(),
+        *validate_policy_contract(),
+    ]
     if errors:
         print("\n".join(errors))
         return 1

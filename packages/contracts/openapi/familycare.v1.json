@@ -196,23 +196,38 @@
         "description": "Stable error envelope that never echoes request values.",
         "properties": {
           "error_code": {
-            "enum": [
-              "ANALYSIS_JOB_NOT_FOUND",
-              "DOCUMENT_NOT_FOUND",
-              "DOCUMENT_PATH_ESCAPE",
-              "DOCUMENT_TOO_LARGE",
-              "EXTRACTION_TIMEOUT",
-              "INVALID_REQUEST",
-              "PAGE_LIMIT_EXCEEDED",
-              "PASSWORD_INVALID",
-              "PASSWORD_REQUIRED",
-              "PDF_CORRUPT",
-              "RESOURCE_LIMIT_EXCEEDED",
-              "TEMP_CLEANUP_FAILED",
-              "UNSUPPORTED_FILE_TYPE"
+            "anyOf": [
+              {
+                "enum": [
+                  "ANALYSIS_JOB_NOT_FOUND",
+                  "DOCUMENT_NOT_FOUND",
+                  "DOCUMENT_PATH_ESCAPE",
+                  "DOCUMENT_TOO_LARGE",
+                  "EXTRACTION_TIMEOUT",
+                  "INVALID_REQUEST",
+                  "PAGE_LIMIT_EXCEEDED",
+                  "PASSWORD_INVALID",
+                  "PASSWORD_REQUIRED",
+                  "PDF_CORRUPT",
+                  "RESOURCE_LIMIT_EXCEEDED",
+                  "TEMP_CLEANUP_FAILED",
+                  "UNSUPPORTED_FILE_TYPE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "AUTHENTICATION_REQUIRED",
+                  "EVIDENCE_INVALID",
+                  "FAMILY_MEMBER_NOT_FOUND",
+                  "POLICY_NOT_FOUND",
+                  "POLICY_STATE_CONFLICT",
+                  "VERSION_CONFLICT"
+                ],
+                "type": "string"
+              }
             ],
-            "title": "Error Code",
-            "type": "string"
+            "title": "Error Code"
           },
           "fields": {
             "anyOf": [
@@ -238,6 +253,92 @@
           "message"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "EvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "physical_page": {
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "content_sha256",
+          "physical_page",
+          "bbox",
+          "review_state"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
+      "ExpectedVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedVersionRequest",
         "type": "object"
       },
       "ExtractionSummaryResponse": {
@@ -304,6 +405,108 @@
         "title": "ExtractorConfigRequest",
         "type": "object"
       },
+      "FamilyMemberCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          },
+          "internal_alias": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Internal Alias",
+            "type": "string"
+          }
+        },
+        "required": [
+          "display_name",
+          "internal_alias"
+        ],
+        "title": "FamilyMemberCreateRequest",
+        "type": "object"
+      },
+      "FamilyMemberResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "internal_alias": {
+            "title": "Internal Alias",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "display_name",
+          "internal_alias",
+          "version",
+          "deleted"
+        ],
+        "title": "FamilyMemberResponse",
+        "type": "object"
+      },
+      "FamilyMemberUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "internal_alias": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Internal Alias"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "FamilyMemberUpdateRequest",
+        "type": "object"
+      },
       "HealthResponse": {
         "description": "Stable public health response.",
         "properties": {
@@ -332,6 +535,568 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "PolicyCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Date"
+          },
+          "coverage_end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End Date"
+          },
+          "coverage_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Start Date"
+          },
+          "insurer_display": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "insurer_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Key",
+            "type": "string"
+          },
+          "parties": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyPartyCreateRequest"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Parties",
+            "type": "array"
+          },
+          "product_display": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Product Display",
+            "type": "string"
+          },
+          "product_key": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Product Key",
+            "type": "string"
+          },
+          "source_document_version_id": {
+            "format": "uuid",
+            "title": "Source Document Version Id",
+            "type": "string"
+          },
+          "source_evidence_id": {
+            "format": "uuid",
+            "title": "Source Evidence Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "unknown",
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Evidence Id"
+          }
+        },
+        "required": [
+          "source_document_version_id",
+          "source_evidence_id",
+          "insurer_display",
+          "insurer_key",
+          "product_display",
+          "product_key",
+          "parties"
+        ],
+        "title": "PolicyCreateRequest",
+        "type": "object"
+      },
+      "PolicyPartyCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policyholder",
+              "primary_insured",
+              "additional_insured",
+              "beneficiary"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "family_member_id",
+          "role",
+          "evidence_id"
+        ],
+        "title": "PolicyPartyCreateRequest",
+        "type": "object"
+      },
+      "PolicyPartyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_from": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceResponse"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policyholder",
+              "primary_insured",
+              "additional_insured",
+              "beneficiary"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "family_member_id",
+          "role",
+          "effective_from",
+          "effective_to",
+          "evidence",
+          "version"
+        ],
+        "title": "PolicyPartyResponse",
+        "type": "object"
+      },
+      "PolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Date"
+          },
+          "coverage_end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End Date"
+          },
+          "coverage_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Start Date"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurer_display": {
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "insurer_key": {
+            "title": "Insurer Key",
+            "type": "string"
+          },
+          "parties": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyPartyResponse"
+            },
+            "title": "Parties",
+            "type": "array"
+          },
+          "product_display": {
+            "title": "Product Display",
+            "type": "string"
+          },
+          "product_key": {
+            "title": "Product Key",
+            "type": "string"
+          },
+          "source_document_version_id": {
+            "format": "uuid",
+            "title": "Source Document Version Id",
+            "type": "string"
+          },
+          "source_evidence": {
+            "$ref": "#/components/schemas/EvidenceResponse"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "source_document_version_id",
+          "source_evidence",
+          "insurer_display",
+          "insurer_key",
+          "product_display",
+          "product_key",
+          "contract_date",
+          "coverage_start_date",
+          "coverage_end_date",
+          "status",
+          "status_evidence",
+          "parties",
+          "version",
+          "deleted"
+        ],
+        "title": "PolicyResponse",
+        "type": "object"
+      },
+      "PolicyUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage_end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End Date"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "inactive",
+                  "expired",
+                  "cancelled",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "status_evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Evidence Id"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "PolicyUpdateRequest",
+        "type": "object"
+      },
+      "RiderResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "benefit_type": {
+            "enum": [
+              "fixed",
+              "indemnity"
+            ],
+            "title": "Benefit Type",
+            "type": "string"
+          },
+          "coverage_end_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage End Date"
+          },
+          "coverage_start_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Start Date"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insured_amount": {
+            "anyOf": [
+              {
+                "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insured Amount"
+          },
+          "normalized_key": {
+            "title": "Normalized Key",
+            "type": "string"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          },
+          "renewable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewable"
+          },
+          "source_evidence": {
+            "$ref": "#/components/schemas/EvidenceResponse"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "policy_contract_id",
+          "display_name",
+          "normalized_key",
+          "benefit_type",
+          "insured_amount",
+          "currency",
+          "coverage_start_date",
+          "coverage_end_date",
+          "renewable",
+          "status",
+          "source_evidence",
+          "status_evidence",
+          "version"
+        ],
+        "title": "RiderResponse",
         "type": "object"
       }
     }
@@ -456,6 +1221,1253 @@
         "summary": "Enqueue a synthetic document analysis job",
         "tags": [
           "local synthetic document analysis"
+        ]
+      }
+    },
+    "/api/v1/family-members": {
+      "get": {
+        "operationId": "list_family_members_api_v1_family_members_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FamilyMemberResponse"
+                  },
+                  "title": "Response List Family Members Api V1 Family Members Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Family Members",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "post": {
+        "operationId": "create_family_member_api_v1_family_members_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FamilyMemberCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Create Family Member",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/family-members/trash": {
+      "get": {
+        "operationId": "list_deleted_family_members_api_v1_family_members_trash_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/FamilyMemberResponse"
+                  },
+                  "title": "Response List Deleted Family Members Api V1 Family Members Trash Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Deleted Family Members",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/family-members/{member_id}": {
+      "delete": {
+        "operationId": "delete_family_member_api_v1_family_members__member_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Delete Family Member",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "get": {
+        "operationId": "get_family_member_api_v1_family_members__member_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Family Member",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "patch": {
+        "operationId": "update_family_member_api_v1_family_members__member_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FamilyMemberUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Family Member",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/family-members/{member_id}/restore": {
+      "post": {
+        "operationId": "restore_family_member_api_v1_family_members__member_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FamilyMemberResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Restore Family Member",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/policies": {
+      "get": {
+        "operationId": "list_policies_api_v1_policies_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyResponse"
+                  },
+                  "title": "Response List Policies Api V1 Policies Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Policies",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "post": {
+        "operationId": "create_policy_api_v1_policies_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Create Policy",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/policies/trash": {
+      "get": {
+        "operationId": "list_deleted_policies_api_v1_policies_trash_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PolicyResponse"
+                  },
+                  "title": "Response List Deleted Policies Api V1 Policies Trash Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Deleted Policies",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/policies/{policy_id}": {
+      "delete": {
+        "operationId": "delete_policy_api_v1_policies__policy_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Delete Policy",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "get": {
+        "operationId": "get_policy_api_v1_policies__policy_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Policy",
+        "tags": [
+          "policy ledger"
+        ]
+      },
+      "patch": {
+        "operationId": "update_policy_api_v1_policies__policy_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PolicyUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Policy",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/policies/{policy_id}/restore": {
+      "post": {
+        "operationId": "restore_policy_api_v1_policies__policy_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Restore Policy",
+        "tags": [
+          "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/policies/{policy_id}/riders": {
+      "get": {
+        "operationId": "list_policy_riders_api_v1_policies__policy_id__riders_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "policy_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Policy Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RiderResponse"
+                  },
+                  "title": "Response List Policy Riders Api V1 Policies  Policy Id  Riders Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Policy Riders",
+        "tags": [
+          "policy ledger"
         ]
       }
     },

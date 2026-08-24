@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "family_member_id": "00000000-0000-4000-8000-000000000101",
+  "policy_id": "00000000-0000-4000-8000-000000000201",
+  "rider_id": "00000000-0000-4000-8000-000000000301",
+  "status": "active",
+  "version": 1,
+  "evidence": {
+    "evidence_id": "00000000-0000-4000-8000-000000000401",
+    "document_version_id": "00000000-0000-4000-8000-000000000501",
+    "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "physical_page": 1,
+    "bbox": null,
+    "review_state": "USER_CONFIRMED"
+  }
+}

@@ -7,14 +7,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 
+from familycare_api.contracts.generated_business import PolicyErrorCode
 from familycare_api.documents.generated_contracts import ErrorCode
+
+ApiErrorCode = ErrorCode | PolicyErrorCode
 
 
 class ApiBoundaryError(RuntimeError):
     """Base exception with a fixed public error code and no request data."""
 
     status_code: int
-    error_code: str
+    error_code: ApiErrorCode
     public_message: str
 
     def __init__(self) -> None:
@@ -38,7 +41,7 @@ class ErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: str
+    error_code: ApiErrorCode
     message: str
     fields: list[str] | None = None
 
