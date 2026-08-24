@@ -44,6 +44,7 @@ AI candidate와 사용자 수정은 `AnalysisCandidateVersion`으로 보존한�
 - `GET/PATCH/DELETE /api/v1/policies/{id}`
 - `GET /api/v1/policies/{id}/riders`
 - `PATCH /api/v1/policies/{id}/candidate-fields/{field_id}`
+- `PATCH /api/v1/review-items/{review_item_id}/candidate-fields/{field_id}`: 여러 후보가 같은 계약에 연결되어도 Web 검수에서 정확한 후보 하나를 수정
 - `GET /api/v1/review-items?domain=policy`
 - `POST /api/v1/review-items/{id}/confirm|reject`
 

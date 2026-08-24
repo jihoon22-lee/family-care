@@ -68,6 +68,17 @@ def _as_date(value: object) -> date | None:
         raise InvalidCandidateCorrection from None
 
 
+def _validate_date_ranges(values: dict[str, object]) -> None:
+    for start_field, end_field in (
+        ("contract_start", "contract_end"),
+        ("coverage_start", "coverage_end"),
+    ):
+        start = _as_date(values.get(start_field))
+        end = _as_date(values.get(end_field))
+        if start is not None and end is not None and end < start:
+            raise InvalidCandidateCorrection
+
+
 def _bbox_from_row(row: dict[str, Any]) -> tuple[float, float, float, float] | None:
     values = tuple(row.get(name) for name in ("x0", "y0", "x1", "y1"))
     if values == (None, None, None, None):
@@ -265,8 +276,23 @@ class CandidateRepository:
                         *coordinates,
                     ),
                 )
-        if status == "AI_VERIFIED":
-            self._publish_projection(connection, household_space_id, version_id)
+        if status == "AI_VERIFIED" and not self._publish_projection(
+            connection, household_space_id, version_id
+        ):
+            review_issues = list(dict.fromkeys([*issue_codes, "UNSUPPORTED_STRUCTURE"]))[:8]
+            connection.execute(
+                """
+                UPDATE analysis_candidate_versions
+                SET status = 'NEEDS_REVIEW', issues = %s::jsonb,
+                    updated_at = clock_timestamp()
+                WHERE id = %s AND household_space_id = %s
+                """,
+                (
+                    Jsonb([{"code": code, "field_id": None} for code in review_issues]),
+                    version_id,
+                    household_space_id,
+                ),
+            )
 
     def list_review_items(
         self,
@@ -347,6 +373,19 @@ class CandidateRepository:
                 ).fetchone()
                 if evidence is None or field is None:
                     raise InvalidCandidateCorrection
+                current_fields = connection.execute(
+                    """
+                    SELECT field_id, value FROM analysis_candidate_fields
+                    WHERE candidate_version_id = %s
+                    """,
+                    (current["id"],),
+                ).fetchall()
+                candidate_values = {
+                    cast(str, candidate_field["field_id"]): candidate_field["value"]
+                    for candidate_field in current_fields
+                }
+                candidate_values[request.field_id] = request.value
+                _validate_date_ranges(candidate_values)
                 child_id = self._insert_child(
                     connection,
                     current,

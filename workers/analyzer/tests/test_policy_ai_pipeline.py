@@ -57,6 +57,17 @@ def test_two_valid_ai_stages_and_validator_publish_ai_verified() -> None:
     ]
 
 
+def test_unimplemented_policy_party_shape_never_becomes_ai_verified() -> None:
+    structured = deepcopy(VALID_STRUCTURED)
+    structured["candidate_kind"] = "policy_party"
+    provider = FakeProvider(structurer=structured, verifier=VALID_VERIFIED)
+
+    candidate = _candidate(_run(provider))
+
+    assert candidate.status == "NEEDS_REVIEW"
+    assert "UNSUPPORTED_STRUCTURE" in _issue_codes(candidate)
+
+
 def test_verifier_cannot_invent_a_rider_or_evidence() -> None:
     """An unreferenced verifier Evidence ID blocks publication."""
 

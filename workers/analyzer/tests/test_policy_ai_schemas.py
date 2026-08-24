@@ -6,11 +6,13 @@ from copy import deepcopy
 from dataclasses import replace
 from typing import Any
 
+import pytest
 from familycare_worker.ai.policy_pipeline import run_policy_pipeline
 from familycare_worker.ai.provider import EvidenceSlice
 
 from workers.analyzer.tests.fixtures.policy_ai_responses import (
     SYNTHETIC_FOREIGN_DOCUMENT_VERSION_ID,
+    SYNTHETIC_RIDER_EVIDENCE_ID,
     SYNTHETIC_UNKNOWN_EVIDENCE_ID,
     VALID_STRUCTURED,
     VALID_VERIFIED,
@@ -189,3 +191,40 @@ def test_negative_sum_assured_is_a_review_issue() -> None:
 
     assert candidate.status == "NEEDS_REVIEW"
     assert "INVALID_UNIT" in _issue_codes(candidate)
+
+
+@pytest.mark.parametrize(
+    ("field_id", "value"),
+    [
+        ("benefit_type", "fixed_amount"),
+        ("rider_status", "enrolled"),
+        ("renewable", "yes"),
+    ],
+)
+def test_invalid_ledger_semantics_never_publish(field_id: str, value: object) -> None:
+    response = deepcopy(VALID_STRUCTURED)
+    fields = response["fields"]
+    assert isinstance(fields, list)
+    existing = next(
+        (
+            field
+            for field in fields
+            if isinstance(field, dict) and field.get("field_id") == field_id
+        ),
+        None,
+    )
+    if existing is None:
+        existing = {
+            "field_id": field_id,
+            "value": value,
+            "evidence_ids": [str(SYNTHETIC_RIDER_EVIDENCE_ID)],
+        }
+        fields.append(existing)
+    else:
+        existing["value"] = value
+    provider = FakeProvider(structurer=response, verifier=VALID_VERIFIED)
+
+    candidate = _candidate(_run(provider))
+
+    assert candidate.status == "NEEDS_REVIEW"
+    assert "UNSUPPORTED_STRUCTURE" in _issue_codes(candidate)

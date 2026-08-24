@@ -16,6 +16,7 @@ export const API_PATHS = [
   "/api/v1/policies/{policy_id}/riders",
   "/api/v1/review-items",
   "/api/v1/review-items/{review_item_id}",
+  "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
   "/api/v1/review-items/{review_item_id}/confirm",
   "/api/v1/review-items/{review_item_id}/reject",
   "/health/live",
@@ -127,6 +128,12 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/review-items/{review_item_id}",
     operationId: "get_review_item_api_v1_review_items__review_item_id__get",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
+    operationId:
+      "correct_review_item_field_api_v1_review_items__review_item_id__candidate_fields__field_id__patch",
   },
   {
     method: "POST",

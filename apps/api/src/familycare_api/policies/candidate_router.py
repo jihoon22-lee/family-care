@@ -94,6 +94,32 @@ def correct_candidate_field(
     return service.correct_field(scope=scope, policy_id=policy_id, request=request, actor_id=None)
 
 
+@router.patch(
+    "/review-items/{review_item_id}/candidate-fields/{field_id}",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def correct_review_item_field(
+    review_item_id: UUID,
+    field_id: PolicyCandidateFieldId,
+    request: CandidateCorrectionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    """Correct one exact review item even when several candidates share a policy."""
+
+    if request.field_id != field_id:
+        raise InvalidCandidateCorrection
+    _no_store(response)
+    return service.correct_field(
+        scope=scope,
+        review_item_id=review_item_id,
+        request=request,
+        actor_id=None,
+    )
+
+
 @router.post(
     "/review-items/{review_item_id}/confirm",
     response_model=PolicyReviewItem,

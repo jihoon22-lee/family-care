@@ -18,6 +18,23 @@ from familycare_worker.ai.schemas import (
 
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 _DATE_FIELDS = frozenset({"contract_start", "contract_end", "coverage_start", "coverage_end"})
+_STRING_FIELDS = frozenset(
+    {
+        "insurer",
+        "product_name",
+        "contract_start",
+        "contract_end",
+        "policy_status",
+        "rider_name",
+        "rider_key",
+        "benefit_type",
+        "currency",
+        "coverage_start",
+        "coverage_end",
+        "rider_status",
+    }
+)
+_LEDGER_STATUSES = frozenset({"active", "inactive", "expired", "cancelled", "unknown"})
 
 
 def _append_issue(issues: list[IssueCode], issue: IssueCode) -> None:
@@ -66,6 +83,31 @@ def _validate_units(fields: Sequence[CandidateField], issues: list[IssueCode]) -
             _append_issue(issues, "INVALID_DATE")
 
 
+def _validate_semantics(candidate: StructurerCandidate, issues: list[IssueCode]) -> None:
+    fields = {field.field_id: field.value for field in candidate.fields}
+    for field in candidate.fields:
+        invalid = (
+            field.field_id in _STRING_FIELDS
+            and (not isinstance(field.value, str) or not field.value.strip())
+        ) or (field.field_id == "benefit_type" and field.value not in {"fixed", "indemnity"})
+        invalid = invalid or (
+            field.field_id in {"policy_status", "rider_status"}
+            and field.value not in _LEDGER_STATUSES
+        )
+        invalid = invalid or (field.field_id == "renewable" and not isinstance(field.value, bool))
+        if invalid:
+            _append_issue(issues, "UNSUPPORTED_STRUCTURE")
+    required = (
+        {"insurer", "product_name"}
+        if candidate.candidate_kind == "policy_contract"
+        else {"rider_name", "rider_key", "benefit_type"}
+        if candidate.candidate_kind == "rider"
+        else set()
+    )
+    if not required <= fields.keys():
+        _append_issue(issues, "UNSUPPORTED_STRUCTURE")
+
+
 def validate_candidate(
     *,
     candidate: StructurerCandidate,
@@ -75,6 +117,9 @@ def validate_candidate(
     """Return stable issues; an empty tuple is the publication boundary."""
 
     issues: list[IssueCode] = list(verifier.issue_codes)
+    if candidate.candidate_kind == "policy_party":
+        _append_issue(issues, "UNSUPPORTED_STRUCTURE")
+    _validate_semantics(candidate, issues)
     evidence_by_id = {item.evidence_id: item for item in evidence}
     candidate_evidence: set[UUID] = set()
     field_ids = [field.field_id for field in candidate.fields]

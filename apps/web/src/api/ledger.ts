@@ -33,13 +33,13 @@ export const getReviewItem = (reviewItemId: string, signal?: AbortSignal) =>
     { signal },
   );
 
-export const correctCandidateField = (
-  policyId: string,
+export const correctReviewItemField = (
+  reviewItemId: string,
   request: CandidateCorrectionRequest,
   signal?: AbortSignal,
 ) =>
   apiRequest<PolicyReviewItem>(
-    `/api/v1/policies/${encodeURIComponent(policyId)}/candidate-fields/${encodeURIComponent(request.field_id)}`,
+    `/api/v1/review-items/${encodeURIComponent(reviewItemId)}/candidate-fields/${encodeURIComponent(request.field_id)}`,
     { body: JSON.stringify(request), method: "PATCH", signal },
   );
 

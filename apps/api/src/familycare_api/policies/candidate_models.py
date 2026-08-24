@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 from typing import Any, Self
 from uuid import UUID
 
@@ -133,6 +134,14 @@ class CandidateCorrectionRequest(BaseModel):
     def bound_value(cls, value: CandidateScalar) -> CandidateScalar:
         return CandidateField.bound_value(value)
 
+    @model_validator(mode="after")
+    def validate_typed_value(self) -> Self:
+        try:
+            validate_candidate_field_value(self.field_id, self.value)
+        except ValueError:
+            raise ValueError("invalid candidate value") from None
+        return self
+
 
 class CandidateConfirmationRequest(BaseModel):
     model_config = _STRICT
@@ -164,8 +173,15 @@ def validate_candidate_field_value(field_id: PolicyCandidateFieldId, value: Any)
         "coverage_end",
         "rider_status",
     }
-    if field_id in string_fields and not isinstance(value, str):
+    if field_id in string_fields and (not isinstance(value, str) or not value):
         raise ValueError("invalid candidate value")
+    if field_id in {"contract_start", "contract_end", "coverage_start", "coverage_end"}:
+        if not isinstance(value, str):
+            raise ValueError("invalid candidate value")
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("invalid candidate value") from None
     if field_id == "renewable" and not isinstance(value, bool):
         raise ValueError("invalid candidate value")
     if field_id == "sum_assured" and (

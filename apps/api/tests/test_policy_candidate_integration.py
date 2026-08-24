@@ -449,6 +449,36 @@ def test_user_correction_creates_a_child_without_overwriting_the_parent(
     assert child_field and child_field["value"] == "Sample Rider Corrected"
 
 
+def test_correction_rejects_reversed_contract_dates_before_creating_a_child(
+    database_url: str,
+    seed: _Seed,
+) -> None:
+    _persist_worker_candidate(
+        database_url,
+        seed,
+        candidate_kind="policy_contract",
+        needs_review=True,
+    )
+    service = _service(database_url)
+    original = service.list_review_items(scope=seed.scope_a)[0]
+
+    with pytest.raises(ApiBoundaryError) as raised:
+        service.correct_field(
+            scope=seed.scope_a,
+            review_item_id=original.review_item_id,
+            request=CandidateCorrectionRequest(
+                expected_version=original.expected_version,
+                field_id="contract_end",
+                value="2025-12-31",
+                evidence_id=seed.policy_evidence_id,
+            ),
+            actor_id=SYNTHETIC_ADMIN_ID,
+        )
+
+    assert raised.value.error_code == "INVALID_CANDIDATE_CORRECTION"
+    assert len(_candidate_rows(database_url, seed.scope_a)) == 1
+
+
 def test_stale_correction_is_a_value_free_conflict(
     database_url: str,
     seed: _Seed,
@@ -510,6 +540,37 @@ def test_ai_verified_policy_candidate_is_published(
     assert result.classification == "SUCCESS"
     assert result.candidates[0].status == "AI_VERIFIED"
     assert _ledger_count(database_url, "policy_contracts", seed.scope_a) == 1
+
+
+def test_ai_verified_rider_without_a_policy_remains_reviewable(
+    database_url: str,
+    seed: _Seed,
+) -> None:
+    _, result, _ = _persist_worker_candidate(database_url, seed, needs_review=False)
+
+    assert result.candidates[0].status == "AI_VERIFIED"
+    items = _service(database_url).list_review_items(scope=seed.scope_a)
+    assert len(items) == 1
+    assert items[0].status == "NEEDS_REVIEW"
+    assert "UNSUPPORTED_STRUCTURE" in {issue.code for issue in items[0].issues}
+    assert _ledger_count(database_url, "riders", seed.scope_a) == 0
+
+
+def test_ai_verified_rider_publishes_after_its_policy(
+    database_url: str,
+    seed: _Seed,
+) -> None:
+    _persist_worker_candidate(
+        database_url,
+        seed,
+        candidate_kind="policy_contract",
+        needs_review=False,
+    )
+    _, result, _ = _persist_worker_candidate(database_url, seed, needs_review=False)
+
+    assert result.candidates[0].status == "AI_VERIFIED"
+    assert _ledger_count(database_url, "riders", seed.scope_a) == 1
+    assert _service(database_url).list_review_items(scope=seed.scope_a) == []
 
 
 def test_user_confirmed_policy_candidate_is_published(

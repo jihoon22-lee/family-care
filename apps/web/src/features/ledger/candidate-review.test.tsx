@@ -71,6 +71,11 @@ const ENROLLED_RIDER_FIELDS: CandidateField[] = [
     evidence_ids: [POLICY_EVIDENCE.evidence_id],
   },
   {
+    field_id: "renewable",
+    value: false,
+    evidence_ids: [POLICY_EVIDENCE.evidence_id],
+  },
+  {
     field_id: "rider_status",
     value: "active",
     evidence_ids: [POLICY_EVIDENCE.evidence_id],
@@ -382,6 +387,11 @@ describe("candidate review", () => {
     ).not.toBeInTheDocument();
     expect(within(dialog).queryByText(PROVIDER_PROSE)).not.toBeInTheDocument();
 
+    const closeButton = within(dialog).getByRole("button", { name: "닫기" });
+    closeButton.focus();
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(within(dialog).getByRole("button", { name: "거절" })).toHaveFocus();
+
     await user.keyboard("{Escape}");
     expect(opener).toHaveFocus();
   });
@@ -432,7 +442,7 @@ describe("candidate review", () => {
       const correction = getRequests(
         requests,
         "PATCH",
-        "/api/v1/policies/synthetic-policy-001/candidate-fields/sum_assured",
+        "/api/v1/review-items/synthetic-review-item-001/candidate-fields/sum_assured",
       )[0];
       expect(correction?.body).toEqual({
         expected_version: 1,
@@ -441,6 +451,22 @@ describe("candidate review", () => {
         evidence_id: POLICY_EVIDENCE.evidence_id,
       });
     });
+  });
+
+  it("uses an explicit boolean control for renewable corrections", async () => {
+    createMockApi();
+    const user = userEvent.setup();
+    renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
+
+    await user.click(await screen.findByRole("button", { name: "후보 검토" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.selectOptions(
+      within(dialog).getByRole("combobox", { name: "수정할 필드" }),
+      "renewable",
+    );
+    expect(
+      within(dialog).getByRole("combobox", { name: "renewable" }),
+    ).toHaveValue("false");
   });
 
   it("preserves the unsaved draft, refetches after 409, and retries safely", async () => {
@@ -498,7 +524,7 @@ describe("candidate review", () => {
       getRequests(
         requests,
         "PATCH",
-        "/api/v1/policies/synthetic-policy-001/candidate-fields/rider_name",
+        "/api/v1/review-items/synthetic-review-item-001/candidate-fields/rider_name",
       )[1]?.body,
     ).toEqual({
       expected_version: 1,

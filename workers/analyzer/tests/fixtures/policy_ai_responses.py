@@ -36,7 +36,7 @@ VALID_STRUCTURED: dict[str, object] = {
         },
         {
             "field_id": "benefit_type",
-            "value": "fixed_amount",
+            "value": "fixed",
             "evidence_ids": [str(SYNTHETIC_RIDER_EVIDENCE_ID)],
         },
         {
@@ -51,7 +51,7 @@ VALID_STRUCTURED: dict[str, object] = {
         },
         {
             "field_id": "rider_status",
-            "value": "enrolled",
+            "value": "active",
             "evidence_ids": [str(SYNTHETIC_RIDER_EVIDENCE_ID)],
         },
     ],

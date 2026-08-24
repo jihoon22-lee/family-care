@@ -7,7 +7,7 @@ import type {
   PolicyReviewItem,
 } from "../../api/generated";
 import { ApiError } from "../../api/errors";
-import { correctCandidateField, getReviewItem } from "../../api/ledger";
+import { correctReviewItemField, getReviewItem } from "../../api/ledger";
 
 function initialField(item: PolicyReviewItem): CandidateField {
   const field =
@@ -104,15 +104,10 @@ export function CandidateFieldEditor({
       setError(invalid ?? "근거 Evidence를 선택해 주세요.");
       return;
     }
-    const policyId = item.aggregate_id;
-    if (!policyId) {
-      setError("연결된 계약을 확인한 뒤 수정할 수 있습니다.");
-      return;
-    }
     setSaving(true);
     setError(undefined);
     try {
-      const updated = await correctCandidateField(policyId, {
+      const updated = await correctReviewItemField(item.review_item_id, {
         evidence_id: evidenceId,
         expected_version: expectedVersion,
         field_id: fieldId,
@@ -158,13 +153,24 @@ export function CandidateFieldEditor({
         </label>
         <label>
           <span>{fieldId}</span>
-          <input
-            aria-label={fieldId}
-            min={fieldId === "sum_assured" ? 0 : undefined}
-            type={inputType}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
+          {fieldId === "renewable" ? (
+            <select
+              aria-label={fieldId}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            >
+              <option value="false">갱신 아님</option>
+              <option value="true">갱신형</option>
+            </select>
+          ) : (
+            <input
+              aria-label={fieldId}
+              min={fieldId === "sum_assured" ? 0 : undefined}
+              type={inputType}
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            />
+          )}
         </label>
         <label>
           <span>근거 Evidence</span>

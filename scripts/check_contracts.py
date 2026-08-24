@@ -147,6 +147,7 @@ def validate_openapi() -> list[str]:
         "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
         "/api/v1/review-items",
         "/api/v1/review-items/{review_item_id}",
+        "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
         "/api/v1/review-items/{review_item_id}/confirm",
         "/api/v1/review-items/{review_item_id}/reject",
     }

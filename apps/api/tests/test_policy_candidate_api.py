@@ -406,6 +406,25 @@ def test_patch_correction_uses_path_field_and_creates_child_version(
     assert not _contains_forbidden_key(body)
 
 
+def test_review_item_patch_targets_one_candidate_even_when_policy_is_shared(
+    client: TestClient,
+    fake_service: _FakeCandidateReviewService,
+) -> None:
+    response = client.patch(
+        f"/api/v1/review-items/{_REVIEW_ITEM_ID}/candidate-fields/rider_name",
+        json={
+            "expected_version": 1,
+            "field_id": "rider_name",
+            "value": "Sample Rider Corrected",
+            "evidence_id": str(_EVIDENCE_ID),
+        },
+    )
+
+    assert response.status_code == 200
+    _assert_no_store(response)
+    assert fake_service.correction_targets == [_REVIEW_ITEM_ID]
+
+
 def test_patch_rejects_field_path_body_mismatch_without_calling_service(
     client: TestClient,
     fake_service: _FakeCandidateReviewService,
@@ -415,7 +434,7 @@ def test_patch_rejects_field_path_body_mismatch_without_calling_service(
         json={
             "expected_version": 1,
             "field_id": "rider_status",
-            "value": "synthetic raw provider response private",
+            "value": "active",
             "evidence_id": str(_EVIDENCE_ID),
         },
     )
@@ -589,6 +608,12 @@ def test_request_models_are_strict_and_correction_does_not_accept_private_fields
         CandidateCorrectionRequest.model_validate(
             {**valid_correction, "source_path": _PRIVATE_MARKERS[1]}
         )
+    with pytest.raises(ValidationError):
+        CandidateCorrectionRequest.model_validate(
+            {**valid_correction, "field_id": "coverage_start", "value": "2026-02-31"}
+        )
+    with pytest.raises(ValidationError):
+        CandidateCorrectionRequest.model_validate({**valid_correction, "value": ""})
 
 
 def test_validation_and_error_responses_do_not_echo_private_values_or_log_them(

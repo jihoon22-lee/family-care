@@ -3129,6 +3129,105 @@
         ]
       }
     },
+    "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}": {
+      "patch": {
+        "description": "Correct one exact review item even when several candidates share a policy.",
+        "operationId": "correct_review_item_field_api_v1_review_items__review_item_id__candidate_fields__field_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "review_item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Review Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "field_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "benefit_type",
+                "contract_end",
+                "contract_start",
+                "coverage_end",
+                "coverage_start",
+                "currency",
+                "insurer",
+                "policy_status",
+                "product_name",
+                "renewable",
+                "rider_key",
+                "rider_name",
+                "rider_status",
+                "sum_assured"
+              ],
+              "title": "Field Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidateCorrectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PolicyReviewItem"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped review item not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Candidate version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid candidate correction"
+          }
+        },
+        "summary": "Correct Review Item Field",
+        "tags": [
+          "policy candidate review"
+        ]
+      }
+    },
     "/api/v1/review-items/{review_item_id}/confirm": {
       "post": {
         "operationId": "confirm_candidate_api_v1_review_items__review_item_id__confirm_post",

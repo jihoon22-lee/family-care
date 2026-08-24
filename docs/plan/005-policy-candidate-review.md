@@ -242,6 +242,7 @@ Add these operations with strict request and response schemas:
 GET  /api/v1/review-items?domain=policy&status=NEEDS_REVIEW
 GET  /api/v1/review-items/{review_item_id}
 PATCH /api/v1/policies/{policy_id}/candidate-fields/{field_id}
+PATCH /api/v1/review-items/{review_item_id}/candidate-fields/{field_id}
 POST /api/v1/review-items/{review_item_id}/confirm
 POST /api/v1/review-items/{review_item_id}/reject
 ```
@@ -694,7 +695,7 @@ git diff --check
 
 Expected: every command exits 0; no command is skipped, interrupted, or replaced by a retry-only result.
 
-- [ ] **Step 2: Inspect the complete diff once before push**
+- [x] **Step 2: Inspect the complete diff once before push**
 
 Trace candidate input → provider payload → validator → database → API response → UI. Confirm that scope, Evidence lineage, terms-only behavior, status transitions, generated types, no-store headers, memory-only cache, logs, and service-worker output match this plan. Resolve all actionable findings before the push; do not substitute repetitive per-file reviews for this gate.
 
