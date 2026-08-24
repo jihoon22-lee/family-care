@@ -120,8 +120,8 @@ ci: validate repository safety
 python3 scripts/check_documentation.py
 python3 scripts/check_repository_safety.py
 corepack pnpm@11.22.0 web:check
-TMPDIR=/tmp uv run ruff format --check apps/api workers/analyzer scripts
-TMPDIR=/tmp uv run ruff check apps/api workers/analyzer scripts
+TMPDIR=/tmp uv run ruff format --check .
+TMPDIR=/tmp uv run ruff check .
 TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts
 TMPDIR=/tmp uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q
 TMPDIR=/tmp uv run python scripts/check_contracts.py

@@ -52,6 +52,7 @@ class OpenedSource:
     source_key: str
     byte_size: int
 
+
 def open_source(root: Path, source_key: str) -> OpenedSource: ...
 def validate_pdf(source: OpenedSource) -> ValidatedPdf: ...
 def stream_sha256(handle: BinaryIO, chunk_size: int = 1_048_576) -> str: ...
@@ -72,6 +73,7 @@ def run_isolated_parser(
     *,
     wall_timeout_seconds: int = 120,
 ) -> ParseOutcome: ...
+
 
 def parse_local_pdf(source_fd: int, settings_json: str) -> ExtractionResult: ...
 ```
@@ -131,10 +133,11 @@ Phase 1 asynchronous API는 unencrypted PDF만 받습니다. `pypdf`가 encrypti
 
 ```python
 class TextBlock(TypedDict):
-    page_number: int       # 1-based
+    page_number: int  # 1-based
     text: str
-    bbox: list[float]      # [x0, top, x1, bottom], PDF points, top-left origin
-    reading_order: int     # starts at 0 per page
+    bbox: list[float]  # [x0, top, x1, bottom], PDF points, top-left origin
+    reading_order: int  # starts at 0 per page
+
 
 class PageQuality(TypedDict):
     rule_version: Literal["quality-v1"]

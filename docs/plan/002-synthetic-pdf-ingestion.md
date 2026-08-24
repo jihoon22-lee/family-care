@@ -153,6 +153,7 @@ def test_document_request_has_relative_source_key_only() -> None:
     assert "password" not in request
     assert "absolute_path" not in request
 
+
 def test_extraction_result_uses_versioned_quality_and_evidence_coordinates() -> None:
     result = load_example("extraction-result.v1.json")
     assert result["quality_rule_version"] == "quality-v1"
@@ -274,6 +275,7 @@ def test_open_source_rejects_symlink_escape(tmp_path: Path) -> None:
     with pytest.raises(DocumentPathEscape):
         open_source(root, "link.pdf")
 
+
 def test_stream_sha256_reads_one_mib_chunks(tmp_path: Path) -> None:
     path = tmp_path / "synthetic.bin"
     path.write_bytes(b"synthetic-" * 200000)
@@ -378,6 +380,7 @@ def test_words_are_text_blocks_with_pdf_point_contract(tmp_path: Path) -> None:
     assert first.page_number == 1
     assert first.reading_order == 0
     assert first.bbox == [72.0, 72.0, 120.0, 84.0]
+
 
 def test_quality_v1_uses_or_thresholds() -> None:
     assert classify_page_quality("a" * 19, "quality-v1").classification == "OCR_REQUIRED"
@@ -591,12 +594,14 @@ def test_submit_analysis_is_async_and_password_free(client) -> None:
     assert body["status_url"].startswith("/api/v1/analysis-jobs/")
     assert "password" not in body
 
+
 def test_disabled_app_does_not_register_synthetic_route(disabled_client) -> None:
     response = disabled_client.post(
         "/api/v1/documents/analysis",
         json={"source_key": "synthetic/policy-001.pdf", "document_kind": "policy"},
     )
     assert response.status_code == 404
+
 
 def test_submit_rejects_password_field(client) -> None:
     response = client.post(
