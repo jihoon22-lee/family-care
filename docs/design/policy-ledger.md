@@ -1,6 +1,6 @@
 # Policy ledger design
 
-- 상태: v0.1 대화 설계 승인 완료, 문서 검토 대기
+- 상태: Phase 2 core ledger 구현 및 합성 PostgreSQL 검증 완료, candidate review 후속 PR 대기
 - 적용 단계: Phase 2
 - 선행 조건: Phase 1 DocumentVersion과 Evidence contract
 

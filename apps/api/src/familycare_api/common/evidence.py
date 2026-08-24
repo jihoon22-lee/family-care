@@ -1,0 +1,194 @@
+"""Policy Evidence validation and PostgreSQL lookup."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from decimal import Decimal
+from typing import Any, Literal, cast
+from uuid import UUID
+
+import psycopg
+from psycopg.rows import dict_row
+
+from familycare_api.common.scope import HouseholdScope
+from familycare_api.policies.errors import EvidenceInvalid, PolicyRepositoryUnavailable
+
+EvidenceReviewState = Literal["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"]
+EvidenceBbox = tuple[Decimal, Decimal, Decimal, Decimal]
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_REVIEW_STATES = {"AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"}
+
+
+def _database_url(value: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise PolicyRepositoryUnavailable
+    return value.replace("postgresql+psycopg://", "postgresql://", 1)
+
+
+def validate_evidence_page(physical_page: int) -> int:
+    if not isinstance(physical_page, int) or isinstance(physical_page, bool) or physical_page < 1:
+        raise EvidenceInvalid
+    return physical_page
+
+
+def validate_content_sha256(content_sha256: str) -> str:
+    if not isinstance(content_sha256, str) or _SHA256.fullmatch(content_sha256) is None:
+        raise EvidenceInvalid
+    return content_sha256
+
+
+def validate_evidence_bbox(bbox: EvidenceBbox | None) -> EvidenceBbox | None:
+    if bbox is None:
+        return None
+    if len(bbox) != 4:
+        raise EvidenceInvalid
+    x0, y0, x1, y1 = bbox
+    if (
+        any(not isinstance(value, Decimal) for value in bbox)
+        or x0 < 0
+        or y0 < 0
+        or x1 <= x0
+        or y1 <= y0
+    ):
+        raise EvidenceInvalid
+    return bbox
+
+
+@dataclass(frozen=True)
+class EvidenceRef:
+    evidence_id: UUID
+    document_version_id: UUID
+    extraction_id: UUID
+    content_sha256: str
+    physical_page: int
+    bbox: EvidenceBbox | None
+    review_state: EvidenceReviewState
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(value, UUID) and value.int != 0
+            for value in (self.evidence_id, self.document_version_id, self.extraction_id)
+        ):
+            raise EvidenceInvalid
+        validate_content_sha256(self.content_sha256)
+        validate_evidence_page(self.physical_page)
+        validate_evidence_bbox(self.bbox)
+        if self.review_state not in _REVIEW_STATES:
+            raise EvidenceInvalid
+
+
+class EvidenceRepository:
+    """Resolve only internally consistent policy Evidence in one household."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = _database_url(database_url)
+
+    def validate_for_document(
+        self,
+        scope: HouseholdScope,
+        evidence_id: UUID,
+        document_version_id: UUID,
+    ) -> EvidenceRef:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                row = connection.execute(
+                    """
+                    SELECT
+                        evidence.id AS evidence_id,
+                        evidence.document_version_id,
+                        evidence.extraction_id,
+                        evidence.content_sha256 AS evidence_hash,
+                        document_version.content_sha256 AS document_hash,
+                        document_version.page_count AS document_page_count,
+                        extraction.document_version_id AS extraction_document_version_id,
+                        page.width_points AS page_width,
+                        page.height_points AS page_height,
+                        evidence.physical_page,
+                        evidence.x0,
+                        evidence.y0,
+                        evidence.x1,
+                        evidence.y1,
+                        evidence.review_state,
+                        document.document_kind
+                    FROM evidence
+                    JOIN document_versions AS document_version
+                      ON document_version.id = evidence.document_version_id
+                    JOIN documents AS document
+                      ON document.id = document_version.document_id
+                    JOIN extractions AS extraction
+                      ON extraction.id = evidence.extraction_id
+                     AND extraction.document_version_id = evidence.document_version_id
+                    JOIN extraction_pages AS page
+                      ON page.extraction_id = extraction.id
+                     AND page.page_number = evidence.physical_page
+                    WHERE evidence.id = %s
+                      AND evidence.household_space_id = %s
+                      AND evidence.document_version_id = %s
+                      AND document.document_kind = 'policy'
+                      AND document.deleted_at IS NULL
+                      AND extraction.status = 'succeeded'
+                      AND evidence.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
+                    """,
+                    (evidence_id, scope.household_space_id, document_version_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise PolicyRepositoryUnavailable from None
+        if row is None:
+            raise EvidenceInvalid
+        return self._from_row(row, document_version_id)
+
+    @staticmethod
+    def _from_row(row: dict[str, Any], expected_document_version_id: UUID) -> EvidenceRef:
+        if (
+            row.get("document_version_id") != expected_document_version_id
+            or row.get("extraction_document_version_id") != expected_document_version_id
+            or row.get("document_kind") != "policy"
+            or row.get("evidence_hash") != row.get("document_hash")
+            or row.get("review_state") not in {"AI_VERIFIED", "USER_CONFIRMED"}
+        ):
+            raise EvidenceInvalid
+        coordinates = (row.get("x0"), row.get("y0"), row.get("x1"), row.get("y1"))
+        bbox: EvidenceBbox | None
+        if coordinates == (None, None, None, None):
+            bbox = None
+        elif all(isinstance(value, Decimal) for value in coordinates):
+            bbox = cast(EvidenceBbox, coordinates)
+        else:
+            raise EvidenceInvalid
+        physical_page = row.get("physical_page")
+        page_count = row.get("document_page_count")
+        page_width = row.get("page_width")
+        page_height = row.get("page_height")
+        if (
+            not isinstance(physical_page, int)
+            or not isinstance(page_count, int)
+            or physical_page > page_count
+            or not isinstance(page_width, Decimal)
+            or not isinstance(page_height, Decimal)
+            or (bbox is not None and (bbox[2] > page_width or bbox[3] > page_height))
+        ):
+            raise EvidenceInvalid
+        try:
+            return EvidenceRef(
+                evidence_id=cast(UUID, row["evidence_id"]),
+                document_version_id=cast(UUID, row["document_version_id"]),
+                extraction_id=cast(UUID, row["extraction_id"]),
+                content_sha256=cast(str, row["evidence_hash"]),
+                physical_page=physical_page,
+                bbox=bbox,
+                review_state=cast(EvidenceReviewState, row["review_state"]),
+            )
+        except KeyError, TypeError:
+            raise EvidenceInvalid from None
+
+
+__all__ = [
+    "EvidenceBbox",
+    "EvidenceRef",
+    "EvidenceRepository",
+    "EvidenceReviewState",
+    "validate_content_sha256",
+    "validate_evidence_bbox",
+    "validate_evidence_page",
+]

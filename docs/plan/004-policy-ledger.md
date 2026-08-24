@@ -250,9 +250,9 @@ GET             /api/v1/policies/{id}/riders
 - Consumes: `0002_document_ingestion` tables and the existing `RecordingOperations` migration-test pattern.
 - Produces: `0003_policy_ledger`, `down_revision = "0002_document_ingestion"`, seven named tables, UUID foreign keys, scope indexes, state/amount/page/version CHECK constraints, and reverse-order downgrade.
 
-- [ ] **Step 1: Write the failing migration-shape tests.** Add tests for the revision chain, exact seven new table names, no missing Phase 1 table, UUID primary/foreign keys, household scope columns, soft-delete/version columns, Evidence page/hash constraints, status snapshot XOR constraint, and downgrade order.
+- [x] **Step 1: Write the failing migration-shape tests.** Add tests for the revision chain, exact seven new table names, no missing Phase 1 table, UUID primary/foreign keys, household scope columns, soft-delete/version columns, Evidence page/hash constraints, status snapshot XOR constraint, and downgrade order.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_migration.py -q
@@ -260,7 +260,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: FAIL because `apps/api/migrations/versions/0003_policy_ledger.py` is absent and the policy migration module cannot be loaded.
 
-- [ ] **Step 3: Implement the minimum Alembic migration.** Use `op.create_table`, `sa.UUID(as_uuid=True)`, `postgresql.JSONB`, timezone-aware timestamps, named constraints, and indexes. Set `revision = "0003_policy_ledger"`, `down_revision = "0002_document_ingestion"`; do not modify `0002_document_ingestion.py`.
+- [x] **Step 3: Implement the minimum Alembic migration.** Use `op.create_table`, `sa.UUID(as_uuid=True)`, timezone-aware timestamps, named constraints, and indexes. Set `revision = "0003_policy_ledger"`, `down_revision = "0002_document_ingestion"`; do not modify `0002_document_ingestion.py`.
 
   ```python
   revision = "0003_policy_ledger"
@@ -285,7 +285,7 @@ GET             /api/v1/policies/{id}/riders
   )
   ```
 
-- [ ] **Step 4: Run the migration tests and a synthetic PostgreSQL migration.**
+- [x] **Step 4: Run the migration tests and a synthetic PostgreSQL migration.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_migration.py -q
@@ -294,7 +294,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: the migration spy tests pass; the configured synthetic PostgreSQL reaches `0003_policy_ledger` without changing the eight Phase 1 table shapes.
 
-- [ ] **Step 5: Commit the migration contract.**
+- [x] **Step 5: Commit the migration contract.**
 
   ```bash
   git add apps/api/migrations/versions/0003_policy_ledger.py apps/api/tests/test_policy_ledger_migration.py apps/api/tests/test_document_ingestion_migration.py
@@ -318,9 +318,9 @@ GET             /api/v1/policies/{id}/riders
 - Consumes: migration tables and `ApiBoundaryError` behavior from `apps/api/src/familycare_api/errors.py`.
 - Produces: `HouseholdScope`, `HouseholdScopeResolver`, `EvidenceRef`, `EvidenceRepository.validate_for_document`, policy/family dataclasses, and direct-`psycopg` repository methods with scope predicates.
 
-- [ ] **Step 1: Write failing domain tests.** Test that a resolver returns a server-owned `HouseholdScope`, a repository query cannot read another household, Evidence rejects page `0`, wrong content hash, stale DocumentVersion, and out-of-bounds bbox, and a stale expected version raises `VersionConflict` without changing the row.
+- [x] **Step 1: Write failing domain tests.** Test that a resolver returns a server-owned `HouseholdScope`, a repository query cannot read another household, Evidence rejects page `0`, wrong content hash, stale DocumentVersion, and out-of-bounds bbox, and a stale expected version raises `VersionConflict` without changing the row.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_domain.py -q
@@ -328,7 +328,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: FAIL with missing `familycare_api.common.scope`, `familycare_api.common.evidence`, or `familycare_api.policies` symbols.
 
-- [ ] **Step 3: Implement the minimum scope, Evidence, and repository interfaces.** Keep the test resolver injectable; never read `household_space_id` from a request model. Every SQL query must contain the server scope predicate and `deleted_at IS NULL` unless the method is explicitly trash/restore.
+- [x] **Step 3: Implement the minimum scope, Evidence, and repository interfaces.** Keep the test resolver injectable; never read `household_space_id` from a request model. Every SQL query must contain the server scope predicate and `deleted_at IS NULL` unless the method is explicitly trash/restore.
 
   ```python
   @dataclass(frozen=True)
@@ -348,7 +348,7 @@ GET             /api/v1/policies/{id}/riders
       return page_number
   ```
 
-- [ ] **Step 4: Run domain tests and static checks.**
+- [x] **Step 4: Run domain tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_domain.py -q
@@ -359,7 +359,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: all domain tests pass, direct SQL is formatted/linted, and strict mypy reports no errors.
 
-- [ ] **Step 5: Commit the scoped domain layer.**
+- [x] **Step 5: Commit the scoped domain layer.**
 
   ```bash
   git add apps/api/src/familycare_api/common apps/api/src/familycare_api/policies apps/api/tests/test_policy_ledger_domain.py
@@ -380,9 +380,9 @@ GET             /api/v1/policies/{id}/riders
 - Consumes: `HouseholdScope`, repository methods, and domain errors from Task 2.
 - Produces: `create_family_member`, `update_family_member`, `delete_family_member`, `restore_family_member`, `create_policy`, `update_policy`, `delete_policy`, `restore_policy`, and `list_policy_riders`; strict Pydantic HTTP models and the routes in this plan.
 
-- [ ] **Step 1: Write failing HTTP tests.** Add TestClient tests for create/list/get/update/delete/restore, another-scope denial, missing aggregate, stale `expected_version`, invalid Evidence, and response absence of `source_key`, path, password, policy number, and raw text.
+- [x] **Step 1: Write failing HTTP tests.** Add TestClient tests for create/list/get/update/delete/restore, another-scope denial, missing aggregate, stale `expected_version`, invalid Evidence, and response absence of `source_key`, path, password, policy number, and raw text.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_api.py -q
@@ -390,7 +390,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: FAIL because the policy router, service, and strict request/response models do not exist.
 
-- [ ] **Step 3: Implement the minimum service and router.** Use dependency injection for the scope resolver and repository. Never accept a household ID in `FamilyMemberCreateRequest` or `PolicyCreateRequest`. Map stale writes to a sanitized `409 VERSION_CONFLICT` envelope.
+- [x] **Step 3: Implement the minimum service and router.** Use dependency injection for the scope resolver and repository. Never accept a household ID in `FamilyMemberCreateRequest` or `PolicyCreateRequest`. Map stale writes to a sanitized `409 VERSION_CONFLICT` envelope.
 
   ```python
   class PolicyUpdateRequest(BaseModel):
@@ -409,7 +409,7 @@ GET             /api/v1/policies/{id}/riders
       )
   ```
 
-- [ ] **Step 4: Run HTTP tests and route contract validation.**
+- [x] **Step 4: Run HTTP tests and route contract validation.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_api.py -q
@@ -419,7 +419,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: all synthetic HTTP behavior passes; OpenAPI is regenerated from FastAPI and the contract checker reports no drift.
 
-- [ ] **Step 5: Commit the policy use cases.**
+- [x] **Step 5: Commit the policy use cases.**
 
   ```bash
   git add apps/api/src/familycare_api/policies
@@ -442,9 +442,9 @@ GET             /api/v1/policies/{id}/riders
 - Consumes: policy router and strict models from Task 3.
 - Produces: `policy-ledger.v1` JSON Schema, synthetic example validation, OpenAPI paths for the policy routes, and sanitized policy error codes.
 
-- [ ] **Step 1: Write failing schema and registration tests.** Assert `additionalProperties: false`, required UUID/version/status fields, no forbidden path/password/text field names, exact route presence, and schema/example validation.
+- [x] **Step 1: Write failing schema and registration tests.** Assert `additionalProperties: false`, required UUID/version/status fields, no forbidden path/password/text field names, exact route presence, and schema/example validation.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_contracts.py -q
@@ -452,7 +452,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: FAIL because the policy schema/example and router registration are absent.
 
-- [ ] **Step 3: Implement the contract and registration.** Include only synthetic examples; extend the checker through a deterministic loader rather than relaxing the existing document contract. Register the router explicitly in `create_app` and add fixed error codes without echoing request values.
+- [x] **Step 3: Implement the contract and registration.** Include only synthetic examples; extend the checker through a deterministic loader rather than relaxing the existing document contract. Register the router explicitly in `create_app` and add fixed error codes without echoing request values.
 
   ```json
   {
@@ -469,7 +469,7 @@ GET             /api/v1/policies/{id}/riders
   }
   ```
 
-- [ ] **Step 4: Run contract and privacy checks.**
+- [x] **Step 4: Run contract and privacy checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_contracts.py apps/api/tests/test_policy_ledger_privacy.py -q
@@ -479,7 +479,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: the committed OpenAPI, JSON Schema, generated business types, and privacy checks agree.
 
-- [ ] **Step 5: Commit the contract boundary.**
+- [x] **Step 5: Commit the contract boundary.**
 
   ```bash
   git add packages/contracts/schemas/policy-ledger.v1.schema.json packages/contracts/examples/policy-ledger.v1.json apps/api/src/familycare_api/main.py apps/api/src/familycare_api/errors.py scripts/check_contracts.py apps/api/tests/test_policy_ledger_contracts.py apps/api/src/familycare_api/contracts/generated_business.py
@@ -500,9 +500,9 @@ GET             /api/v1/policies/{id}/riders
 - Consumes: the complete `0003` migration, policy repositories/services/router, and `policy-ledger.v1` contract.
 - Produces: a synthetic PostgreSQL proof of household isolation, Evidence validation, policy/Rider lifecycle, soft delete/restore, optimistic concurrency, and response/log redaction.
 
-- [ ] **Step 1: Write the failing end-to-end and privacy assertions.** Exercise synthetic DocumentVersion/Evidence rows through family member → policy → party → Rider, then assert a second scope cannot read them, stale updates return `409`, deleted rows disappear from default queries, and `caplog`/responses contain no source path, password, policy number, or text.
+- [x] **Step 1: Write the failing end-to-end and privacy assertions.** Exercise synthetic DocumentVersion/Evidence rows through family member → policy → party → Rider, then assert a second scope cannot read them, stale updates return `409`, deleted rows disappear from default queries, and `caplog`/responses contain no source path, password, policy number, or text.
 
-- [ ] **Step 2: Run the focused RED integration command.**
+- [x] **Step 2: Run the focused RED integration command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_policy_ledger_integration.py -q
@@ -510,9 +510,9 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: FAIL until the real PostgreSQL repository transaction and scope predicates are complete. The test must not inspect any private filesystem root.
 
-- [ ] **Step 3: Implement only the missing transaction and redaction paths.** Use short `psycopg.connect` transactions, `SELECT ... FOR UPDATE` for expected-version updates, explicit `deleted_at` predicates, and fixed public error messages.
+- [x] **Step 3: Implement only the missing transaction and redaction paths.** Use short `psycopg.connect` transactions, atomic `UPDATE ... WHERE version = expected_version` predicates, explicit `deleted_at` predicates, and fixed public error messages.
 
-- [ ] **Step 4: Run the complete focused feature suite.**
+- [x] **Step 4: Run the complete focused feature suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_migration.py apps/api/tests/test_policy_ledger_domain.py apps/api/tests/test_policy_ledger_api.py apps/api/tests/test_policy_ledger_contracts.py apps/api/tests/test_policy_ledger_privacy.py -q
@@ -525,7 +525,7 @@ GET             /api/v1/policies/{id}/riders
 
   Expected: all focused tests and static checks pass; no external provider or private data is accessed.
 
-- [ ] **Step 5: Commit the verified feature and record the PR gate.**
+- [x] **Step 5: Commit the verified feature and record the PR gate.**
 
   ```bash
   git add apps/api/tests/test_policy_ledger_integration.py apps/api/tests/test_policy_ledger_privacy.py apps/api/tests/test_policy_ledger_domain.py apps/api/tests/test_policy_ledger_api.py

@@ -60,6 +60,8 @@ def _python_type(schema: Schema) -> str:
         return " | ".join(dict.fromkeys(members))
 
     schema_type = schema.get("type")
+    if schema_type == "null":
+        return "None"
     if schema_type == "array":
         return f"list[{_python_type(schema.get('items', {}))}]"
     if schema_type == "object":
@@ -118,12 +120,20 @@ def render_module(schemas: list[Schema]) -> str:
     classes = collect_classes(schemas)
     aliases = collect_aliases(schemas)
     names = sorted((*classes, *aliases))
+    uses_not_required = any(
+        field_name not in required
+        for definition, required in classes.values()
+        for field_name in definition.get("properties", {})
+    )
+    typing_imports = (
+        "Literal, NotRequired, TypedDict" if uses_not_required else "Literal, TypedDict"
+    )
     lines = [
         '"""Generated from packages/contracts/schemas; do not edit manually."""',
         "",
         "from __future__ import annotations",
         "",
-        "from typing import Literal, NotRequired, TypedDict",
+        f"from typing import {typing_imports}",
         "",
         "__all__ = [",
         *(f'    "{name}",' for name in names),

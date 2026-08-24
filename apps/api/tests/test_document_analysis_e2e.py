@@ -44,6 +44,13 @@ EXTRACTOR_CONFIG = {
 }
 
 _INGESTION_TABLES = (
+    "policy_status_snapshots",
+    "riders",
+    "policy_parties",
+    "policy_contracts",
+    "evidence",
+    "family_members",
+    "household_spaces",
     "extraction_cells",
     "extraction_tables",
     "extraction_blocks",

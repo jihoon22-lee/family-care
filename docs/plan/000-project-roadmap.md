@@ -1,6 +1,6 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: Phase 0·1 완료, Phase 2~8 및 v0.1 설계 승인
+- 상태: Phase 0·1 완료, Phase 2 core ledger 구현, Phase 2 candidate review~Phase 8 설계 승인
 - 기준 설계: `docs/design/v0.1-product.md`
 - 목표 릴리스: `v0.1.0`
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
@@ -21,7 +21,7 @@
 |---|---|---|
 | Phase 0 — Project Foundation | Complete | PR #1, merge `0f632989df891ae944c012bfcce6c838009867a9`, required CI passed. |
 | Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation, PR #13 completion record, current main `8c6ceab`; no release tag or real-data acceptance. |
-| Phase 2 — Policy Ledger | Approved design | Family, contract, party, actual Rider, AI candidate review. |
+| Phase 2 — Policy Ledger | Core ledger implemented | Family, contract, party, actual Rider and Evidence complete; AI candidate review and Web UI pending. |
 | Phase 3 — Clause Linking and Search | Approved design | TermsEdition, Clause, full-text search, Rider link, AI rule validation. |
 | Phase 4 — Coverage Decision Engine | Approved design | MedicalEvent, tri-state engine, fixed and indemnity calculation. |
 | Phase 5 — Event and Result PWA | Approved design | Hybrid input and action-first mobile result. |
@@ -35,7 +35,7 @@
 ```text
 Phase 0 Foundation [complete]
   -> Phase 1 Synthetic PDF Ingestion [complete]
-  -> Phase 2 Policy Ledger and AI candidate review
+  -> Phase 2 core Policy Ledger [implemented], AI candidate review [pending]
   -> Phase 3 Clause search, linking, and executable rule validation
   -> Phase 4 MedicalEvent, tri-state decision, fixed/indemnity calculation
   -> Phase 5 Hybrid input and action-first PWA

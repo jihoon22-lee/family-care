@@ -1,0 +1,506 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/policy-ledger.v1.schema.json",
+  "title": "PolicyLedger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "family_member_id",
+    "policy_id",
+    "rider_id",
+    "status",
+    "version",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "family_member_id": {
+      "$ref": "#/$defs/FamilyMemberId"
+    },
+    "policy_id": {
+      "$ref": "#/$defs/PolicyId"
+    },
+    "rider_id": {
+      "$ref": "#/$defs/RiderId"
+    },
+    "status": {
+      "$ref": "#/$defs/PolicyStatus"
+    },
+    "version": {
+      "$ref": "#/$defs/PositiveVersion"
+    },
+    "evidence": {
+      "$ref": "#/$defs/Evidence"
+    }
+  },
+  "$defs": {
+    "FamilyMemberId": {
+      "format": "uuid",
+      "title": "FamilyMemberId",
+      "type": "string"
+    },
+    "PolicyId": {
+      "format": "uuid",
+      "title": "PolicyId",
+      "type": "string"
+    },
+    "RiderId": {
+      "format": "uuid",
+      "title": "RiderId",
+      "type": "string"
+    },
+    "DocumentVersionId": {
+      "format": "uuid",
+      "title": "DocumentVersionId",
+      "type": "string"
+    },
+    "EvidenceId": {
+      "format": "uuid",
+      "title": "EvidenceId",
+      "type": "string"
+    },
+    "PolicyPartyId": {
+      "format": "uuid",
+      "title": "PolicyPartyId",
+      "type": "string"
+    },
+    "PositiveVersion": {
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "PolicyStatus": {
+      "enum": [
+        "active",
+        "inactive",
+        "expired",
+        "cancelled",
+        "unknown"
+      ],
+      "title": "PolicyStatus",
+      "type": "string"
+    },
+    "BenefitType": {
+      "enum": [
+        "fixed",
+        "indemnity"
+      ],
+      "title": "BenefitType",
+      "type": "string"
+    },
+    "PartyRole": {
+      "enum": [
+        "policyholder",
+        "primary_insured",
+        "additional_insured",
+        "beneficiary"
+      ],
+      "title": "PartyRole",
+      "type": "string"
+    },
+    "EvidenceReviewState": {
+      "enum": [
+        "AI_VERIFIED",
+        "NEEDS_REVIEW",
+        "USER_CONFIRMED"
+      ],
+      "title": "EvidenceReviewState",
+      "type": "string"
+    },
+    "PolicyErrorCode": {
+      "enum": [
+        "AUTHENTICATION_REQUIRED",
+        "EVIDENCE_INVALID",
+        "FAMILY_MEMBER_NOT_FOUND",
+        "POLICY_NOT_FOUND",
+        "POLICY_STATE_CONFLICT",
+        "VERSION_CONFLICT"
+      ],
+      "title": "PolicyErrorCode",
+      "type": "string"
+    },
+    "PolicyApiErrorCode": {
+      "enum": [
+        "AUTHENTICATION_REQUIRED",
+        "EVIDENCE_INVALID",
+        "FAMILY_MEMBER_NOT_FOUND",
+        "INVALID_REQUEST",
+        "POLICY_NOT_FOUND",
+        "POLICY_STATE_CONFLICT",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "VERSION_CONFLICT"
+      ],
+      "title": "PolicyApiErrorCode",
+      "type": "string"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/EvidenceId"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/DocumentVersionId"
+        },
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "physical_page": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "multipleOf": 0.001,
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review_state": {
+          "$ref": "#/$defs/EvidenceReviewState"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "content_sha256",
+        "physical_page",
+        "bbox",
+        "review_state"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "FamilyMemberRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/FamilyMemberId"
+        },
+        "display_name": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "internal_alias": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "internal_alias",
+        "version",
+        "deleted"
+      ],
+      "title": "FamilyMemberRecord",
+      "type": "object"
+    },
+    "PolicyPartyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PolicyPartyId"
+        },
+        "family_member_id": {
+          "$ref": "#/$defs/FamilyMemberId"
+        },
+        "role": {
+          "$ref": "#/$defs/PartyRole"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "effective_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "id",
+        "family_member_id",
+        "role",
+        "effective_from",
+        "effective_to",
+        "evidence",
+        "version"
+      ],
+      "title": "PolicyPartyRecord",
+      "type": "object"
+    },
+    "PolicyRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/PolicyId"
+        },
+        "source_document_version_id": {
+          "$ref": "#/$defs/DocumentVersionId"
+        },
+        "source_evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "insurer_display": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "insurer_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "product_display": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "product_key": {
+          "maxLength": 200,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage_start_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage_end_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/PolicyStatus"
+        },
+        "status_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parties": {
+          "items": {
+            "$ref": "#/$defs/PolicyPartyRecord"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "deleted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source_document_version_id",
+        "source_evidence",
+        "insurer_display",
+        "insurer_key",
+        "product_display",
+        "product_key",
+        "contract_date",
+        "coverage_start_date",
+        "coverage_end_date",
+        "status",
+        "status_evidence",
+        "parties",
+        "version",
+        "deleted"
+      ],
+      "title": "PolicyRecord",
+      "type": "object"
+    },
+    "RiderRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RiderId"
+        },
+        "policy_contract_id": {
+          "$ref": "#/$defs/PolicyId"
+        },
+        "display_name": {
+          "maxLength": 240,
+          "minLength": 1,
+          "type": "string"
+        },
+        "normalized_key": {
+          "maxLength": 240,
+          "minLength": 1,
+          "type": "string"
+        },
+        "benefit_type": {
+          "$ref": "#/$defs/BenefitType"
+        },
+        "insured_amount": {
+          "anyOf": [
+            {
+              "pattern": "^(0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage_start_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage_end_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "renewable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/PolicyStatus"
+        },
+        "source_evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "status_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "id",
+        "policy_contract_id",
+        "display_name",
+        "normalized_key",
+        "benefit_type",
+        "insured_amount",
+        "currency",
+        "coverage_start_date",
+        "coverage_end_date",
+        "renewable",
+        "status",
+        "source_evidence",
+        "status_evidence",
+        "version"
+      ],
+      "title": "RiderRecord",
+      "type": "object"
+    }
+  }
+}
