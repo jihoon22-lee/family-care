@@ -181,7 +181,7 @@ The API service accepts `RequestScope` from authentication middleware in the nex
 - Produces: strict `PolicyReviewItem`, `CandidateCorrectionRequest`, `CandidateConfirmationRequest`, `CandidateRejectionRequest`, `VERSION_CONFLICT`, `REVIEW_ITEM_NOT_FOUND`, and `INVALID_CANDIDATE_CORRECTION` contracts.
 - The schema rejects `source_path`, `absolute_path`, `policy_number`, `raw_pdf`, `password`, `archive_key`, `household_space_id`, `prompt`, and `raw_provider_response` at every request/response object level.
 
-- [ ] **Step 1: Write the failing schema and generated-consumer tests**
+- [x] **Step 1: Write the failing schema and generated-consumer tests**
 
 ```python
 def test_candidate_example_requires_policy_evidence_and_bounded_excerpt() -> None:
@@ -213,13 +213,13 @@ TMPDIR=/tmp uv run pytest scripts/tests/test_policy_candidate_contract.py -q
 
 Expected: FAIL because the candidate schema, checker, generated TypeScript consumer, and OpenAPI operations do not exist.
 
-- [ ] **Step 2: Add the strict candidate schema and synthetic example**
+- [x] **Step 2: Add the strict candidate schema and synthetic example**
 
 Define one versioned JSON object with `schema_version: "1"`, the exact candidate status enum, candidate kind enum, fixed field ID enum, typed values, Evidence references, bounded excerpts, and issue code enum. Set `additionalProperties: false` on the root and every nested object. Require Evidence for every `AI_VERIFIED` and `USER_CONFIRMED` field. Add one `AI_VERIFIED` rider backed by a synthetic policy DocumentVersion and one `NEEDS_REVIEW` rider with `TERMS_ONLY_RIDER` so the example demonstrates that terms presence is not enrollment.
 
 Use only values such as `synthetic-policy-001`, `Sample Policy`, `Family Member A`, and UUID-shaped synthetic IDs. Do not add a field that can carry raw provider messages, full extracted text, absolute paths, passwords, or private external identifiers.
 
-- [ ] **Step 3: Add deterministic contract and TypeScript generation checks**
+- [x] **Step 3: Add deterministic contract and TypeScript generation checks**
 
 Implement `check_policy_candidate_contract.py` with the same standard-library schema validator used by the existing document contract tests. Validate the examples, forbidden field list, page/bbox bounds, excerpt length, exact status values, and the requirement that `TERMS_ONLY_RIDER` cannot have `AI_VERIFIED` status.
 
@@ -234,7 +234,7 @@ TMPDIR=/tmp uv run python scripts/generate_web_contract_types.py --check
 
 Expected: PASS after the schema, examples, and generator are present; a byte change in the generated file fails the check.
 
-- [ ] **Step 4: Add the review operations to OpenAPI and checker expectations**
+- [x] **Step 4: Add the review operations to OpenAPI and checker expectations**
 
 Add these operations with strict request and response schemas:
 
@@ -242,13 +242,14 @@ Add these operations with strict request and response schemas:
 GET  /api/v1/review-items?domain=policy&status=NEEDS_REVIEW
 GET  /api/v1/review-items/{review_item_id}
 PATCH /api/v1/policies/{policy_id}/candidate-fields/{field_id}
+PATCH /api/v1/review-items/{review_item_id}/candidate-fields/{field_id}
 POST /api/v1/review-items/{review_item_id}/confirm
 POST /api/v1/review-items/{review_item_id}/reject
 ```
 
 The correction body contains only `expected_version`, `field_id`, `value`, and `evidence_id`. Confirmation and rejection contain `expected_version`; rejection additionally contains an enum `reason_code`. Define `409 VERSION_CONFLICT`, `404 REVIEW_ITEM_NOT_FOUND`, and `422 INVALID_CANDIDATE_CORRECTION` without echoing raw values. Regenerate OpenAPI with the application factory and ensure the committed contract matches byte-for-byte.
 
-- [ ] **Step 5: Run the contract slice and commit it**
+- [x] **Step 5: Run the contract slice and commit it**
 
 ```bash
 TMPDIR=/tmp uv run pytest scripts/tests/test_policy_candidate_contract.py -q
@@ -315,7 +316,7 @@ def run_policy_pipeline(
 ) -> PolicyCandidateBatch: ...
 ```
 
-- [ ] **Step 1: Write the failing pipeline decision-table tests**
+- [x] **Step 1: Write the failing pipeline decision-table tests**
 
 ```python
 def test_two_valid_ai_stages_and_validator_publish_ai_verified() -> None:
@@ -347,23 +348,23 @@ TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_policy_ai_schemas.py worke
 
 Expected: FAIL because the provider protocol, strict payload models, and pipeline do not exist.
 
-- [ ] **Step 2: Implement strict structurer and verifier payloads**
+- [x] **Step 2: Implement strict structurer and verifier payloads**
 
 Use frozen Pydantic models or equivalent typed validation with `extra="forbid"`. The structurer accepts only the bounded `EvidenceSlice` batch and returns fixed candidate kinds and field IDs. The verifier receives the structurer candidate plus the same Evidence IDs and returns `approved`, `needs_review`, or `rejected` with issue codes; it has no field for adding facts.
 
 Reject unknown fields, unknown enum values, missing Evidence IDs, Evidence IDs from another DocumentVersion, invalid page numbers, bboxes outside page bounds, negative amounts, invalid currency, end-before-start dates, and terms-only Rider candidates marked as enrolled.
 
-- [ ] **Step 3: Implement provider adapter and sanitized retry classification**
+- [x] **Step 3: Implement provider adapter and sanitized retry classification**
 
 Define `OpenAiResponsesAdapter` behind `AiProvider`. Read the API key only inside the Worker call path, send strict JSON schema instructions, and retain only a provider request ID in the candidate audit record. Do not log prompts, responses, Evidence text, model input, API key, or exception bodies.
 
 Classify timeout and rate-limit responses as retryable once within the job retry budget. Classify authentication and configuration errors as terminal. Invalid JSON, schema mismatch, invented Evidence, and unsupported candidate structure become `NEEDS_REVIEW` without retrying the same invalid response.
 
-- [ ] **Step 4: Implement pipeline ordering and partial-failure behavior**
+- [x] **Step 4: Implement pipeline ordering and partial-failure behavior**
 
 Run structurer, verifier, and deterministic validator in that order. A verifier failure preserves the candidate as `NEEDS_REVIEW`; it does not erase other valid candidates. A provider failure leaves the existing published candidate version unchanged. The runner publishes only the validated batch and never calls the decision engine or computes `MATCH`, `NO_MATCH`, or money.
 
-- [ ] **Step 5: Add privacy tests and commit the pipeline**
+- [x] **Step 5: Add privacy tests and commit the pipeline**
 
 ```bash
 TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_policy_ai_schemas.py workers/analyzer/tests/test_policy_ai_pipeline.py workers/analyzer/tests/test_policy_ai_privacy.py -q
@@ -417,7 +418,7 @@ class CandidateReviewService:
     ) -> PolicyReviewItem: ...
 ```
 
-- [ ] **Step 1: Write failing migration and use-case tests**
+- [x] **Step 1: Write failing migration and use-case tests**
 
 ```python
 def test_candidate_correction_creates_a_child_version_without_overwriting_parent(
@@ -447,21 +448,21 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_candidate_migration.py apps
 
 Expected: FAIL because revision `0004_policy_candidate_review`, repository, service, and routes do not exist.
 
-- [ ] **Step 2: Add the candidate version migration**
+- [x] **Step 2: Add the candidate version migration**
 
 Create `analysis_candidate_versions` with UUID ID, `household_space_id`, candidate kind, aggregate ID, parent version ID, integer version, status, generator/verifier/schema versions, provider request ID, issue JSON, actor/timestamps, and soft-delete timestamp. Create `analysis_candidate_fields` with candidate version ID, fixed field ID, JSON scalar value, and unique `(candidate_version_id, field_id)`. Create `analysis_candidate_evidence` with candidate version ID, field ID, DocumentVersion ID, Evidence ID, physical page, bounded excerpt, optional bbox, and unique `(candidate_version_id, field_id, evidence_id)`. Create indexes for household/status and review-item lookup.
 
 Do not create columns for source paths, passwords, raw provider response, PDF body, policy numbers, or user free-text copies. Add foreign keys to Plan 004 policy and Phase 1 DocumentVersion records. Add a unique `(aggregate_id, version)` constraint and a check that status is in the exact candidate enum.
 
-- [ ] **Step 3: Implement repository scope and optimistic concurrency**
+- [x] **Step 3: Implement repository scope and optimistic concurrency**
 
 Every SELECT, UPDATE, and INSERT receives server-derived `RequestScope.household_space_id`; ignore any household/user ID in request JSON or query parameters. `expected_version` is checked in the same transaction as the write. A mismatch returns `VERSION_CONFLICT`; missing or soft-deleted rows return `REVIEW_ITEM_NOT_FOUND` without revealing whether another household owns the ID.
 
-- [ ] **Step 4: Implement publish, correction, confirmation, and rejection**
+- [x] **Step 4: Implement publish, correction, confirmation, and rejection**
 
 `correct_field` validates field type, Evidence membership, and DocumentVersion lineage, then inserts a child candidate version and audit event. `confirm` marks the current version `USER_CONFIRMED` and publishes only aggregate values with policy Evidence. `reject` marks the version `rejected` with a bounded reason code. A terms-only Rider can be confirmed as an informational candidate but cannot create or activate a Rider projection. Existing published versions remain unchanged until the replacement passes all invariants in one transaction.
 
-- [ ] **Step 5: Add API routes and run focused tests**
+- [x] **Step 5: Add API routes and run focused tests**
 
 Register the router only in the authenticated application path. Add `Cache-Control: no-store` to every review response and use the existing sanitized error envelope. Add integration coverage for AI candidate persistence, review, correction, confirmation, publication, terms-only rejection, object scope, and stale version conflicts.
 
@@ -521,7 +522,7 @@ export function useLedger(memberId: string): {
 };
 ```
 
-- [ ] **Step 1: Write failing HTTP/cache and ledger tests**
+- [x] **Step 1: Write failing HTTP/cache and ledger tests**
 
 ```tsx
 it("uses same-origin credentials and does not persist ledger responses", async () => {
@@ -547,19 +548,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the client, query cache, route shell, and ledger components do not exist.
 
-- [ ] **Step 2: Implement the fetch boundary and memory-only query cache**
+- [x] **Step 2: Implement the fetch boundary and memory-only query cache**
 
 Set `credentials: "include"`, `cache: "no-store"`, and `Accept: "application/json"` for every request. Add JSON content type only for JSON bodies. Convert non-2xx responses to stable `ApiError` codes without returning raw response text or request bodies. Use `AbortController` for unmounts. Implement query subscriptions with `useSyncExternalStore`; `clear()` removes all server data on logout and session expiry. Do not import or call any Web Storage API.
 
-- [ ] **Step 3: Implement accessible shell and read-only ledger**
+- [x] **Step 3: Implement accessible shell and read-only ledger**
 
 Use `/app/members/:memberId/ledger` under the existing SPA fallback. Render one `h1`, a FamilyMember picker sourced from the API, policy summary cards, actual Rider rows, and a visible `NEEDS_REVIEW` count. Do not render candidate fields as enrolled Riders. Add a skip link, semantic `main`, list/table semantics, text labels for every status, and a route heading focus target.
 
-- [ ] **Step 4: Add interaction support and safe empty/error states**
+- [x] **Step 4: Add interaction support and safe empty/error states**
 
 Render empty family, no policy, partial API failure, and unauthorized states separately. Do not echo API detail, IDs, source paths, policy numbers, or raw document text. Set `aria-live="polite"` for loading completion and `role="alert"` for safe errors. Add `@testing-library/user-event` as a pinned dev dependency for keyboard tests.
 
-- [ ] **Step 5: Run the Web slice and commit**
+- [x] **Step 5: Run the Web slice and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 src/features/ledger/ledger.test.tsx
@@ -606,7 +607,7 @@ export function EvidenceDrawer(props: {
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing review interaction tests**
+- [x] **Step 1: Write failing review interaction tests**
 
 ```tsx
 it("keeps a terms-only candidate out of enrolled Riders and exposes its review reason", async () => {
@@ -638,19 +639,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because review queue, dialog, Evidence drawer, and mutation handlers do not exist.
 
-- [ ] **Step 2: Implement status-grouped review queue and safe terminology**
+- [x] **Step 2: Implement status-grouped review queue and safe terminology**
 
 Show `AI_VERIFIED` records in the ledger, `NEEDS_REVIEW` records in the exception queue, and `USER_CONFIRMED` records with the confirmation actor/time. Use the Korean UI terms `청구 검토`, `추가 확인 필요`, and `조건 불일치` only where applicable; never use `지급 확정`. A review reason is a fixed code mapped to safe copy, not provider prose.
 
-- [ ] **Step 3: Implement the keyboard-safe dialog and Evidence drawer**
+- [x] **Step 3: Implement the keyboard-safe dialog and Evidence drawer**
 
 Use `role="dialog"`, `aria-modal="true"`, a labelled heading, Escape close, focus on the heading or first invalid field, and focus restoration to the opener. Evidence shows document label, physical page, bounded excerpt, and optional coordinates. It never shows path, archive object key, password, policy number, or full extracted text. If Evidence fetch fails or hash is stale, show a stale warning and disable confirmation.
 
-- [ ] **Step 4: Implement typed correction and optimistic mutation behavior**
+- [x] **Step 4: Implement typed correction and optimistic mutation behavior**
 
 The editor renders only the generated `PolicyCandidateFieldId` enum. Field-level validation blocks invalid dates, negative sums, unsupported currencies, and missing Evidence. Submit `expected_version`, typed value, and selected Evidence ID. On `409 VERSION_CONFLICT`, preserve the unsaved draft, refetch the item, and give a safe retry action. On success, invalidate the ledger and review-item query keys.
 
-- [ ] **Step 5: Add mock browser E2E and run the focused suite**
+- [x] **Step 5: Add mock browser E2E and run the focused suite**
 
 Configure one Chromium worker with `webServer` running `pnpm build && pnpm preview --host 127.0.0.1`, `baseURL` defaulting to `http://127.0.0.1:4173`, and `page.route("**/api/v1/**")` returning synthetic JSON only. The E2E must cover 320px layout, keyboard dialog close, terms-only exclusion, confirmation, and absence of Web Storage writes.
 
@@ -676,7 +677,7 @@ Expected: component tests and the synthetic browser flow pass; no network reques
 - Consumes: all Task 1–5 outputs and the root agent's current `main` comparison.
 - Produces: one reviewable branch, one PR, passing required checks, and a post-merge focused verification record.
 
-- [ ] **Step 1: Run the complete feature checks serially**
+- [x] **Step 1: Run the complete feature checks serially**
 
 ```bash
 python3 scripts/check_documentation.py
@@ -694,7 +695,7 @@ git diff --check
 
 Expected: every command exits 0; no command is skipped, interrupted, or replaced by a retry-only result.
 
-- [ ] **Step 2: Inspect the complete diff once before push**
+- [x] **Step 2: Inspect the complete diff once before push**
 
 Trace candidate input → provider payload → validator → database → API response → UI. Confirm that scope, Evidence lineage, terms-only behavior, status transitions, generated types, no-store headers, memory-only cache, logs, and service-worker output match this plan. Resolve all actionable findings before the push; do not substitute repetitive per-file reviews for this gate.
 

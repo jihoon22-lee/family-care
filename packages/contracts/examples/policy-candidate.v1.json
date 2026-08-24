@@ -1,0 +1,104 @@
+{
+  "schema_version": "1",
+  "candidates": [
+    {
+      "candidate_version_id": "00000000-0000-4000-8000-000000000601",
+      "aggregate_id": "00000000-0000-4000-8000-000000000201",
+      "candidate_kind": "rider",
+      "status": "AI_VERIFIED",
+      "fields": [
+        {
+          "field_id": "rider_name",
+          "value": "Sample Hospital Benefit",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        },
+        {
+          "field_id": "rider_key",
+          "value": "sample-hospital-benefit",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        },
+        {
+          "field_id": "benefit_type",
+          "value": "fixed",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        },
+        {
+          "field_id": "sum_assured",
+          "value": 100000,
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        },
+        {
+          "field_id": "currency",
+          "value": "KRW",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        },
+        {
+          "field_id": "rider_status",
+          "value": "active",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000401",
+          "document_version_id": "00000000-0000-4000-8000-000000000501",
+          "document_label": "Sample Policy",
+          "page": 1,
+          "bbox": [
+            72,
+            120,
+            480,
+            180
+          ],
+          "bounded_excerpt": "Sample Hospital Benefit is enrolled with a fixed amount of 100000 KRW."
+        }
+      ],
+      "issues": [],
+      "expected_version": 1
+    },
+    {
+      "candidate_version_id": "00000000-0000-4000-8000-000000000602",
+      "aggregate_id": "00000000-0000-4000-8000-000000000202",
+      "candidate_kind": "rider",
+      "status": "NEEDS_REVIEW",
+      "fields": [
+        {
+          "field_id": "rider_name",
+          "value": "Sample Wellness Benefit",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000000402"
+          ]
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000402",
+          "document_version_id": "00000000-0000-4000-8000-000000000502",
+          "document_label": "Sample Terms",
+          "page": 2,
+          "bbox": null,
+          "bounded_excerpt": "Sample Wellness Benefit is described in the terms as an available option."
+        }
+      ],
+      "issues": [
+        {
+          "code": "TERMS_ONLY_RIDER",
+          "field_id": "rider_name"
+        }
+      ],
+      "expected_version": 1
+    }
+  ]
+}

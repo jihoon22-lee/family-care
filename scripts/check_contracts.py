@@ -20,7 +20,10 @@ JOB_EXAMPLE_PATH = ROOT / "packages/contracts/examples/analysis-job.v1.json"
 DOCUMENT_SCHEMA_PATH = ROOT / "packages/contracts/schemas/document-ingestion.v1.schema.json"
 POLICY_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json"
 POLICY_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-ledger.v1.json"
+CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json"
+CANDIDATE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-candidate.v1.json"
 BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
+WEB_OUTPUT_PATH = ROOT / "apps/web/src/api/generated.ts"
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 POLICY_FORBIDDEN_FIELDS = {
     "absolute_path",
@@ -61,6 +64,34 @@ def _load_business_generator() -> Any:
 
 
 generate_business = _load_business_generator()
+
+
+def _load_candidate_checker() -> Any:
+    """Load the policy candidate checker from package or direct-script context."""
+
+    try:
+        module = import_module("scripts.check_policy_candidate_contract")
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution path
+        module = import_module("check_policy_candidate_contract")
+    return module
+
+
+_CANDIDATE_CHECKER = _load_candidate_checker()
+validate_policy_candidate_contract = _CANDIDATE_CHECKER.validate_policy_candidate_contract
+
+
+def _load_web_generator() -> Any:
+    """Load the deterministic Web TypeScript generator."""
+
+    try:
+        module = import_module("scripts.generate_web_contract_types")
+    except ModuleNotFoundError:  # pragma: no cover - direct-script execution path
+        module = import_module("generate_web_contract_types")
+    return module
+
+
+_WEB_GENERATOR = _load_web_generator()
+generate_web = _WEB_GENERATOR.generate
 
 
 def render_openapi() -> str:
@@ -113,6 +144,12 @@ def validate_openapi() -> list[str]:
         "/api/v1/policies/{policy_id}",
         "/api/v1/policies/{policy_id}/restore",
         "/api/v1/policies/{policy_id}/riders",
+        "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
+        "/api/v1/review-items",
+        "/api/v1/review-items/{review_item_id}",
+        "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
+        "/api/v1/review-items/{review_item_id}/confirm",
+        "/api/v1/review-items/{review_item_id}/reject",
     }
     if set(paths) != expected_paths:
         errors.append("OpenAPI paths must contain health, policy, and gated analysis routes")
@@ -287,6 +324,22 @@ def validate_policy_contract() -> list[str]:
     return errors
 
 
+def validate_web_generated_outputs() -> list[str]:
+    """Regenerate the Web consumer in a temporary directory and compare bytes."""
+
+    if not WEB_OUTPUT_PATH.is_file():
+        return ["generated Web contract is missing"]
+    with TemporaryDirectory() as directory:
+        generated = Path(directory) / "generated.ts"
+        try:
+            generate_web(generated)
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            return [f"Web contract generation failed: {error}"]
+        if WEB_OUTPUT_PATH.read_bytes() != generated.read_bytes():
+            return ["generated Web contract is stale"]
+    return []
+
+
 def validate_job_contract() -> list[str]:
     """Validate the versioned analyzer job schema and its synthetic example."""
 
@@ -359,13 +412,15 @@ def main() -> int:
         *validate_job_contract(),
         *validate_document_contracts(),
         *validate_policy_contract(),
+        *validate_policy_candidate_contract(),
+        *validate_web_generated_outputs(),
     ]
     if errors:
         print("\n".join(errors))
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
-        "and policy-ledger.v1 contracts)"
+        "policy-ledger.v1, policy-candidate.v1, and generated Web contracts)"
     )
     return 0
 

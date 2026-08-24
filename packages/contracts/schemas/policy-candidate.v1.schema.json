@@ -1,0 +1,455 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/policy-candidate.v1.schema.json",
+  "title": "PolicyCandidateBatch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/PolicyCandidate"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "CandidateVersionId": {
+      "format": "uuid",
+      "title": "CandidateVersionId",
+      "type": "string"
+    },
+    "AggregateId": {
+      "format": "uuid",
+      "title": "AggregateId",
+      "type": "string"
+    },
+    "EvidenceId": {
+      "format": "uuid",
+      "title": "EvidenceId",
+      "type": "string"
+    },
+    "DocumentVersionId": {
+      "format": "uuid",
+      "title": "DocumentVersionId",
+      "type": "string"
+    },
+    "ReviewItemId": {
+      "format": "uuid",
+      "title": "ReviewItemId",
+      "type": "string"
+    },
+    "PositiveVersion": {
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "CandidateStatus": {
+      "enum": [
+        "AI_VERIFIED",
+        "NEEDS_REVIEW",
+        "USER_CONFIRMED",
+        "rejected"
+      ],
+      "title": "CandidateStatus",
+      "type": "string"
+    },
+    "CandidateKind": {
+      "enum": [
+        "policy_contract",
+        "policy_party",
+        "rider"
+      ],
+      "title": "CandidateKind",
+      "type": "string"
+    },
+    "PolicyCandidateFieldId": {
+      "enum": [
+        "insurer",
+        "product_name",
+        "contract_start",
+        "contract_end",
+        "policy_status",
+        "rider_name",
+        "rider_key",
+        "benefit_type",
+        "sum_assured",
+        "currency",
+        "coverage_start",
+        "coverage_end",
+        "renewable",
+        "rider_status"
+      ],
+      "title": "PolicyCandidateFieldId",
+      "type": "string"
+    },
+    "CandidateIssueCode": {
+      "enum": [
+        "MISSING_EVIDENCE",
+        "CONFLICTING_EVIDENCE",
+        "TERMS_ONLY_RIDER",
+        "UNSUPPORTED_STRUCTURE",
+        "LOW_CONFIDENCE",
+        "INVALID_UNIT",
+        "INVALID_DATE"
+      ],
+      "title": "CandidateIssueCode",
+      "type": "string"
+    },
+    "CandidateRejectionReason": {
+      "enum": [
+        "NOT_ENROLLED",
+        "TERMS_ONLY_RIDER",
+        "DUPLICATE_CANDIDATE",
+        "INVALID_EVIDENCE",
+        "UNSUPPORTED_STRUCTURE"
+      ],
+      "title": "CandidateRejectionReason",
+      "type": "string"
+    },
+    "CandidateErrorCode": {
+      "enum": [
+        "VERSION_CONFLICT",
+        "REVIEW_ITEM_NOT_FOUND",
+        "INVALID_CANDIDATE_CORRECTION"
+      ],
+      "title": "CandidateErrorCode",
+      "type": "string"
+    },
+    "CandidateScalar": {
+      "anyOf": [
+        {
+          "maxLength": 240,
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "CandidateScalar"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/EvidenceId"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/DocumentVersionId"
+        },
+        "document_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "page": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "maximum": 1000000,
+                "minimum": 0,
+                "type": "number"
+              },
+              "maxItems": 4,
+              "minItems": 4,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bounded_excerpt": {
+          "maxLength": 240,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "document_label",
+        "page",
+        "bbox",
+        "bounded_excerpt"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "CandidateField": {
+      "additionalProperties": false,
+      "properties": {
+        "field_id": {
+          "$ref": "#/$defs/PolicyCandidateFieldId"
+        },
+        "value": {
+          "$ref": "#/$defs/CandidateScalar"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/EvidenceId"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "field_id",
+        "value",
+        "evidence_ids"
+      ],
+      "title": "CandidateField",
+      "type": "object"
+    },
+    "ReviewIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CandidateIssueCode"
+        },
+        "field_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicyCandidateFieldId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "code",
+        "field_id"
+      ],
+      "title": "ReviewIssue",
+      "type": "object"
+    },
+    "PolicyCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_version_id": {
+          "$ref": "#/$defs/CandidateVersionId"
+        },
+        "aggregate_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AggregateId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_kind": {
+          "$ref": "#/$defs/CandidateKind"
+        },
+        "status": {
+          "$ref": "#/$defs/CandidateStatus"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/CandidateField"
+          },
+          "maxItems": 15,
+          "minItems": 1,
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/ReviewIssue"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "candidate_version_id",
+        "aggregate_id",
+        "candidate_kind",
+        "status",
+        "fields",
+        "evidence",
+        "issues",
+        "expected_version"
+      ],
+      "title": "PolicyCandidate",
+      "type": "object"
+    },
+    "PolicyReviewItem": {
+      "additionalProperties": false,
+      "properties": {
+        "review_item_id": {
+          "$ref": "#/$defs/ReviewItemId"
+        },
+        "candidate_version_id": {
+          "$ref": "#/$defs/CandidateVersionId"
+        },
+        "aggregate_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AggregateId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_kind": {
+          "$ref": "#/$defs/CandidateKind"
+        },
+        "status": {
+          "$ref": "#/$defs/CandidateStatus"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/CandidateField"
+          },
+          "maxItems": 15,
+          "minItems": 1,
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/ReviewIssue"
+          },
+          "maxItems": 8,
+          "type": "array"
+        },
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "review_item_id",
+        "candidate_version_id",
+        "aggregate_id",
+        "candidate_kind",
+        "status",
+        "fields",
+        "evidence",
+        "issues",
+        "expected_version"
+      ],
+      "title": "PolicyReviewItem",
+      "type": "object"
+    },
+    "CandidateCorrectionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "field_id": {
+          "$ref": "#/$defs/PolicyCandidateFieldId"
+        },
+        "value": {
+          "$ref": "#/$defs/CandidateScalar"
+        },
+        "evidence_id": {
+          "$ref": "#/$defs/EvidenceId"
+        }
+      },
+      "required": [
+        "expected_version",
+        "field_id",
+        "value",
+        "evidence_id"
+      ],
+      "title": "CandidateCorrectionRequest",
+      "type": "object"
+    },
+    "CandidateConfirmationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "expected_version"
+      ],
+      "title": "CandidateConfirmationRequest",
+      "type": "object"
+    },
+    "CandidateRejectionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/CandidateRejectionReason"
+        }
+      },
+      "required": [
+        "expected_version",
+        "reason_code"
+      ],
+      "title": "CandidateRejectionRequest",
+      "type": "object"
+    },
+    "CandidateErrorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error_code": {
+          "$ref": "#/$defs/CandidateErrorCode"
+        },
+        "message": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "error_code",
+        "message"
+      ],
+      "title": "CandidateErrorResponse",
+      "type": "object"
+    }
+  }
+}

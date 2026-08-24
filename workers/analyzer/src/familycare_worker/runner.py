@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
 import psycopg
 
+from familycare_worker.ai.policy_pipeline import run_policy_pipeline
+from familycare_worker.ai.provider import (
+    DEFAULT_STRUCTURER_MODEL,
+    DEFAULT_VERIFIER_MODEL,
+    AiProvider,
+    EvidenceSlice,
+)
+from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.jobs import (
     AnalysisJobRecord,
     JobNotFound,
@@ -48,6 +56,47 @@ class ParserRunner(Protocol):
 
 
 WorkspaceFactory = Callable[[Path], WorkspaceLike]
+
+
+class CandidateBatchPublisher(Protocol):
+    """Persist one sanitized candidate batch and its bounded Evidence slices."""
+
+    def publish(
+        self,
+        result: CandidatePipelineResult,
+        evidence: tuple[EvidenceSlice, ...],
+    ) -> None: ...
+
+
+class PolicyCandidatePipelineRunner:
+    """Run candidate analysis and publish only a sanitized candidate result."""
+
+    def __init__(
+        self,
+        *,
+        provider: AiProvider,
+        publisher: CandidateBatchPublisher,
+        structurer_model: str = DEFAULT_STRUCTURER_MODEL,
+        verifier_model: str = DEFAULT_VERIFIER_MODEL,
+    ) -> None:
+        if not structurer_model or not verifier_model:
+            raise ValueError("candidate model configuration is required")
+        self.provider = provider
+        self.publisher = publisher
+        self.structurer_model = structurer_model
+        self.verifier_model = verifier_model
+
+    def run(self, *, evidence: Sequence[EvidenceSlice]) -> CandidatePipelineResult:
+        bounded_evidence = tuple(evidence)
+        result = run_policy_pipeline(
+            evidence=bounded_evidence,
+            provider=self.provider,
+            structurer_model=self.structurer_model,
+            verifier_model=self.verifier_model,
+        )
+        if result.candidates:
+            self.publisher.publish(result, bounded_evidence)
+        return result
 
 
 def _default_workspace_factory(root: Path) -> Workspace:
@@ -239,4 +288,11 @@ class AnalysisJobRunner:
         )
 
 
-__all__ = ["AnalysisJobRunner", "ParserRunner", "WorkspaceFactory", "WorkspaceLike"]
+__all__ = [
+    "AnalysisJobRunner",
+    "CandidateBatchPublisher",
+    "ParserRunner",
+    "PolicyCandidatePipelineRunner",
+    "WorkspaceFactory",
+    "WorkspaceLike",
+]

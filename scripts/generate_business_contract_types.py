@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any, cast
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json"
+SCHEMA_PATHS = (
+    ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json",
+    ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json",
+)
 DEFAULT_OUTPUT = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 
 
@@ -28,19 +31,22 @@ def _load_render_module() -> Callable[[list[dict[str, Any]]], str]:
 render_module = _load_render_module()
 
 
-def load_schema(path: Path = SCHEMA_PATH) -> dict[str, Any]:
-    """Load the single canonical business-contract schema."""
+def load_schemas(paths: tuple[Path, ...] = SCHEMA_PATHS) -> list[dict[str, Any]]:
+    """Load canonical business-contract schemas in a stable order."""
 
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(value, dict):
-        raise ValueError(f"schema must be an object: {path.relative_to(ROOT)}")
-    return value
+    schemas: list[dict[str, Any]] = []
+    for path in paths:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise ValueError(f"schema must be an object: {path.relative_to(ROOT)}")
+        schemas.append(value)
+    return schemas
 
 
 def generate(output: Path = DEFAULT_OUTPUT) -> str:
     """Render and write the business contract consumer deterministically."""
 
-    rendered = render_module([load_schema()])
+    rendered = render_module(load_schemas())
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(rendered, encoding="utf-8", newline="\n")
     return rendered

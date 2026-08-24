@@ -5,32 +5,103 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 __all__ = [
+    "AggregateId",
     "BenefitType",
+    "CandidateConfirmationRequest",
+    "CandidateCorrectionRequest",
+    "CandidateErrorCode",
+    "CandidateErrorResponse",
+    "CandidateField",
+    "CandidateIssueCode",
+    "CandidateKind",
+    "CandidateRejectionReason",
+    "CandidateRejectionRequest",
+    "CandidateScalar",
+    "CandidateStatus",
+    "CandidateVersionId",
     "DocumentVersionId",
     "Evidence",
     "EvidenceId",
+    "EvidenceRef",
     "EvidenceReviewState",
     "FamilyMemberId",
     "FamilyMemberRecord",
     "PartyRole",
     "PolicyApiErrorCode",
+    "PolicyCandidate",
+    "PolicyCandidateBatch",
+    "PolicyCandidateFieldId",
     "PolicyErrorCode",
     "PolicyId",
     "PolicyLedger",
     "PolicyPartyId",
     "PolicyPartyRecord",
     "PolicyRecord",
+    "PolicyReviewItem",
     "PolicyStatus",
     "PositiveVersion",
+    "ReviewIssue",
+    "ReviewItemId",
     "RiderId",
     "RiderRecord",
 ]
+
+
+AggregateId = str
 
 
 BenefitType = Literal[
     "fixed",
     "indemnity",
 ]
+
+
+CandidateErrorCode = Literal[
+    "INVALID_CANDIDATE_CORRECTION",
+    "REVIEW_ITEM_NOT_FOUND",
+    "VERSION_CONFLICT",
+]
+
+
+CandidateIssueCode = Literal[
+    "CONFLICTING_EVIDENCE",
+    "INVALID_DATE",
+    "INVALID_UNIT",
+    "LOW_CONFIDENCE",
+    "MISSING_EVIDENCE",
+    "TERMS_ONLY_RIDER",
+    "UNSUPPORTED_STRUCTURE",
+]
+
+
+CandidateKind = Literal[
+    "policy_contract",
+    "policy_party",
+    "rider",
+]
+
+
+CandidateRejectionReason = Literal[
+    "DUPLICATE_CANDIDATE",
+    "INVALID_EVIDENCE",
+    "NOT_ENROLLED",
+    "TERMS_ONLY_RIDER",
+    "UNSUPPORTED_STRUCTURE",
+]
+
+
+CandidateScalar = str | float | bool | None
+
+
+CandidateStatus = Literal[
+    "AI_VERIFIED",
+    "NEEDS_REVIEW",
+    "USER_CONFIRMED",
+    "rejected",
+]
+
+
+CandidateVersionId = str
 
 
 DocumentVersionId = str
@@ -69,6 +140,24 @@ PolicyApiErrorCode = Literal[
 ]
 
 
+PolicyCandidateFieldId = Literal[
+    "benefit_type",
+    "contract_end",
+    "contract_start",
+    "coverage_end",
+    "coverage_start",
+    "currency",
+    "insurer",
+    "policy_status",
+    "product_name",
+    "renewable",
+    "rider_key",
+    "rider_name",
+    "rider_status",
+    "sum_assured",
+]
+
+
 PolicyErrorCode = Literal[
     "AUTHENTICATION_REQUIRED",
     "EVIDENCE_INVALID",
@@ -97,7 +186,37 @@ PolicyStatus = Literal[
 PositiveVersion = int
 
 
+ReviewItemId = str
+
+
 RiderId = str
+
+
+class CandidateConfirmationRequest(TypedDict):
+    expected_version: PositiveVersion
+
+
+class CandidateCorrectionRequest(TypedDict):
+    evidence_id: EvidenceId
+    expected_version: PositiveVersion
+    field_id: PolicyCandidateFieldId
+    value: CandidateScalar
+
+
+class CandidateErrorResponse(TypedDict):
+    error_code: CandidateErrorCode
+    message: str
+
+
+class CandidateField(TypedDict):
+    evidence_ids: list[EvidenceId]
+    field_id: PolicyCandidateFieldId
+    value: CandidateScalar
+
+
+class CandidateRejectionRequest(TypedDict):
+    expected_version: PositiveVersion
+    reason_code: CandidateRejectionReason
 
 
 class Evidence(TypedDict):
@@ -109,12 +228,37 @@ class Evidence(TypedDict):
     review_state: EvidenceReviewState
 
 
+class EvidenceRef(TypedDict):
+    bbox: list[float] | None
+    bounded_excerpt: str
+    document_label: str
+    document_version_id: DocumentVersionId
+    evidence_id: EvidenceId
+    page: int
+
+
 class FamilyMemberRecord(TypedDict):
     deleted: bool
     display_name: str
     id: FamilyMemberId
     internal_alias: str
     version: PositiveVersion
+
+
+class PolicyCandidate(TypedDict):
+    aggregate_id: AggregateId | None
+    candidate_kind: CandidateKind
+    candidate_version_id: CandidateVersionId
+    evidence: list[EvidenceRef]
+    expected_version: PositiveVersion
+    fields: list[CandidateField]
+    issues: list[ReviewIssue]
+    status: CandidateStatus
+
+
+class PolicyCandidateBatch(TypedDict):
+    candidates: list[PolicyCandidate]
+    schema_version: Literal["1"]
 
 
 class PolicyLedger(TypedDict):
@@ -153,6 +297,23 @@ class PolicyRecord(TypedDict):
     status: PolicyStatus
     status_evidence: Evidence | None
     version: PositiveVersion
+
+
+class PolicyReviewItem(TypedDict):
+    aggregate_id: AggregateId | None
+    candidate_kind: CandidateKind
+    candidate_version_id: CandidateVersionId
+    evidence: list[EvidenceRef]
+    expected_version: PositiveVersion
+    fields: list[CandidateField]
+    issues: list[ReviewIssue]
+    review_item_id: ReviewItemId
+    status: CandidateStatus
+
+
+class ReviewIssue(TypedDict):
+    code: CandidateIssueCode
+    field_id: PolicyCandidateFieldId | None
 
 
 class RiderRecord(TypedDict):

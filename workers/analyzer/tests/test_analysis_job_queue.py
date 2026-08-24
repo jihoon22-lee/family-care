@@ -19,6 +19,9 @@ from psycopg.types.json import Jsonb
 pytestmark = pytest.mark.integration
 
 _INGESTION_TABLES = (
+    "analysis_candidate_evidence",
+    "analysis_candidate_fields",
+    "analysis_candidate_versions",
     "policy_status_snapshots",
     "riders",
     "policy_parties",

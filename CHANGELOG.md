@@ -34,6 +34,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - A default-disabled local synthetic document-analysis API with asynchronous enqueue/status routes, strict v1 request validation, and sanitized extraction summaries.
 - Phase 2 household-scoped family, policy, policy-party, subscribed-Rider, Evidence, and status-snapshot ledger with optimistic versions and soft-delete trash/restore.
 - Evidence-backed policy APIs and a deterministic `policy-ledger.v1` JSON Schema/OpenAPI consumer with fixed value-free business error codes.
+- Evidence-bounded OpenAI policy structuring and independent verification with deterministic publication guards.
+- Immutable policy-candidate review versions, exact review-item corrections, optimistic confirmation/rejection, and terms-only Rider exclusion.
+- A memory-only, no-store family policy ledger PWA with candidate review, typed corrections, bounded Evidence display, and synthetic Chromium coverage.
 
 ### Changed
 
@@ -74,5 +77,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Malformed parser output is rejected before persistence; extraction rows and job success commit atomically, while temporary-cleanup failure is permanently failed and logged only with a job UUID.
 - Synthetic analysis routes require the exact development/feature-flag opt-in, reject extra credential/path/body fields, and return value-free validation errors without opening documents in the API process.
 - Policy routes reject client-selected household scope, terms-only or unreviewed Evidence, stale writes, and cross-document Evidence lineage; the default scope resolver fails closed until Phase 7 authentication.
+- Candidate review keeps provider prose and private paths out of API/UI errors, traps modal focus, never persists server state in Web Storage, and downgrades unpublishable AI candidates to review instead of silently treating them as enrolled coverage.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.
