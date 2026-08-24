@@ -56,7 +56,7 @@ CoverageRule candidate는 `docs/design/ai-document-analysis.md`의 allowlist DSL
 
 - `GET /api/v1/terms-editions`
 - `GET /api/v1/terms-editions/{id}/clauses`
-- `GET /api/v1/clauses/search`
+- `POST /api/v1/clauses/search` — 검색어를 URL·access log·browser history에 남기지 않는 no-store JSON request
 - `GET /api/v1/riders/{id}/clause-links`
 - `POST /api/v1/rider-clause-links/{id}/confirm|reject`
 - `GET /api/v1/coverage-rules/{id}/versions`
