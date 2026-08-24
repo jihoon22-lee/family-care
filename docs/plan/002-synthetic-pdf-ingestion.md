@@ -21,7 +21,7 @@
 - FAMILYCARE_DOCUMENT_ROOT is an absolute root. Requests and jobs carry only relative source_key values. The resolved file must be a regular file below the root, must not traverse symlinks, and must begin with PDF magic %PDF-.
 - Intake performs component checks, then opens the final source once with descriptor-based no-follow semantics. Magic, size, pypdf structure, and SHA-256 use that opened descriptor; the validated path is never reopened. Linux parser children receive an inherited or duplicated read-only descriptor, not a reopenable path. Source keys and paths are sanitized out of logs.
 - SHA-256 is streamed in 1 MiB chunks.
-- The parser child receives only a local read-only descriptor and canonical JSON settings. It applies resource limits before lazy-importing the parser, has no network client or external URL resolution, and applies `RLIMIT_FSIZE=64 MiB`. OS egress enforcement is production hardening; private-data acceptance stays blocked until the approved runtime boundary exists. Windows descriptor passing and `RLIMIT_*` behavior are unverified.
+- The parser child receives only a local read-only descriptor and canonical JSON settings capped at 64 KiB of UTF-8. It applies resource limits before lazy-importing the parser, has no network client or external URL resolution, and applies `RLIMIT_FSIZE=64 MiB`. OS egress enforcement is production hardening; private-data acceptance stays blocked until the approved runtime boundary exists. Windows descriptor passing and `RLIMIT_*` behavior are unverified.
 - Coordinates are PDF points with a top-left origin, rounded to 3 decimals. pdfplumber extract_words x0/top/x1/bottom values are bounds-checked directly; no page-height subtraction or bottom-origin conversion is used. Page numbers are 1-based and reading_order starts at 0 for each page. Words are TextBlock records; table and cell candidates retain bounding boxes; each page result is appended/serialized before page.close(). The extractor does not persist directly to DB.
 - quality-v1 classifies a page as OCR_REQUIRED when non-whitespace chars are below 20, alphanumeric ratio is below 0.25, replacement-character ratio is above 0.05, or maximum repeated-character run is above 20. Otherwise it is TEXT_SUFFICIENT. OCR execution is outside Phase 1.
 - Passwords never enter the database, job payload, or logs. The asynchronous API accepts unencrypted PDFs only; encrypted input returns PASSWORD_REQUIRED. A parser adapter has direct one-shot runtime-password tests for PASSWORD_INVALID, but queued password transport is not built.
@@ -230,7 +230,7 @@ git add packages/contracts scripts apps/api/migrations apps/api/tests/test_docum
 git commit -m "feat(contracts): define document ingestion schemas"
 ~~~
 
-- [ ] **Step 7: Complete the PR checkpoint**
+- [x] **Step 7: Complete the PR checkpoint**
 
 The root agent reviews the full feat/document-ingestion-contracts diff once, including generated output, migration constraints, privacy fields, and test evidence. Then push the branch, create the PR, wait for all seven GitHub CI jobs, merge with a merge commit, fetch main, verify the migration and contract checks on post-merge main, and record the merge commit before beginning feat/pdf-intake-safety. Do not create THIRD_PARTY_NOTICES.md in this branch because parser dependencies have not landed.
 
@@ -261,7 +261,7 @@ The root agent reviews the full feat/document-ingestion-contracts diff once, inc
 - ValidatedPdf includes only safe metadata: media_type, byte_size, page_count, encrypted, and content_sha256. It does not carry a password or absolute path into the job payload.
 - ParseOutcome contains success or one stable error code and sanitized metadata; it never contains the original source path in a log message.
 
-- [ ] **Step 1: Write failing intake and isolation tests**
+- [x] **Step 1: Write failing intake and isolation tests**
 
 Use pytest tmp_path or a context-managed tempfile.TemporaryDirectory in every test; both are created outside the checkout by the TMPDIR=/tmp test command. Build only synthetic bytes in that temporary root. Test a valid relative source key, absolute source key rejection, parent traversal rejection, symlink component rejection, regular-file rejection, wrong magic rejection, 25 MiB boundary, 500-page boundary through a generated synthetic PDF, observed one MiB read chunks, 0700/0600 modes, child wall timeout, child CPU/address-space/file-size/descriptor limit configuration, and output-file cap.
 
@@ -295,19 +295,19 @@ TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_pdf_intake.py workers/anal
 
 Expected: FAIL because the pdf safety modules and their exported functions do not yet exist.
 
-- [ ] **Step 2: Implement relative-root resolution and intake validation**
+- [x] **Step 2: Implement relative-root resolution and intake validation**
 
 Load FAMILYCARE_DOCUMENT_ROOT once per job and require an absolute directory. Reject source_key values beginning with a path separator, containing NUL, or containing a parent component. Open the root directory descriptor, then traverse each relative component with chained `openat`/`dir_fd`, `O_NOFOLLOW`, and directory-only flags; retain the directory descriptors until the final read-only file descriptor is open. This makes containment part of the open operation instead of a check that can race a later reopen. Require final `fstat` regular-file metadata, check the first five bytes for %PDF-, enforce the 25 MiB size limit, and run pypdf structural/page/encryption validation through duplicates of the opened descriptor. Return PASSWORD_REQUIRED for encrypted input. Compute content_sha256 by reading exactly 1 MiB chunks from the same opened file identity and reset/duplicate offsets between consumers. Close every descriptor in all exit paths. Do not log source_key or any path.
 
 Keep errors in errors.py as an enum/string union. Map path escape, unsupported type, size, page, encryption, corruption, timeout, and resource failures to the contract's stable codes. Unit tests assert that exceptions and logs contain no absolute path, file name, document text, or password.
 
-- [ ] **Step 3: Implement the workspace lifecycle**
+- [x] **Step 3: Implement the workspace lifecycle**
 
 Create a random job directory below the configured work root with mode 0700. Create every output file with mode 0600 using exclusive creation. Expose close_and_cleanup() that attempts cleanup in a finally path and returns a boolean cleanup result plus a sanitized TEMP_CLEANUP_FAILED error when deletion fails. Do not include source_key or family labels in directory names.
 
-- [ ] **Step 4: Implement parser supervision and limits**
+- [x] **Step 4: Implement parser supervision and limits**
 
-Use a dedicated child process for parser execution. On Linux the supervisor passes only the inherited or duplicated read-only source descriptor and canonical JSON settings; it never passes a reopenable path. It waits at most 120 seconds, terminates and joins the child on timeout, and caps serialized result handling at 64 MiB. In the child, apply RLIMIT_CPU=90, RLIMIT_AS=1536 MiB, RLIMIT_FSIZE=64 MiB, and RLIMIT_NOFILE=64 before lazy-importing or calling the parser. The child has no HTTP client, URL resolver, subprocess launcher, or embedded-file execution path. Keep the parser callable injectable so this branch can test limits without a PDF parser implementation. Windows descriptor passing and RLIMIT behavior are unverified.
+Use a dedicated child process for parser execution. On Linux the supervisor passes only the inherited or duplicated read-only source descriptor and canonical JSON settings; it never passes a reopenable path. Immediately after fork, close inherited application file and socket descriptors other than the source and supervision pipes. It waits at most 120 seconds, terminates and joins the child on timeout, and caps serialized result handling at 64 MiB. Child results must be JSON values encoded as canonical UTF-8 JSON; the parent must not unpickle child-controlled objects. In the child, apply RLIMIT_CPU=90, RLIMIT_AS=1536 MiB, RLIMIT_FSIZE=64 MiB, and RLIMIT_NOFILE=64 before lazy-importing or calling the parser. The child has no HTTP client, URL resolver, subprocess launcher, or embedded-file execution path. Keep the parser callable injectable so this branch can test limits without a PDF parser implementation. Windows descriptor passing and RLIMIT behavior are unverified.
 
 Run:
 
@@ -317,7 +317,7 @@ TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_pdf_intake.py workers/anal
 
 Expected: all intake and isolation tests pass, including the exact limit constants and permissions.
 
-- [ ] **Step 5: Run static checks for the branch**
+- [x] **Step 5: Run static checks for the branch**
 
 ~~~bash
 TMPDIR=/tmp uv run ruff format --check workers/analyzer
@@ -328,7 +328,7 @@ git diff --check
 
 Expected: all commands exit 0 and the test suite reports no real/private path access.
 
-- [ ] **Step 6: Commit the independently reviewable branch**
+- [x] **Step 6: Commit the independently reviewable branch**
 
 ~~~bash
 git add workers/analyzer/pyproject.toml workers/analyzer/src/familycare_worker/pdf workers/analyzer/tests/test_pdf_intake.py workers/analyzer/tests/test_pdf_isolation.py uv.lock

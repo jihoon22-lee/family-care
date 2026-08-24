@@ -31,6 +31,7 @@ Phase 1은 공개 저장소와 CI에서 처음부터 만든 합성 PDF를 안전
 | child CPU limit | 90초 | parser child `RLIMIT_CPU` |
 | child address space | 1536 MiB | parser child `RLIMIT_AS` |
 | output file | 64 MiB 이하 | parser child `RLIMIT_FSIZE` and result writer |
+| canonical settings JSON | UTF-8 64 KiB 이하 | child 실행 전 supervisor |
 | open descriptors | 64 이하 | parser child `RLIMIT_NOFILE` |
 
 작업 디렉터리는 mode `0700`, 그 안의 파일은 mode `0600`으로 생성합니다. 임시 평문과 페이지 산출물은 성공·실패·취소·강제 종료 경로에서 삭제를 시도하고, 삭제 실패는 성공으로 숨기지 않습니다.
@@ -78,7 +79,7 @@ def run_isolated_parser(
 def parse_local_pdf(source_fd: int, settings_json: str) -> ExtractionResult: ...
 ```
 
-child에는 CPU 90초, address space 1536 MiB, file size 64 MiB, open descriptors 64개의 OS resource limit을 적용하고, supervisor에는 120초 parent wall timeout을 적용합니다. OS-level egress enforcement는 production hardening 항목입니다. 승인된 runtime boundary가 마련되기 전에는 실제 private-data acceptance를 수행하지 않습니다. Windows descriptor passing과 `RLIMIT_*` 동작은 미검증입니다.
+child에는 CPU 90초, address space 1536 MiB, file size 64 MiB, open descriptors 64개의 OS resource limit을 적용하고, supervisor에는 120초 parent wall timeout을 적용합니다. Fork 후 parser를 호출하기 전에 source와 supervisor control pipe를 제외한 inherited application file·socket descriptor를 닫습니다. Child 결과는 JSON 값만 허용하고 canonical UTF-8 JSON으로 직렬화하며, parent는 64 MiB를 넘는 결과를 읽지 않습니다. 격리 경계를 넘어 임의 객체 생성을 허용하는 `pickle` 역직렬화는 사용하지 않습니다. OS-level egress enforcement는 production hardening 항목입니다. 승인된 runtime boundary가 마련되기 전에는 실제 private-data acceptance를 수행하지 않습니다. Windows descriptor passing과 `RLIMIT_*` 동작은 미검증입니다.
 
 ## Parser stack
 
