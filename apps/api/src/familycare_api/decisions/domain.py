@@ -341,9 +341,7 @@ class DecisionReaders:
 
 
 class CoverageDecisionEngine(Protocol):
-    def evaluate(
-        self, scope: HouseholdScope, event: MedicalEvent, *, history: ClaimHistoryReader
-    ) -> DecisionRunResult: ...
+    def evaluate(self, scope: HouseholdScope, event: MedicalEvent) -> DecisionRunResult: ...
 
 
 def _require_nonzero_uuid(value: UUID, field_name: str) -> None:

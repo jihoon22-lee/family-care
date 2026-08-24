@@ -226,7 +226,7 @@ class DecisionReaders:
 
 class CoverageDecisionEngine(Protocol):
     def evaluate(
-        self, scope: HouseholdScope, event: MedicalEvent, *, history: ClaimHistoryReader
+        self, scope: HouseholdScope, event: MedicalEvent
     ) -> DecisionRunResult: ...
 ```
 

@@ -179,6 +179,8 @@ def snapshot(
     contract_end: date | None = date(2030, 12, 31),
     rider_coverage_start: date | None = date(2020, 1, 1),
     rider_coverage_end: date | None = date(2030, 12, 31),
+    renewable: bool | None = None,
+    status_checked_at: datetime | None = None,
 ) -> PolicySnapshot:
     return PolicySnapshot(
         policy_id=POLICY_ID,
@@ -193,6 +195,8 @@ def snapshot(
         rider_status=rider_status,
         insured_amount=Decimal("1000000"),
         currency="KRW",
+        renewable=renewable,
+        status_checked_at=status_checked_at,
     )
 
 
@@ -435,6 +439,62 @@ def test_event_outside_subscribed_rider_period_is_no_match() -> None:
 
     assert result.candidates[0].aggregate_result == "NO_MATCH"
     assert result.evaluations[0].reason_code == "EVENT_OUTSIDE_RIDER_PERIOD"
+
+
+def test_renewable_rider_without_current_status_check_is_unknown() -> None:
+    result = run(
+        (snapshot(RIDER_A, renewable=True, status_checked_at=None),),
+        {RIDER_A: (rule(),)},
+    )
+
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert result.evaluations[0].reason_code == "RENEWAL_STATUS_UNCONFIRMED"
+    assert result.candidates[0].questions == (
+        Question("Rider.status", "RENEWAL_STATUS_UNCONFIRMED"),
+    )
+
+
+def test_conflicting_policy_snapshots_are_not_arbitrarily_selected() -> None:
+    result = run(
+        (snapshot(RIDER_A), snapshot(RIDER_A, status="unknown")),
+        {RIDER_A: (rule(),)},
+    )
+
+    assert len(result.candidates) == 1
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert result.candidates[0].hold_reason_codes == ("CONFLICTING_POLICY_SNAPSHOT",)
+    assert result.evaluations == ()
+    assert result.stale is True
+
+
+def test_waiting_period_and_confirmed_classification_mismatch_are_no_match() -> None:
+    waiting = run(
+        (
+            snapshot(
+                RIDER_A,
+                contract_start=date(2026, 8, 20),
+                rider_coverage_start=date(2026, 8, 20),
+            ),
+        ),
+        {
+            RIDER_A: (
+                rule(
+                    field="PolicyContract.contract_start",
+                    operator="days_since",
+                    value=10,
+                ),
+            )
+        },
+    )
+    classification = run(
+        (snapshot(RIDER_A),),
+        {RIDER_A: (rule(value="illness"),)},
+    )
+
+    assert waiting.candidates[0].aggregate_result == "NO_MATCH"
+    assert waiting.evaluations[0].reason_code == "DAYS_THRESHOLD_NOT_MET"
+    assert classification.candidates[0].aggregate_result == "NO_MATCH"
+    assert classification.evaluations[0].reason_code == "DETERMINISTIC_VALUE_MISMATCH"
 
 
 def test_no_executable_rule_produces_unknown_and_does_not_call_ai() -> None:
