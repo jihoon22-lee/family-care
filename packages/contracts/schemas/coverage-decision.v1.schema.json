@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/coverage-decision.v1.schema.json",
+  "title": "CoverageDecision",
+  "description": "Strict deterministic coverage decision output with synthetic-safe Evidence references.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "medical_event_id",
+    "event_version",
+    "engine_version",
+    "rule_set_version",
+    "policy_snapshot_at",
+    "stale",
+    "candidates",
+    "evaluations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "run_id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "medical_event_id": {
+      "$ref": "#/$defs/Uuid"
+    },
+    "event_version": {
+      "$ref": "#/$defs/PositiveVersion"
+    },
+    "engine_version": {
+      "$ref": "#/$defs/VersionString"
+    },
+    "rule_set_version": {
+      "$ref": "#/$defs/VersionString"
+    },
+    "policy_snapshot_at": {
+      "$ref": "#/$defs/DateTime"
+    },
+    "stale": {
+      "type": "boolean"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/ClaimCandidate"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "evaluations": {
+      "items": {
+        "$ref": "#/$defs/RuleEvaluation"
+      },
+      "maxItems": 256,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Uuid",
+      "type": "string"
+    },
+    "PositiveVersion": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "VersionString": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "VersionString",
+      "type": "string"
+    },
+    "DateTime": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "title": "DateTime",
+      "type": "string"
+    },
+    "TriState": {
+      "enum": [
+        "MATCH",
+        "NO_MATCH",
+        "UNKNOWN"
+      ],
+      "title": "TriState",
+      "type": "string"
+    },
+    "ReasonCode": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "FieldPath": {
+      "maxLength": 160,
+      "minLength": 3,
+      "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}\\.[a-z][a-z0-9_]{0,63}$",
+      "title": "FieldPath",
+      "type": "string"
+    },
+    "BoundingBox": {
+      "items": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "multipleOf": 0.001,
+        "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "BoundingBox",
+      "type": "array"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "extraction_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "physical_page": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review_state": {
+          "enum": [
+            "AI_VERIFIED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "extraction_id",
+        "content_sha256",
+        "physical_page",
+        "bbox",
+        "review_state"
+      ],
+      "title": "Evidence"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "$ref": "#/$defs/FieldPath"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        }
+      },
+      "required": [
+        "field_path",
+        "reason_code"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "RuleEvaluation": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rule_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "result": {
+          "$ref": "#/$defs/TriState"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "fact_paths": {
+          "items": {
+            "$ref": "#/$defs/FieldPath"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "missing_fields": {
+          "items": {
+            "$ref": "#/$defs/FieldPath"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "conflicting_fields": {
+          "items": {
+            "$ref": "#/$defs/FieldPath"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/Evidence"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "engine_version": {
+          "$ref": "#/$defs/VersionString"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "rider_id",
+        "rule_version_id",
+        "result",
+        "required",
+        "reason_code",
+        "fact_paths",
+        "missing_fields",
+        "conflicting_fields",
+        "evidence",
+        "engine_version"
+      ],
+      "title": "RuleEvaluation",
+      "type": "object"
+    },
+    "ClaimCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_type": {
+          "enum": [
+            "fixed",
+            "indemnity"
+          ],
+          "type": "string"
+        },
+        "aggregate_result": {
+          "$ref": "#/$defs/TriState"
+        },
+        "required_match_count": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_unknown_count": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_no_match_count": {
+          "maximum": 256,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/Question"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "candidate_id",
+        "rider_id",
+        "rider_type",
+        "aggregate_result",
+        "required_match_count",
+        "required_unknown_count",
+        "required_no_match_count",
+        "questions",
+        "hold_reason_codes"
+      ],
+      "title": "ClaimCandidate",
+      "type": "object"
+    }
+  }
+}
