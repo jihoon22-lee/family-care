@@ -1,0 +1,289 @@
+{
+  "$id": "https://familycare.invalid/schemas/extraction-result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/Evidence"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "extractor_config_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "extractor_name": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "extractor_version": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/ExtractionPage"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "quality_rule_version": {
+      "const": "quality-v1",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "content_sha256",
+    "extractor_name",
+    "extractor_version",
+    "extractor_config_hash",
+    "quality_rule_version",
+    "pages",
+    "evidence"
+  ],
+  "title": "ExtractionResult",
+  "type": "object",
+  "$defs": {
+    "BoundingBox": {
+      "description": "[x0, top, x1, bottom] in PDF points with a top-left origin, rounded to 3 decimals.",
+      "items": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "multipleOf": 0.001,
+        "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "BoundingBox",
+      "type": "array"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "document_version_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "page_number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "review_state": {
+          "enum": [
+            "candidate",
+            "confirmed",
+            "rejected"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_version_id",
+        "page_number",
+        "content_sha256",
+        "review_state"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "ExtractionCell": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "column_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "review_state": {
+          "enum": [
+            "candidate",
+            "confirmed",
+            "rejected"
+          ],
+          "type": "string"
+        },
+        "row_index": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "row_index",
+        "column_index",
+        "text",
+        "bbox",
+        "review_state"
+      ],
+      "title": "ExtractionCell",
+      "type": "object"
+    },
+    "ExtractionPage": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/TextBlock"
+          },
+          "type": "array"
+        },
+        "height_points": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        "page_number": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "quality": {
+          "$ref": "#/$defs/PageQuality"
+        },
+        "tables": {
+          "items": {
+            "$ref": "#/$defs/ExtractionTable"
+          },
+          "type": "array"
+        },
+        "warning_codes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "width_points": {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "page_number",
+        "width_points",
+        "height_points",
+        "quality",
+        "blocks",
+        "tables",
+        "warning_codes"
+      ],
+      "title": "ExtractionPage",
+      "type": "object"
+    },
+    "ExtractionTable": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/ExtractionCell"
+          },
+          "type": "array"
+        },
+        "review_state": {
+          "enum": [
+            "candidate",
+            "confirmed",
+            "rejected"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "bbox",
+        "cells",
+        "review_state"
+      ],
+      "title": "ExtractionTable",
+      "type": "object"
+    },
+    "PageQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "alphanumeric_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "classification": {
+          "enum": [
+            "OCR_REQUIRED",
+            "TEXT_SUFFICIENT"
+          ],
+          "type": "string"
+        },
+        "maximum_repeated_character_run": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "non_whitespace_chars": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replacement_character_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        "rule_version": {
+          "const": "quality-v1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_version",
+        "classification",
+        "non_whitespace_chars",
+        "alphanumeric_ratio",
+        "replacement_character_ratio",
+        "maximum_repeated_character_run"
+      ],
+      "title": "PageQuality",
+      "type": "object"
+    },
+    "TextBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "reading_order": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "bbox",
+        "reading_order"
+      ],
+      "title": "TextBlock",
+      "type": "object"
+    }
+  }
+}

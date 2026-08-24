@@ -142,7 +142,7 @@ Each branch uses a merge commit. Before each push, the root agent performs one r
 - Queue contract: analysis-job.v1 contains schema_version, job_id, document_id, relative source_key, canonical settings, and server-computed extractor_config_hash. It cannot contain content_sha256 because intake has not run yet.
 - Extraction contract: each page has page_number >= 1; each block has PDF-point x0/y0/x1/y1 rounded to three decimals and reading_order >= 0; tables and cells require bounding boxes; quality rule version is quality-v1.
 
-- [ ] **Step 1: Write the schema and migration tests first**
+- [x] **Step 1: Write the schema and migration tests first**
 
 Add tests that load the examples, assert the required keys and fixed enum values, and inspect the migration SQL metadata for exactly these physical tables: documents, document_versions, extractions, extraction_pages, extraction_blocks, extraction_tables, extraction_cells, analysis_jobs. Assert that request and queue schemas reject a password and an absolute source key, that the request rejects a client-supplied extractor_config_hash, and that the pre-intake analysis-job envelope has no content_sha256. Assert the uniqueness rules separately and document that DocumentVersion is the sole content-hash representative after intake.
 
@@ -170,13 +170,13 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_document_contracts.py workers/anal
 
 Expected: FAIL because the schema files, generated modules, and migration revision do not yet exist.
 
-- [ ] **Step 2: Add the two versioned JSON Schemas and synthetic examples**
+- [x] **Step 2: Add the two versioned JSON Schemas and synthetic examples**
 
 Define document-ingestion.v1 with request fields source_key, document_kind, and extractor_config plus a status/error projection. The server canonicalizes extractor_config JSON and computes extractor_config_hash; clients cannot supply the authoritative hash. Define extraction-result.v1 with content_sha256, extractor_name, extractor_version, extractor_config_hash, quality_rule_version, pages, blocks, tables, cells, and evidence. Replace the Foundation placeholder analysis-job.v1 shape with the actual pre-intake queue envelope: schema_version, job_id, document_id, relative source_key, canonical settings, and server-computed extractor_config_hash. It must not require or expose content_sha256 before the Worker runs. Use only synthetic values such as synthetic-policy-001 and Sample Policy. Do not add a password property, absolute path property, raw PDF property, external URL, or client-controlled config-hash property.
 
 Set AnalysisJob status values exactly to queued, running, succeeded, retryable_failed, permanently_failed, and cancelled. Set error codes to the values in docs/design/pdf-ingestion.md. Make page number, bbox, and reading_order constraints explicit in the schema rather than relying only on Python tests.
 
-- [ ] **Step 3: Generate typed consumers and add drift checking**
+- [x] **Step 3: Generate typed consumers and add drift checking**
 
 Implement scripts/generate_document_contract_types.py as a deterministic standard-library generator. It reads the schemas, sorts fields and enum members, and emits the API and Worker modules. Implement scripts/check_document_contracts.py to regenerate into a temporary directory, compare bytes, validate both examples, reject forbidden fields, and check the exact safety-limit constants. The generated modules include no business logic and are not hand-edited.
 
@@ -188,7 +188,7 @@ TMPDIR=/tmp uv run python scripts/check_document_contracts.py
 
 Expected: PASS for the checked-in schema/examples/generated outputs after the generator is implemented.
 
-- [ ] **Step 4: Create the minimum migration**
+- [x] **Step 4: Create the minimum migration**
 
 Create revision 0002_document_ingestion with foreign keys and indexes for the eight tables. Include:
 
@@ -212,7 +212,7 @@ FAMILYCARE_DATABASE_URL=postgresql+psycopg://postgres:ci-only-password@127.0.0.1
 
 Expected: revision 0002_document_ingestion is head and the eight named physical tables exist; no unrelated domain table exists. The extraction table does not contain a redundant content_sha256 column.
 
-- [ ] **Step 5: Run the complete branch test set**
+- [x] **Step 5: Run the complete branch test set**
 
 ~~~bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_document_contracts.py workers/analyzer/tests/test_document_contracts.py -q
@@ -223,7 +223,7 @@ git diff --check
 
 Expected: all commands exit 0 and no generated file differs from its schema source.
 
-- [ ] **Step 6: Commit the independently reviewable branch**
+- [x] **Step 6: Commit the independently reviewable branch**
 
 ~~~bash
 git add packages/contracts scripts apps/api/migrations apps/api/tests/test_document_contracts.py workers/analyzer/tests/test_document_contracts.py

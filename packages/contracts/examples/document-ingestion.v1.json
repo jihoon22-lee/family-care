@@ -1,0 +1,10 @@
+{
+  "document_kind": "policy",
+  "extractor_config": {
+    "profile": "quality-v1",
+    "quality_rule_version": "quality-v1",
+    "table_strategy": "auto"
+  },
+  "schema_version": "1",
+  "source_key": "synthetic/policy-001.pdf"
+}

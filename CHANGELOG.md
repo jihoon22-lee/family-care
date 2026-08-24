@@ -18,6 +18,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Published images receive version and 12-character commit SHA tags; pre-1.0 releases do not create `latest`.
 - Phase 1 synthetic PDF ingestion design, implementation plan, and minimum Document/Extraction/AnalysisJob model boundary.
 - ADR 0006 selecting pdfplumber 0.11.10, pypdf 6.16.2, and reportlab 5.0.1 for the permissive synthetic-only parser stack.
+- Versioned document-ingestion, pre-intake analysis-job, and evidence-preserving extraction-result contracts with deterministic API/Worker TypedDict generation.
+- Alembic `0002_document_ingestion` with the eight-table Phase 1 document, extraction, evidence-coordinate, and analysis-job model.
 
 ### Changed
 
@@ -42,5 +44,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 - 실제 보험 문서와 파생 데이터의 저장소 유입을 금지하는 정책 수립
 - Phase 1 parser boundary records that passwords never enter database rows, job payloads, or logs and that production acceptance waits for an approved runtime boundary.
+- Document contracts reject absolute, traversal, Windows-style, multiline, password-bearing, and client-hashed intake requests; PostgreSQL enforces job, extraction, evidence-review, and successful-extraction identity states.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.
