@@ -251,7 +251,9 @@ export type CandidateErrorCode =
 
 export interface CandidateErrorResponse {
   error_code:
-    "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
+    | "INVALID_CANDIDATE_CORRECTION"
+    | "REVIEW_ITEM_NOT_FOUND"
+    | "VERSION_CONFLICT";
   message: string;
 }
 

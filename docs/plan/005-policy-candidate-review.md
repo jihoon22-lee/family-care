@@ -521,7 +521,7 @@ export function useLedger(memberId: string): {
 };
 ```
 
-- [ ] **Step 1: Write failing HTTP/cache and ledger tests**
+- [x] **Step 1: Write failing HTTP/cache and ledger tests**
 
 ```tsx
 it("uses same-origin credentials and does not persist ledger responses", async () => {
@@ -547,19 +547,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the client, query cache, route shell, and ledger components do not exist.
 
-- [ ] **Step 2: Implement the fetch boundary and memory-only query cache**
+- [x] **Step 2: Implement the fetch boundary and memory-only query cache**
 
 Set `credentials: "include"`, `cache: "no-store"`, and `Accept: "application/json"` for every request. Add JSON content type only for JSON bodies. Convert non-2xx responses to stable `ApiError` codes without returning raw response text or request bodies. Use `AbortController` for unmounts. Implement query subscriptions with `useSyncExternalStore`; `clear()` removes all server data on logout and session expiry. Do not import or call any Web Storage API.
 
-- [ ] **Step 3: Implement accessible shell and read-only ledger**
+- [x] **Step 3: Implement accessible shell and read-only ledger**
 
 Use `/app/members/:memberId/ledger` under the existing SPA fallback. Render one `h1`, a FamilyMember picker sourced from the API, policy summary cards, actual Rider rows, and a visible `NEEDS_REVIEW` count. Do not render candidate fields as enrolled Riders. Add a skip link, semantic `main`, list/table semantics, text labels for every status, and a route heading focus target.
 
-- [ ] **Step 4: Add interaction support and safe empty/error states**
+- [x] **Step 4: Add interaction support and safe empty/error states**
 
 Render empty family, no policy, partial API failure, and unauthorized states separately. Do not echo API detail, IDs, source paths, policy numbers, or raw document text. Set `aria-live="polite"` for loading completion and `role="alert"` for safe errors. Add `@testing-library/user-event` as a pinned dev dependency for keyboard tests.
 
-- [ ] **Step 5: Run the Web slice and commit**
+- [x] **Step 5: Run the Web slice and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 src/features/ledger/ledger.test.tsx
@@ -606,7 +606,7 @@ export function EvidenceDrawer(props: {
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing review interaction tests**
+- [x] **Step 1: Write failing review interaction tests**
 
 ```tsx
 it("keeps a terms-only candidate out of enrolled Riders and exposes its review reason", async () => {
@@ -638,19 +638,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because review queue, dialog, Evidence drawer, and mutation handlers do not exist.
 
-- [ ] **Step 2: Implement status-grouped review queue and safe terminology**
+- [x] **Step 2: Implement status-grouped review queue and safe terminology**
 
 Show `AI_VERIFIED` records in the ledger, `NEEDS_REVIEW` records in the exception queue, and `USER_CONFIRMED` records with the confirmation actor/time. Use the Korean UI terms `청구 검토`, `추가 확인 필요`, and `조건 불일치` only where applicable; never use `지급 확정`. A review reason is a fixed code mapped to safe copy, not provider prose.
 
-- [ ] **Step 3: Implement the keyboard-safe dialog and Evidence drawer**
+- [x] **Step 3: Implement the keyboard-safe dialog and Evidence drawer**
 
 Use `role="dialog"`, `aria-modal="true"`, a labelled heading, Escape close, focus on the heading or first invalid field, and focus restoration to the opener. Evidence shows document label, physical page, bounded excerpt, and optional coordinates. It never shows path, archive object key, password, policy number, or full extracted text. If Evidence fetch fails or hash is stale, show a stale warning and disable confirmation.
 
-- [ ] **Step 4: Implement typed correction and optimistic mutation behavior**
+- [x] **Step 4: Implement typed correction and optimistic mutation behavior**
 
 The editor renders only the generated `PolicyCandidateFieldId` enum. Field-level validation blocks invalid dates, negative sums, unsupported currencies, and missing Evidence. Submit `expected_version`, typed value, and selected Evidence ID. On `409 VERSION_CONFLICT`, preserve the unsaved draft, refetch the item, and give a safe retry action. On success, invalidate the ledger and review-item query keys.
 
-- [ ] **Step 5: Add mock browser E2E and run the focused suite**
+- [x] **Step 5: Add mock browser E2E and run the focused suite**
 
 Configure one Chromium worker with `webServer` running `pnpm build && pnpm preview --host 127.0.0.1`, `baseURL` defaulting to `http://127.0.0.1:4173`, and `page.route("**/api/v1/**")` returning synthetic JSON only. The E2E must cover 320px layout, keyboard dialog close, terms-only exclusion, confirmation, and absence of Web Storage writes.
 
