@@ -85,6 +85,28 @@ v0.1에는 별도 live search-index rebuild endpoint가 없습니다. 초기 nor
 
 이 Phase 4 변경은 실제 보험 자료, 외부 AI, Google Drive, 운영 배포를 사용하거나 검증하지 않았습니다. 현재 검증은 처음부터 만든 합성 한국어·영어 corpus와 합성 Evidence만 사용합니다.
 
+### Phase 5 Rider-Clause and CoverageRule review boundary
+
+Phase 5는 검색 결과를 실제 가입 담보와 실행 가능한 규칙으로 연결하기 전의 검토 경계를 제공합니다. UI 경로는 `/app/clauses/review`이며 두 개의 대기열을 분리합니다.
+
+- **담보와 약관 연결**: 실제 가입이 Evidence로 확인된 Rider와 계약일에 적용되는 TermsEdition의 Clause를 검토합니다. 약관에만 존재하는 Rider, 잘못된 판본, 다른 문서의 Clause, 누락·충돌 Evidence는 `NEEDS_REVIEW`로 남습니다. 확인·제외는 현재 link version을 요구합니다.
+- **보장 규칙**: 저장된 CoverageRule candidate의 reason code, rule kind, 필요한 입력 필드와 Evidence를 확인합니다. data-only allowlist에 맞지 않는 DSL은 설명만 표시되고 게시할 수 없습니다.
+
+API 계약은 다음과 같습니다.
+
+```text
+GET   /api/v1/review-items?domain=rider_clause|coverage_rule&status=NEEDS_REVIEW
+PATCH /api/v1/review-items/{id}/fields/{field_id}
+GET   /api/v1/riders/{id}/clause-links
+POST  /api/v1/rider-clause-links/{id}/confirm|reject
+GET   /api/v1/coverage-rules/{id}/versions
+POST  /api/v1/coverage-rules/{id}/publish
+```
+
+Rule version GET은 `expected_version`을 반환합니다. publish 요청은 새 DSL 본문이나 household ID를 받지 않고 `expected_version`과 이미 저장된 `version_id`만 받습니다. typed correction은 후보 원본을 수정하지 않고 child version을 만들며, optimistic conflict가 발생하면 현재 입력을 버리지 않고 화면에 유지합니다. `AI_VERIFIED`·`USER_CONFIRMED`와 exact Evidence를 만족한 stored version만 executable로 게시할 수 있습니다. 게시되었다고 해서 아직 `MATCH`, `NO_MATCH`, `UNKNOWN`을 계산하거나 보험금 지급을 확정하는 것은 아닙니다.
+
+Evidence drawer는 bounded excerpt와 1-based physical page만 보여줍니다. 화면에는 raw DSL textarea, 문서 전체 text, provider payload, private path를 표시하지 않으며 query/cache는 no-store와 memory-only 경계를 유지합니다. 합성 Web 시나리오는 320px viewport에서도 연결·규칙 dialog focus, Evidence disclosure, stored-version publish body, browser storage 미사용을 확인합니다. 이 단계의 검증은 합성 데이터에 한정되며 실제 보험 자료·실제 기기·Tailscale 환경을 검증하지 않습니다.
+
 ### Planned v0.1 local runtime
 
 v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 이 문서는 인증 연결과 운영 migration 적용을 완료로 표시하지 않으며, 실제 운영 사용 절차는 별도 승인과 acceptance 뒤에 추가합니다.

@@ -38,6 +38,11 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Immutable policy-candidate review versions, exact review-item corrections, optimistic confirmation/rejection, and terms-only Rider exclusion.
 - A memory-only, no-store family policy ledger PWA with candidate review, typed corrections, bounded Evidence display, and synthetic Chromium coverage.
 - Phase 4 TermsEdition and Clause hierarchy with PostgreSQL `simple` FTS + `pg_trgm`, household/date/edition/insurer/product scope, bounded Evidence-backed results, and private no-store Web search.
+- Phase 5 scoped Rider-Clause link confirmation/rejection and CoverageRule publication boundary with exact Policy/Clause Evidence checks.
+- A bounded data-only CoverageRule DSL validator that records typed rule candidates without executing decision logic.
+- Generic `rider_clause` and `coverage_rule` review domains with typed child-version corrections and optimistic concurrency metadata.
+- `/app/clauses/review` with separate link/rule queues, Evidence disclosure, generated typed controls, and no raw DSL editor.
+- Synthetic Web review coverage including a 320px Playwright flow for Evidence disclosure, stored-version publication, and browser-storage privacy.
 
 ### Changed
 
@@ -56,6 +61,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 AnalysisJob queue and Worker runner were merged in PR #11 at `cc651436cab884109dc6fdc7f793c8b32e9c86d4`; PR and post-merge `main` CI each passed 7/7, with 23 local queue tests and 59 local extraction tests passing after merge.
 - Phase 1 local synthetic document-analysis API was merged in PR #12 at `1c77f019c9d2b150053e431c31171b97ff3d90c3`; PR and post-merge `main` CI each passed 7/7.
 - Phase 2 candidate review was merged into `main` in PR #16; Phase 4 Clause search remains synthetic-only and its default household scope resolver stays fail-closed until authentication is connected.
+- CoverageRule version reads expose `expected_version`; publication accepts only the expected version and a stored version ID, while deterministic rule evaluation remains deferred to the next phase.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
 
 ### Deprecated
@@ -81,5 +87,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Policy routes reject client-selected household scope, terms-only or unreviewed Evidence, stale writes, and cross-document Evidence lineage; the default scope resolver fails closed until Phase 7 authentication.
 - Candidate review keeps provider prose and private paths out of API/UI errors, traps modal focus, never persists server state in Web Storage, and downgrades unpublishable AI candidates to review instead of silently treating them as enrolled coverage.
 - Clause search uses a no-store JSON POST, server-derived household/date/edition/insurer/product scope, bounded 1-based physical-page Evidence, and no raw query/full-text logging; v0.1 has no live rebuild endpoint, and app/DB or stale-index mismatches fail explicitly as `SEARCH_INDEX_VERSION_MISMATCH` without silent fallback.
+- Rider-Clause and CoverageRule review routes remain server-scoped and no-store. The Web boundary shows bounded Evidence and safe reason-code copy, never raw DSL, provider prose, private paths, or document text; unsupported rule candidates remain informational and cannot be published as executable.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

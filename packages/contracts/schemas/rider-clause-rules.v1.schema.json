@@ -1,0 +1,920 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/rider-clause-rules.v1.schema.json",
+  "title": "RiderClauseRules",
+  "description": "Synthetic-only Rider-Clause links and data-only CoverageRule versions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "rider_clause_links",
+    "coverage_rule_versions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "rider_clause_links": {
+      "items": {
+        "$ref": "#/$defs/RiderClauseLink"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    },
+    "coverage_rule_versions": {
+      "items": {
+        "$ref": "#/$defs/CoverageRuleVersion"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Uuid",
+      "type": "string"
+    },
+    "PositiveVersion": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "Sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "PageNumber": {
+      "maximum": 500,
+      "minimum": 1,
+      "title": "PageNumber",
+      "type": "integer"
+    },
+    "BoundingBox": {
+      "description": "Four non-negative PDF points [x0, top, x1, bottom].",
+      "items": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "multipleOf": 0.001,
+        "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "title": "BoundingBox",
+      "type": "array"
+    },
+    "RuleEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "content_sha256": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "physical_page": {
+          "$ref": "#/$defs/PageNumber"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BoundingBox"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "review_state": {
+          "enum": [
+            "AI_VERIFIED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "content_sha256",
+        "physical_page",
+        "bbox",
+        "review_state"
+      ],
+      "title": "RuleEvidence",
+      "type": "object"
+    },
+    "LinkReviewState": {
+      "enum": [
+        "AI_VERIFIED",
+        "NEEDS_REVIEW",
+        "USER_CONFIRMED",
+        "rejected"
+      ],
+      "title": "LinkReviewState",
+      "type": "string"
+    },
+    "RuleReviewState": {
+      "enum": [
+        "AI_VERIFIED",
+        "NEEDS_REVIEW",
+        "USER_CONFIRMED"
+      ],
+      "title": "RuleReviewState",
+      "type": "string"
+    },
+    "ReasonCode": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "FieldPath": {
+      "enum": [
+        "MedicalEvent.event_date",
+        "MedicalEvent.classification",
+        "MedicalEvent.admission_days",
+        "PolicyContract.contract_start",
+        "PolicyContract.contract_end",
+        "Rider.status",
+        "Rider.insured_amount",
+        "ClaimHistory.counted_occurrence"
+      ],
+      "title": "FieldPath",
+      "type": "string"
+    },
+    "RuleKind": {
+      "enum": [
+        "eligibility",
+        "classification",
+        "temporal",
+        "exclusion",
+        "frequency",
+        "fixed_amount",
+        "rate_amount",
+        "indemnity_eligibility",
+        "deductible",
+        "limit",
+        "required_document"
+      ],
+      "title": "RuleKind",
+      "type": "string"
+    },
+    "RuleLiteral": {
+      "anyOf": [
+        {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
+      ],
+      "title": "RuleLiteral"
+    },
+    "NumericRange": {
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+        },
+        "max": {
+          "maximum": 1000000000000000,
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "required": [
+        "min",
+        "max"
+      ],
+      "title": "NumericRange",
+      "type": "object"
+    },
+    "DateRange": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "type": "string"
+        },
+        "end": {
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "DateRange",
+      "type": "object"
+    },
+    "RuleExpression": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "all",
+              "type": "string"
+            },
+            "args": {
+              "items": {
+                "$ref": "#/$defs/RuleExpression"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ],
+          "title": "AllExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "any",
+              "type": "string"
+            },
+            "args": {
+              "items": {
+                "$ref": "#/$defs/RuleExpression"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ],
+          "title": "AnyExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "not",
+              "type": "string"
+            },
+            "args": {
+              "items": {
+                "$ref": "#/$defs/RuleExpression"
+              },
+              "maxItems": 1,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "args"
+          ],
+          "title": "NotExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "present",
+              "type": "string"
+            },
+            "field": {
+              "$ref": "#/$defs/FieldPath"
+            }
+          },
+          "required": [
+            "op",
+            "field"
+          ],
+          "title": "PresentExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "equals",
+              "type": "string"
+            },
+            "field": {
+              "$ref": "#/$defs/FieldPath"
+            },
+            "value": {
+              "$ref": "#/$defs/RuleLiteral"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value"
+          ],
+          "title": "EqualsExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "in",
+              "type": "string"
+            },
+            "field": {
+              "$ref": "#/$defs/FieldPath"
+            },
+            "value": {
+              "items": {
+                "$ref": "#/$defs/RuleLiteral"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value"
+          ],
+          "title": "InExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "range",
+              "type": "string"
+            },
+            "field": {
+              "$ref": "#/$defs/FieldPath"
+            },
+            "value": {
+              "$ref": "#/$defs/NumericRange"
+            },
+            "unit": {
+              "enum": [
+                "date",
+                "days",
+                "occurrences",
+                "amount",
+                "currency"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value",
+            "unit"
+          ],
+          "title": "RangeExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "date_between",
+              "type": "string"
+            },
+            "field": {
+              "enum": [
+                "MedicalEvent.event_date",
+                "PolicyContract.contract_start",
+                "PolicyContract.contract_end"
+              ],
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/DateRange"
+            },
+            "unit": {
+              "const": "date",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value",
+            "unit"
+          ],
+          "title": "DateBetweenExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "days_since",
+              "type": "string"
+            },
+            "field": {
+              "enum": [
+                "MedicalEvent.event_date",
+                "PolicyContract.contract_start",
+                "PolicyContract.contract_end"
+              ],
+              "type": "string"
+            },
+            "value": {
+              "maximum": 50000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unit": {
+              "const": "days",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value",
+            "unit"
+          ],
+          "title": "DaysSinceExpression",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "op": {
+              "const": "count_before",
+              "type": "string"
+            },
+            "field": {
+              "const": "ClaimHistory.counted_occurrence",
+              "type": "string"
+            },
+            "value": {
+              "maximum": 1000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "unit": {
+              "const": "occurrences",
+              "type": "string"
+            }
+          },
+          "required": [
+            "op",
+            "field",
+            "value",
+            "unit"
+          ],
+          "title": "CountBeforeExpression",
+          "type": "object"
+        }
+      ],
+      "title": "RuleExpression"
+    },
+    "CalculationOperator": {
+      "enum": [
+        "add",
+        "subtract",
+        "multiply",
+        "min",
+        "max",
+        "round"
+      ],
+      "title": "CalculationOperator",
+      "type": "string"
+    },
+    "RoundingMode": {
+      "enum": [
+        "half_up",
+        "half_even",
+        "up",
+        "down"
+      ],
+      "title": "RoundingMode",
+      "type": "string"
+    },
+    "CalculationOperand": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "enum": [
+                "MedicalEvent.admission_days",
+                "Rider.insured_amount",
+                "ClaimHistory.counted_occurrence"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "field"
+          ],
+          "title": "CalculationField",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "value": {
+              "maximum": 1000000000000000,
+              "minimum": 0,
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "title": "CalculationValue",
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/RuleCalculation"
+        }
+      ],
+      "title": "CalculationOperand"
+    },
+    "RuleCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "$ref": "#/$defs/CalculationOperator"
+        },
+        "args": {
+          "items": {
+            "$ref": "#/$defs/CalculationOperand"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "rounding": {
+          "$ref": "#/$defs/RoundingMode"
+        }
+      },
+      "required": [
+        "op",
+        "args"
+      ],
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "rounding"
+            ]
+          },
+          "properties": {
+            "args": {
+              "minItems": 2
+            },
+            "op": {
+              "enum": [
+                "add",
+                "subtract",
+                "multiply",
+                "min",
+                "max"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "args": {
+              "maxItems": 1,
+              "minItems": 1
+            },
+            "op": {
+              "const": "round"
+            }
+          },
+          "required": [
+            "rounding"
+          ]
+        }
+      ],
+      "title": "RuleCalculation",
+      "type": "object"
+    },
+    "CoverageRuleVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "coverage_rule_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "candidate_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "version_number": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "schema_version": {
+          "const": "coverage-rule-v1",
+          "type": "string"
+        },
+        "rule_kind": {
+          "$ref": "#/$defs/RuleKind"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "input_field_paths": {
+          "items": {
+            "$ref": "#/$defs/FieldPath"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "expression": {
+          "$ref": "#/$defs/RuleExpression"
+        },
+        "calculation": {
+          "$ref": "#/$defs/RuleCalculation"
+        },
+        "result_reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "review_state": {
+          "$ref": "#/$defs/RuleReviewState"
+        },
+        "executable": {
+          "type": "boolean"
+        },
+        "generator_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "verifier_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/RuleEvidence"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "calculation"
+            ]
+          },
+          "required": [
+            "expression"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "expression"
+            ]
+          },
+          "required": [
+            "calculation"
+          ]
+        }
+      ],
+      "required": [
+        "id",
+        "coverage_rule_id",
+        "candidate_version_id",
+        "version_number",
+        "schema_version",
+        "rule_kind",
+        "required",
+        "input_field_paths",
+        "result_reason_code",
+        "review_state",
+        "executable",
+        "generator_version",
+        "verifier_version",
+        "evidence"
+      ],
+      "title": "CoverageRuleVersion",
+      "type": "object"
+    },
+    "RiderClauseLink": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "terms_edition_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "clause_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "candidate_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "clause_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "terms_edition_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "review_state": {
+          "$ref": "#/$defs/LinkReviewState"
+        },
+        "applicability_reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/RuleEvidence"
+          },
+          "maxItems": 16,
+          "minItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "rider_id",
+        "terms_edition_id",
+        "clause_id",
+        "candidate_version_id",
+        "review_state",
+        "applicability_reason_code",
+        "version",
+        "evidence"
+      ],
+      "title": "RiderClauseLink",
+      "type": "object"
+    },
+    "ConfirmRiderClauseLinkRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        }
+      },
+      "required": [
+        "expected_version"
+      ],
+      "title": "ConfirmRiderClauseLinkRequest",
+      "type": "object"
+    },
+    "RejectRiderClauseLinkRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "reason_code": {
+          "enum": [
+            "USER_REJECTED",
+            "WRONG_CLAUSE",
+            "WRONG_EDITION",
+            "NOT_APPLICABLE"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_version",
+        "reason_code"
+      ],
+      "title": "RejectRiderClauseLinkRequest",
+      "type": "object"
+    },
+    "PublishCoverageRuleRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "version_id": {
+          "$ref": "#/$defs/Uuid"
+        }
+      },
+      "required": [
+        "expected_version",
+        "version_id"
+      ],
+      "title": "PublishCoverageRuleRequest",
+      "type": "object"
+    },
+    "RiderClauseLinkListResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/RiderClauseLink"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "rider_id",
+        "links"
+      ],
+      "title": "RiderClauseLinkListResponse",
+      "type": "object"
+    },
+    "CoverageRuleVersionListResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "coverage_rule_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "versions": {
+          "items": {
+            "$ref": "#/$defs/CoverageRuleVersion"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "coverage_rule_id",
+        "versions"
+      ],
+      "title": "CoverageRuleVersionListResponse",
+      "type": "object"
+    },
+    "ConfirmLinkRequest": {
+      "$ref": "#/$defs/ConfirmRiderClauseLinkRequest"
+    },
+    "RejectLinkRequest": {
+      "$ref": "#/$defs/RejectRiderClauseLinkRequest"
+    },
+    "PublishRuleRequest": {
+      "$ref": "#/$defs/PublishCoverageRuleRequest"
+    }
+  }
+}

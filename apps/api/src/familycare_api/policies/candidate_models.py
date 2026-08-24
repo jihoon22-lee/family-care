@@ -9,6 +9,13 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from familycare_api.clauses.dsl import (
+    CALCULATION_OPERATORS,
+    EXPRESSION_OPERATORS,
+    FIELD_PATHS,
+    RULE_KINDS,
+    UNIT_REGISTRY,
+)
 from familycare_api.contracts.generated_business import (
     CandidateErrorCode,
     CandidateIssueCode,
@@ -172,6 +179,15 @@ def validate_candidate_field_value(field_id: PolicyCandidateFieldId, value: Any)
         "coverage_start",
         "coverage_end",
         "rider_status",
+        "rider_id",
+        "terms_edition_id",
+        "clause_id",
+        "link_review_state",
+        "rule_kind",
+        "rule_operator",
+        "fact_field",
+        "unit",
+        "date_boundary",
     }
     if field_id in string_fields and (not isinstance(value, str) or not value):
         raise ValueError("invalid candidate value")
@@ -197,6 +213,45 @@ def validate_candidate_field_value(field_id: PolicyCandidateFieldId, value: Any)
     }:
         raise ValueError("invalid candidate value")
     if field_id == "benefit_type" and value not in {"fixed", "indemnity"}:
+        raise ValueError("invalid candidate value")
+    if field_id in {"rider_id", "terms_edition_id", "clause_id"}:
+        if not isinstance(value, str):
+            raise ValueError("invalid candidate value")
+        try:
+            parsed = UUID(value)
+        except ValueError:
+            raise ValueError("invalid candidate value") from None
+        if parsed.int == 0:
+            raise ValueError("invalid candidate value")
+    if field_id == "link_review_state" and value not in {
+        "AI_VERIFIED",
+        "NEEDS_REVIEW",
+        "USER_CONFIRMED",
+    }:
+        raise ValueError("invalid candidate value")
+    if field_id == "rule_kind" and value not in RULE_KINDS:
+        raise ValueError("invalid candidate value")
+    if field_id == "rule_operator" and value not in {
+        *EXPRESSION_OPERATORS,
+        *CALCULATION_OPERATORS,
+    }:
+        raise ValueError("invalid candidate value")
+    if field_id == "fact_field" and value not in FIELD_PATHS:
+        raise ValueError("invalid candidate value")
+    if field_id == "unit" and value not in UNIT_REGISTRY:
+        raise ValueError("invalid candidate value")
+    if field_id == "decimal_boundary" and (
+        isinstance(value, bool) or not isinstance(value, int | float) or value < 0
+    ):
+        raise ValueError("invalid candidate value")
+    if field_id == "date_boundary":
+        if not isinstance(value, str):
+            raise ValueError("invalid candidate value")
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            raise ValueError("invalid candidate value") from None
+    if field_id == "required" and not isinstance(value, bool):
         raise ValueError("invalid candidate value")
     if field_id == "currency" and (
         not isinstance(value, str) or len(value) != 3 or not value.isascii() or not value.isupper()

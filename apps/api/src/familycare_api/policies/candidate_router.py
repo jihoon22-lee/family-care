@@ -52,12 +52,11 @@ def list_review_items(
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
-    domain: Literal["policy"] = "policy",
+    domain: Literal["policy", "rider_clause", "coverage_rule"] = "policy",
     status: Literal["NEEDS_REVIEW", "AI_VERIFIED", "USER_CONFIRMED"] = "NEEDS_REVIEW",
 ) -> list[PolicyReviewItem]:
-    del domain
     _no_store(response)
-    return service.list_review_items(scope=scope, status=status)
+    return service.list_review_items(scope=scope, status=status, domain=domain)
 
 
 @router.get(
@@ -108,6 +107,32 @@ def correct_review_item_field(
     service: ServiceDependency,
 ) -> PolicyReviewItem:
     """Correct one exact review item even when several candidates share a policy."""
+
+    if request.field_id != field_id:
+        raise InvalidCandidateCorrection
+    _no_store(response)
+    return service.correct_field(
+        scope=scope,
+        review_item_id=review_item_id,
+        request=request,
+        actor_id=None,
+    )
+
+
+@router.patch(
+    "/review-items/{review_item_id}/fields/{field_id}",
+    response_model=PolicyReviewItem,
+    responses=_COMMON_ERRORS,
+)
+def correct_typed_review_item_field(
+    review_item_id: UUID,
+    field_id: PolicyCandidateFieldId,
+    request: CandidateCorrectionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: ServiceDependency,
+) -> PolicyReviewItem:
+    """Create a child version from one generated typed field correction."""
 
     if request.field_id != field_id:
         raise InvalidCandidateCorrection

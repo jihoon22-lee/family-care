@@ -18,10 +18,20 @@ from familycare_api.clauses.schemas import (
     ClauseSearchHitResponse,
     ClauseSearchQuery,
     ClauseSearchResponse,
+    CoverageRulePublishRequest,
+    CoverageRuleVersionResponse,
+    CoverageRuleVersionsResponse,
+    ExpectedVersionRequest,
+    RiderClauseLinkRejectionRequest,
+    RiderClauseLinkResponse,
     TermsEditionResponse,
 )
 from familycare_api.clauses.search import ClauseSearchService
-from familycare_api.clauses.service import ClauseCatalogService
+from familycare_api.clauses.service import (
+    ClauseCatalogService,
+    CoverageRuleService,
+    RiderClauseLinkService,
+)
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 
 ScopeDependency = Annotated[HouseholdScope, Depends(resolve_household_scope)]
@@ -44,8 +54,20 @@ def get_clause_search_service(scope: ScopeDependency) -> ClauseSearchService:
     return ClauseSearchService(ClauseSearchRepository(database_url))
 
 
+def get_rider_clause_link_service(scope: ScopeDependency) -> RiderClauseLinkService:
+    del scope
+    return RiderClauseLinkService.from_environment()
+
+
+def get_coverage_rule_service(scope: ScopeDependency) -> CoverageRuleService:
+    del scope
+    return CoverageRuleService.from_environment()
+
+
 CatalogServiceDependency = Annotated[ClauseCatalogService, Depends(get_clause_catalog_service)]
 SearchServiceDependency = Annotated[ClauseSearchService, Depends(get_clause_search_service)]
+LinkServiceDependency = Annotated[RiderClauseLinkService, Depends(get_rider_clause_link_service)]
+RuleServiceDependency = Annotated[CoverageRuleService, Depends(get_coverage_rule_service)]
 
 router = APIRouter(prefix="/api/v1", tags=["clause search"])
 
@@ -137,11 +159,120 @@ def search_clauses(
     )
 
 
+@router.get(
+    "/riders/{rider_id}/clause-links",
+    response_model=list[RiderClauseLinkResponse],
+    responses=_COMMON_ERRORS,
+)
+def list_rider_clause_links(
+    rider_id: UUID,
+    response: Response,
+    scope: ScopeDependency,
+    service: LinkServiceDependency,
+) -> list[RiderClauseLinkResponse]:
+    _no_store(response)
+    return [
+        RiderClauseLinkResponse.from_domain(link)
+        for link in service.list_rider_clause_links(scope, rider_id)
+    ]
+
+
+@router.post(
+    "/rider-clause-links/{link_id}/confirm",
+    response_model=RiderClauseLinkResponse,
+    responses=_COMMON_ERRORS,
+)
+def confirm_rider_clause_link(
+    link_id: UUID,
+    request: ExpectedVersionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: LinkServiceDependency,
+) -> RiderClauseLinkResponse:
+    _no_store(response)
+    link = service.confirm_rider_clause_link(
+        scope,
+        link_id,
+        expected_version=request.expected_version,
+    )
+    return RiderClauseLinkResponse.from_domain(link)
+
+
+@router.post(
+    "/rider-clause-links/{link_id}/reject",
+    response_model=RiderClauseLinkResponse,
+    responses=_COMMON_ERRORS,
+)
+def reject_rider_clause_link(
+    link_id: UUID,
+    request: RiderClauseLinkRejectionRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: LinkServiceDependency,
+) -> RiderClauseLinkResponse:
+    _no_store(response)
+    link = service.reject_rider_clause_link(
+        scope,
+        link_id,
+        expected_version=request.expected_version,
+        reason_code=request.reason_code,
+    )
+    return RiderClauseLinkResponse.from_domain(link)
+
+
+@router.get(
+    "/coverage-rules/{rule_id}/versions",
+    response_model=CoverageRuleVersionsResponse,
+    responses=_COMMON_ERRORS,
+)
+def list_coverage_rule_versions(
+    rule_id: UUID,
+    response: Response,
+    scope: ScopeDependency,
+    service: RuleServiceDependency,
+) -> CoverageRuleVersionsResponse:
+    _no_store(response)
+    collection = service.list_rule_versions(scope, rule_id)
+    return CoverageRuleVersionsResponse(
+        rule_id=rule_id,
+        expected_version=collection.expected_version,
+        versions=tuple(
+            CoverageRuleVersionResponse.from_domain(version) for version in collection.versions
+        ),
+    )
+
+
+@router.post(
+    "/coverage-rules/{rule_id}/publish",
+    response_model=CoverageRuleVersionResponse,
+    responses=_COMMON_ERRORS,
+)
+def publish_coverage_rule(
+    rule_id: UUID,
+    request: CoverageRulePublishRequest,
+    response: Response,
+    scope: ScopeDependency,
+    service: RuleServiceDependency,
+) -> CoverageRuleVersionResponse:
+    _no_store(response)
+    version = service.publish_coverage_rule(
+        scope,
+        rule_id,
+        request.version_id,
+        expected_version=request.expected_version,
+    )
+    return CoverageRuleVersionResponse.from_domain(version)
+
+
 __all__ = [
     "CatalogServiceDependency",
+    "LinkServiceDependency",
+    "RuleServiceDependency",
     "ScopeDependency",
     "SearchServiceDependency",
     "get_clause_catalog_service",
     "get_clause_search_service",
+    "get_coverage_rule_service",
+    "get_rider_clause_link_service",
     "router",
 ]

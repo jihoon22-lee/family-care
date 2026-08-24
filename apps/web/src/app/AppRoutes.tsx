@@ -1,4 +1,5 @@
 import { ClauseSearchPage } from "../features/clauses/ClauseSearchPage";
+import { RuleReviewPage } from "../features/clauses/RuleReviewPage";
 import { LedgerPage } from "../features/ledger/LedgerPage";
 
 function routeMemberId(): string | undefined {
@@ -11,6 +12,9 @@ function routeMemberId(): string | undefined {
 export function AppRoutes() {
   if (/^\/app\/clauses\/search\/?$/.test(window.location.pathname)) {
     return <ClauseSearchPage />;
+  }
+  if (/^\/app\/clauses\/review\/?$/.test(window.location.pathname)) {
+    return <RuleReviewPage />;
   }
   return <LedgerPage memberId={routeMemberId()} />;
 }

@@ -1,12 +1,14 @@
 # Coverage decision engine design
 
-- 상태: v0.1 대화 설계 승인 완료, 문서 검토 대기
-- 적용 단계: Phase 4 — Coverage Decision Engine
+- 상태: v0.1 대화 설계 승인 완료, Phase 5 rule publication boundary 반영; deterministic execution 문서
+- 적용 단계: Phase 6 — Coverage Decision Engine
 - 상위 기준: `docs/design/v0.1-product.md`
 
 ## Scope
 
 MedicalEvent와 실제 가입 Rider, 계약 상태, 약관 CoverageRule을 결합해 근거가 있는 청구 후보를 생성하는 결정론적 엔진을 정의합니다. AI 설명과 보험사 최종 심사는 이 엔진의 권위 범위 밖입니다.
+
+Phase 5의 선행 boundary는 이 문서가 소비할 입력을 준비합니다. 즉, 검증된 Rider-Clause 연결과 immutable CoverageRule version을 만들고, data-only DSL이 지원되는지 확인합니다. Phase 5 validator는 규칙을 실행하지 않으며 이 문서의 `MATCH`·`NO_MATCH`·`UNKNOWN` evaluation은 별도 구현 범위입니다.
 
 ## Inputs
 
@@ -18,6 +20,8 @@ MedicalEvent와 실제 가입 Rider, 계약 상태, 약관 CoverageRule을 결�
 - 과거 ClaimHistory
 - 정액형 가입금액 또는 실손 계산에 필요한 비용 자료
 - `AI_VERIFIED` 또는 `USER_CONFIRMED` 상태의 실행 가능한 CoverageRule
+
+CoverageRule은 저장된 `coverage_rule_versions`의 published executable version만 사용합니다. review queue에서 아직 검토 중인 candidate, unsupported DSL, stale/missing Evidence는 입력으로 사용하지 않고 관련 결과를 `UNKNOWN`으로 남깁니다.
 
 입력 필드에는 값과 확인 수준, 선택적 Evidence를 함께 둡니다. 자연어 사건을 AI가 구조화할 수 있지만 사용자가 수정할 수 있는 사실 레코드로 저장한 뒤에만 이 엔진의 입력이 됩니다.
 
@@ -62,6 +66,18 @@ Rider별 ClaimCandidate:
 9. RuleEvaluation을 손실 없이 ClaimCandidate로 집계합니다.
 
 가입하지 않은 Rider는 조항 검색에 나타나도 1차 필터에서 제외합니다.
+
+## Rule boundary consumed by this engine
+
+Rule publication 단계는 다음 불변식을 보장해야 합니다.
+
+- 실제 가입이 검증된 Rider와 계약일에 적용되는 TermsEdition의 Clause만 연결됩니다.
+- DSL은 허용된 JSON operator, field path, unit, calculation과 Evidence reference만 포함합니다.
+- version read의 `expected_version`과 publish 대상 `version_id`가 일치할 때만 게시됩니다.
+- `AI_VERIFIED` 또는 `USER_CONFIRMED`이고 exact Clause/Policy Evidence가 있는 immutable version만 실행 가능합니다.
+- typed correction은 child version을 만들며 이전 후보와 원문 Evidence를 덮어쓰지 않습니다.
+
+이 불변식이 깨졌거나 이후 Evidence가 stale이면 engine은 규칙을 평가하지 않고 `UNKNOWN` 경로를 선택합니다. Rule validator가 반환한 typed structure를 engine이 직접 신뢰해 실행하는 것이 아니라, 저장·게시 상태와 Evidence lineage를 다시 확인해야 합니다.
 
 ## Aggregation
 
@@ -162,7 +178,8 @@ MedicalEvent fact
 - 추가 질문 없이 현재 후보 반환
 - AI 계층 없이 동일한 판정 재현
 - `NEEDS_REVIEW` 규칙의 실행 거부와 verifier 실패의 `UNKNOWN`
+- Phase 5 boundary의 stored-version selection, expected-version conflict, unsupported DSL non-execution
 
 ## Deferred decisions
 
-초기 CoverageRule DSL은 `docs/design/ai-document-analysis.md`의 data-only allowlist를 사용합니다. KCD·수술분류 사전의 확대와 복수 실손 비례분담 자동 계산은 v0.1 이후로 미룹니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.
+CoverageRule DSL validation은 `docs/design/ai-document-analysis.md`의 data-only allowlist를 사용하며 Phase 5에서 실행 없이 경계만 구현합니다. KCD·수술분류 사전의 확대와 복수 실손 비례분담 자동 계산은 v0.1 이후로 미룹니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.

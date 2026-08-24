@@ -9,10 +9,12 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from familycare_api.clauses.domain import Clause, ClauseSearchHit, TermsEdition
+from familycare_api.clauses.links import RiderClauseLink
 from familycare_api.clauses.normalization import (
     MAX_EXCERPT_LENGTH,
     bounded_excerpt,
 )
+from familycare_api.clauses.rules import CoverageRuleVersion
 from familycare_api.common.evidence import EvidenceRef
 
 _STRICT = ConfigDict(extra="forbid", frozen=True)
@@ -191,6 +193,101 @@ class ClauseSearchResponse(BaseModel):
     hits: tuple[ClauseSearchHitResponse, ...] = Field(max_length=50)
 
 
+class ExpectedVersionRequest(BaseModel):
+    model_config = _STRICT
+
+    expected_version: int = Field(ge=1)
+
+
+class RiderClauseLinkRejectionRequest(ExpectedVersionRequest):
+    reason_code: Literal[
+        "USER_REJECTED",
+        "WRONG_CLAUSE",
+        "WRONG_EDITION",
+        "NOT_APPLICABLE",
+    ]
+
+
+class CoverageRulePublishRequest(ExpectedVersionRequest):
+    version_id: UUID
+
+
+class RiderClauseLinkResponse(BaseModel):
+    """Bounded link projection without source Clause text or household scope."""
+
+    model_config = _STRICT
+
+    link_id: UUID
+    rider_id: UUID
+    rider_label: str | None = Field(default=None, min_length=1, max_length=160)
+    terms_edition_id: UUID
+    clause_id: UUID
+    clause_label: str | None = Field(default=None, min_length=1, max_length=160)
+    review_state: Literal["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED", "rejected"]
+    applicability_reason_code: str = Field(min_length=1, max_length=64)
+    version: int = Field(ge=1)
+    evidence: tuple[ClauseEvidenceResponse, ...] = Field(min_length=1, max_length=16)
+
+    @classmethod
+    def from_domain(cls, link: RiderClauseLink) -> RiderClauseLinkResponse:
+        return cls(
+            link_id=link.id,
+            rider_id=link.rider_id,
+            rider_label=link.rider_label,
+            terms_edition_id=link.terms_edition_id,
+            clause_id=link.clause_id,
+            clause_label=link.clause_label,
+            review_state=link.review_state,
+            applicability_reason_code=link.applicability_reason_code,
+            version=link.version,
+            evidence=tuple(ClauseEvidenceResponse.from_domain(item) for item in link.evidence),
+        )
+
+
+class CoverageRuleVersionResponse(BaseModel):
+    """Rule metadata and Evidence only; the stored DSL body is not returned."""
+
+    model_config = _STRICT
+
+    version_id: UUID
+    version_number: int = Field(ge=1)
+    schema_version: Literal["coverage-rule-v1"]
+    rule_kind: str = Field(min_length=1, max_length=48)
+    required: bool
+    input_field_paths: tuple[str, ...] = Field(min_length=1, max_length=16)
+    result_reason_code: str = Field(min_length=1, max_length=64)
+    review_state: Literal["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"]
+    executable: bool
+    generator_version: str = Field(min_length=1, max_length=64)
+    verifier_version: str = Field(min_length=1, max_length=64)
+    evidence: tuple[ClauseEvidenceResponse, ...] = Field(min_length=1, max_length=16)
+
+    @classmethod
+    def from_domain(cls, version: CoverageRuleVersion) -> CoverageRuleVersionResponse:
+        return cls(
+            version_id=version.id,
+            version_number=version.version_number,
+            schema_version="coverage-rule-v1",
+            rule_kind=version.rule_kind,
+            required=version.required,
+            input_field_paths=version.input_field_paths,
+            result_reason_code=version.result_reason_code,
+            review_state=version.review_state,
+            executable=version.executable,
+            generator_version=version.generator_version,
+            verifier_version=version.verifier_version,
+            evidence=tuple(ClauseEvidenceResponse.from_domain(item) for item in version.evidence),
+        )
+
+
+class CoverageRuleVersionsResponse(BaseModel):
+    model_config = _STRICT
+
+    rule_id: UUID
+    expected_version: int = Field(ge=1)
+    versions: tuple[CoverageRuleVersionResponse, ...] = Field(max_length=100)
+
+
 __all__ = [
     "ClauseApiErrorCode",
     "ClauseErrorResponse",
@@ -199,6 +296,12 @@ __all__ = [
     "ClauseSearchHitResponse",
     "ClauseSearchQuery",
     "ClauseSearchResponse",
+    "CoverageRulePublishRequest",
+    "CoverageRuleVersionResponse",
+    "CoverageRuleVersionsResponse",
+    "ExpectedVersionRequest",
+    "RiderClauseLinkRejectionRequest",
+    "RiderClauseLinkResponse",
     "ClauseEvidenceResponse",
     "TermsEditionResponse",
 ]

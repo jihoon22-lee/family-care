@@ -244,6 +244,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
 ### Task 1: Define Rider-Clause and CoverageRule tables
 
+**Status:** `completed`
+
 **Files:**
 - Create: `apps/api/migrations/versions/0006_rider_clause_rules.py`
 - Create: `apps/api/tests/test_rider_clause_rules_migration.py`
@@ -253,9 +255,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: `0005_clause_search`, policy/Rider/Evidence tables, candidate versions, and Clause hierarchy.
 - Produces: `revision = "0006_rider_clause_rules"`, `down_revision = "0005_clause_search"`, five new tables, FK/index/check constraints, and reverse-order downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert exact tables/columns, all UUID FKs, link/rule Evidence join uniqueness, version uniqueness, allowed review states, executable/status columns, and no duplicate Phase 1/Clause tables.
+- [x] **Step 1: Write failing migration tests.** Assert exact tables/columns, all UUID FKs, link/rule Evidence join uniqueness, version uniqueness, allowed review states, executable/status columns, and no duplicate Phase 1/Clause tables.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py -q
@@ -263,9 +265,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because `0006_rider_clause_rules.py` is absent.
 
-- [ ] **Step 3: Implement the additive Alembic migration.** Use direct `op.create_table` definitions, named constraints, FK delete behavior that preserves audit rows, and indexes on `(household_space_id, deleted_at)`, Rider, TermsEdition, Clause, and rule version.
+- [x] **Step 3: Implement the additive Alembic migration.** Use direct `op.create_table` definitions, named constraints, FK delete behavior that preserves audit rows, and indexes on `(household_space_id, deleted_at)`, Rider, TermsEdition, Clause, and rule version.
 
-- [ ] **Step 4: Run migration tests and synthetic PostgreSQL upgrade.**
+- [x] **Step 4: Run migration tests and synthetic PostgreSQL upgrade.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py -q
@@ -274,7 +276,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: all shape tests pass and PostgreSQL reaches `0006_rider_clause_rules` without changing prior tables.
 
-- [ ] **Step 5: Commit the schema.**
+- [x] **Step 5: Commit the schema.**
 
   ```bash
   git add apps/api/migrations/versions/0006_rider_clause_rules.py apps/api/tests/test_rider_clause_rules_migration.py
@@ -282,6 +284,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 2: Implement the data-only DSL validator
+
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/dsl.py`
@@ -292,9 +296,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: JSON Schema rule shape, Evidence index, and the fixed field/operator lists in this plan.
 - Produces: `validate_field_path`, `validate_expression`, `validate_calculation`, `validate_rule_document`, `CompiledExpression`, `CompiledCalculation`, and stable validation reason codes.
 
-- [ ] **Step 1: Write failing decision-table tests.** Cover every allowed expression/calculation operator, unknown operator, unknown field, nested dynamic path, wrong type/unit, missing required field, unsupported cross-reference, conflicting definition, and arbitrary executable string.
+- [x] **Step 1: Write failing decision-table tests.** Cover every allowed expression/calculation operator, unknown operator, unknown field, nested dynamic path, wrong type/unit, missing required field, unsupported cross-reference, conflicting definition, and arbitrary executable string.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_dsl.py -q
@@ -302,7 +306,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because `familycare_api.clauses.dsl` and its compiler/validator symbols do not exist.
 
-- [ ] **Step 3: Implement the minimum recursive allowlist validator.** Reject keys outside the schema, require an operator at each expression node, validate operands against the field registry and unit registry, and return typed compiled data without evaluating a fact.
+- [x] **Step 3: Implement the minimum recursive allowlist validator.** Reject keys outside the schema, require an operator at each expression node, validate operands against the field registry and unit registry, and return typed compiled data without evaluating a fact.
 
   ```python
   def validate_expression(value: Mapping[str, object]) -> CompiledExpression:
@@ -317,7 +321,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
       )
   ```
 
-- [ ] **Step 4: Run DSL tests and static checks.**
+- [x] **Step 4: Run DSL tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_dsl.py -q
@@ -328,7 +332,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: every allowlist row passes and every unsupported construct fails with a stable reason code.
 
-- [ ] **Step 5: Commit the validator.**
+- [x] **Step 5: Commit the validator.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/dsl.py apps/api/tests/test_rule_dsl.py
@@ -336,6 +340,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 3: Implement scoped Rider-Clause link validation
+
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/links.py`
@@ -348,9 +354,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: policy/Rider repository, TermsEdition/Clause repository, Evidence validation, candidate review status, and `HouseholdScope`.
 - Produces: `RiderClauseLink`, `list_rider_clause_links`, `confirm_rider_clause_link`, `reject_rider_clause_link`, and deterministic applicability/error codes.
 
-- [ ] **Step 1: Write failing link tests.** Cover verified policy Rider success, Terms-only Rider rejection, wrong contract-date TermsEdition, Clause from another DocumentVersion, missing/stale Evidence, conflicting common/special terms, cross-household denial, soft delete, and stale link version.
+- [x] **Step 1: Write failing link tests.** Cover verified policy Rider success, Terms-only Rider rejection, wrong contract-date TermsEdition, Clause from another DocumentVersion, missing/stale Evidence, conflicting common/special terms, cross-household denial, soft delete, and stale link version.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules.py -q
@@ -358,9 +364,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because link domain/service functions are not implemented.
 
-- [ ] **Step 3: Implement validation before state transition.** Load all parents under the server scope, verify policy Evidence and TermsEdition applicability, validate every Evidence reference, and transition only after all invariants pass. Preserve a failed candidate as `NEEDS_REVIEW` with a reason code rather than selecting a different row.
+- [x] **Step 3: Implement validation before state transition.** Load all parents under the server scope, verify policy Evidence and TermsEdition applicability, validate every Evidence reference, and transition only after all invariants pass. Preserve a failed candidate as `NEEDS_REVIEW` with a reason code rather than selecting a different row.
 
-- [ ] **Step 4: Run link tests and direct SQL static checks.**
+- [x] **Step 4: Run link tests and direct SQL static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules.py -q
@@ -371,7 +377,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: link invariant tests pass and no untyped/unsafe SQL path remains.
 
-- [ ] **Step 5: Commit the link validator.**
+- [x] **Step 5: Commit the link validator.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/links.py apps/api/src/familycare_api/clauses/repository.py apps/api/src/familycare_api/clauses/service.py apps/api/tests/test_rider_clause_rules.py
@@ -379,6 +385,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 4: Implement CoverageRule versions and executable publication
+
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/api/src/familycare_api/clauses/rules.py`
@@ -391,9 +399,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: validated DSL/compiler, Rider-Clause links, candidate versions, and Evidence index.
 - Produces: `CoverageRule`, `CoverageRuleVersion`, `list_rule_versions`, `publish_coverage_rule`, and the invariant that only `AI_VERIFIED`/`USER_CONFIRMED` validated versions become executable.
 
-- [ ] **Step 1: Write failing publication tests.** Assert `NEEDS_REVIEW`, unsupported DSL, invented/mismatched Evidence, wrong schema version, stale candidate, and missing Clause Evidence all remain non-executable; assert two-stage verified candidate plus exact Evidence publishes atomically.
+- [x] **Step 1: Write failing publication tests.** Assert `NEEDS_REVIEW`, unsupported DSL, invented/mismatched Evidence, wrong schema version, stale candidate, and missing Clause Evidence all remain non-executable; assert two-stage verified candidate plus exact Evidence publishes atomically.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_publication.py -q
@@ -401,7 +409,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because rule repository/publisher functions are absent.
 
-- [ ] **Step 3: Implement the minimum transactional publisher.** Revalidate the stored candidate and Evidence inside one `SELECT ... FOR UPDATE` transaction, write a new immutable version, and set `executable = true` only for the two approved review states.
+- [x] **Step 3: Implement the minimum transactional publisher.** Revalidate the stored candidate and Evidence inside one `SELECT ... FOR UPDATE` transaction, write a new immutable version, and set `executable = true` only for the two approved review states.
 
   ```python
   APPROVED_STATES = frozenset({"AI_VERIFIED", "USER_CONFIRMED"})
@@ -411,7 +419,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
       return review_state in APPROVED_STATES and validation.valid and validation.evidence_complete
   ```
 
-- [ ] **Step 4: Run publication tests and static checks.**
+- [x] **Step 4: Run publication tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rule_publication.py -q
@@ -422,7 +430,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: executable-state and atomic-version tests pass; unsupported rules remain informational.
 
-- [ ] **Step 5: Commit rule publication.**
+- [x] **Step 5: Commit rule publication.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses/rules.py apps/api/src/familycare_api/clauses/schemas.py apps/api/src/familycare_api/clauses/repository.py apps/api/tests/test_rule_publication.py
@@ -430,6 +438,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 5: Add HTTP contracts, integration tests, and privacy checks
+
+**Status:** `completed`
 
 **Files:**
 - Modify: `apps/api/src/familycare_api/clauses/router.py`
@@ -451,9 +461,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Consumes: link/rule services and publisher from Tasks 3–4.
 - Produces: strict link/rule routes, `rider-clause-rules.v1`, PostgreSQL transaction proof, and response/log redaction.
 
-- [ ] **Step 1: Write failing API/contract/integration tests.** Assert route status/error envelopes, expected version handling, generic review domains and typed child-version correction, link/rule Evidence fields, no raw DSL/path/text output, synthetic PostgreSQL publish atomicity, and inability to access another household.
+- [x] **Step 1: Write failing API/contract/integration tests.** Assert route status/error envelopes, expected version handling, generic review domains and typed child-version correction, link/rule Evidence fields, no raw DSL/path/text output, synthetic PostgreSQL publish atomicity, and inability to access another household.
 
-- [ ] **Step 2: Run the focused RED commands.**
+- [x] **Step 2: Run the focused RED commands.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_integration.py -q
@@ -461,9 +471,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because the routes, schema artifact, and integration transactions are incomplete.
 
-- [ ] **Step 3: Implement strict route adapters and the JSON Schema.** Confirm/reject/publish endpoints accept only expected version and bounded reason metadata. Extend the generic candidate review service with the two new domains and generated typed field IDs; corrections always create child versions. The client cannot submit a new authoritative rule body or household ID.
+- [x] **Step 3: Implement strict route adapters and the JSON Schema.** Confirm/reject/publish endpoints accept only expected version and bounded reason metadata. Extend the generic candidate review service with the two new domains and generated typed field IDs; corrections always create child versions. The client cannot submit a new authoritative rule body or household ID.
 
-- [ ] **Step 4: Run the complete focused suite.**
+- [x] **Step 4: Run the complete focused suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_rider_clause_rules_migration.py apps/api/tests/test_rule_dsl.py apps/api/tests/test_rider_clause_rules.py apps/api/tests/test_rule_publication.py apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_privacy.py -q
@@ -476,7 +486,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: migration, DSL, link, publish, HTTP, PostgreSQL, contract, and privacy checks pass with no external AI.
 
-- [ ] **Step 5: Commit the complete rule boundary.**
+- [x] **Step 5: Commit the complete rule boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/clauses packages/contracts/schemas/rider-clause-rules.v1.schema.json packages/contracts/examples/rider-clause-rules.v1.json apps/api/tests/test_rider_clause_rules_api.py apps/api/tests/test_rider_clause_rules_integration.py apps/api/tests/test_rider_clause_rules_privacy.py
@@ -484,6 +494,8 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
   ```
 
 ### Task 6: Add Rider-Clause and CoverageRule review screens
+
+**Status:** `completed`
 
 **Files:**
 - Create: `apps/web/src/api/rules.ts`
@@ -501,7 +513,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 - Produces: `/app/clauses/review`, separate exception queues for Rider-Clause links and CoverageRules, exact Evidence disclosure, typed correction, confirmation/rejection, and publication state.
 - The UI does not offer a textarea or code editor for DSL; it renders only generated field/operator/unit options and never marks an unsupported user-confirmed rule executable.
 
-- [ ] **Step 1: Write failing review, conflict, and accessibility tests.** Cover `AI_VERIFIED` immediate publication, `NEEDS_REVIEW` queue visibility, terms-only Rider rejection, wrong edition, stale Evidence, typed correction as a child version, `409 VERSION_CONFLICT` draft preservation, unsupported DSL remaining informational, dialog focus, and no raw Clause/provider/path output.
+- [x] **Step 1: Write failing review, conflict, and accessibility tests.** Cover `AI_VERIFIED` stored-version publication eligibility, `NEEDS_REVIEW` queue visibility, terms-only Rider rejection, wrong edition, stale Evidence, typed correction as a child version, `409 VERSION_CONFLICT` draft preservation, unsupported DSL remaining informational, dialog focus, and no raw Clause/provider/path output.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -510,9 +522,9 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: FAIL because the generated rule client and review components do not exist.
 
-- [ ] **Step 2: Implement the no-store generated client and typed review UI.** Reuse the Evidence drawer and memory-only query cache from Plan 005. Invalidate only the affected review/link/rule keys after mutations. Map stable reason codes to safe copy, preserve unsaved typed values on conflict, and require fresh Evidence before enabling confirm/publish.
+- [x] **Step 2: Implement the no-store generated client and typed review UI.** Reuse the Evidence drawer and memory-only query cache from Plan 005. Invalidate only the affected review/link/rule keys after mutations. Map stable reason codes to safe copy, preserve unsaved typed values on conflict, and require fresh Evidence before enabling confirm/publish.
 
-- [ ] **Step 3: Run GREEN and the synthetic browser flow.**
+- [x] **Step 3: Run GREEN and the synthetic browser flow.**
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -524,7 +536,7 @@ The review-item field endpoint accepts only generated field IDs and typed allowl
 
   Expected: typed correction, conflict recovery, Evidence/focus behavior, and browser privacy checks pass with wholly synthetic data.
 
-- [ ] **Step 4: Commit the review UI.**
+- [x] **Step 4: Commit the review UI.**
 
   ```bash
   git add apps/web/src/api/rules.ts apps/web/src/features/clauses \

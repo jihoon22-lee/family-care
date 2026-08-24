@@ -12,6 +12,35 @@ ClauseErrorCode = Literal[
     "CLAUSE_NOT_FOUND",
     "SEARCH_INDEX_VERSION_MISMATCH",
 ]
+RiderClauseReasonCode = Literal[
+    "CANDIDATE_DOMAIN_MISMATCH",
+    "CANDIDATE_NOT_APPROVED",
+    "CLAUSE_DOCUMENT_MISMATCH",
+    "CONTRACT_DATE_UNKNOWN",
+    "INVALID_REJECTION_REASON",
+    "LINK_EVIDENCE_INCOMPLETE",
+    "LINK_EVIDENCE_INVALID",
+    "LINK_NOT_ACTIVE",
+    "LINK_SCOPE_MISMATCH",
+    "RIDER_POLICY_MISMATCH",
+    "TERMS_EDITION_MISMATCH",
+    "TERMS_EDITION_NOT_APPLICABLE",
+    "TERMS_ONLY_RIDER",
+    "TERMS_SCOPE_CONFLICT",
+]
+CoverageRuleReasonCode = Literal[
+    "RIDER_CLAUSE_LINK_NOT_APPROVED",
+    "RULE_CANDIDATE_MISMATCH",
+    "RULE_CANDIDATE_NOT_APPROVED",
+    "RULE_CANDIDATE_STALE",
+    "RULE_DSL_INVALID",
+    "RULE_EVIDENCE_INVALID",
+    "RULE_EVIDENCE_MISMATCH",
+    "RULE_NOT_ACTIVE",
+    "RULE_SCOPE_MISMATCH",
+    "RULE_VERSION_ALREADY_PUBLISHED",
+    "RULE_VERSION_NOT_APPROVED",
+]
 
 
 class ClauseError(ApiBoundaryError):
@@ -48,6 +77,30 @@ class ClauseVersionConflict(ClauseError):
     public_message = "version conflict"
 
 
+class RiderClauseLinkInvalid(ClauseError):
+    """A fixed link invariant failed without exposing source values."""
+
+    status_code = 422
+    error_code: PolicyErrorCode = "EVIDENCE_INVALID"
+    public_message = "Rider clause link is invalid"
+
+    def __init__(self, reason_code: RiderClauseReasonCode) -> None:
+        self.reason_code = reason_code
+        super().__init__()
+
+
+class CoverageRuleInvalid(ClauseError):
+    """A stored rule candidate failed deterministic publication checks."""
+
+    status_code = 422
+    error_code: PolicyErrorCode = "EVIDENCE_INVALID"
+    public_message = "coverage rule is invalid"
+
+    def __init__(self, reason_code: CoverageRuleReasonCode) -> None:
+        self.reason_code = reason_code
+        super().__init__()
+
+
 class ClauseStateConflict(ClauseError):
     status_code = 409
     error_code: PolicyErrorCode = "POLICY_STATE_CONFLICT"
@@ -74,7 +127,11 @@ __all__ = [
     "ClauseRepositoryUnavailable",
     "ClauseStateConflict",
     "ClauseVersionConflict",
+    "CoverageRuleInvalid",
+    "CoverageRuleReasonCode",
     "InvalidSearchQuery",
+    "RiderClauseLinkInvalid",
+    "RiderClauseReasonCode",
     "SearchIndexVersionMismatch",
     "TermsEditionNotFound",
 ]

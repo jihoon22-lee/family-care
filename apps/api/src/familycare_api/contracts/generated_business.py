@@ -64,20 +64,26 @@ CandidateErrorCode = Literal[
 
 
 CandidateIssueCode = Literal[
+    "COMMON_SPECIAL_TERMS_CONFLICT",
     "CONFLICTING_EVIDENCE",
     "INVALID_DATE",
     "INVALID_UNIT",
     "LOW_CONFIDENCE",
     "MISSING_EVIDENCE",
+    "STALE_EVIDENCE",
     "TERMS_ONLY_RIDER",
+    "UNSUPPORTED_DSL",
     "UNSUPPORTED_STRUCTURE",
+    "WRONG_EDITION",
 ]
 
 
 CandidateKind = Literal[
+    "coverage_rule",
     "policy_contract",
     "policy_party",
     "rider",
+    "rider_clause",
 ]
 
 
@@ -142,19 +148,30 @@ PolicyApiErrorCode = Literal[
 
 PolicyCandidateFieldId = Literal[
     "benefit_type",
+    "clause_id",
     "contract_end",
     "contract_start",
     "coverage_end",
     "coverage_start",
     "currency",
+    "date_boundary",
+    "decimal_boundary",
+    "fact_field",
     "insurer",
+    "link_review_state",
     "policy_status",
     "product_name",
     "renewable",
+    "required",
+    "rider_id",
     "rider_key",
     "rider_name",
     "rider_status",
+    "rule_kind",
+    "rule_operator",
     "sum_assured",
+    "terms_edition_id",
+    "unit",
 ]
 
 

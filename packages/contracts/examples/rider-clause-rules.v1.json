@@ -1,0 +1,103 @@
+{
+  "schema_version": "1",
+  "rider_clause_links": [
+    {
+      "id": "00000000-0000-4000-8000-000000000701",
+      "rider_id": "00000000-0000-4000-8000-000000000301",
+      "terms_edition_id": "00000000-0000-4000-8000-000000000602",
+      "clause_id": "00000000-0000-4000-8000-000000000601",
+      "candidate_version_id": "00000000-0000-4000-8000-000000000702",
+      "rider_label": "Synthetic Rider A",
+      "clause_label": "Synthetic Terms Article",
+      "terms_edition_label": "Synthetic Terms Edition",
+      "review_state": "AI_VERIFIED",
+      "applicability_reason_code": "CONTRACT_DATE_APPLIES",
+      "version": 1,
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000401",
+          "document_version_id": "00000000-0000-4000-8000-000000000501",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "physical_page": 1,
+          "bbox": [
+            72,
+            120,
+            480,
+            180
+          ],
+          "review_state": "USER_CONFIRMED"
+        },
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000603",
+          "document_version_id": "00000000-0000-4000-8000-000000000604",
+          "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "physical_page": 2,
+          "bbox": [
+            72,
+            144,
+            468,
+            198
+          ],
+          "review_state": "USER_CONFIRMED"
+        }
+      ]
+    }
+  ],
+  "coverage_rule_versions": [
+    {
+      "id": "00000000-0000-4000-8000-000000000703",
+      "coverage_rule_id": "00000000-0000-4000-8000-000000000704",
+      "candidate_version_id": "00000000-0000-4000-8000-000000000705",
+      "version_number": 1,
+      "schema_version": "coverage-rule-v1",
+      "rule_kind": "temporal",
+      "required": true,
+      "input_field_paths": [
+        "MedicalEvent.event_date",
+        "PolicyContract.contract_start"
+      ],
+      "expression": {
+        "op": "date_between",
+        "field": "MedicalEvent.event_date",
+        "value": {
+          "start": "2026-01-01",
+          "end": "2026-12-31"
+        },
+        "unit": "date"
+      },
+      "result_reason_code": "SYNTHETIC_DATE_IN_TERM",
+      "review_state": "AI_VERIFIED",
+      "executable": true,
+      "generator_version": "synthetic-generator-v1",
+      "verifier_version": "synthetic-verifier-v1",
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000401",
+          "document_version_id": "00000000-0000-4000-8000-000000000501",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "physical_page": 1,
+          "bbox": [
+            72,
+            120,
+            480,
+            180
+          ],
+          "review_state": "USER_CONFIRMED"
+        },
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000000603",
+          "document_version_id": "00000000-0000-4000-8000-000000000604",
+          "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "physical_page": 2,
+          "bbox": [
+            72,
+            144,
+            468,
+            198
+          ],
+          "review_state": "USER_CONFIRMED"
+        }
+      ]
+    }
+  ]
+}

@@ -566,3 +566,14 @@ The Post-Merge Verification checkboxes below remain intentionally incomplete. No
   Expected: committed OpenAPI/schema artifacts match and no raw query, full Clause text, path, or private identifier appears in response/log assertions.
 
 - [ ] **Step 3: Apply the shared Root PR gate.** Follow `docs/plan/003-v0.1-implementation-index.md`: inspect the complete diff once immediately before push, run the serial repository gate, wait for required CI, merge, and record the PR URL, merge commit, Actions result, and unverified real-data/device boundaries.
+
+## Phase 4 Post-Merge Verification Record
+
+Recorded 2026-08-25 after [PR #17](https://github.com/jihoon22-lee/family-care/pull/17) merged into `main`. The pre-merge validation record and its intentionally unchecked placeholders above are preserved as historical context.
+
+- [x] **Step 1: Verify the migration chain and PostgreSQL search after merge.** Merged-main Alembic head is `0005_clause_search`; the full PostgreSQL integration result was 52 passed and 325 deselected.
+- [x] **Step 2: Verify contracts and privacy.** The contracts check passed, and the focused Clause API/contract/privacy suite passed 16 tests.
+- [x] **Step 3: Apply the shared Root PR gate.** Merge commit: `5dc33bc64096623ee65d74004d771eff9f5b1acc`. PR CI run `32761619745` passed 7/7; main CI run `32761798254` passed 7/7.
+- [x] **Step 4: Verify the Web search slice after merge.** The focused Web suite passed 7 tests, and Chromium Playwright at 320 CSS px passed 1 test.
+
+All post-merge checks used synthetic inputs only. Real/private insurance data and derived artifacts, physical mobile devices, and production deployment/runtime remain unverified.

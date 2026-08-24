@@ -13,11 +13,13 @@ from familycare_api.clauses.errors import (
     ClauseRepositoryUnavailable,
     TermsEditionNotFound,
 )
+from familycare_api.clauses.links import RiderClauseLinkService
 from familycare_api.clauses.normalization import (
     NORMALIZATION_VERSION,
     normalize_clause_text,
 )
 from familycare_api.clauses.repository import ClauseRepository, TermsEditionRepository
+from familycare_api.clauses.rules import CoverageRuleService
 from familycare_api.common.scope import HouseholdScope
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -175,4 +177,4 @@ class ClauseCatalogService:
         return clauses
 
 
-__all__ = ["ClauseCatalogService"]
+__all__ = ["ClauseCatalogService", "CoverageRuleService", "RiderClauseLinkService"]
