@@ -38,6 +38,8 @@ Phase 1의 물리 상태는 Document `pending`/`ready`/`failed`, Extraction `run
 
 Phase 1의 API POST는 source_key 형식만 검증하고 `documents` row를 source_key로 생성·재사용한 뒤 `analysis_jobs` row를 enqueue합니다. API는 아직 파일을 열지 않으므로 DocumentVersion이나 content hash를 만들 수 없습니다. Worker intake가 열린 source descriptor에서 hash와 PDF 구조를 확인한 뒤 `document_versions`를 생성·재사용하고, `extractions`를 생성·재사용합니다. Unknown job 조회는 `ANALYSIS_JOB_NOT_FOUND`를 반환합니다.
 
+Worker는 parser Evidence에 필요한 UUID를 확정하기 위해 validated intake 직후 DocumentVersion을 별도 짧은 transaction에서 생성하거나 재사용합니다. 이후 child 결과의 전체 shape와 identity를 검증하고 Extraction, page/block/table/cell, Evidence coordinates, AnalysisJob 성공 전이를 하나의 transaction에 저장합니다. 따라서 parser 실패나 잘못된 child result는 유효한 content-identity DocumentVersion을 남길 수 있지만 partial Extraction을 남기지 않습니다. 동일 content/config의 기존 succeeded Extraction이 있으면 child 실행과 중복 row 생성을 건너뛰고 그 결과로 job만 성공 전이합니다.
+
 Phase 1의 API에는 인증 provider가 없고 인증·인가를 제공하지 않습니다. 따라서 이 모델과 endpoint는 local synthetic-only 개발 경계이며 production-safe로 취급하지 않습니다. Authentication provider는 Phase 7에 남깁니다. Phase 2 이후의 모든 business record는 `HouseholdSpace` scope를 소유하거나 명시적인 `household_space_id` foreign key를 가져야 하며, 클라이언트가 보낸 household/user ID를 권위로 사용하지 않습니다.
 
 ## Phase 1 Evidence coordinates

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import multiprocessing
 import os
 import stat
@@ -24,6 +25,7 @@ from .limits import (
 )
 
 Parser = Callable[[int, str], object]
+ProgressCallback = Callable[[], bool]
 
 _FORBIDDEN_SETTINGS_KEYS = frozenset(
     {
@@ -304,6 +306,8 @@ def run_isolated_parser(
     *,
     parser: Parser | None = None,
     wall_timeout_seconds: float = PARENT_WALL_TIMEOUT_SECONDS,
+    on_progress: ProgressCallback | None = None,
+    progress_interval_seconds: float = 30.0,
 ) -> ParseOutcome:
     """Run an injectable parser in a dedicated child with descriptor-only input."""
 
@@ -312,7 +316,13 @@ def run_isolated_parser(
         return _failure("INVALID_REQUEST")
     if not _read_only_descriptor(source_fd):
         return _failure("INVALID_REQUEST")
-    if wall_timeout_seconds <= 0:
+    if (
+        not math.isfinite(wall_timeout_seconds)
+        or wall_timeout_seconds <= 0
+        or not math.isfinite(progress_interval_seconds)
+        or progress_interval_seconds <= 0
+        or (on_progress is not None and not callable(on_progress))
+    ):
         return _failure("INVALID_REQUEST")
     try:
         source_offset = os.lseek(source_fd, 0, os.SEEK_CUR)
@@ -373,10 +383,18 @@ def run_isolated_parser(
 
     payload: bytes | None = None
     deadline = time.monotonic() + wall_timeout_seconds
+    next_progress = time.monotonic() + progress_interval_seconds
     try:
         while True:
+            now = time.monotonic()
             try:
-                ready = receive.poll(min(0.05, max(0.0, deadline - time.monotonic())))
+                ready = receive.poll(
+                    min(
+                        0.05,
+                        max(0.0, deadline - now),
+                        max(0.0, next_progress - now),
+                    )
+                )
             except OSError, ValueError:
                 return _failure("RESOURCE_LIMIT_EXCEEDED")
             if ready:
@@ -387,8 +405,17 @@ def run_isolated_parser(
                 break
             if not child.is_alive():
                 break
-            if time.monotonic() >= deadline:
+            now = time.monotonic()
+            if now >= deadline:
                 return _failure("EXTRACTION_TIMEOUT")
+            if on_progress is not None and now >= next_progress:
+                try:
+                    should_continue = on_progress()
+                except Exception:
+                    should_continue = False
+                if not should_continue:
+                    return ParseOutcome(success=False, metadata={"cancelled": True})
+                next_progress = now + progress_interval_seconds
 
         if payload is None:
             return _failure("PDF_CORRUPT")
@@ -405,6 +432,7 @@ def run_isolated_parser(
 __all__ = [
     "ParseOutcome",
     "Parser",
+    "ProgressCallback",
     "parse_local_pdf",
     "run_isolated_parser",
 ]

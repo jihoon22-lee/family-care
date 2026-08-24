@@ -10,6 +10,18 @@ from familycare_worker import __version__
 
 DatabaseProbe = Callable[[], bool]
 
+_ANALYSIS_JOBS_TABLE_QUERY = """
+SELECT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    INNER JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND relation.relname = 'analysis_jobs'
+      AND relation.relkind IN ('r', 'p')
+)
+"""
+
 
 class HealthPayload(TypedDict):
     """Stable process health payload."""
@@ -20,7 +32,7 @@ class HealthPayload(TypedDict):
 
 
 def database_is_ready(database_url: str | None = None) -> bool:
-    """Return whether PostgreSQL accepts a minimal query."""
+    """Return whether PostgreSQL and the worker queue table are available."""
 
     url = database_url or os.getenv("FAMILYCARE_DATABASE_URL")
     if not url:
@@ -30,9 +42,11 @@ def database_is_ready(database_url: str | None = None) -> bool:
     try:
         with psycopg.connect(psycopg_url) as connection:
             connection.execute("SELECT 1")
+            result = connection.execute(_ANALYSIS_JOBS_TABLE_QUERY)
+            row = result.fetchone()
     except psycopg.Error:
         return False
-    return True
+    return bool(row and row[0])
 
 
 def health_payload(database_probe: DatabaseProbe | None = None) -> HealthPayload:
