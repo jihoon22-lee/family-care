@@ -158,6 +158,8 @@ The archive scheme is aes-256-gcm+aes-kw-v1. Each document gets a random 32-byte
 - Create: packages/contracts/examples/document-batch-status.v1.json
 - Create: scripts/generate_batch_contract_types.py
 - Create: scripts/check_batch_contracts.py
+- Create: apps/api/src/familycare_api/documents/generated_batch_contracts.py
+- Create: workers/analyzer/src/familycare_worker/generated_batch_contracts.py
 - Create: apps/api/tests/test_document_batch_contracts.py
 - Modify: scripts/check_contracts.py
 - Modify: packages/contracts/README.md
@@ -172,7 +174,7 @@ The archive scheme is aes-256-gcm+aes-kw-v1. Each document gets a random 32-byte
 - managed_archives contains id, document_version_id, opaque object_key, scheme, key version, nonce, wrapped data key, ciphertext size, auth tag, timestamps, and retired timestamp. It has no key or plaintext column.
 - A batch is valid only when every item resolves beneath the configured import root and all items share one FamilyMember.
 
-- [ ] **Step 1: Write schema and migration tests before creating implementation files**
+- [x] **Step 1: Write schema and migration tests before creating implementation files**
 
 ~~~python
 def test_batch_request_has_one_family_member_and_no_secret_fields() -> None:
@@ -196,7 +198,7 @@ def test_archive_table_has_wrapped_key_metadata_only(migration_sql: str) -> None
     assert "plaintext" not in migration_sql
 ~~~
 
-- [ ] **Step 2: Run the RED contract and migration tests**
+- [x] **Step 2: Run the RED contract and migration tests**
 
 Run:
 
@@ -208,7 +210,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the batch schemas, generated consumers, and migration 0012_encrypted_document_import do not exist.
 
-- [ ] **Step 3: Add schemas, generated types, and PostgreSQL constraints**
+- [x] **Step 3: Add schemas, generated types, and PostgreSQL constraints**
 
 Use strict request fields:
 
@@ -225,7 +227,7 @@ Use strict request fields:
 
 Use enum states created, running, partial, succeeded, failed, and cancelled for batches; use queued, running, succeeded, password_required, retryable_failed, permanently_failed, and cancelled for items. Enforce 64-character lowercase-hex source IDs at the public boundary and retain the Phase 1 relative source-key validation only inside the server/Worker boundary. Status responses return source ID and bounded display label, never the internal relative source key. Generate API/Worker TypedDict modules without hand edits. Add foreign keys and indexes, and keep existing eight tables and their constraints unchanged.
 
-- [ ] **Step 4: Run the GREEN contract and PostgreSQL migration checks**
+- [x] **Step 4: Run the GREEN contract and PostgreSQL migration checks**
 
 Run:
 
@@ -241,7 +243,7 @@ TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 
 Expected: all contract examples and migration assertions pass; no Phase 1 schema file or generated document type drifts.
 
-- [ ] **Step 5: Commit the contract slice**
+- [x] **Step 5: Commit the contract slice**
 
 ~~~bash
 git add apps/api/migrations/versions/0012_encrypted_document_import.py \

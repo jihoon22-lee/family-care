@@ -1,0 +1,213 @@
+{
+  "$id": "https://familycare.invalid/schemas/document-batch-status.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strict status projection for one FamilyMember-scoped document batch.",
+  "properties": {
+    "batch_id": {
+      "$ref": "#/$defs/BatchId"
+    },
+    "family_member_id": {
+      "$ref": "#/$defs/FamilyMemberId"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/DocumentBatchItem"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/BatchState"
+    }
+  },
+  "required": [
+    "schema_version",
+    "batch_id",
+    "family_member_id",
+    "state",
+    "items"
+  ],
+  "title": "DocumentBatchStatus",
+  "type": "object",
+  "$defs": {
+    "BatchErrorCode": {
+      "enum": [
+        "ARCHIVE_INTEGRITY_ERROR",
+        "ARCHIVE_KEY_UNAVAILABLE",
+        "ARCHIVE_WRITE_FAILED",
+        "DOCUMENT_NOT_FOUND",
+        "DOCUMENT_PATH_ESCAPE",
+        "DOCUMENT_TOO_LARGE",
+        "EXTRACTION_TIMEOUT",
+        "INVALID_REQUEST",
+        "PAGE_LIMIT_EXCEEDED",
+        "PASSWORD_INVALID",
+        "PASSWORD_REQUIRED",
+        "PDF_CORRUPT",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "SOURCE_CHANGED",
+        "TEMP_CLEANUP_FAILED",
+        "UNSUPPORTED_FILE_TYPE"
+      ],
+      "title": "BatchErrorCode",
+      "type": "string"
+    },
+    "BatchId": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "BatchId",
+      "type": "string"
+    },
+    "BatchItemState": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "password_required",
+        "retryable_failed",
+        "permanently_failed",
+        "cancelled"
+      ],
+      "title": "BatchItemState",
+      "type": "string"
+    },
+    "BatchState": {
+      "enum": [
+        "created",
+        "running",
+        "partial",
+        "succeeded",
+        "failed",
+        "cancelled"
+      ],
+      "title": "BatchState",
+      "type": "string"
+    },
+    "DocumentBatch": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/BatchId"
+        },
+        "family_member_id": {
+          "$ref": "#/$defs/FamilyMemberId"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/DocumentBatchItem"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/$defs/BatchState"
+        }
+      },
+      "required": [
+        "schema_version",
+        "batch_id",
+        "family_member_id",
+        "state",
+        "items"
+      ],
+      "title": "DocumentBatch",
+      "type": "object"
+    },
+    "DocumentBatchItem": {
+      "additionalProperties": false,
+      "properties": {
+        "attempts": {
+          "maximum": 20,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "display_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BatchErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "BatchErrorCodeOrNull"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId"
+        },
+        "state": {
+          "$ref": "#/$defs/BatchItemState"
+        }
+      },
+      "required": [
+        "source_id",
+        "display_label",
+        "state",
+        "error_code",
+        "attempts"
+      ],
+      "title": "DocumentBatchItem",
+      "type": "object"
+    },
+    "FamilyMemberId": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "FamilyMemberId",
+      "type": "string"
+    },
+    "ImportSource": {
+      "additionalProperties": false,
+      "properties": {
+        "display_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[^\\u0000\\r\\n]+$",
+          "type": "string"
+        },
+        "encrypted": {
+          "type": "boolean"
+        },
+        "size_bytes": {
+          "maximum": 26214400,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId"
+        }
+      },
+      "required": [
+        "source_id",
+        "display_label",
+        "size_bytes",
+        "encrypted"
+      ],
+      "title": "ImportSource",
+      "type": "object"
+    },
+    "SourceId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "SourceId",
+      "type": "string"
+    }
+  }
+}

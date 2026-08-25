@@ -1,0 +1,46 @@
+{
+  "$id": "https://familycare.invalid/schemas/document-batch.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strict request for one FamilyMember-scoped encrypted document batch.",
+  "properties": {
+    "family_member_id": {
+      "$ref": "#/$defs/FamilyMemberId"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "source_ids": {
+      "items": {
+        "$ref": "#/$defs/SourceId"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "family_member_id",
+    "source_ids"
+  ],
+  "title": "DocumentBatchRequest",
+  "type": "object",
+  "$defs": {
+    "FamilyMemberId": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "FamilyMemberId",
+      "type": "string"
+    },
+    "SourceId": {
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "SourceId",
+      "type": "string"
+    }
+  }
+}
