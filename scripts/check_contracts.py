@@ -125,6 +125,26 @@ DECISION_FORBIDDEN_FIELDS = RIDER_CLAUSE_RULES_FORBIDDEN_FIELDS | {
     "pdf_bytes",
 }
 DECISION_TRI_STATES = ["MATCH", "NO_MATCH", "UNKNOWN"]
+BENEFIT_SCHEMA_PATH = ROOT / "packages/contracts/schemas/benefit-calculation.v1.schema.json"
+BENEFIT_EXAMPLE_PATH = ROOT / "packages/contracts/examples/benefit-calculation.v1.json"
+BENEFIT_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "diagnosis",
+    "diagnosis_text",
+    "file",
+    "file_id",
+    "file_path",
+    "full_text",
+    "medical_text",
+    "note",
+    "note_code",
+    "path",
+    "raw_note",
+    "raw_text",
+    "source_path",
+}
+BENEFIT_CALCULATION_KINDS = ["fixed", "indemnity"]
+BENEFIT_CALCULATION_STATUSES = ["computed", "partial", "unknown"]
 
 
 def _load_document_contract_checker() -> Any:
@@ -253,6 +273,9 @@ def validate_openapi() -> list[str]:
         "/api/v1/medical-events/trash",
         "/api/v1/medical-events/{event_id}",
         "/api/v1/medical-events/{event_id}/analyze",
+        "/api/v1/medical-events/{event_id}/calculations",
+        "/api/v1/medical-events/{event_id}/receipt-lines",
+        "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
         "/api/v1/medical-events/{event_id}/restore",
         "/api/v1/medical-events/{event_id}/results/{version}",
     }
@@ -1070,6 +1093,111 @@ def validate_decision_contract() -> list[str]:
     return errors
 
 
+def _forbidden_benefit_keys(value: Any, path: str = "$") -> list[str]:
+    """Return benefit-contract paths crossing the private-data boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in BENEFIT_FORBIDDEN_FIELDS
+    ]
+
+
+def _validate_benefit_example_ids(value: Any, path: str, errors: list[str]) -> None:
+    """Require calculation lineage IDs to use the repository's synthetic UUID range."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if (key.endswith("_id") or key == "id") and child is not None:
+                if not valid_uuid4(child):
+                    errors.append(f"benefit-calculation {child_path} must be a UUIDv4")
+                elif not str(child).startswith("00000000-0000-4000-8000-"):
+                    errors.append(f"benefit-calculation {child_path} must use a synthetic UUID")
+            elif key == "evidence_ids" and isinstance(child, list):
+                for index, evidence_id in enumerate(child):
+                    evidence_path = f"{child_path}[{index}]"
+                    if not valid_uuid4(evidence_id):
+                        errors.append(f"benefit-calculation {evidence_path} must be a UUIDv4")
+                    elif not str(evidence_id).startswith("00000000-0000-4000-8000-"):
+                        errors.append(
+                            f"benefit-calculation {evidence_path} must use a synthetic UUID"
+                        )
+            _validate_benefit_example_ids(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_benefit_example_ids(child, f"{path}[{index}]", errors)
+
+
+def validate_benefit_calculation_contract() -> list[str]:
+    """Validate strict benefit calculation traces and their synthetic examples."""
+
+    try:
+        schema = load_json(BENEFIT_SCHEMA_PATH)
+        example = load_json(BENEFIT_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("benefit-calculation schema must use JSON Schema draft 2020-12")
+    if schema.get("title") != "BenefitCalculationEnvelope":
+        errors.append("benefit-calculation schema title changed")
+    if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
+        errors.append("benefit-calculation root must be a strict object")
+    if schema.get("required") != ["schema_version", "calculations"]:
+        errors.append("benefit-calculation root required fields changed")
+    object_schemas = _object_schemas(schema)
+    if not object_schemas or any(
+        item.get("additionalProperties") is not False for item in object_schemas
+    ):
+        errors.append("benefit-calculation nested objects must reject additional properties")
+    if _forbidden_benefit_keys(schema):
+        errors.append("benefit-calculation schema contains a forbidden field")
+    if _forbidden_benefit_keys(example):
+        errors.append("benefit-calculation example contains a forbidden field")
+    errors.extend(
+        f"benefit-calculation example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+
+    definitions = schema.get("$defs", {})
+    if definitions.get("CalculationKind", {}).get("enum") != BENEFIT_CALCULATION_KINDS:
+        errors.append("benefit-calculation kind enum changed")
+    if definitions.get("CalculationStatus", {}).get("enum") != BENEFIT_CALCULATION_STATUSES:
+        errors.append("benefit-calculation status enum changed")
+    calculation_schema = definitions.get("BenefitCalculation", {})
+    if calculation_schema.get("properties", {}).get("steps", {}).get("maxItems") != 64:
+        errors.append("benefit-calculation steps must be bounded at 64")
+    if calculation_schema.get("properties", {}).get("hold_reason_codes", {}).get("maxItems") != 16:
+        errors.append("benefit-calculation hold reasons must be bounded at 16")
+    if schema.get("properties", {}).get("calculations", {}).get("maxItems") != 64:
+        errors.append("benefit-calculation result list must be bounded at 64")
+
+    calculations = example.get("calculations")
+    if not isinstance(calculations, list) or not calculations:
+        errors.append("benefit-calculation example must contain calculations")
+    else:
+        kinds = {item.get("kind") for item in calculations if isinstance(item, dict)}
+        statuses = {item.get("status") for item in calculations if isinstance(item, dict)}
+        if "fixed" not in kinds or "indemnity" not in kinds:
+            errors.append("benefit-calculation example must cover fixed and indemnity")
+        if "partial" not in statuses:
+            errors.append("benefit-calculation example must cover partial status")
+        for index, item in enumerate(calculations):
+            if (
+                isinstance(item, dict)
+                and item.get("status") == "unknown"
+                and not item.get("hold_reason_codes")
+            ):
+                errors.append(
+                    "benefit-calculation example "
+                    f"$.calculations[{index}] unknown result needs a hold reason"
+                )
+    _validate_benefit_example_ids(example, "$", errors)
+    return errors
+
+
 def validate_web_generated_outputs() -> list[str]:
     """Regenerate the Web consumer in a temporary directory and compare bytes."""
 
@@ -1162,6 +1290,7 @@ def main() -> int:
         *validate_clause_search_contract(),
         *validate_rider_clause_rules_contract(),
         *validate_decision_contract(),
+        *validate_benefit_calculation_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -1170,7 +1299,8 @@ def main() -> int:
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
-        "rider-clause-rules.v1, coverage-decision.v1, and generated Web contracts)"
+        "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
+        "and generated Web contracts)"
     )
     return 0
 

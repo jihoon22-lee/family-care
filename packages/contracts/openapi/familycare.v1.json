@@ -138,6 +138,345 @@
         "title": "AnalysisJobStatusResponse",
         "type": "object"
       },
+      "BenefitCalculationResponse": {
+        "additionalProperties": false,
+        "description": "Calculation result projection with conditional amounts and trace reasons.",
+        "properties": {
+          "additional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applied_limit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "applied_rate": {
+            "anyOf": [
+              {
+                "maxLength": 8,
+                "minLength": 1,
+                "pattern": "^(?:0(?:\\.[0-9]{1,6})?|1(?:\\.0{1,6})?)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Rate"
+          },
+          "calculation_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Id"
+          },
+          "claim_candidate_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Candidate Id"
+          },
+          "confirmed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "deductible": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine Version"
+          },
+          "evidence_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "excluded": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "excluded_reason_codes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Excluded Reason Codes",
+            "type": "array"
+          },
+          "hold_reason_codes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Hold Reason Codes",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "fixed",
+              "indemnity"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rounding_rule": {
+            "anyOf": [
+              {
+                "enum": [
+                  "half_up",
+                  "half_even",
+                  "up",
+                  "down"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Rule"
+          },
+          "rule_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Version Id"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "computed",
+              "partial",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/CalculationStepResponse"
+            },
+            "maxItems": 64,
+            "title": "Steps",
+            "type": "array"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "kind",
+          "status"
+        ],
+        "title": "BenefitCalculationResponse",
+        "type": "object"
+      },
+      "BenefitCalculationsResponse": {
+        "additionalProperties": false,
+        "description": "Versioned collection returned by the calculation read endpoint.",
+        "properties": {
+          "calculations": {
+            "items": {
+              "$ref": "#/components/schemas/BenefitCalculationResponse"
+            },
+            "maxItems": 64,
+            "title": "Calculations",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "calculations"
+        ],
+        "title": "BenefitCalculationsResponse",
+        "type": "object"
+      },
+      "CalculationStepResponse": {
+        "additionalProperties": false,
+        "description": "Bounded arithmetic trace entry; only normalized values are exposed.",
+        "properties": {
+          "input_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "title": "Operation",
+            "type": "string"
+          },
+          "output_amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MoneyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "rounding_rule": {
+            "anyOf": [
+              {
+                "enum": [
+                  "half_up",
+                  "half_even",
+                  "up",
+                  "down"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Rule"
+          },
+          "step_number": {
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Step Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step_number",
+          "operation",
+          "input_amount",
+          "output_amount",
+          "rounding_rule",
+          "reason_code"
+        ],
+        "title": "CalculationStepResponse",
+        "type": "object"
+      },
       "CandidateConfirmationRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1710,6 +2049,31 @@
         "title": "MedicalEventUpdateRequest",
         "type": "object"
       },
+      "MoneyResponse": {
+        "additionalProperties": false,
+        "description": "One amount/currency pair in a calculation response.",
+        "properties": {
+          "amount": {
+            "description": "A non-negative decimal string with at most 12 integer and 6 fraction digits.",
+            "maxLength": 19,
+            "minLength": 1,
+            "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "title": "MoneyResponse",
+        "type": "object"
+      },
       "PolicyCreateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2288,6 +2652,285 @@
           "reason_code"
         ],
         "title": "QuestionResponse",
+        "type": "object"
+      },
+      "ReceiptLineCreateRequest": {
+        "additionalProperties": false,
+        "description": "User-entered receipt metadata; files and calculation authority are absent.",
+        "properties": {
+          "amount": {
+            "description": "A non-negative decimal string with at most two fraction digits.",
+            "maxLength": 15,
+            "minLength": 1,
+            "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,2})?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "outpatient",
+              "inpatient",
+              "pharmacy"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "confirmation_level": {
+            "enum": [
+              "user",
+              "ai_structured",
+              "unconfirmed"
+            ],
+            "title": "Confirmation Level",
+            "type": "string"
+          },
+          "coverage_category": {
+            "enum": [
+              "covered",
+              "possible_excluded",
+              "excluded",
+              "unknown"
+            ],
+            "title": "Coverage Category",
+            "type": "string"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "note_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Code"
+          }
+        },
+        "required": [
+          "category",
+          "coverage_category",
+          "amount",
+          "currency",
+          "confirmation_level"
+        ],
+        "title": "ReceiptLineCreateRequest",
+        "type": "object"
+      },
+      "ReceiptLineDeleteRequest": {
+        "additionalProperties": false,
+        "description": "Versioned soft-delete request.",
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ReceiptLineDeleteRequest",
+        "type": "object"
+      },
+      "ReceiptLineResponse": {
+        "additionalProperties": false,
+        "description": "Safe receipt projection with no household scope or source-document fields.",
+        "properties": {
+          "amount": {
+            "description": "A non-negative decimal string with at most two fraction digits.",
+            "maxLength": 15,
+            "minLength": 1,
+            "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,2})?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "category": {
+            "enum": [
+              "outpatient",
+              "inpatient",
+              "pharmacy"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "confirmation_level": {
+            "enum": [
+              "user",
+              "ai_structured",
+              "unconfirmed"
+            ],
+            "title": "Confirmation Level",
+            "type": "string"
+          },
+          "coverage_category": {
+            "enum": [
+              "covered",
+              "possible_excluded",
+              "excluded",
+              "unknown"
+            ],
+            "title": "Coverage Category",
+            "type": "string"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Code"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "coverage_category",
+          "amount",
+          "currency",
+          "confirmation_level",
+          "version"
+        ],
+        "title": "ReceiptLineResponse",
+        "type": "object"
+      },
+      "ReceiptLineUpdateRequest": {
+        "additionalProperties": false,
+        "description": "Versioned receipt metadata update; omitted fields remain unchanged.",
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "description": "A non-negative decimal string with at most two fraction digits.",
+                "maxLength": 15,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,2})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "outpatient",
+                  "inpatient",
+                  "pharmacy"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confirmation_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  "user",
+                  "ai_structured",
+                  "unconfirmed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation Level"
+          },
+          "coverage_category": {
+            "anyOf": [
+              {
+                "enum": [
+                  "covered",
+                  "possible_excluded",
+                  "excluded",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage Category"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "note_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Code"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ReceiptLineUpdateRequest",
         "type": "object"
       },
       "ReviewIssue": {
@@ -4394,6 +5037,379 @@
           }
         },
         "summary": "Analyze Medical Event",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/calculations": {
+      "get": {
+        "operationId": "get_benefit_calculations_api_v1_medical_events__event_id__calculations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenefitCalculationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Benefit Calculations",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/receipt-lines": {
+      "post": {
+        "operationId": "create_receipt_line_api_v1_medical_events__event_id__receipt_lines_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptLineCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptLineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Create Receipt Line",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}": {
+      "delete": {
+        "operationId": "delete_receipt_line_api_v1_medical_events__event_id__receipt_lines__line_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptLineDeleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Delete Receipt Line",
+        "tags": [
+          "coverage decisions"
+        ]
+      },
+      "patch": {
+        "operationId": "update_receipt_line_api_v1_medical_events__event_id__receipt_lines__line_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "line_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Line Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReceiptLineUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptLineResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Receipt Line",
         "tags": [
           "coverage decisions"
         ]

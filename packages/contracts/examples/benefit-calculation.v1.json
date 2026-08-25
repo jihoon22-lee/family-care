@@ -1,0 +1,178 @@
+{
+  "schema_version": "1",
+  "calculations": [
+    {
+      "schema_version": "1",
+      "kind": "fixed",
+      "status": "computed",
+      "calculation_id": "00000000-0000-4000-8000-000000000906",
+      "claim_candidate_id": "00000000-0000-4000-8000-000000000907",
+      "currency": "KRW",
+      "confirmed": {
+        "amount": "66667",
+        "currency": "KRW"
+      },
+      "additional": null,
+      "excluded": null,
+      "excluded_reason_codes": [],
+      "deductible": null,
+      "applied_rate": "0.333333",
+      "applied_limit": null,
+      "rounding_rule": "half_up",
+      "steps": [
+        {
+          "step_number": 1,
+          "operation": "multiply",
+          "input_amount": {
+            "amount": "200000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "66666.600000",
+            "currency": "KRW"
+          },
+          "rounding_rule": null,
+          "reason_code": "FIXED_MULTIPLY"
+        },
+        {
+          "step_number": 2,
+          "operation": "round",
+          "input_amount": {
+            "amount": "66666.600000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "66667",
+            "currency": "KRW"
+          },
+          "rounding_rule": "half_up",
+          "reason_code": "FIXED_ROUND"
+        }
+      ],
+      "hold_reason_codes": [],
+      "rule_version_id": "00000000-0000-4000-8000-000000000901",
+      "evidence_ids": [
+        "00000000-0000-4000-8000-000000000902"
+      ],
+      "engine_version": "synthetic-calculation-engine-v1",
+      "version": 1,
+      "created_at": "2026-08-25T09:00:00Z"
+    },
+    {
+      "schema_version": "1",
+      "kind": "indemnity",
+      "status": "partial",
+      "calculation_id": "00000000-0000-4000-8000-000000000908",
+      "claim_candidate_id": "00000000-0000-4000-8000-000000000909",
+      "currency": "KRW",
+      "confirmed": {
+        "amount": "64000",
+        "currency": "KRW"
+      },
+      "additional": {
+        "amount": "12500",
+        "currency": "KRW"
+      },
+      "excluded": {
+        "amount": "3000",
+        "currency": "KRW"
+      },
+      "excluded_reason_codes": [
+        "POSSIBLE_EXCLUDED_LINE"
+      ],
+      "deductible": {
+        "amount": "20000",
+        "currency": "KRW"
+      },
+      "applied_rate": "0.8",
+      "applied_limit": {
+        "amount": "100000",
+        "currency": "KRW"
+      },
+      "rounding_rule": "half_up",
+      "steps": [
+        {
+          "step_number": 1,
+          "operation": "subtract",
+          "input_amount": {
+            "amount": "100000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "80000",
+            "currency": "KRW"
+          },
+          "rounding_rule": null,
+          "reason_code": "INDEMNITY_DEDUCTIBLE"
+        },
+        {
+          "step_number": 2,
+          "operation": "max",
+          "input_amount": {
+            "amount": "80000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "80000",
+            "currency": "KRW"
+          },
+          "rounding_rule": null,
+          "reason_code": "INDEMNITY_NON_NEGATIVE"
+        },
+        {
+          "step_number": 3,
+          "operation": "multiply",
+          "input_amount": {
+            "amount": "80000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "64000",
+            "currency": "KRW"
+          },
+          "rounding_rule": null,
+          "reason_code": "INDEMNITY_RATE"
+        },
+        {
+          "step_number": 4,
+          "operation": "min",
+          "input_amount": {
+            "amount": "64000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "64000",
+            "currency": "KRW"
+          },
+          "rounding_rule": null,
+          "reason_code": "INDEMNITY_LIMIT"
+        },
+        {
+          "step_number": 5,
+          "operation": "round",
+          "input_amount": {
+            "amount": "64000",
+            "currency": "KRW"
+          },
+          "output_amount": {
+            "amount": "64000",
+            "currency": "KRW"
+          },
+          "rounding_rule": "half_up",
+          "reason_code": "INDEMNITY_ROUND"
+        }
+      ],
+      "hold_reason_codes": [
+        "ADDITIONAL_RECEIPT_CONFIRMATION"
+      ],
+      "rule_version_id": "00000000-0000-4000-8000-000000000903",
+      "evidence_ids": [
+        "00000000-0000-4000-8000-000000000904",
+        "00000000-0000-4000-8000-000000000905"
+      ],
+      "engine_version": "synthetic-calculation-engine-v1",
+      "version": 1,
+      "created_at": "2026-08-25T09:00:00Z"
+    }
+  ]
+}

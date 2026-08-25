@@ -15,6 +15,9 @@ export const API_PATHS = [
   "/api/v1/medical-events/trash",
   "/api/v1/medical-events/{event_id}",
   "/api/v1/medical-events/{event_id}/analyze",
+  "/api/v1/medical-events/{event_id}/calculations",
+  "/api/v1/medical-events/{event_id}/receipt-lines",
+  "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
   "/api/v1/medical-events/{event_id}/results/{version}",
   "/api/v1/policies",
@@ -135,6 +138,30 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/analyze",
     operationId:
       "analyze_medical_event_api_v1_medical_events__event_id__analyze_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-events/{event_id}/calculations",
+    operationId:
+      "get_benefit_calculations_api_v1_medical_events__event_id__calculations_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/receipt-lines",
+    operationId:
+      "create_receipt_line_api_v1_medical_events__event_id__receipt_lines_post",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
+    operationId:
+      "delete_receipt_line_api_v1_medical_events__event_id__receipt_lines__line_id__delete",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
+    operationId:
+      "update_receipt_line_api_v1_medical_events__event_id__receipt_lines__line_id__patch",
   },
   {
     method: "POST",
@@ -347,6 +374,44 @@ export interface AnalysisJobStatusResponse {
     | "retryable_failed"
     | "running"
     | "succeeded";
+}
+
+export interface BenefitCalculationResponse {
+  additional?: MoneyResponse | null;
+  applied_limit?: MoneyResponse | null;
+  applied_rate?: string | null;
+  calculation_id?: string | null;
+  claim_candidate_id?: string | null;
+  confirmed?: MoneyResponse | null;
+  created_at?: string | null;
+  currency?: string | null;
+  deductible?: MoneyResponse | null;
+  engine_version?: string | null;
+  evidence_ids?: Array<string>;
+  excluded?: MoneyResponse | null;
+  excluded_reason_codes?: Array<string>;
+  hold_reason_codes?: Array<string>;
+  kind: "fixed" | "indemnity";
+  rounding_rule?: "half_up" | "half_even" | "up" | "down" | null;
+  rule_version_id?: string | null;
+  schema_version?: "1";
+  status: "computed" | "partial" | "unknown";
+  steps?: Array<CalculationStepResponse>;
+  version?: number | null;
+}
+
+export interface BenefitCalculationsResponse {
+  calculations: Array<BenefitCalculationResponse>;
+  schema_version?: "1";
+}
+
+export interface CalculationStepResponse {
+  input_amount: MoneyResponse | null;
+  operation: string;
+  output_amount: MoneyResponse | null;
+  reason_code: string;
+  rounding_rule: "half_up" | "half_even" | "up" | "down" | null;
+  step_number: number;
 }
 
 export interface CandidateConfirmationRequest {
@@ -723,6 +788,11 @@ export interface MedicalEventUpdateRequest {
   visit_date?: string | null;
 }
 
+export interface MoneyResponse {
+  amount: string;
+  currency: string;
+}
+
 export interface PolicyCandidate {
   aggregate_id: AggregateId | null;
   candidate_kind: CandidateKind;
@@ -862,6 +932,42 @@ export type PositiveVersion = number;
 export interface QuestionResponse {
   field_path: string;
   reason_code: string;
+}
+
+export interface ReceiptLineCreateRequest {
+  amount: string;
+  category: "outpatient" | "inpatient" | "pharmacy";
+  confirmation_level: "user" | "ai_structured" | "unconfirmed";
+  coverage_category: "covered" | "possible_excluded" | "excluded" | "unknown";
+  currency: string;
+  note_code?: string | null;
+}
+
+export interface ReceiptLineDeleteRequest {
+  expected_version: number;
+}
+
+export interface ReceiptLineResponse {
+  amount: string;
+  category: "outpatient" | "inpatient" | "pharmacy";
+  confirmation_level: "user" | "ai_structured" | "unconfirmed";
+  coverage_category: "covered" | "possible_excluded" | "excluded" | "unknown";
+  currency: string;
+  deleted?: boolean;
+  id: string;
+  note_code?: string | null;
+  version: number;
+}
+
+export interface ReceiptLineUpdateRequest {
+  amount?: string | null;
+  category?: "outpatient" | "inpatient" | "pharmacy" | null;
+  confirmation_level?: "user" | "ai_structured" | "unconfirmed" | null;
+  coverage_category?:
+    "covered" | "possible_excluded" | "excluded" | "unknown" | null;
+  currency?: string | null;
+  expected_version: number;
+  note_code?: string | null;
 }
 
 export interface ReviewIssue {

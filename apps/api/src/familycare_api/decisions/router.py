@@ -8,6 +8,15 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Path, Response, status
 
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
+from familycare_api.decisions.calculation_schemas import (
+    BenefitCalculationResponse,
+    BenefitCalculationsResponse,
+    ReceiptLineCreateRequest,
+    ReceiptLineDeleteRequest,
+    ReceiptLineResponse,
+    ReceiptLineUpdateRequest,
+)
+from familycare_api.decisions.calculation_service import CalculationService
 from familycare_api.decisions.schemas import (
     CoverageDecisionResponse,
     DecisionErrorResponse,
@@ -26,6 +35,16 @@ def get_decision_service(scope: ScopeDependency) -> DecisionService:
 
 
 ServiceDependency = Annotated[DecisionService, Depends(get_decision_service)]
+
+
+def get_calculation_service(scope: ScopeDependency) -> CalculationService:
+    return CalculationService.from_environment(scope)
+
+
+CalculationServiceDependency = Annotated[
+    CalculationService,
+    Depends(get_calculation_service),
+]
 router = APIRouter(prefix="/api/v1/medical-events", tags=["coverage decisions"])
 
 _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
@@ -147,4 +166,75 @@ def get_decision_result(
     return CoverageDecisionResponse.from_value(service.get_decision_result(event_id, version))
 
 
-__all__ = ["get_decision_service", "router"]
+@router.post(
+    "/{event_id}/receipt-lines",
+    response_model=ReceiptLineResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses=_COMMON_ERRORS,
+)
+def create_receipt_line(
+    event_id: UUID,
+    request: ReceiptLineCreateRequest,
+    response: Response,
+    service: CalculationServiceDependency,
+) -> ReceiptLineResponse:
+    _no_store(response)
+    return ReceiptLineResponse.from_domain(service.create_receipt_line(event_id, request))
+
+
+@router.patch(
+    "/{event_id}/receipt-lines/{line_id}",
+    response_model=ReceiptLineResponse,
+    responses=_COMMON_ERRORS,
+)
+def update_receipt_line(
+    event_id: UUID,
+    line_id: UUID,
+    request: ReceiptLineUpdateRequest,
+    response: Response,
+    service: CalculationServiceDependency,
+) -> ReceiptLineResponse:
+    _no_store(response)
+    return ReceiptLineResponse.from_domain(service.update_receipt_line(event_id, line_id, request))
+
+
+@router.delete(
+    "/{event_id}/receipt-lines/{line_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+    responses=_COMMON_ERRORS,
+)
+def delete_receipt_line(
+    event_id: UUID,
+    line_id: UUID,
+    request: ReceiptLineDeleteRequest,
+    service: CalculationServiceDependency,
+) -> Response:
+    service.delete_receipt_line(
+        event_id,
+        line_id,
+        expected_version=request.expected_version,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "no-store"})
+
+
+@router.get(
+    "/{event_id}/calculations",
+    response_model=BenefitCalculationsResponse,
+    responses=_COMMON_ERRORS,
+)
+def get_benefit_calculations(
+    event_id: UUID,
+    response: Response,
+    service: CalculationServiceDependency,
+) -> BenefitCalculationsResponse:
+    _no_store(response)
+    return BenefitCalculationsResponse(
+        calculations=tuple(
+            BenefitCalculationResponse.from_value(value)
+            for value in service.get_calculations(event_id)
+        )
+    )
+
+
+__all__ = ["get_calculation_service", "get_decision_service", "router"]
