@@ -503,39 +503,30 @@ class ClaimRepository:
         amount: Decimal | None,
         reason_code: str | None,
     ) -> None:
-        riders = connection.execute(
+        # The current public DecisionReader is member/event scoped rather than
+        # Rider scoped. Persist one aggregate occurrence per ClaimCase so a
+        # policy with several selected Riders is not counted several times.
+        connection.execute(
             """
-            SELECT id FROM riders
-            WHERE household_space_id = %s AND policy_contract_id = %s
-              AND deleted_at IS NULL
-            ORDER BY id
+            INSERT INTO claim_history (
+              household_space_id, medical_event_id, family_member_id,
+              policy_contract_id, rider_id, outcome, payment_date,
+              counted_occurrence, amount, currency, reason_code
+            ) VALUES (%s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s)
             """,
-            (claim["household_space_id"], claim["policy_contract_id"]),
-        ).fetchall()
-        rider_ids: list[UUID | None] = [cast(UUID, row["id"]) for row in riders] or [None]
-        for rider_id in rider_ids:
-            connection.execute(
-                """
-                INSERT INTO claim_history (
-                  household_space_id, medical_event_id, family_member_id,
-                  policy_contract_id, rider_id, outcome, payment_date,
-                  counted_occurrence, amount, currency, reason_code
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                (
-                    claim["household_space_id"],
-                    claim["medical_event_id"],
-                    claim["family_member_id"],
-                    claim["policy_contract_id"],
-                    rider_id,
-                    outcome,
-                    payment_date,
-                    outcome in {"paid", "partially_paid"},
-                    amount,
-                    claim.get("currency"),
-                    reason_code,
-                ),
-            )
+            (
+                claim["household_space_id"],
+                claim["medical_event_id"],
+                claim["family_member_id"],
+                claim["policy_contract_id"],
+                outcome,
+                payment_date,
+                outcome in {"paid", "partially_paid"},
+                amount,
+                claim.get("currency"),
+                reason_code,
+            ),
+        )
 
     def _toggle_deleted(
         self,
