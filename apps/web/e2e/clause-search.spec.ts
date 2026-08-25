@@ -9,6 +9,8 @@ import type {
   TermsEditionResponse,
 } from "../src/api/generated";
 
+import { mockAuthenticatedSession } from "./support/mockApi";
+
 const TERMS_EDITION_ID = "synthetic-terms-edition-001";
 const CLAUSE_ID = "synthetic-clause-001";
 const EVIDENCE_ID = "synthetic-clause-evidence-001";
@@ -148,6 +150,7 @@ test("searches with POST body, opens Evidence, and stays usable at 320px", async
       status: 404,
     });
   });
+  await mockAuthenticatedSession(page);
 
   await page.goto("/app/clauses/search", { waitUntil: "domcontentloaded" });
   const query = page.getByRole("searchbox", { name: /약관|clause/i });

@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
+import { mockAuthenticatedSession } from "./support/mockApi";
+
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:4173";
 const MEMBER_ID = "00000000-0000-4000-8000-000000000001";
 const POLICY_ID = "00000000-0000-4000-8000-000000000010";
@@ -361,6 +363,7 @@ async function openLedger(page: Page): Promise<void> {
 async function setupLedger(page: Page): Promise<SyntheticState> {
   await installStorageWriteSpy(page);
   const state = await installSyntheticApi(page);
+  await mockAuthenticatedSession(page);
   await openLedger(page);
   return state;
 }
