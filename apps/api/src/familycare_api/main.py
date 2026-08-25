@@ -1,8 +1,9 @@
 """FastAPI application factory."""
 
 import os
+from collections.abc import Awaitable, Callable
 
-from fastapi import FastAPI, Response, status
+from fastapi import FastAPI, Request, Response, status
 
 from familycare_api.claims.router import medical_event_claim_router
 from familycare_api.claims.router import router as claim_router
@@ -23,6 +24,7 @@ from familycare_api.health import (
     liveness,
     readiness,
 )
+from familycare_api.identity.router import router as identity_router
 from familycare_api.policies.candidate_router import router as policy_candidate_router
 from familycare_api.policies.router import router as policy_ledger_router
 
@@ -48,6 +50,31 @@ def create_app(
         description="Evidence-first family insurance guidance API",
     )
     install_error_handlers(app)
+
+    @app.middleware("http")
+    async def no_store_api_responses(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        response = await call_next(request)
+        if request.url.path.startswith("/api/v1/"):
+            response.headers["Cache-Control"] = "no-store"
+        raw_session = getattr(request.state, "session_cookie_refresh", None)
+        session_cookie_headers = response.headers.getlist("set-cookie")
+        if raw_session and not any(
+            header.startswith("familycare_session=") for header in session_cookie_headers
+        ):
+            response.set_cookie(
+                "familycare_session",
+                raw_session,
+                max_age=7 * 24 * 60 * 60,
+                secure=True,
+                httponly=True,
+                samesite="strict",
+                path="/",
+            )
+        return response
+
     app.add_api_route(
         "/health/live",
         liveness,
@@ -70,6 +97,7 @@ def create_app(
     )
     if enabled:
         app.include_router(document_analysis_router)
+    app.include_router(identity_router)
     app.include_router(policy_ledger_router)
     app.include_router(policy_candidate_router)
     app.include_router(clause_search_router)

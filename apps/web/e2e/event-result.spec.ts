@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   installStorageWriteSpy,
+  mockAuthenticatedSession,
   mockSyntheticEventApi,
 } from "./support/mockApi";
 
@@ -11,6 +12,7 @@ test("creates a minimal event and reaches action-first results at 320px", async 
   await page.setViewportSize({ width: 320, height: 800 });
   await installStorageWriteSpy(page);
   const mock = await mockSyntheticEventApi(page);
+  await mockAuthenticatedSession(page);
 
   await page.goto("/app/events/new?member=synthetic-member-a", {
     waitUntil: "domcontentloaded",
@@ -76,6 +78,7 @@ test("keeps manual analysis available when optional structuring fails", async ({
 }) => {
   await installStorageWriteSpy(page);
   const mock = await mockSyntheticEventApi(page, { structuring: "failure" });
+  await mockAuthenticatedSession(page);
 
   await page.goto("/app/events/new?member=synthetic-member-a");
   await page
@@ -99,6 +102,7 @@ test("discloses bounded Evidence and returns focus after Escape", async ({
   const mock = await mockSyntheticEventApi(page, {
     result: "partial_stale",
   });
+  await mockAuthenticatedSession(page);
 
   await page.goto("/app/events/new?member=synthetic-member-a");
   await page
@@ -112,8 +116,8 @@ test("discloses bounded Evidence and returns focus after Escape", async ({
     page.getByRole("heading", { name: "추가 확인 필요" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /청구 검토 시작/ }).first(),
-  ).toBeVisible();
+    page.getByRole("button", { name: /청구 검토 시작/ }),
+  ).toHaveCount(0);
 
   const trigger = page.getByRole("button", { name: "근거 보기" }).first();
   await trigger.click();
@@ -132,6 +136,7 @@ test("validates post-treatment receipt lines without sending invalid amounts", a
 }) => {
   await installStorageWriteSpy(page);
   const mock = await mockSyntheticEventApi(page);
+  await mockAuthenticatedSession(page);
 
   await page.goto(
     "/app/events/new?member=synthetic-member-a&mode=post_treatment",

@@ -138,6 +138,125 @@
         "title": "AnalysisJobStatusResponse",
         "type": "object"
       },
+      "AuthErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "enum": [
+              "AUTHENTICATION_REQUIRED",
+              "AUTH_FAILED",
+              "AUTH_RATE_LIMITED",
+              "AUTH_STORE_UNAVAILABLE",
+              "CSRF_REQUIRED",
+              "INVALID_REQUEST",
+              "ORIGIN_REQUIRED",
+              "REAUTHENTICATION_REQUIRED",
+              "SESSION_NOT_FOUND"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "AuthErrorResponse",
+        "type": "object"
+      },
+      "AuthSessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "current": {
+            "title": "Current",
+            "type": "boolean"
+          },
+          "device_label": {
+            "title": "Device Label",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "last_seen_at": {
+            "format": "date-time",
+            "title": "Last Seen At",
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "device_label",
+          "current",
+          "created_at",
+          "last_seen_at",
+          "expires_at"
+        ],
+        "title": "AuthSessionResponse",
+        "type": "object"
+      },
+      "AuthUserResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "needs_reauthentication": {
+            "title": "Needs Reauthentication",
+            "type": "boolean"
+          },
+          "user_id": {
+            "format": "uuid",
+            "title": "User Id",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "needs_reauthentication"
+        ],
+        "title": "AuthUserResponse",
+        "type": "object"
+      },
       "BenefitCalculationResponse": {
         "additionalProperties": false,
         "description": "Calculation result projection with conditional amounts and trace reasons.",
@@ -822,6 +941,22 @@
           }
         },
         "title": "CandidateSnapshotResponse",
+        "type": "object"
+      },
+      "ChangePasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_password": {
+            "format": "password",
+            "title": "New Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "new_password"
+        ],
+        "title": "ChangePasswordRequest",
         "type": "object"
       },
       "ChecklistUpdateRequest": {
@@ -2143,6 +2278,20 @@
         "title": "CoverageRuleVersionsResponse",
         "type": "object"
       },
+      "CsrfResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "csrf_token"
+        ],
+        "title": "CsrfResponse",
+        "type": "object"
+      },
       "DecisionErrorResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2694,6 +2843,60 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "device_label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Device Label",
+            "type": "string"
+          },
+          "password": {
+            "format": "password",
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "username": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "device_label"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "LoginResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "csrf_token": {
+            "title": "Csrf Token",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthUserResponse"
+          }
+        },
+        "required": [
+          "user",
+          "csrf_token",
+          "expires_at"
+        ],
+        "title": "LoginResponse",
         "type": "object"
       },
       "MedicalEventCreateRequest": {
@@ -3635,6 +3838,22 @@
           "reason_code"
         ],
         "title": "QuestionResponse",
+        "type": "object"
+      },
+      "ReauthenticateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "ReauthenticateRequest",
         "type": "object"
       },
       "ReceiptLineCreateRequest": {
@@ -4933,6 +5152,13 @@
         "title": "ExpectedVersionRequest",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "APIKeyCookie": {
+        "in": "cookie",
+        "name": "familycare_session",
+        "type": "apiKey"
+      }
     }
   },
   "info": {
@@ -5003,6 +5229,725 @@
         "summary": "Get a synthetic document analysis job",
         "tags": [
           "local synthetic document analysis"
+        ]
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "operationId": "issue_csrf_api_v1_auth_csrf_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CsrfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Issue Csrf",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "familycare_session",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Familycare Session"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Logout",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "current_user_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthUserResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Current User",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "operationId": "change_password_api_v1_auth_password_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Change Password",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/reauthenticate": {
+      "post": {
+        "operationId": "reauthenticate_api_v1_auth_reauthenticate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthenticateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Reauthenticate",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sessions": {
+      "get": {
+        "operationId": "list_sessions_api_v1_auth_sessions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AuthSessionResponse"
+                  },
+                  "title": "Response List Sessions Api V1 Auth Sessions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Sessions",
+        "tags": [
+          "authentication"
+        ]
+      }
+    },
+    "/api/v1/auth/sessions/{session_id}/revoke": {
+      "post": {
+        "operationId": "revoke_session_api_v1_auth_sessions__session_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication failed"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "CSRF or reauthentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Rate limited"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Revoke Session",
+        "tags": [
+          "authentication"
         ]
       }
     },
@@ -5144,6 +6089,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Claim Cases",
         "tags": [
           "claim workflow"
@@ -5215,6 +6165,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Deleted Claim Cases",
         "tags": [
           "claim workflow"
@@ -5301,6 +6256,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Delete Claim Case",
         "tags": [
           "claim workflow"
@@ -5382,6 +6342,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Claim Case",
         "tags": [
           "claim workflow"
@@ -5473,6 +6438,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Claim Case",
         "tags": [
           "claim workflow"
@@ -5576,6 +6546,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Claim Checklist",
         "tags": [
           "claim workflow"
@@ -5669,6 +6644,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Restore Claim Case",
         "tags": [
           "claim workflow"
@@ -5762,6 +6742,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Transition Claim Case",
         "tags": [
           "claim workflow"
@@ -5843,6 +6828,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Search Clauses",
         "tags": [
           "clause search"
@@ -5936,6 +6926,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Publish Coverage Rule",
         "tags": [
           "clause search"
@@ -6019,6 +7014,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Coverage Rule Versions",
         "tags": [
           "clause search"
@@ -6144,6 +7144,11 @@
             "description": "Service Unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Evidence",
         "tags": [
           "evidence"
@@ -6219,6 +7224,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Family Members",
         "tags": [
           "policy ledger"
@@ -6298,6 +7308,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Create Family Member",
         "tags": [
           "policy ledger"
@@ -6373,6 +7388,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Deleted Family Members",
         "tags": [
           "policy ledger"
@@ -6459,6 +7479,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Delete Family Member",
         "tags": [
           "policy ledger"
@@ -6540,6 +7565,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Family Member",
         "tags": [
           "policy ledger"
@@ -6631,6 +7661,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Family Member",
         "tags": [
           "policy ledger"
@@ -6724,6 +7759,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Restore Family Member",
         "tags": [
           "policy ledger"
@@ -6807,6 +7847,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Structuring Job",
         "tags": [
           "medical event structuring"
@@ -6888,6 +7933,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Create Medical Event",
         "tags": [
           "coverage decisions"
@@ -6963,6 +8013,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Deleted Medical Events",
         "tags": [
           "coverage decisions"
@@ -7049,6 +8104,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Delete Medical Event",
         "tags": [
           "coverage decisions"
@@ -7130,6 +8190,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Medical Event",
         "tags": [
           "coverage decisions"
@@ -7221,6 +8286,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Medical Event",
         "tags": [
           "coverage decisions"
@@ -7304,6 +8374,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Analyze Medical Event",
         "tags": [
           "coverage decisions"
@@ -7387,6 +8462,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Benefit Calculations",
         "tags": [
           "coverage decisions"
@@ -7480,6 +8560,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Create Claim Case",
         "tags": [
           "claim workflow"
@@ -7563,6 +8648,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Receipt Lines",
         "tags": [
           "coverage decisions"
@@ -7654,6 +8744,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Create Receipt Line",
         "tags": [
           "coverage decisions"
@@ -7750,6 +8845,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Delete Receipt Line",
         "tags": [
           "coverage decisions"
@@ -7851,6 +8951,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Receipt Line",
         "tags": [
           "coverage decisions"
@@ -7944,6 +9049,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Restore Medical Event",
         "tags": [
           "coverage decisions"
@@ -8038,6 +9148,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Decision Result",
         "tags": [
           "coverage decisions"
@@ -8131,6 +9246,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Structure Medical Event",
         "tags": [
           "coverage decisions"
@@ -8206,6 +9326,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Policies",
         "tags": [
           "policy ledger"
@@ -8285,6 +9410,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Create Policy",
         "tags": [
           "policy ledger"
@@ -8360,6 +9490,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Deleted Policies",
         "tags": [
           "policy ledger"
@@ -8446,6 +9581,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Delete Policy",
         "tags": [
           "policy ledger"
@@ -8527,6 +9667,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Policy",
         "tags": [
           "policy ledger"
@@ -8618,6 +9763,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Update Policy",
         "tags": [
           "policy ledger"
@@ -8727,6 +9877,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Correct Candidate Field",
         "tags": [
           "policy candidate review"
@@ -8820,6 +9975,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Restore Policy",
         "tags": [
           "policy ledger"
@@ -8907,6 +10067,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Policy Riders",
         "tags": [
           "policy ledger"
@@ -8994,6 +10159,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Review Items",
         "tags": [
           "policy candidate review"
@@ -9057,6 +10227,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Review Item",
         "tags": [
           "policy candidate review"
@@ -9167,6 +10342,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Correct Review Item Field",
         "tags": [
           "policy candidate review"
@@ -9240,6 +10420,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Confirm Candidate",
         "tags": [
           "policy candidate review"
@@ -9350,6 +10535,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Correct Typed Review Item Field",
         "tags": [
           "policy candidate review"
@@ -9423,6 +10613,11 @@
             "description": "Invalid candidate correction"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Reject Candidate",
         "tags": [
           "policy candidate review"
@@ -9516,6 +10711,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Confirm Rider Clause Link",
         "tags": [
           "clause search"
@@ -9609,6 +10809,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Reject Rider Clause Link",
         "tags": [
           "clause search"
@@ -9696,6 +10901,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Rider Clause Links",
         "tags": [
           "clause search"
@@ -9771,6 +10981,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "List Terms Editions",
         "tags": [
           "clause search"
@@ -9854,6 +11069,11 @@
             "description": "Local database unavailable"
           }
         },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
         "summary": "Get Clause Hierarchy",
         "tags": [
           "clause search"

@@ -1,6 +1,8 @@
 import type { Page, Route } from "@playwright/test";
 
 import type {
+  AuthSessionResponse,
+  AuthUserResponse,
   BenefitCalculationsResponse,
   CoverageDecisionResponse,
   EvidenceDetailResponse,
@@ -21,6 +23,9 @@ const DOCUMENT_VERSION_ID = "00000000-0000-4000-8000-000000000601";
 const RIDER_MATCH_ID = "00000000-0000-4000-8000-000000000701";
 const RIDER_UNKNOWN_ID = "00000000-0000-4000-8000-000000000702";
 const RECEIPT_LINE_ID = "00000000-0000-4000-8000-000000001101";
+const AUTH_CSRF_TOKEN = "synthetic-csrf-a";
+const AUTH_CURRENT_SESSION_ID = "synthetic-session-current";
+const AUTH_OTHER_SESSION_ID = "synthetic-session-other";
 
 type JsonObject = Record<string, unknown>;
 
@@ -35,6 +40,18 @@ export interface SyntheticEventApiState {
   receiptLineRequests: number;
   structureRequests: number;
   updateRequests: number;
+}
+
+export interface SyntheticAuthSessionOptions {
+  authenticated?: boolean;
+  needsReauthentication?: boolean;
+}
+
+export interface SyntheticAuthSessionState {
+  loginRequests: number;
+  reauthenticationRequests: number;
+  requestOrder: string[];
+  revokedSessionIds: string[];
 }
 
 declare global {
@@ -55,6 +72,32 @@ const FORBIDDEN_REQUEST_FIELDS = [
   "ocr_text",
   "password",
   "source_path",
+];
+
+const SYNTHETIC_AUTH_USER: AuthUserResponse = {
+  display_name: "Admin A",
+  needs_reauthentication: false,
+  user_id: "synthetic-user-a",
+  username: "admin-a",
+};
+
+const SYNTHETIC_AUTH_SESSIONS: AuthSessionResponse[] = [
+  {
+    created_at: "2026-08-25T00:00:00Z",
+    current: true,
+    device_label: "FamilyCare Web",
+    expires_at: "2026-09-01T00:00:00Z",
+    last_seen_at: "2026-08-26T00:00:00Z",
+    session_id: AUTH_CURRENT_SESSION_ID,
+  },
+  {
+    created_at: "2026-08-24T00:00:00Z",
+    current: false,
+    device_label: "Synthetic Other Device",
+    expires_at: "2026-08-31T00:00:00Z",
+    last_seen_at: "2026-08-25T00:00:00Z",
+    session_id: AUTH_OTHER_SESSION_ID,
+  },
 ];
 
 const SYNTHETIC_EVIDENCE = {
@@ -189,10 +232,18 @@ async function fulfillJson(
   route: Route,
   payload: unknown,
   status = 200,
+  extraHeaders: Record<string, string> = {},
 ): Promise<void> {
   await route.fulfill({
     body: JSON.stringify(payload),
     contentType: "application/json",
+    headers: { "Cache-Control": "no-store", ...extraHeaders },
+    status,
+  });
+}
+
+async function fulfillEmpty(route: Route, status = 204): Promise<void> {
+  await route.fulfill({
     headers: { "Cache-Control": "no-store" },
     status,
   });
@@ -260,6 +311,174 @@ export async function installStorageWriteSpy(page: Page): Promise<void> {
       };
     }
   });
+}
+
+export async function mockAuthenticatedSession(
+  page: Page,
+  options: SyntheticAuthSessionOptions = {},
+): Promise<SyntheticAuthSessionState> {
+  const state: SyntheticAuthSessionState = {
+    loginRequests: 0,
+    reauthenticationRequests: 0,
+    requestOrder: [],
+    revokedSessionIds: [],
+  };
+  let authenticated = options.authenticated ?? true;
+  let needsReauthentication = options.needsReauthentication ?? false;
+  let reauthenticated = false;
+
+  await page.route("**/api/v1/auth/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const path = url.pathname;
+    const method = request.method();
+
+    if (method === "POST" && path === "/api/v1/auth/login") {
+      state.loginRequests += 1;
+      authenticated = true;
+      reauthenticated = false;
+      await fulfillJson(
+        route,
+        {
+          csrf_token: AUTH_CSRF_TOKEN,
+          expires_at: "2026-09-01T00:00:00Z",
+          user: { ...SYNTHETIC_AUTH_USER },
+        },
+        200,
+        {
+          "Set-Cookie":
+            "familycare_session=synthetic-session-cookie; Max-Age=3600; Path=/; Secure; HttpOnly; SameSite=Strict",
+        },
+      );
+      return;
+    }
+
+    if (method === "GET" && path === "/api/v1/auth/me") {
+      state.requestOrder.push("me");
+      if (!authenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "AUTHENTICATION_REQUIRED",
+            message: "synthetic auth required",
+          },
+          401,
+        );
+        return;
+      }
+      await fulfillJson(route, {
+        ...SYNTHETIC_AUTH_USER,
+        needs_reauthentication: needsReauthentication,
+      });
+      return;
+    }
+
+    if (method === "GET" && path === "/api/v1/auth/csrf") {
+      state.requestOrder.push("csrf");
+      if (!authenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "AUTHENTICATION_REQUIRED",
+            message: "synthetic auth required",
+          },
+          401,
+        );
+        return;
+      }
+      await fulfillJson(route, { csrf_token: AUTH_CSRF_TOKEN });
+      return;
+    }
+
+    if (method === "GET" && path === "/api/v1/auth/sessions") {
+      state.requestOrder.push("sessions");
+      if (!authenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "AUTHENTICATION_REQUIRED",
+            message: "synthetic auth required",
+          },
+          401,
+        );
+        return;
+      }
+      await fulfillJson(
+        route,
+        SYNTHETIC_AUTH_SESSIONS.filter(
+          (session) => !state.revokedSessionIds.includes(session.session_id),
+        ),
+      );
+      return;
+    }
+
+    if (method === "POST" && path === "/api/v1/auth/reauthenticate") {
+      state.requestOrder.push("reauthenticate");
+      if (!authenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "AUTHENTICATION_REQUIRED",
+            message: "synthetic auth required",
+          },
+          401,
+        );
+        return;
+      }
+      reauthenticated = true;
+      needsReauthentication = false;
+      state.reauthenticationRequests += 1;
+      await fulfillEmpty(route);
+      return;
+    }
+
+    const revokeMatch = path.match(
+      /^\/api\/v1\/auth\/sessions\/([^/]+)\/revoke$/,
+    );
+    if (method === "POST" && revokeMatch) {
+      state.requestOrder.push("revoke");
+      if (!authenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "AUTHENTICATION_REQUIRED",
+            message: "synthetic auth required",
+          },
+          401,
+        );
+        return;
+      }
+      if (!reauthenticated) {
+        await fulfillJson(
+          route,
+          {
+            error_code: "REAUTHENTICATION_REQUIRED",
+            message: "synthetic reauthentication required",
+          },
+          403,
+        );
+        return;
+      }
+      state.revokedSessionIds.push(decodeURIComponent(revokeMatch[1]));
+      await fulfillEmpty(route);
+      return;
+    }
+
+    if (method === "POST" && path === "/api/v1/auth/logout") {
+      authenticated = false;
+      reauthenticated = false;
+      await fulfillEmpty(route);
+      return;
+    }
+
+    await fulfillJson(
+      route,
+      { error_code: "NOT_FOUND", message: "Synthetic auth route not found." },
+      404,
+    );
+  });
+
+  return state;
 }
 
 export async function mockSyntheticEventApi(

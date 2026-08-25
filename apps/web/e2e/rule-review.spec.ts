@@ -5,6 +5,8 @@ import type {
   PolicyReviewItem,
 } from "../src/api/generated";
 
+import { mockAuthenticatedSession } from "./support/mockApi";
+
 const RULE_ID = "00000000-0000-4000-8000-000000000801";
 const RULE_VERSION_ID = "00000000-0000-4000-8000-000000000802";
 const REVIEW_ID = "00000000-0000-4000-8000-000000000803";
@@ -129,6 +131,7 @@ test("publishes only a stored verified rule with Evidence at 320px", async ({
       status: 404,
     });
   });
+  await mockAuthenticatedSession(page);
 
   await page.goto("/app/clauses/review", { waitUntil: "domcontentloaded" });
   await expect(
@@ -140,11 +143,11 @@ test("publishes only a stored verified rule with Evidence at 320px", async ({
   await expect(dialog).toContainText("MedicalEvent.event_date");
   await expect(dialog).not.toContainText("FULL_SYNTHETIC_RULE_BODY");
   await dialog.getByRole("button", { name: "근거 보기 Evidence" }).click();
-  await expect(page.getByRole("dialog", { name: "근거 페이지" })).toContainText(
-    "2페이지",
-  );
+  await expect(
+    page.getByRole("dialog", { name: "증권과 약관 근거" }),
+  ).toContainText("2페이지");
   await page
-    .getByRole("dialog", { name: "근거 페이지" })
+    .getByRole("dialog", { name: "증권과 약관 근거" })
     .getByRole("button", { name: "닫기" })
     .click();
   await dialog.getByRole("button", { name: "규칙 게시" }).click();

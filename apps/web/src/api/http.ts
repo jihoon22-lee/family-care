@@ -1,9 +1,20 @@
 import { ApiError, safeErrorCode } from "./errors";
+import {
+  authHeaders,
+  clearAuthState,
+  loadCsrfToken,
+} from "../features/identity/authApi";
 
 export type ApiRequestInit = RequestInit & { csrfToken?: string };
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function requestHeaders(init: ApiRequestInit): Record<string, string> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  const method = (init.method ?? "GET").toUpperCase();
+  if (!SAFE_METHODS.has(method)) {
+    Object.assign(headers, authHeaders());
+  }
   if (init.headers) {
     new Headers(init.headers).forEach((value, key) => {
       headers[key] = value;
@@ -30,10 +41,12 @@ async function responseError(response: Response): Promise<ApiError> {
       errorCode = undefined;
     }
   }
-  return new ApiError(
+  const error = new ApiError(
     safeErrorCode(errorCode, response.status),
     response.status,
   );
+  if (response.status === 401) clearAuthState();
+  return error;
 }
 
 export async function apiRequest<T>(
@@ -59,7 +72,19 @@ export async function apiRequest<T>(
     void error;
     throw new ApiError("NETWORK_ERROR", 0);
   }
-  if (!response.ok) throw await responseError(response);
+  if (!response.ok) {
+    const error = await responseError(response);
+    const method = (init.method ?? "GET").toUpperCase();
+    if (
+      error.code === "CSRF_REQUIRED" &&
+      !SAFE_METHODS.has(method) &&
+      init.csrfToken === undefined
+    ) {
+      const refreshedToken = await loadCsrfToken();
+      return apiRequest<T>(path, { ...init, csrfToken: refreshedToken });
+    }
+    throw error;
+  }
   if (response.status === 204) return undefined as T;
   if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new ApiError("INVALID_RESPONSE", 502);

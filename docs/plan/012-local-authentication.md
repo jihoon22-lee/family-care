@@ -136,7 +136,7 @@ The session cookie is host-only, `Secure`, `HttpOnly`, `SameSite=Strict`, and na
 - Database tables: `app_users` with UUID, household FK, normalized username, display name, Argon2id hash, active flag, timestamps, and deactivated timestamp; `app_sessions` is created in this migration with its full shape for later tasks.
 - The two-admin limit is enforced by locking the single HouseholdSpace row, counting active users, and rejecting a third active account with `ADMIN_LIMIT_REACHED`.
 
-- [ ] **Step 1: Write the failing password and provisioning tests**
+- [x] **Step 1: Write the failing password and provisioning tests**
 
 ~~~python
 def test_password_hash_is_argon2id_and_never_round_trips() -> None:
@@ -161,7 +161,7 @@ def test_third_active_admin_is_rejected_without_persisting_password(
     assert all("synthetic-password" not in row.password_hash for row in provisioner.rows())
 ~~~
 
-- [ ] **Step 2: Run the RED tests and record the expected missing module failure**
+- [x] **Step 2: Run the RED tests and record the expected missing module failure**
 
 Run:
 
@@ -173,7 +173,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because `familycare_api.identity` and the `familycare-admin` entrypoint do not yet exist.
 
-- [ ] **Step 3: Add the migration, Argon2id service, and safe CLI**
+- [x] **Step 3: Add the migration, Argon2id service, and safe CLI**
 
 Use explicit Argon2id parameters and never accept a password option:
 
@@ -199,7 +199,7 @@ def create_admin_from_tty(database_url: str, username: str) -> None:
 
 `set-password` uses the same double `getpass` flow, accepts only the username as a non-secret argument, replaces the hash transactionally, and revokes every existing session for that user. `disable` also revokes all sessions and never deletes HouseholdSpace business data. The migration must lock the HouseholdSpace row during the active-account count and must not create a public bootstrap endpoint. Add `[project.scripts] familycare-admin = "familycare_api.identity.cli:main"` and pin `argon2-cffi` in the API package.
 
-- [ ] **Step 4: Run the GREEN unit tests and migration checks**
+- [x] **Step 4: Run the GREEN unit tests and migration checks**
 
 Run:
 
@@ -213,7 +213,7 @@ TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 
 Expected: password/provisioning tests pass, the new revision is head, and no raw password appears in captured CLI output or fake rows.
 
-- [ ] **Step 5: Commit the schema and provisioning slice**
+- [x] **Step 5: Commit the schema and provisioning slice**
 
 ~~~bash
 git add apps/api/migrations/versions/0011_local_authentication.py \
@@ -249,7 +249,7 @@ git commit -m "feat(auth): add local admin provisioning"
 - Login success rotates to a new opaque session. Logout and revocation invalidate the selected session; password change invalidates every session for that user. Password change and revoking another device require `reauthenticated_at` within the configured recent window.
 - Every Phase 2–6 business router is registered with `Depends(require_household_context)` and reads the resulting server scope. Health routes and the default-disabled synthetic Phase 1 router remain outside this authenticated business-router group.
 
-- [ ] **Step 1: Write expiry, fixation, CSRF, and object-scope tests**
+- [x] **Step 1: Write expiry, fixation, CSRF, and object-scope tests**
 
 ~~~python
 def test_session_expires_at_inactivity_boundary(session_service, clock) -> None:
@@ -285,7 +285,7 @@ def test_every_business_route_requires_a_server_session(app) -> None:
     )
 ~~~
 
-- [ ] **Step 2: Run the RED route tests**
+- [x] **Step 2: Run the RED route tests**
 
 Run:
 
@@ -298,7 +298,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the session dependency, CSRF check, and auth router are absent.
 
-- [ ] **Step 3: Implement hash-only sessions and protected routes**
+- [x] **Step 3: Implement hash-only sessions and protected routes**
 
 ~~~python
 def _token_hash(raw_token: str) -> str:
@@ -320,7 +320,7 @@ Set the cookie with `secure=True`, `httponly=True`, `samesite="strict"`, `path="
 
 Register policy, review, clause, rule, decision, receipt, result, and claim routers through one explicit business-router list with the auth dependency. Implement `POST /auth/password` with current-session reauthentication, Argon2id policy validation, hash replacement in one transaction, and revocation of all of the user's sessions. Do not add email reset, recovery questions, or a public bootstrap route.
 
-- [ ] **Step 4: Run the GREEN HTTP and static checks**
+- [x] **Step 4: Run the GREEN HTTP and static checks**
 
 Run:
 
@@ -335,7 +335,7 @@ TMPDIR=/tmp uv run python scripts/check_contracts.py
 
 Expected: login, logout, expiry, CSRF, reauthentication, session revoke, no-store, and server-derived scope tests pass; OpenAPI is regenerated from the authenticated app contract.
 
-- [ ] **Step 5: Commit the session and API slice**
+- [x] **Step 5: Commit the session and API slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/identity \
@@ -371,7 +371,7 @@ git commit -m "feat(auth): add secure local sessions"
 - Produces: `login(username, password)`, `logout()`, `loadCurrentUser()`, `loadCsrfToken()`, `reauthenticate(password)`, `changePassword(newPassword)`, `listSessions()`, and `revokeSession(id)`.
 - The client uses `credentials: "include"`, `Cache-Control: no-store`, and a module-scoped CSRF token. It never writes session, bearer, password, medical, policy, or Evidence data to localStorage, sessionStorage, IndexedDB, or a service-worker cache.
 
-- [ ] **Step 1: Write browser-storage and login-flow tests**
+- [x] **Step 1: Write browser-storage and login-flow tests**
 
 ~~~tsx
 test("login uses cookies and does not persist credentials", async () => {
@@ -390,7 +390,7 @@ test("login uses cookies and does not persist credentials", async () => {
 })
 ~~~
 
-- [ ] **Step 2: Run the RED Web tests**
+- [x] **Step 2: Run the RED Web tests**
 
 Run:
 
@@ -402,7 +402,7 @@ corepack pnpm@11.22.0 --filter @familycare/web test -- \
 
 Expected: FAIL because the identity feature files and authenticated shell do not exist.
 
-- [ ] **Step 3: Implement the no-storage auth client and accessible screens**
+- [x] **Step 3: Implement the no-storage auth client and accessible screens**
 
 ~~~ts
 let csrfToken: string | null = null;
@@ -428,7 +428,7 @@ export function clearAuthState(): void {
 
 Keep password values only in controlled component memory and clear them after success, failure, close, unmount, logout, or session expiry. Revoking another device and changing a password first open the keyboard-safe reauthentication dialog. A successful password change revokes all sessions, clears every in-memory business/auth cache, and returns to login. Use labels, focus restoration, and an explicit unauthenticated loading state.
 
-- [ ] **Step 4: Run Web GREEN checks and storage assertions**
+- [x] **Step 4: Run Web GREEN checks and storage assertions**
 
 Run:
 
@@ -441,7 +441,7 @@ corepack pnpm@11.22.0 web:check
 
 Expected: identity tests and the complete Web check pass, with no persistent credential storage.
 
-- [ ] **Step 5: Commit the Web slice**
+- [x] **Step 5: Commit the Web slice**
 
 ~~~bash
 git add apps/web/src/App.tsx apps/web/src/styles.css \
@@ -464,7 +464,7 @@ git commit -m "feat(web): add local authentication screens"
 - Consumes: all identity tables, routes, Web screens, and generated OpenAPI.
 - Produces: repeatable migration upgrade/downgrade evidence and documentation for `familycare-admin`, login, session expiry, and the fact that Tailscale does not replace app login.
 
-- [ ] **Step 1: Write PostgreSQL and privacy regression tests**
+- [x] **Step 1: Write PostgreSQL and privacy regression tests**
 
 ~~~python
 @pytest.mark.integration
@@ -478,7 +478,7 @@ def test_raw_password_and_session_token_are_absent_from_rows(db) -> None:
     assert all(row["token_hash"] != issued.raw_token for row in rows.sessions)
 ~~~
 
-- [ ] **Step 2: Run the RED integration test against a clean PostgreSQL schema**
+- [x] **Step 2: Run the RED integration test against a clean PostgreSQL schema**
 
 Run:
 
@@ -489,7 +489,7 @@ TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_auth_database.py -q
 
 Expected: FAIL until the migration, row mapping, and session transaction boundaries are present.
 
-- [ ] **Step 3: Add guide/changelog evidence without sensitive examples**
+- [x] **Step 3: Add guide/changelog evidence without sensitive examples**
 
 Document only synthetic CLI examples and external path shapes, for example:
 
@@ -499,7 +499,7 @@ docker compose run --rm api familycare-admin create --username admin-a
 
 State that the password is prompted through TTY/stdin, that signup/reset/invite are absent, and that actual private-device acceptance is reported separately.
 
-- [ ] **Step 4: Run the complete focused auth gate**
+- [x] **Step 4: Run the complete focused auth gate**
 
 Run serially:
 
@@ -519,7 +519,7 @@ git diff --check
 
 Expected: all checks pass; no password, cookie, session token, actual path, or private document value appears in tracked files or test output.
 
-- [ ] **Step 5: Commit the integration/documentation slice and invoke the Root PR gate**
+- [x] **Step 5: Commit the integration/documentation slice and invoke the Root PR gate**
 
 ~~~bash
 git add apps/api/tests/test_auth_database.py \

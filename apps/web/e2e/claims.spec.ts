@@ -6,7 +6,10 @@ import type {
   CoverageDecisionResponse,
   MedicalEventResponse,
 } from "../src/api/generated";
-import { installStorageWriteSpy } from "./support/mockApi";
+import {
+  installStorageWriteSpy,
+  mockAuthenticatedSession,
+} from "./support/mockApi";
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000201";
 const RIDER_ID = "00000000-0000-4000-8000-000000000701";
@@ -228,6 +231,7 @@ test("starts a server-created claim and records checklist/status without browser
       json: { error_code: "CLAIM_NOT_FOUND", message: "Synthetic missing" },
     });
   });
+  await mockAuthenticatedSession(page);
 
   await page.goto(`/app/events/${EVENT_ID}/result/2`);
   await page

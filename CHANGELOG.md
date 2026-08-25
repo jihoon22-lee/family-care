@@ -10,6 +10,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - AI-assisted policy, clause, and rule structuring with an independent verifier and deterministic evidence/schema validation.
 - Hybrid pre-visit and post-treatment input, fixed-benefit and partial indemnity calculation, and action-first mobile results.
 - Local two-admin authentication, encrypted family-scoped PDF batches, managed encrypted archive, selective Korean/English OCR, and claim metadata/checklists in the v0.1 design.
+- Local authentication implementation with exactly two equal administrators, safe `familycare-admin` TTY/stdin provisioning, hash-only server sessions, and the authenticated Web login/session boundary.
 
 - 프로젝트 기반 설계와 전체 단계별 로드맵
 - 공개 저장소 개인정보 경계와 개발 지침
@@ -60,6 +61,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 - The roadmap now records Phase 1 as complete and defines the independent PR sequence and acceptance gate for `v0.1.0`.
 - OpenAI document structuring moves into v0.1 while Google Drive automation, Gemini, insurer submission, Cloud Run, and host disk/swap changes remain deferred.
+- Business routes now derive `HouseholdScope` from the authenticated local session; client-supplied household identifiers remain non-authoritative, and Tailscale private access does not replace app login.
+- Local sessions use a host-only `Secure`, `HttpOnly`, `SameSite=Strict` cookie and expire after 7 days of inactivity or 30 days absolute, whichever comes first; session listing, revocation, and recent reauthentication are available.
 
 - 로컬 검증 명령은 WSL 임시파일 경로와 고정 pnpm 버전을 재현 가능하게 사용합니다.
 - Foundation completion is recorded at PR #1 merge commit `0f632989df891ae944c012bfcce6c838009867a9`; PR and post-merge CI had seven successful jobs. Tag/GHCR, Cloud Run, and real/private-data verification remain outside that evidence.
@@ -72,7 +75,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 synthetic PDF extraction was merged in PR #10 at `eac98171fd72604c7ff0c641f7c80f02c99d145a`; all seven PR and post-merge `main` checks passed, along with the local post-merge extraction checks.
 - Phase 1 AnalysisJob queue and Worker runner were merged in PR #11 at `cc651436cab884109dc6fdc7f793c8b32e9c86d4`; PR and post-merge `main` CI each passed 7/7, with 23 local queue tests and 59 local extraction tests passing after merge.
 - Phase 1 local synthetic document-analysis API was merged in PR #12 at `1c77f019c9d2b150053e431c31171b97ff3d90c3`; PR and post-merge `main` CI each passed 7/7.
-- Phase 2 candidate review was merged into `main` in PR #16; Phase 4 Clause search remains synthetic-only and its default household scope resolver stays fail-closed until authentication is connected.
+- Phase 2 candidate review was merged into `main` in PR #16; Phase 4 Clause search remains synthetic-only and its default household scope resolver stays fail-closed without an authenticated local session.
 - CoverageRule version reads expose `expected_version`; publication accepts only the expected version and a stored version ID, while deterministic rule evaluation remains deferred to the next phase.
 - Claim workflow records user-entered receipt/payment metadata and expected-version manual transitions; it does not send submissions to insurers or store medical/claim files. Historical snapshots remain immutable when later results are reanalyzed.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
@@ -100,7 +103,10 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Queue payloads are revalidated against their server-computed config hash before processing, and lease ownership is required for heartbeat, failure, and success transitions.
 - Malformed parser output is rejected before persistence; extraction rows and job success commit atomically, while temporary-cleanup failure is permanently failed and logged only with a job UUID.
 - Synthetic analysis routes require the exact development/feature-flag opt-in, reject extra credential/path/body fields, and return value-free validation errors without opening documents in the API process.
-- Policy routes reject client-selected household scope, terms-only or unreviewed Evidence, stale writes, and cross-document Evidence lineage; the default scope resolver fails closed until Phase 7 authentication.
+- Local administrator passwords are prompted through TTY/stdin only; they are not accepted in argv or environment variables, and identity rows persist only Argon2id password hashes plus hashed session/CSRF proofs.
+- Policy routes reject client-selected household scope, terms-only or unreviewed Evidence, stale writes, and cross-document Evidence lineage; the scope resolver fails closed without an authenticated local session.
+- Authenticated state-changing requests require same-origin and CSRF validation, while auth and business responses use no-store boundaries. Signup, email reset, and invite flows are intentionally absent.
+- Windows browser, mobile PWA, real Tailscale device/network, and private-document acceptance remain unverified; synthetic tests do not substitute for those acceptance checks.
 - Candidate review keeps provider prose and private paths out of API/UI errors, traps modal focus, never persists server state in Web Storage, and downgrades unpublishable AI candidates to review instead of silently treating them as enrolled coverage.
 - Clause search uses a no-store JSON POST, server-derived household/date/edition/insurer/product scope, bounded 1-based physical-page Evidence, and no raw query/full-text logging; v0.1 has no live rebuild endpoint, and app/DB or stale-index mismatches fail explicitly as `SEARCH_INDEX_VERSION_MISMATCH` without silent fallback.
 - Rider-Clause and CoverageRule review routes remain server-scoped and no-store. The Web boundary shows bounded Evidence and safe reason-code copy, never raw DSL, provider prose, private paths, or document text; unsupported rule candidates remain informational and cannot be published as executable.
