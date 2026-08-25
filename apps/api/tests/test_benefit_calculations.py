@@ -241,6 +241,12 @@ def test_receipt_line_validation_accepts_zero_without_treating_it_as_missing() -
     validate_receipt_line(_line(amount="0"))
 
 
+def test_receipt_line_rejects_fractional_subunits_the_database_cannot_store() -> None:
+    assert _error_code(validate_receipt_line, _line(amount="1.001")) == (
+        "RECEIPT_AMOUNT_SCALE_EXCEEDED"
+    )
+
+
 def test_round_money_applies_only_the_selected_rounding_boundary() -> None:
     value = Money(Decimal("10.125"), "KRW")
 
@@ -385,6 +391,27 @@ def test_fixed_benefit_rejects_overflow_instead_of_returning_zero() -> None:
     assert result.hold_reason_codes == ("AMOUNT_PRECISION_EXCEEDED",)
 
 
+def test_fixed_benefit_requires_explicit_rounding_before_persistence() -> None:
+    rule = _calculation_rule(
+        {
+            "op": "multiply",
+            "args": [
+                {"field": "Rider.insured_amount"},
+                {"value": Decimal("0.333333")},
+            ],
+        }
+    )
+
+    result = calculate_fixed_benefit(
+        _candidate(), rule, _fixed_context(insured_amount=Decimal("1"))
+    )
+
+    assert result.status == "unknown"
+    assert result.confirmed is None
+    assert result.steps == ()
+    assert result.hold_reason_codes == ("ROUNDING_RULE_REQUIRED",)
+
+
 def test_receipt_breakdown_separates_confirmed_additional_and_excluded() -> None:
     lines = (
         _line(amount="50000", coverage_category="covered", confirmation_level="user"),
@@ -497,3 +524,13 @@ def test_multiple_indemnity_contracts_are_never_summed() -> None:
     assert result.allocation == "UNKNOWN"
     assert result.candidate_ids == (first.id, second.id)
     assert result.combined_amount is None
+
+
+def test_no_match_indemnity_does_not_create_a_multiple_contract_hold() -> None:
+    matched = _candidate(rider_type="indemnity", value=80)
+    no_match = _candidate(rider_type="indemnity", result="NO_MATCH", value=90)
+
+    result = detect_multiple_indemnity_contracts((matched, no_match))
+
+    assert result.allocation == "SINGLE"
+    assert result.candidate_ids == (matched.id,)

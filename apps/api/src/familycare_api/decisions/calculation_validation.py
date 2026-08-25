@@ -55,6 +55,9 @@ def validate_receipt_line(line: ReceiptLine) -> None:
         raise CalculationValidationError("INVALID_COVERAGE_CATEGORY")
     if line.confirmation_level not in _CONFIRMATION_LEVELS:
         raise CalculationValidationError("INVALID_CONFIRMATION_LEVEL")
+    exponent = cast(int, line.amount.amount.as_tuple().exponent)
+    if exponent < -2:
+        raise CalculationValidationError("RECEIPT_AMOUNT_SCALE_EXCEEDED")
 
 
 def round_money(value: Money, rounding_rule: str, *, scale: int = 0) -> Money:

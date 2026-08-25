@@ -194,6 +194,9 @@ def calculate_fixed_benefit(
         currency = _confirmed_currency(facts)
         state = _CalculationState(currency=currency, facts=facts, reason_prefix="FIXED")
         amount = state.evaluate(calculation)
+        effective_exponent = cast(int, amount.normalize().as_tuple().exponent)
+        if effective_exponent < -2 and calculation.operator != "round":
+            raise CalculationValidationError("ROUNDING_RULE_REQUIRED")
         confirmed = Money(amount, currency)
     except CalculationValidationError as error:
         reason = (
@@ -271,9 +274,12 @@ def calculate_indemnity(
 
     try:
         breakdown = split_confirmed_additional_excluded(lines)
-        currency = _confirmed_currency(facts)
-        if breakdown.confirmed.currency != currency:
-            raise CalculationValidationError("CURRENCY_MISMATCH")
+        currency = breakdown.confirmed.currency
+        rider_currency = facts.get("Rider.currency")
+        if rider_currency is not None and rider_currency.value is not None:
+            _require_confirmed_fact(rider_currency)
+            if _validate_currency(rider_currency.value) != currency:
+                raise CalculationValidationError("CURRENCY_MISMATCH")
         calculation = _compile_calculation(rule)
         terms = _parse_indemnity_formula(calculation)
         steps, final = _indemnity_steps(breakdown.confirmed, terms)
@@ -304,7 +310,11 @@ def detect_multiple_indemnity_contracts(
 ) -> MultipleIndemnityResult:
     """Identify independent indemnity candidates without adding their amounts."""
 
-    indemnity = tuple(item for item in candidates if item.rider_type == "indemnity")
+    indemnity = tuple(
+        item
+        for item in candidates
+        if item.rider_type == "indemnity" and item.aggregate_result != "NO_MATCH"
+    )
     candidate_ids = tuple(item.id for item in indemnity)
     if not indemnity:
         return MultipleIndemnityResult("NONE", ())
