@@ -207,7 +207,7 @@ Structuring returns an asynchronous job projection and must be polled through it
 - `EventStructurer.structure(request: EventStructuringRequest) -> EventStructuringResult` may return normalized facts, ambiguity/conflict states, and optional question codes only.
 - User patches create a new fact version, retain the prior AI candidate and conflict metadata, and always take precedence in deterministic analysis.
 
-- [ ] **Step 1: Write the failing migration, API, pipeline, and privacy tests**
+- [x] **Step 1: Write the failing migration, API, pipeline, and privacy tests**
 
 Test the exact revision chain, separate event queue, scope denial, stale expected version, fake-provider success, ambiguous and missing facts, invented fields, provider timeout, one invalid fact alongside valid facts, user override precedence, and absence of situation text/provider payload in logs and error responses.
 
@@ -221,7 +221,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the `0009` migration, event queue, routes, and Worker structurer do not exist.
 
-- [ ] **Step 2: Define strict structuring contracts**
+- [x] **Step 2: Define strict structuring contracts**
 
 Use closed enums for field IDs and source states, bounded strings/lists, `additionalProperties: false`, and no output fields named `result`, `tri_state`, `eligible`, `amount`, `payment`, or `decision`. The Worker sends only the selected event's bounded situation text and temporal context; it does not send user/account identifiers, cookies, policy documents, unrelated events, or local paths.
 
@@ -237,11 +237,11 @@ class EventStructurer(Protocol):
     def structure(self, request: EventStructuringRequest) -> EventStructuringResult: ...
 ```
 
-- [ ] **Step 3: Implement the migration, direct-psycopg queue, API, and Worker adapter**
+- [x] **Step 3: Implement the migration, direct-psycopg queue, API, and Worker adapter**
 
 Lease event jobs independently from document jobs, use the fake provider in CI, and use the Plan 005 OpenAI adapter only in the Worker runtime. Persist validated fact candidates and stable issue codes, never raw provider responses. A provider failure produces a visible failed/retryable structuring job while the event remains manually editable and analyzable.
 
-- [ ] **Step 4: Run GREEN, contract generation, and static checks**
+- [x] **Step 4: Run GREEN, contract generation, and static checks**
 
 ```bash
 TMPDIR=/tmp uv run pytest \
@@ -257,7 +257,7 @@ TMPDIR=/tmp uv run mypy apps/api/src/familycare_api/decisions workers/analyzer/s
 
 Expected: the same input and model response yield the same validated fact candidates; AI never produces a tri-state or amount; user override and privacy tests pass.
 
-- [ ] **Step 5: Commit the event structuring slice**
+- [x] **Step 5: Commit the event structuring slice**
 
 ```bash
 git add apps/api/migrations/versions/0009_event_structuring.py \
@@ -304,7 +304,7 @@ export function getEventResult(eventId: string, version: number): Promise<EventR
 export function getEvidence(evidenceId: string): Promise<EvidenceResponse>;
 ```
 
-- [ ] **Step 1: Write failing client contract tests**
+- [x] **Step 1: Write failing client contract tests**
 
 ```ts
 it("creates only an event payload and uses the shared no-store boundary", async () => {
@@ -338,19 +338,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because event/result clients, generated operations, and routes do not exist.
 
-- [ ] **Step 2: Consume generated OpenAPI types without duplicating wire models**
+- [x] **Step 2: Consume generated OpenAPI types without duplicating wire models**
 
 Regenerate `apps/web/src/api/generated.ts` after Plans 008/009 update OpenAPI. Implement endpoint wrappers by indexing generated `paths` operation request and response types. Keep `event-types.ts` limited to UI discriminated unions and format helpers; do not redefine request/response field names. Return decimal amount strings unchanged.
 
-- [ ] **Step 3: Implement event/result wrappers through the shared client**
+- [x] **Step 3: Implement event/result wrappers through the shared client**
 
 Use the existing `apiRequest` wrapper from the policy-candidate Web plan. Pass `expected_version` on every event patch. Treat only the structuring `202` response as a pending job and poll its generated status URL; treat deterministic analyze as a completed versioned result. Fetch results by explicit event version and preserve `stale`, policy snapshot, rule set, engine version, and generated time.
 
-- [ ] **Step 4: Add query hooks and invalidation keys**
+- [x] **Step 4: Add query hooks and invalidation keys**
 
 Use keys `medical-event:{eventId}`, `medical-event-result:{eventId}:{version}`, and `evidence:{evidenceId}`. Abort obsolete requests, invalidate the event/result after a successful patch or analysis completion, and never persist drafts or query values. A failed structuring query must not clear manual event fields.
 
-- [ ] **Step 5: Run the client slice and commit**
+- [x] **Step 5: Run the client slice and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -399,7 +399,7 @@ export function ReceiptLineEditor({
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing input-flow tests**
+- [x] **Step 1: Write failing input-flow tests**
 
 ```tsx
 it("submits a pre-visit situation without requiring optional questions", async () => {
@@ -437,23 +437,23 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the composer, fact editor, optional questions, and receipt editor do not exist.
 
-- [ ] **Step 2: Implement the minimum pre-visit form**
+- [x] **Step 2: Implement the minimum pre-visit form**
 
 Render FamilyMember context, event mode, optional event date, and a labelled natural-language situation field. The submit action creates the server event and immediately displays the current analysis path without requiring diagnosis, treatment, admission, or receipt values. Keep the original situation in memory until server save; do not put it in the URL.
 
-- [ ] **Step 3: Implement structuring status and editable facts**
+- [x] **Step 3: Implement structuring status and editable facts**
 
 After event creation, offer structuring as a separate action. Render confirmed-looking, ambiguous, missing, and conflict facts as editable controls with source/state labels. User-edited values take precedence in the patch request; conflicting AI values remain visible in audit state. If structuring fails, show a safe retry action and keep the deterministic manual-analysis action enabled.
 
-- [ ] **Step 4: Implement optional questions without a completion gate**
+- [x] **Step 4: Implement optional questions without a completion gate**
 
 Each question states which result group it could change. Questions are dismissible and do not block `현재 후보 보기`. Missing answers remain null and result in `UNKNOWN`/hold reasons rather than guessed values. Use `aria-live="polite"` for structuring progress and `role="alert"` for field-level validation.
 
-- [ ] **Step 5: Implement decimal receipt-line editing**
+- [x] **Step 5: Implement decimal receipt-line editing**
 
 Use `<input inputMode="decimal">` with a decimal-string parser that accepts `0` and finite non-negative values, preserves up to the API-supported scale, and rejects exponent notation, negative values, blank submitted amounts, and currency mismatch. Render category, benefit category, coverage status, and amount. Do not provide an image/PDF upload control. Add/remove/edit remains local until the expected-version patch is submitted.
 
-- [ ] **Step 6: Run the input suite and commit**
+- [x] **Step 6: Run the input suite and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -498,7 +498,7 @@ export function ActionFirstResult({
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing result tests**
+- [x] **Step 1: Write failing result tests**
 
 ```tsx
 it("renders the action-first group order and safe terminology", () => {
@@ -532,23 +532,23 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because result route, action groups, candidate cards, and partial/stale states do not exist.
 
-- [ ] **Step 2: Implement fixed DOM order and group semantics**
+- [x] **Step 2: Implement fixed DOM order and group semantics**
 
 Render in this exact order: event summary, `지금 할 일`, `청구 검토 대상`, `추가 확인 필요`, `조건 불일치`, conditional calculation details, and Evidence actions. Use stable `<h1>`/`<h2>` landmarks and list semantics. The order must not depend on which groups are empty; empty groups render an explicit safe state or are omitted only after the primary action remains visible.
 
-- [ ] **Step 3: Implement candidate cards and action copy**
+- [x] **Step 3: Implement candidate cards and action copy**
 
 Each card shows Rider label, technical result, safe Korean group label, hold/missing reasons, conditional estimate, required-document checklist preview, and Evidence buttons. `MATCH` means the confirmed conditions match the verified rule for review; it does not mean payment approval. `UNKNOWN` always names the missing/conflicting fact or stale Evidence.
 
-- [ ] **Step 4: Implement fixed and indemnity calculation displays**
+- [x] **Step 4: Implement fixed and indemnity calculation displays**
 
 Show confirmed amount, additional amount, excluded amount/reason, currency, deductible/rate/limit labels, and the linked Evidence IDs returned by the API. Do not calculate or add amounts in React. For multiple indemnity Riders, show shared claimable categories and allocation `UNKNOWN`; never sum independent contract estimates.
 
-- [ ] **Step 5: Implement partial and stale result handling**
+- [x] **Step 5: Implement partial and stale result handling**
 
 Render successful cards even when `partial_failures` contains another Rider. The partial banner shows only a count, stable reason code mapping, and retry action. The stale banner displays event version, policy snapshot, rule set, engine version, and generated time, then offers reanalysis. Stale or unavailable Evidence disables payment-like confirmation wording and keeps the result in review/hold state.
 
-- [ ] **Step 6: Run the result suite and commit**
+- [x] **Step 6: Run the result suite and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -588,7 +588,7 @@ export function EvidenceDrawer({
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing focus and Evidence tests**
+- [x] **Step 1: Write failing focus and Evidence tests**
 
 ```tsx
 it("opens exact page Evidence and returns focus to the trigger", async () => {
@@ -613,19 +613,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the Evidence drawer and focus helpers do not exist.
 
-- [ ] **Step 2: Implement dialog semantics and focus restoration**
+- [x] **Step 2: Implement dialog semantics and focus restoration**
 
 Use `role="dialog"`, `aria-modal="true"`, a labelled heading, visible close button, Escape close, and focus restoration. On route entry focus the page `h1`; on drawer entry focus the drawer heading or first control. Keep the drawer content bounded to document label, physical page, Clause label, bounded excerpt, and coordinates.
 
-- [ ] **Step 3: Implement unavailable/stale Evidence behavior**
+- [x] **Step 3: Implement unavailable/stale Evidence behavior**
 
 If the Evidence endpoint returns unavailable or hash mismatch, show a stable `EVIDENCE_UNAVAILABLE` message, mark the parent card stale, and disable any action that could imply a confirmed benefit. Do not display raw exception text, request URL, path, or response body.
 
-- [ ] **Step 4: Verify keyboard and small-screen CSS**
+- [x] **Step 4: Verify keyboard and small-screen CSS**
 
 Ensure cards use `min-width: 0`, wrapping controls, and no required horizontal scrolling. Preserve visible focus rings, semantic labels, reduced-motion behavior, and text/icon state pairing. Add component assertions for Tab order, Enter activation, Escape close, invalid amount focus, and `aria-describedby` links.
 
-- [ ] **Step 5: Run the accessibility slice and commit**
+- [x] **Step 5: Run the accessibility slice and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -658,7 +658,7 @@ Expected: Evidence, keyboard, and focus tests pass without adding a persistent c
 - `playwright.config.ts` runs one Chromium worker with `baseURL` default `http://127.0.0.1:4173`, `webServer.command = "pnpm build && pnpm preview --host 127.0.0.1"`, and `trace: "retain-on-failure"`.
 - `web:e2e` remains separate from the fast `web:check`; the root release gate runs the complete browser flow.
 
-- [ ] **Step 1: Write failing PWA and browser tests**
+- [x] **Step 1: Write failing PWA and browser tests**
 
 ```ts
 import { readFileSync } from "node:fs";
@@ -699,19 +699,19 @@ corepack pnpm@11.22.0 --filter @familycare/web exec playwright test --workers=1 
 
 Expected: FAIL because the cache-policy assertions, mock handlers, event flow, and browser configuration do not exist.
 
-- [ ] **Step 2: Preserve app-shell-only PWA configuration**
+- [x] **Step 2: Preserve app-shell-only PWA configuration**
 
 Keep `registerType: "prompt"`, hashed static asset glob patterns, no `runtimeCaching`, and the existing API/document navigation denylist. Do not add a Workbox handler for API, Evidence, PDF, event, result, or claim paths. If the built service worker is inspected, its precache list may contain only app-shell assets and hashed static files.
 
-- [ ] **Step 3: Implement synthetic mock handlers and browser flow**
+- [x] **Step 3: Implement synthetic mock handlers and browser flow**
 
 Use `page.route("**/api/v1/**")` and return deterministic responses. Cover: minimal pre-visit create, optional structuring failure with manual analysis still enabled, editable fact patch, post-treatment receipt line validation, partial Rider result, stale result banner, Evidence drawer page, and navigation to ClaimCase start. Assert no request contains file upload fields, local paths, passwords, or raw document text.
 
-- [ ] **Step 4: Assert storage, service-worker, focus, and 320px behavior**
+- [x] **Step 4: Assert storage, service-worker, focus, and 320px behavior**
 
 Spy on `localStorage`, `sessionStorage`, and IndexedDB writes; assert none occur. Wait for service-worker readiness in the built preview, inspect `caches.keys()` and every cache request, and assert no API/Evidence/document/result URL is cached. Assert route `h1` focus, dialog Escape/focus return, visible non-color status labels, and no horizontal overflow at 320 CSS px.
 
-- [ ] **Step 5: Run the target browser slice and commit**
+- [x] **Step 5: Run the target browser slice and commit**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec playwright install --with-deps chromium

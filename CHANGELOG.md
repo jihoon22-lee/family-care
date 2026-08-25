@@ -48,6 +48,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Transactional decision runs, RuleEvaluations, and Rider candidates with immutable Evidence metadata/content-hash snapshots for reproducible result reads.
 - Strict `coverage-decision.v1` contract and no-store MedicalEvent create/update/analyze/result HTTP boundary, including synthetic PostgreSQL integration and privacy tests.
 - PR7 benefit-calculation boundary: PostgreSQL `0008_benefit_calculations`, Decimal fixed/indemnity traces, manual household-scoped receipt lines, partial results, multiple-indemnity allocation `UNKNOWN`, strict `benefit-calculation.v1`, and no-store calculation HTTP routes.
+- Phase 5 Event/Result PWA with optional natural-language fact structuring, editable user overrides, manual post-treatment receipt lines, action-first result groups, stale/partial handling, and bounded Evidence disclosure.
+- A separate PostgreSQL event-structuring queue and strict provider-neutral contract that cannot return tri-state decisions or monetary results.
+- Immutable Rider label snapshots on ClaimCandidate results so historical result cards retain the analyzed coverage label.
 
 ### Changed
 
@@ -78,6 +81,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Worker 콘솔 진입점이 `--health` 인자를 읽고 종료 코드로 준비 상태를 보고합니다.
 - 생성된 PWA 산출물이 소스 포맷 검사에 다시 포함되지 않습니다.
 - 로컬 필수 Ruff 검사의 범위를 CI와 동일하게 맞춰 문서의 Python 코드블록 포맷 차이도 PR 전에 발견합니다.
+- A failed optional structuring job no longer remounts the event editor or discards manually entered analysis facts.
 
 ### Security
 
@@ -93,5 +97,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Candidate review keeps provider prose and private paths out of API/UI errors, traps modal focus, never persists server state in Web Storage, and downgrades unpublishable AI candidates to review instead of silently treating them as enrolled coverage.
 - Clause search uses a no-store JSON POST, server-derived household/date/edition/insurer/product scope, bounded 1-based physical-page Evidence, and no raw query/full-text logging; v0.1 has no live rebuild endpoint, and app/DB or stale-index mismatches fail explicitly as `SEARCH_INDEX_VERSION_MISMATCH` without silent fallback.
 - Rider-Clause and CoverageRule review routes remain server-scoped and no-store. The Web boundary shows bounded Evidence and safe reason-code copy, never raw DSL, provider prose, private paths, or document text; unsupported rule candidates remain informational and cannot be published as executable.
+- Event/result API responses are no-store, the PWA service worker caches only hashed app-shell assets, and browser tests verify that medical events, receipt lines, calculations, Evidence, and results never enter Web Storage, IndexedDB, or sensitive runtime caches.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

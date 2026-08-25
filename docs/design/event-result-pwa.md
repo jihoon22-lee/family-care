@@ -1,6 +1,6 @@
 # Event and result PWA design
 
-- 상태: v0.1 대화 설계 승인 완료, 문서 검토 대기
+- 상태: Phase 5 구현 완료, PR 전체 검증 대기
 - 적용 단계: Phase 5
 - 선행 조건: MedicalEvent and decision API contracts
 
