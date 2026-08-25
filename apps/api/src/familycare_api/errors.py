@@ -30,6 +30,16 @@ ClaimBoundaryErrorCode = Literal[
     "INVALID_CLAIM_TRANSITION",
     "CLAIM_INVALID",
 ]
+AuthBoundaryErrorCode = Literal[
+    "AUTHENTICATION_REQUIRED",
+    "AUTH_FAILED",
+    "AUTH_RATE_LIMITED",
+    "AUTH_STORE_UNAVAILABLE",
+    "CSRF_REQUIRED",
+    "ORIGIN_REQUIRED",
+    "REAUTHENTICATION_REQUIRED",
+    "SESSION_NOT_FOUND",
+]
 ApiErrorCode = (
     ErrorCode
     | PolicyErrorCode
@@ -37,6 +47,7 @@ ApiErrorCode = (
     | ClauseBoundaryErrorCode
     | DecisionBoundaryErrorCode
     | ClaimBoundaryErrorCode
+    | AuthBoundaryErrorCode
 )
 
 

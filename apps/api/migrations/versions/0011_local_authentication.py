@@ -116,7 +116,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "reauthenticated_at IS NULL OR "
-            "(reauthenticated_at >= created_at AND reauthenticated_at <= last_seen_at)",
+            "(reauthenticated_at >= created_at AND reauthenticated_at <= expires_at)",
             name="ck_app_sessions_reauthenticated_at",
         ),
         sa.CheckConstraint(

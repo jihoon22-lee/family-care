@@ -249,7 +249,7 @@ git commit -m "feat(auth): add local admin provisioning"
 - Login success rotates to a new opaque session. Logout and revocation invalidate the selected session; password change invalidates every session for that user. Password change and revoking another device require `reauthenticated_at` within the configured recent window.
 - Every Phase 2–6 business router is registered with `Depends(require_household_context)` and reads the resulting server scope. Health routes and the default-disabled synthetic Phase 1 router remain outside this authenticated business-router group.
 
-- [ ] **Step 1: Write expiry, fixation, CSRF, and object-scope tests**
+- [x] **Step 1: Write expiry, fixation, CSRF, and object-scope tests**
 
 ~~~python
 def test_session_expires_at_inactivity_boundary(session_service, clock) -> None:
@@ -285,7 +285,7 @@ def test_every_business_route_requires_a_server_session(app) -> None:
     )
 ~~~
 
-- [ ] **Step 2: Run the RED route tests**
+- [x] **Step 2: Run the RED route tests**
 
 Run:
 
@@ -298,7 +298,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the session dependency, CSRF check, and auth router are absent.
 
-- [ ] **Step 3: Implement hash-only sessions and protected routes**
+- [x] **Step 3: Implement hash-only sessions and protected routes**
 
 ~~~python
 def _token_hash(raw_token: str) -> str:
@@ -320,7 +320,7 @@ Set the cookie with `secure=True`, `httponly=True`, `samesite="strict"`, `path="
 
 Register policy, review, clause, rule, decision, receipt, result, and claim routers through one explicit business-router list with the auth dependency. Implement `POST /auth/password` with current-session reauthentication, Argon2id policy validation, hash replacement in one transaction, and revocation of all of the user's sessions. Do not add email reset, recovery questions, or a public bootstrap route.
 
-- [ ] **Step 4: Run the GREEN HTTP and static checks**
+- [x] **Step 4: Run the GREEN HTTP and static checks**
 
 Run:
 
@@ -335,7 +335,7 @@ TMPDIR=/tmp uv run python scripts/check_contracts.py
 
 Expected: login, logout, expiry, CSRF, reauthentication, session revoke, no-store, and server-derived scope tests pass; OpenAPI is regenerated from the authenticated app contract.
 
-- [ ] **Step 5: Commit the session and API slice**
+- [x] **Step 5: Commit the session and API slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/identity \

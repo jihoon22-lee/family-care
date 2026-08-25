@@ -396,12 +396,50 @@ def validate_openapi() -> list[str]:
         "/api/v1/claims/{claim_id}/transitions",
         "/api/v1/claims/{claim_id}/checklist/{item_id}",
         "/api/v1/claims/{claim_id}/restore",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/me",
+        "/api/v1/auth/csrf",
+        "/api/v1/auth/reauthenticate",
+        "/api/v1/auth/password",
+        "/api/v1/auth/sessions",
+        "/api/v1/auth/sessions/{session_id}/revoke",
     }
     if set(paths) != expected_paths:
         errors.append(
             "OpenAPI paths must contain health, policy, Clause, analysis, and decision routes"
         )
         return errors
+
+    security_schemes = document.get("components", {}).get("securitySchemes", {})
+    session_scheme = security_schemes.get("APIKeyCookie", {})
+    if session_scheme != {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "familycare_session",
+    }:
+        errors.append("authenticated routes must use the host-only session cookie scheme")
+    if paths["/api/v1/auth/login"]["post"].get("security"):
+        errors.append("login must not require an existing authenticated session")
+    for authenticated_path, method in (
+        ("/api/v1/auth/me", "get"),
+        ("/api/v1/auth/logout", "post"),
+        ("/api/v1/family-members", "get"),
+        ("/api/v1/claims", "get"),
+    ):
+        if paths[authenticated_path][method].get("security") != [{"APIKeyCookie": []}]:
+            errors.append(f"{method.upper()} {authenticated_path} must require session cookie auth")
+    unauthenticated_v1_paths = {
+        "/api/v1/auth/login",
+        "/api/v1/documents/analysis",
+        "/api/v1/analysis-jobs/{job_id}",
+    }
+    for path, path_item in paths.items():
+        if not path.startswith("/api/v1/") or path in unauthenticated_v1_paths:
+            continue
+        for method in {"get", "post", "put", "patch", "delete"} & set(path_item):
+            if path_item[method].get("security") != [{"APIKeyCookie": []}]:
+                errors.append(f"{method.upper()} {path} must require session cookie auth")
 
     clause_search = paths["/api/v1/clauses/search"].get("post", {})
     if clause_search.get("parameters"):

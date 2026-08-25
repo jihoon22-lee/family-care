@@ -3,6 +3,14 @@
 
 export const API_PATHS = [
   "/api/v1/analysis-jobs/{job_id}",
+  "/api/v1/auth/csrf",
+  "/api/v1/auth/login",
+  "/api/v1/auth/logout",
+  "/api/v1/auth/me",
+  "/api/v1/auth/password",
+  "/api/v1/auth/reauthenticate",
+  "/api/v1/auth/sessions",
+  "/api/v1/auth/sessions/{session_id}/revoke",
   "/api/v1/claims",
   "/api/v1/claims/trash",
   "/api/v1/claims/{claim_id}",
@@ -58,6 +66,46 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/analysis-jobs/{job_id}",
     operationId: "get_analysis_job_api_v1_analysis_jobs__job_id__get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/auth/csrf",
+    operationId: "issue_csrf_api_v1_auth_csrf_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/auth/login",
+    operationId: "login_api_v1_auth_login_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/auth/logout",
+    operationId: "logout_api_v1_auth_logout_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/auth/me",
+    operationId: "current_user_api_v1_auth_me_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/auth/password",
+    operationId: "change_password_api_v1_auth_password_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/auth/reauthenticate",
+    operationId: "reauthenticate_api_v1_auth_reauthenticate_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/auth/sessions",
+    operationId: "list_sessions_api_v1_auth_sessions_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/auth/sessions/{session_id}/revoke",
+    operationId: "revoke_session_api_v1_auth_sessions__session_id__revoke_post",
   },
   {
     method: "GET",
@@ -467,6 +515,26 @@ export interface AnalysisJobStatusResponse {
     | "succeeded";
 }
 
+export interface AuthErrorResponse {
+  error_code: string;
+  message: string;
+}
+
+export interface AuthSessionResponse {
+  created_at: string;
+  current: boolean;
+  device_label: string;
+  expires_at: string;
+  last_seen_at: string;
+  session_id: string;
+}
+
+export interface AuthUserResponse {
+  display_name: string;
+  user_id: string;
+  username: string;
+}
+
 export interface BenefitCalculationResponse {
   additional: MoneyResponse | null;
   applied_limit: MoneyResponse | null;
@@ -647,6 +715,10 @@ export type CandidateStatus =
   "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 
 export type CandidateVersionId = string;
+
+export interface ChangePasswordRequest {
+  new_password: string;
+}
 
 export interface ChecklistUpdateRequest {
   expected_version: number;
@@ -903,6 +975,10 @@ export interface CoverageRuleVersionsResponse {
   versions: Array<CoverageRuleVersionResponse>;
 }
 
+export interface CsrfResponse {
+  csrf_token: string;
+}
+
 export interface DecisionErrorResponse {
   error_code: string;
   message: string;
@@ -1019,10 +1095,26 @@ export interface FamilyMemberUpdateRequest {
   internal_alias?: string | null;
 }
 
+export interface HTTPValidationError {
+  detail?: Array<ValidationError>;
+}
+
 export interface HealthResponse {
   service?: "api";
   status: "ok" | "ready" | "unavailable";
   version?: string;
+}
+
+export interface LoginRequest {
+  device_label: string;
+  password: string;
+  username: string;
+}
+
+export interface LoginResponse {
+  csrf_token: string;
+  expires_at: string;
+  user: AuthUserResponse;
 }
 
 export interface MedicalEventCreateRequest {
@@ -1230,6 +1322,10 @@ export type PositiveVersion = number;
 export interface QuestionResponse {
   field_path: string;
   reason_code: string;
+}
+
+export interface ReauthenticateRequest {
+  password: string;
 }
 
 export interface ReceiptLineCreateRequest {
@@ -1446,6 +1542,14 @@ export interface TermsEditionResponse {
   product_display: string;
   product_key: string;
   version: number;
+}
+
+export interface ValidationError {
+  ctx?: Record<string, unknown>;
+  input?: unknown;
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
 }
 
 export interface familycare_api__claims__schemas__ExpectedVersionRequest {

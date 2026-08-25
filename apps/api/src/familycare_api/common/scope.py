@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Annotated, Protocol
 from uuid import UUID
 
-from fastapi import Request
+from fastapi import Depends
 
 from familycare_api.contracts.generated_business import PolicyErrorCode
 from familycare_api.errors import ApiBoundaryError
+from familycare_api.identity.context import AuthContext, resolve_auth_context
 
 
 class HouseholdScopeUnavailable(ApiBoundaryError):
@@ -34,15 +35,19 @@ class HouseholdScope:
 class HouseholdScopeResolver(Protocol):
     """Protocol replaced by the authenticated session resolver in Phase 7."""
 
-    def resolve(self, request: Request) -> HouseholdScope:
+    def resolve(self, context: AuthContext) -> HouseholdScope:
         """Resolve a household from trusted server state only."""
 
 
-def resolve_household_scope(request: Request) -> HouseholdScope:
-    """Fail closed until authentication installs a server-derived resolver."""
+AuthDependency = Annotated[AuthContext, Depends(resolve_auth_context)]
 
-    del request
-    raise HouseholdScopeUnavailable
+
+def resolve_household_scope(context: AuthDependency) -> HouseholdScope:
+    """Derive the only authoritative business scope from an active session."""
+
+    if not isinstance(context, AuthContext):
+        raise HouseholdScopeUnavailable
+    return HouseholdScope(context.household_space_id)
 
 
 __all__ = [
