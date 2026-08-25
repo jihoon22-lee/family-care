@@ -377,32 +377,32 @@ export interface AnalysisJobStatusResponse {
 }
 
 export interface BenefitCalculationResponse {
-  additional?: MoneyResponse | null;
-  applied_limit?: MoneyResponse | null;
-  applied_rate?: string | null;
-  calculation_id?: string | null;
-  claim_candidate_id?: string | null;
-  confirmed?: MoneyResponse | null;
-  created_at?: string | null;
-  currency?: string | null;
-  deductible?: MoneyResponse | null;
-  engine_version?: string | null;
-  evidence_ids?: Array<string>;
-  excluded?: MoneyResponse | null;
-  excluded_reason_codes?: Array<string>;
-  hold_reason_codes?: Array<string>;
+  additional: MoneyResponse | null;
+  applied_limit: MoneyResponse | null;
+  applied_rate: string | null;
+  calculation_id: string | null;
+  claim_candidate_id: string | null;
+  confirmed: MoneyResponse | null;
+  created_at: string | null;
+  currency: string | null;
+  deductible: MoneyResponse | null;
+  engine_version: string;
+  evidence_ids: Array<string>;
+  excluded: MoneyResponse | null;
+  excluded_reason_codes: Array<string>;
+  hold_reason_codes: Array<string>;
   kind: "fixed" | "indemnity";
-  rounding_rule?: "half_up" | "half_even" | "up" | "down" | null;
-  rule_version_id?: string | null;
-  schema_version?: "1";
+  rounding_rule: "half_up" | "half_even" | "up" | "down" | null;
+  rule_version_id: string;
+  schema_version: "1";
   status: "computed" | "partial" | "unknown";
-  steps?: Array<CalculationStepResponse>;
-  version?: number | null;
+  steps: Array<CalculationStepResponse>;
+  version: number | null;
 }
 
 export interface BenefitCalculationsResponse {
   calculations: Array<BenefitCalculationResponse>;
-  schema_version?: "1";
+  schema_version: "1";
 }
 
 export interface CalculationStepResponse {

@@ -230,6 +230,7 @@ def get_benefit_calculations(
 ) -> BenefitCalculationsResponse:
     _no_store(response)
     return BenefitCalculationsResponse(
+        schema_version="1",
         calculations=tuple(
             BenefitCalculationResponse.from_value(value)
             for value in service.get_calculations(event_id)

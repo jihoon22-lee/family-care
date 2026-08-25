@@ -267,48 +267,42 @@ class CalculationStepResponse(_StrictModel):
 class BenefitCalculationResponse(_StrictModel):
     """Calculation result projection with conditional amounts and trace reasons."""
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1"]
     kind: CalculationKind
     status: CalculationStatus
-    calculation_id: UUID | None = None
-    claim_candidate_id: UUID | None = None
-    rule_version_id: UUID | None = None
-    currency: CurrencyCode | None = None
-    confirmed: MoneyResponse | None = None
-    additional: MoneyResponse | None = None
-    excluded: MoneyResponse | None = None
-    deductible: MoneyResponse | None = None
-    applied_rate: RateString | None = None
-    applied_limit: MoneyResponse | None = None
-    rounding_rule: RoundingRule | None = None
-    engine_version: VersionString | None = None
-    version: PositiveVersion | None = None
-    created_at: datetime | None = None
-    steps: tuple[CalculationStepResponse, ...] = Field(
-        default_factory=tuple,
-        max_length=64,
-    )
-    hold_reason_codes: tuple[ReasonCode, ...] = Field(
-        default_factory=tuple,
-        max_length=16,
-    )
-    excluded_reason_codes: tuple[ReasonCode, ...] = Field(default_factory=tuple, max_length=16)
-    evidence_ids: tuple[UUID, ...] = Field(default_factory=tuple, max_length=16)
+    calculation_id: UUID | None
+    claim_candidate_id: UUID | None
+    rule_version_id: UUID
+    currency: CurrencyCode | None
+    confirmed: MoneyResponse | None
+    additional: MoneyResponse | None
+    excluded: MoneyResponse | None
+    deductible: MoneyResponse | None
+    applied_rate: RateString | None
+    applied_limit: MoneyResponse | None
+    rounding_rule: RoundingRule | None
+    engine_version: VersionString
+    version: PositiveVersion | None
+    created_at: datetime | None
+    steps: tuple[CalculationStepResponse, ...] = Field(max_length=64)
+    hold_reason_codes: tuple[ReasonCode, ...] = Field(max_length=16)
+    excluded_reason_codes: tuple[ReasonCode, ...] = Field(max_length=16)
+    evidence_ids: tuple[UUID, ...] = Field(min_length=1, max_length=16)
 
     @classmethod
     def from_result(
         cls,
         value: BenefitCalculationResult,
         *,
+        rule_version_id: UUID,
+        engine_version: str,
+        evidence_ids: tuple[UUID, ...],
         calculation_id: UUID | None = None,
         claim_candidate_id: UUID | None = None,
-        rule_version_id: UUID | None = None,
-        engine_version: str | None = None,
         version: int | None = None,
         created_at: datetime | None = None,
         rounding_rule: RoundingRule | None = None,
         excluded_reason_codes: tuple[str, ...] = (),
-        evidence_ids: tuple[UUID, ...] = (),
     ) -> Self:
         currency = _result_currency(value)
         if rounding_rule is None:
@@ -324,6 +318,7 @@ class BenefitCalculationResponse(_StrictModel):
                 ),
             )
         return cls(
+            schema_version="1",
             kind=value.kind,
             status=value.status,
             calculation_id=calculation_id,
@@ -395,7 +390,7 @@ class BenefitCalculationResponse(_StrictModel):
 class BenefitCalculationsResponse(_StrictModel):
     """Versioned collection returned by the calculation read endpoint."""
 
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1"]
     calculations: tuple[BenefitCalculationResponse, ...] = Field(max_length=64)
 
 

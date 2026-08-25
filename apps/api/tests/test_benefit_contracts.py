@@ -218,6 +218,16 @@ def test_benefit_schema_accepts_unknown_result_with_bounded_hold_reason() -> Non
     assert not validate_schema_instance(schema, example)
 
 
+def test_benefit_schema_accepts_an_empty_envelope_when_no_rule_is_eligible() -> None:
+    schema = load_json(SCHEMA_PATH)
+    validate_schema_instance = load_schema_validator()
+
+    assert not validate_schema_instance(
+        schema,
+        {"schema_version": "1", "calculations": []},
+    )
+
+
 def test_benefit_checker_reports_clean_artifacts() -> None:
     sys.path.insert(0, str(ROOT))
     from scripts.check_contracts import validate_benefit_calculation_contract

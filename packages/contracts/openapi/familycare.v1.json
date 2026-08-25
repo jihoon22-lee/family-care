@@ -245,18 +245,11 @@
             ]
           },
           "engine_version": {
-            "anyOf": [
-              {
-                "maxLength": 64,
-                "minLength": 1,
-                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Engine Version"
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Engine Version",
+            "type": "string"
           },
           "evidence_ids": {
             "items": {
@@ -264,6 +257,7 @@
               "type": "string"
             },
             "maxItems": 16,
+            "minItems": 1,
             "title": "Evidence Ids",
             "type": "array"
           },
@@ -325,20 +319,12 @@
             "title": "Rounding Rule"
           },
           "rule_version_id": {
-            "anyOf": [
-              {
-                "format": "uuid",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Rule Version Id"
+            "format": "uuid",
+            "title": "Rule Version Id",
+            "type": "string"
           },
           "schema_version": {
             "const": "1",
-            "default": "1",
             "title": "Schema Version",
             "type": "string"
           },
@@ -373,8 +359,27 @@
           }
         },
         "required": [
+          "schema_version",
           "kind",
-          "status"
+          "status",
+          "calculation_id",
+          "claim_candidate_id",
+          "rule_version_id",
+          "currency",
+          "confirmed",
+          "additional",
+          "excluded",
+          "deductible",
+          "applied_rate",
+          "applied_limit",
+          "rounding_rule",
+          "engine_version",
+          "version",
+          "created_at",
+          "steps",
+          "hold_reason_codes",
+          "excluded_reason_codes",
+          "evidence_ids"
         ],
         "title": "BenefitCalculationResponse",
         "type": "object"
@@ -393,12 +398,12 @@
           },
           "schema_version": {
             "const": "1",
-            "default": "1",
             "title": "Schema Version",
             "type": "string"
           }
         },
         "required": [
+          "schema_version",
           "calculations"
         ],
         "title": "BenefitCalculationsResponse",

@@ -19,7 +19,6 @@
         "$ref": "#/$defs/BenefitCalculation"
       },
       "maxItems": 64,
-      "minItems": 1,
       "type": "array"
     }
   },

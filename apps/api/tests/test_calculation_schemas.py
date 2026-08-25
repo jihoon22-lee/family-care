@@ -140,6 +140,7 @@ def test_calculation_response_serializes_all_money_and_steps_as_wire_strings() -
         claim_candidate_id=CLAIM_CANDIDATE_ID,
         rule_version_id=RULE_VERSION_ID,
         engine_version="calculation-engine-v1",
+        evidence_ids=(RULE_VERSION_ID,),
         version=1,
     )
     payload = json.loads(response.model_dump_json())
@@ -185,3 +186,8 @@ def test_calculation_step_response_is_strict_and_bounded() -> None:
             rounding_rule=None,
             reason_code="FIXED_ADD",
         )
+
+
+def test_calculation_response_requires_persisted_rule_and_evidence_lineage() -> None:
+    with pytest.raises(ValidationError):
+        BenefitCalculationResponse(kind="fixed", status="unknown")
