@@ -800,6 +800,12 @@
             "title": "Rider Id",
             "type": "string"
           },
+          "rider_label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Rider Label",
+            "type": "string"
+          },
           "rider_type": {
             "enum": [
               "fixed",
@@ -812,6 +818,7 @@
         "required": [
           "candidate_id",
           "rider_id",
+          "rider_label",
           "rider_type",
           "aggregate_result",
           "required_match_count",

@@ -104,6 +104,10 @@ def upgrade() -> None:
         "medical_events",
         "situation_text IS NULL OR btrim(situation_text) <> ''",
     )
+    op.add_column(
+        "claim_candidates",
+        sa.Column("rider_label_snapshot", sa.String(length=160), nullable=True),
+    )
 
     op.create_table(
         "medical_event_structuring_jobs",
@@ -341,6 +345,7 @@ def downgrade() -> None:
         table_name="medical_event_structuring_jobs",
     )
     op.drop_table("medical_event_structuring_jobs")
+    op.drop_column("claim_candidates", "rider_label_snapshot")
     op.drop_constraint(
         "ck_medical_events_situation_text_nonempty",
         table_name="medical_events",

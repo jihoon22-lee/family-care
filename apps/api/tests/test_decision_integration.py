@@ -786,6 +786,7 @@ def test_decision_analysis_selects_insured_riders_and_persists_immutable_runs(
     }
     candidates = {candidate.rider_id: candidate for candidate in first.candidates}
     assert candidates[seed.good_rider_id].aggregate_result == "MATCH"
+    assert candidates[seed.good_rider_id].rider_label == "Synthetic Good Rider"
     assert candidates[seed.bad_rider_id].aggregate_result == "UNKNOWN"
     assert {evaluation.rider_id for evaluation in first.evaluations} == {
         seed.good_rider_id,
@@ -796,6 +797,8 @@ def test_decision_analysis_selects_insured_riders_and_persists_immutable_runs(
     fetched = service.get_decision_result(event.id, first.event_version)
     assert fetched.event_version == first.event_version
     assert fetched.run_id == first.run_id
+    fetched_candidates = {candidate.rider_id: candidate for candidate in fetched.candidates}
+    assert fetched_candidates[seed.good_rider_id].rider_label == "Synthetic Good Rider"
     fetched_good = next(
         evaluation
         for evaluation in fetched.evaluations

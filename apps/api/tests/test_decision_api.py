@@ -93,6 +93,7 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
             {
                 "candidate_id": str(UUID("00000000-0000-4000-8000-000000000701")),
                 "rider_id": str(RIDER_ID),
+                "rider_label": "Sample Rider A",
                 "rider_type": "fixed",
                 "aggregate_result": "UNKNOWN",
                 "required_match_count": 0,
@@ -513,6 +514,7 @@ def test_analyze_returns_unknown_normally_with_exact_versions_and_evidence(
     assert body["rule_set_version"] == "coverage-rules-v1"
     assert body["policy_snapshot_at"] == "2026-08-25T09:00:00Z"
     assert body["candidates"][0]["aggregate_result"] == "UNKNOWN"
+    assert body["candidates"][0]["rider_label"] == "Sample Rider A"
     assert "evaluations" not in body["candidates"][0]
     evaluation = body["evaluations"][0]
     assert evaluation["rule_version_id"] == str(RULE_VERSION_ID)

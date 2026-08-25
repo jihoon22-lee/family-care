@@ -580,6 +580,7 @@ export interface ClaimCandidateResponse {
   required_no_match_count: number;
   required_unknown_count: number;
   rider_id: string;
+  rider_label: string;
   rider_type: "fixed" | "indemnity";
 }
 

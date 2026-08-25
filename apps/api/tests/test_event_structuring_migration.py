@@ -146,10 +146,10 @@ def test_revision_is_chained_after_benefit_calculations() -> None:
     assert migration.depends_on is None
 
 
-def test_upgrade_adds_only_bounded_situation_metadata_to_medical_events() -> None:
+def test_upgrade_adds_bounded_event_and_result_snapshot_metadata() -> None:
     _, operations = run_upgrade()
 
-    assert set(operations.added_columns) == {"medical_events"}
+    assert set(operations.added_columns) == {"claim_candidates", "medical_events"}
     columns = {column.name: column for column in operations.added_columns["medical_events"]}
     assert set(columns) == {"situation_text", "situation_retention_until"}
     assert isinstance(columns["situation_text"].type, sa.String)
@@ -163,6 +163,11 @@ def test_upgrade_adds_only_bounded_situation_metadata_to_medical_events() -> Non
             "situation_text IS NULL OR btrim(situation_text) <> ''"
         )
     }
+    label_column = operations.added_columns["claim_candidates"][0]
+    assert label_column.name == "rider_label_snapshot"
+    assert isinstance(label_column.type, sa.String)
+    assert label_column.type.length == 160
+    assert label_column.nullable is True
 
 
 def test_upgrade_creates_separate_scoped_structuring_tables() -> None:
@@ -333,6 +338,7 @@ def test_downgrade_reverses_indexes_tables_and_event_columns() -> None:
         "medical_event_structuring_jobs",
     ]
     assert operations.dropped_columns == [
+        ("claim_candidates", "rider_label_snapshot"),
         ("medical_events", "situation_retention_until"),
         ("medical_events", "situation_text"),
     ]

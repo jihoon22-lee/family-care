@@ -143,6 +143,7 @@ class PolicySnapshot:
     effective_status: str
     evidence_ids: tuple[UUID, ...]
     rider_type: str | None = None
+    rider_label: str | None = None
     contract_start: date | None = None
     contract_end: date | None = None
     rider_coverage_start: date | None = None
@@ -235,6 +236,7 @@ class ClaimCandidate:
     rider_id: UUID
     aggregate_result: TriState
     rider_type: str | None = None
+    rider_label: str | None = None
     evaluations: tuple[RuleEvaluation, ...] = ()
     questions: tuple[Question, ...] = ()
     hold_reason_codes: tuple[str, ...] = ()

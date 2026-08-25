@@ -212,6 +212,7 @@ class RuleEvaluationResponse(StrictModel):
 class ClaimCandidateResponse(StrictModel):
     candidate_id: UUID
     rider_id: UUID
+    rider_label: str = Field(min_length=1, max_length=160)
     rider_type: Literal["fixed", "indemnity"]
     aggregate_result: TriState
     required_match_count: int = Field(ge=0)
@@ -227,6 +228,7 @@ class ClaimCandidateResponse(StrictModel):
         return cls(
             candidate_id=value.id,
             rider_id=value.rider_id,
+            rider_label=value.rider_label or "보험 담보",
             rider_type=cast(Literal["fixed", "indemnity"], value.rider_type),
             aggregate_result=value.aggregate_result,
             required_match_count=value.required_match_count,

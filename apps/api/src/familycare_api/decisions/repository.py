@@ -566,6 +566,7 @@ class DecisionRepository:
               rider.coverage_start_date AS rider_coverage_start,
               rider.coverage_end_date AS rider_coverage_end,
               rider.benefit_type AS rider_type,
+              rider.display_name AS rider_label,
               rider.insured_amount, rider.currency, rider.renewable,
               rider.status_checked_at,
               insured.party_evidence_ids,
@@ -808,17 +809,19 @@ class DecisionRepository:
             connection.execute(
                 """
                 INSERT INTO claim_candidates (
-                  id, decision_run_id, rider_id, rider_type, aggregate_result,
+                  id, decision_run_id, rider_id, rider_type,
+                  rider_label_snapshot, aggregate_result,
                   required_match_count, required_unknown_count,
                   required_no_match_count, questions_json, hold_reason_codes_json,
                   version
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     candidate.id,
                     result.run_id,
                     candidate.rider_id,
                     candidate.rider_type,
+                    candidate.rider_label,
                     candidate.aggregate_result,
                     candidate.required_match_count,
                     candidate.required_unknown_count,
@@ -852,9 +855,13 @@ class DecisionRepository:
         evaluations = tuple(_rule_evaluation(row) for row in evaluation_rows)
         candidate_rows = connection.execute(
             """
-            SELECT * FROM claim_candidates
-            WHERE decision_run_id = %s
-            ORDER BY rider_id, id
+            SELECT candidate.*,
+                   COALESCE(candidate.rider_label_snapshot, rider.display_name)
+                     AS rider_label
+            FROM claim_candidates AS candidate
+            LEFT JOIN riders AS rider ON rider.id = candidate.rider_id
+            WHERE candidate.decision_run_id = %s
+            ORDER BY candidate.rider_id, candidate.id
             """,
             (run["id"],),
         ).fetchall()
@@ -1018,6 +1025,7 @@ def _policy_snapshot(row: Mapping[str, Any], event_date: date | None) -> PolicyS
         effective_status=policy_status,
         evidence_ids=evidence_ids,
         rider_type=cast(str, row.get("rider_type")),
+        rider_label=cast(str | None, row.get("rider_label")),
         contract_start=cast(date | None, row.get("contract_start")),
         contract_end=cast(date | None, row.get("contract_end")),
         rider_coverage_start=cast(date | None, row.get("rider_coverage_start")),
@@ -1225,6 +1233,7 @@ def _claim_candidate(
         decision_run_id=cast(UUID, row["decision_run_id"]),
         rider_id=cast(UUID, row["rider_id"]),
         rider_type=cast(str, row["rider_type"]),
+        rider_label=cast(str | None, row.get("rider_label")),
         aggregate_result=cast(Any, row["aggregate_result"]),
         evaluations=evaluations,
         questions=tuple(questions),
