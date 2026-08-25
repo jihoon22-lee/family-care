@@ -1,8 +1,10 @@
 import { apiRequest } from "./http";
 import { ApiError } from "./errors";
+import { clearAuthState, login } from "../features/identity/authApi";
 
 describe("API request boundary", () => {
   afterEach(() => {
+    clearAuthState();
     vi.unstubAllGlobals();
   });
 
@@ -25,6 +27,48 @@ describe("API request boundary", () => {
         cache: "no-store",
         credentials: "include",
         headers: expect.objectContaining({ Accept: "application/json" }),
+      }),
+    );
+  });
+
+  it("attaches the in-memory session CSRF token to business writes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            csrf_token: "synthetic-csrf-a",
+            user: {
+              display_name: "Admin A",
+              needs_reauthentication: false,
+              user_id: "synthetic-user-a",
+              username: "admin-a",
+            },
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "created" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await login("admin-a", "synthetic-auth-secret-a");
+    await apiRequest("/api/v1/medical-events", {
+      body: JSON.stringify({ situation: "Synthetic situation" }),
+      method: "POST",
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/medical-events",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "X-CSRF-Token": "synthetic-csrf-a",
+        }),
       }),
     );
   });

@@ -123,7 +123,7 @@ async function requestWithCsrf<T>(path: string, init: RequestInit): Promise<T> {
   return request<T>(path, init, { includeCsrf: true });
 }
 
-export function authHeaders(): HeadersInit {
+export function authHeaders(): Record<string, string> {
   return csrfToken === null ? {} : { "X-CSRF-Token": csrfToken };
 }
 
@@ -163,6 +163,7 @@ export async function loadCurrentUser(): Promise<AuthUser> {
   const user = normalizeUser(
     await request<unknown>("/api/v1/auth/me", { method: "GET" }),
   );
+  await loadCsrfToken();
   authStore.setAuthenticated(user);
   return user;
 }

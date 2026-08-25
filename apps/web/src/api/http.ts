@@ -1,10 +1,16 @@
 import { ApiError, safeErrorCode } from "./errors";
-import { clearAuthState } from "../features/identity/authApi";
+import { authHeaders, clearAuthState } from "../features/identity/authApi";
 
 export type ApiRequestInit = RequestInit & { csrfToken?: string };
 
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
 function requestHeaders(init: ApiRequestInit): Record<string, string> {
   const headers: Record<string, string> = { Accept: "application/json" };
+  const method = (init.method ?? "GET").toUpperCase();
+  if (!SAFE_METHODS.has(method)) {
+    Object.assign(headers, authHeaders());
+  }
   if (init.headers) {
     new Headers(init.headers).forEach((value, key) => {
       headers[key] = value;

@@ -115,10 +115,27 @@ describe("local authentication API boundary", () => {
     expect(window.sessionStorage.length).toBe(0);
   });
 
+  it("restores a CSRF proof when an existing cookie session is loaded", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(CURRENT_USER))
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: "synthetic-csrf-a" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(loadCurrentUser()).resolves.toEqual(CURRENT_USER);
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/auth/me",
+      "/api/v1/auth/csrf",
+    ]);
+    expect(authHeaders()).toEqual({ "X-CSRF-Token": "synthetic-csrf-a" });
+  });
+
   it("uses the narrow authenticated route set for current user and sessions", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(CURRENT_USER))
+      .mockResolvedValueOnce(jsonResponse({ csrf_token: "synthetic-csrf-a" }))
       .mockResolvedValueOnce(
         jsonResponse([
           {
@@ -131,7 +148,6 @@ describe("local authentication API boundary", () => {
           },
         ]),
       )
-      .mockResolvedValueOnce(jsonResponse({ csrf_token: "synthetic-csrf-a" }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
@@ -154,8 +170,8 @@ describe("local authentication API boundary", () => {
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
       "/api/v1/auth/me",
-      "/api/v1/auth/sessions",
       "/api/v1/auth/csrf",
+      "/api/v1/auth/sessions",
       "/api/v1/auth/reauthenticate",
       "/api/v1/auth/sessions/synthetic-session-b/revoke",
       "/api/v1/auth/password",
