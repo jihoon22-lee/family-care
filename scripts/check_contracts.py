@@ -216,6 +216,43 @@ STRUCTURING_JOB_STATES = [
     "permanently_failed",
     "cancelled",
 ]
+CLAIM_SCHEMA_PATH = ROOT / "packages/contracts/schemas/claim-workflow.v1.schema.json"
+CLAIM_EXAMPLE_PATH = ROOT / "packages/contracts/examples/claim-workflow.v1.json"
+CLAIM_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "archive_key",
+    "blob",
+    "document",
+    "document_id",
+    "document_path",
+    "document_text",
+    "external_document_id",
+    "file",
+    "file_id",
+    "file_path",
+    "full_text",
+    "image",
+    "image_bytes",
+    "medical_text",
+    "ocr",
+    "ocr_text",
+    "password",
+    "path",
+    "pdf_path",
+    "raw_text",
+    "source_path",
+    "text",
+}
+CLAIM_STATUSES = [
+    "preparing",
+    "submitted",
+    "supplementation_requested",
+    "paid",
+    "partially_paid",
+    "denied",
+    "closed",
+]
+CLAIM_OUTCOMES = ["paid", "partially_paid", "denied"]
 
 
 def _load_document_contract_checker() -> Any:
@@ -352,6 +389,13 @@ def validate_openapi() -> list[str]:
         "/api/v1/medical-events/{event_id}/restore",
         "/api/v1/medical-events/{event_id}/results/{version}",
         "/api/v1/medical-event-structuring-jobs/{job_id}",
+        "/api/v1/medical-events/{event_id}/claims",
+        "/api/v1/claims",
+        "/api/v1/claims/trash",
+        "/api/v1/claims/{claim_id}",
+        "/api/v1/claims/{claim_id}/transitions",
+        "/api/v1/claims/{claim_id}/checklist/{item_id}",
+        "/api/v1/claims/{claim_id}/restore",
     }
     if set(paths) != expected_paths:
         errors.append(
@@ -1383,6 +1427,226 @@ def validate_event_structuring_contract() -> list[str]:
     return errors
 
 
+def _forbidden_claim_keys(value: Any, path: str = "$") -> list[str]:
+    """Return ClaimCase contract paths crossing the medical-file boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in CLAIM_FORBIDDEN_FIELDS or key.lower() == "household_space_id"
+    ]
+
+
+def _claim_string_values(value: Any, path: str = "$") -> list[tuple[str, str]]:
+    """Return example strings for path-like and raw-payload checks."""
+
+    if isinstance(value, dict):
+        strings: list[tuple[str, str]] = []
+        for key, child in value.items():
+            strings.extend(_claim_string_values(child, f"{path}.{key}"))
+        return strings
+    if isinstance(value, list):
+        strings = []
+        for index, child in enumerate(value):
+            strings.extend(_claim_string_values(child, f"{path}[{index}]"))
+        return strings
+    if isinstance(value, str):
+        return [(path, value)]
+    return []
+
+
+def _validate_claim_example_ids(value: Any, path: str, errors: list[str]) -> None:
+    """Require ClaimCase identifiers and hashes to use synthetic values."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if (key == "id" or key.endswith("_id")) and child is not None:
+                if not valid_uuid4(child):
+                    errors.append(f"claim-workflow {child_path} must be a UUIDv4")
+                elif not str(child).startswith("00000000-0000-4000-8000-"):
+                    errors.append(f"claim-workflow {child_path} must use a synthetic UUID")
+            if key == "snapshot_sha256":
+                if not isinstance(child, str) or SHA256_PATTERN.fullmatch(child) is None:
+                    errors.append(f"claim-workflow {child_path} must be a SHA-256 value")
+                elif child not in {"a" * 64, "b" * 64}:
+                    errors.append(f"claim-workflow {child_path} must use a synthetic SHA-256")
+            if key == "content_sha256":
+                if not isinstance(child, str) or SHA256_PATTERN.fullmatch(child) is None:
+                    errors.append(f"claim-workflow {child_path} must be a SHA-256 value")
+                elif child not in {"a" * 64, "b" * 64}:
+                    errors.append(f"claim-workflow {child_path} must use a synthetic SHA-256")
+            _validate_claim_example_ids(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_claim_example_ids(child, f"{path}[{index}]", errors)
+
+
+def validate_claim_workflow_contract() -> list[str]:
+    """Validate the strict ClaimCase workflow envelope and synthetic example."""
+
+    try:
+        schema = load_json(CLAIM_SCHEMA_PATH)
+        example = load_json(CLAIM_EXAMPLE_PATH)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("claim-workflow schema must use JSON Schema draft 2020-12")
+    if schema.get("title") != "ClaimWorkflowEnvelope":
+        errors.append("claim-workflow schema title changed")
+    if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
+        errors.append("claim-workflow root must be a strict object")
+    expected_required = [
+        "schema_version",
+        "claim_case",
+        "snapshot",
+        "checklist",
+        "status_events",
+        "history",
+    ]
+    if schema.get("required") != expected_required:
+        errors.append("claim-workflow root required fields changed")
+
+    object_schemas = _object_schemas(schema)
+    if not object_schemas or any(
+        item.get("additionalProperties") is not False for item in object_schemas
+    ):
+        errors.append("claim-workflow nested objects must reject additional properties")
+    if _forbidden_claim_keys(schema):
+        errors.append("claim-workflow schema contains a forbidden field")
+    if _forbidden_claim_keys(example):
+        errors.append("claim-workflow example contains a forbidden field")
+    errors.extend(
+        f"claim-workflow example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+
+    definitions = schema.get("$defs", {})
+    if definitions.get("ClaimStatus", {}).get("enum") != CLAIM_STATUSES:
+        errors.append("claim-workflow ClaimStatus enum changed")
+    if definitions.get("ClaimOutcome", {}).get("enum") != CLAIM_OUTCOMES:
+        errors.append("claim-workflow ClaimOutcome enum changed")
+    claim_case = definitions.get("ClaimCase", {})
+    claim_case_properties = claim_case.get("properties", {})
+    if claim_case_properties.get("schema_version", {}).get("const") != "1":
+        errors.append("claim-workflow ClaimCase schema_version must be 1")
+    if {
+        "schema_version",
+        "rider_id",
+        "deleted",
+    } - set(claim_case.get("required", [])):
+        errors.append("claim-workflow ClaimCase must require schema_version, rider_id, and deleted")
+    if "deleted_at" in claim_case_properties:
+        errors.append("claim-workflow ClaimCase must not expose deleted_at")
+    candidate = definitions.get("CandidateSnapshot", {})
+    if candidate.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-candidate-snapshot-v1"
+    ):
+        errors.append("claim-workflow candidate snapshot version changed")
+    candidate_item = definitions.get("CandidateSnapshotItem", {}).get("properties", {})
+    if "id" not in candidate_item or "candidate_id" in candidate_item:
+        errors.append("claim-workflow candidate snapshot must use id")
+    rule = definitions.get("RuleSnapshot", {})
+    if rule.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-rule-snapshot-v1"
+    ):
+        errors.append("claim-workflow rule snapshot version changed")
+    if "versions" not in rule.get("properties", {}) or "evaluations" in rule.get("properties", {}):
+        errors.append("claim-workflow rule snapshot must expose versions")
+    policy = definitions.get("PolicySnapshot", {})
+    if policy.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-policy-snapshot-v1"
+    ):
+        errors.append("claim-workflow policy snapshot version changed")
+    if "snapshots" not in policy.get("properties", {}):
+        errors.append("claim-workflow policy snapshot must expose snapshots")
+    evidence = definitions.get("EvidenceSnapshot", {})
+    if evidence.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-evidence-snapshot-v1"
+    ):
+        errors.append("claim-workflow evidence snapshot version changed")
+    calculation = definitions.get("CalculationSnapshot", {})
+    if calculation.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-calculation-snapshot-v1"
+    ):
+        errors.append("claim-workflow calculation snapshot version changed")
+    transition_metadata = definitions.get("TransitionMetadata", {}).get("properties", {})
+    if "changed_fields" not in transition_metadata:
+        errors.append("claim-workflow transition metadata must expose changed_fields")
+    transition_request = definitions.get("ClaimTransitionRequest", {}).get("properties", {})
+    if transition_request.get("metadata", {}).get("$ref") != "#/$defs/ClaimTransitionMetadata":
+        errors.append("claim-workflow transition request metadata shape changed")
+    if definitions.get("ClaimErrorCode", {}).get("enum") != [
+        "AUTHENTICATION_REQUIRED",
+        "CLAIM_NOT_FOUND",
+        "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+        "CLAIM_INVALID",
+        "INVALID_CLAIM_TRANSITION",
+        "INVALID_REQUEST",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "VERSION_CONFLICT",
+    ]:
+        errors.append("claim-workflow error codes changed")
+    if claim_case.get("properties", {}).get("allowed_transitions", {}).get("maxItems") != 6:
+        errors.append("claim-workflow allowed transitions must be bounded at 6")
+    checklist = definitions.get("ChecklistItem", {})
+    if checklist.get("properties", {}).get("document_kind", {}).get("maxLength") != 64:
+        errors.append("claim-workflow checklist document kind must be bounded at 64")
+    snapshot = definitions.get("ClaimCaseSnapshot", {})
+    if snapshot.get("properties", {}).get("snapshot_sha256", {}).get("pattern") != "^[a-f0-9]{64}$":
+        errors.append("claim-workflow snapshot hash must be a lowercase SHA-256")
+    for name, max_items in (
+        ("checklist", 64),
+        ("status_events", 64),
+        ("history", 64),
+    ):
+        if schema.get("properties", {}).get(name, {}).get("maxItems") != max_items:
+            errors.append(f"claim-workflow {name} must be bounded at {max_items}")
+
+    for path, value in _claim_string_values(example):
+        if (
+            "\n" in value
+            or "\r" in value
+            or "\\" in value
+            or "://" in value
+            or value.startswith(("/", "~/"))
+            or re.match(r"^[A-Za-z]:[\\/]", value) is not None
+        ):
+            errors.append(f"claim-workflow example contains a path-like value at {path}")
+    claim_case_example = example.get("claim_case")
+    if isinstance(claim_case_example, dict):
+        if not str(claim_case_example.get("receipt_number", "")).startswith("synthetic-"):
+            errors.append("claim-workflow receipt number must be synthetic")
+        if claim_case_example.get("status") != "closed":
+            errors.append("claim-workflow example must demonstrate a closed case")
+        if claim_case_example.get("allowed_transitions") != []:
+            errors.append("claim-workflow closed example must have no allowed transitions")
+
+    events = example.get("status_events")
+    if not isinstance(events, list) or len(events) < 2:
+        errors.append("claim-workflow example must contain status history")
+    else:
+        if events[0].get("from_status") is not None or events[0].get("to_status") != "preparing":
+            errors.append("claim-workflow status history must begin at preparing")
+        if events[-1].get("to_status") != "closed":
+            errors.append("claim-workflow status history must end at closed")
+
+    history = example.get("history")
+    if not isinstance(history, list) or not history:
+        errors.append("claim-workflow example must contain history")
+    elif {item.get("outcome") for item in history if isinstance(item, dict)} != set(CLAIM_OUTCOMES):
+        errors.append("claim-workflow example must cover paid, partially_paid, and denied")
+
+    history_rider = definitions.get("ClaimHistory", {}).get("properties", {}).get("rider_id", {})
+    if history_rider.get("$ref") != "#/$defs/Uuid":
+        errors.append("claim-workflow history rider must be required and non-null")
+
+    _validate_claim_example_ids(example, "$", errors)
+    return errors
+
+
 def validate_web_generated_outputs() -> list[str]:
     """Regenerate the Web consumer in a temporary directory and compare bytes."""
 
@@ -1477,6 +1741,7 @@ def main() -> int:
         *validate_decision_contract(),
         *validate_benefit_calculation_contract(),
         *validate_event_structuring_contract(),
+        *validate_claim_workflow_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -1486,7 +1751,7 @@ def main() -> int:
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
-        "medical-event-structuring.v1, and generated Web contracts)"
+        "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"
     )
     return 0
 

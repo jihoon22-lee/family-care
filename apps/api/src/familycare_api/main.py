@@ -4,6 +4,8 @@ import os
 
 from fastapi import FastAPI, Response, status
 
+from familycare_api.claims.router import medical_event_claim_router
+from familycare_api.claims.router import router as claim_router
 from familycare_api.clauses.router import router as clause_search_router
 from familycare_api.decisions.evidence_router import router as evidence_router
 from familycare_api.decisions.router import (
@@ -74,6 +76,8 @@ def create_app(
     app.include_router(coverage_decision_router)
     app.include_router(structuring_job_router)
     app.include_router(evidence_router)
+    app.include_router(medical_event_claim_router)
+    app.include_router(claim_router)
 
     return app
 

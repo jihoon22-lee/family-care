@@ -93,6 +93,45 @@ def test_candidate_checker_and_web_generator_report_clean_artifacts() -> None:
     assert GENERATED_PATH.read_text(encoding="utf-8") == render_module()
 
 
+def test_web_generator_wraps_long_array_unions_at_item_boundaries() -> None:
+    sys.path.insert(0, str(ROOT))
+    from scripts.generate_web_contract_types import render_module
+
+    openapi = {
+        "components": {
+            "schemas": {
+                "SyntheticEnvelope": {
+                    "type": "object",
+                    "required": ["states"],
+                    "properties": {
+                        "states": {
+                            "type": "array",
+                            "items": {
+                                "enum": [
+                                    "preparing",
+                                    "submitted",
+                                    "supplementation_requested",
+                                    "partially_paid",
+                                    "closed",
+                                ]
+                            },
+                        }
+                    },
+                }
+            }
+        },
+        "paths": {},
+    }
+
+    rendered = render_module(openapi, {})
+
+    assert (
+        '  states: Array<\n    | "preparing"\n    | "submitted"\n'
+        '    | "supplementation_requested"\n    | "partially_paid"\n'
+        '    | "closed"\n  >;'
+    ) in rendered
+
+
 def test_api_business_types_include_the_candidate_contract() -> None:
     text = GENERATED_BUSINESS_PATH.read_text(encoding="utf-8")
 

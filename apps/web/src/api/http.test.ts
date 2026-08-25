@@ -54,6 +54,32 @@ describe("API request boundary", () => {
     expect(String(error)).not.toContain(privateValue);
   });
 
+  it("preserves sanitized claim transition codes without response details", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error_code: "INVALID_CLAIM_TRANSITION",
+            message: "synthetic private transition detail",
+          }),
+          { status: 409, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const error = await apiRequest("/api/v1/claims/synthetic/transitions", {
+      method: "POST",
+      body: JSON.stringify({ target_status: "paid" }),
+    }).catch((reason: unknown) => reason);
+
+    expect(error).toMatchObject({
+      code: "INVALID_CLAIM_TRANSITION",
+      status: 409,
+    });
+    expect(String(error)).not.toContain("synthetic private transition detail");
+  });
+
   it("rejects cross-origin and non-API request targets before fetch", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);

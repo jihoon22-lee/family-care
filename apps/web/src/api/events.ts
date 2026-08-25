@@ -1,6 +1,6 @@
 import type {
   CoverageDecisionResponse,
-  ExpectedVersionRequest,
+  familycare_api__decisions__schemas__ExpectedVersionRequest as ExpectedVersionRequest,
   MedicalEventCreateRequest,
   MedicalEventResponse,
   MedicalEventUpdateRequest,

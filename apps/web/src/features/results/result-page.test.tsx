@@ -221,7 +221,7 @@ describe("action-first event results", () => {
   });
 
   it("does not mix current calculations into an older event result", async () => {
-    installFetch(
+    const fetchMock = installFetch(
       { ...EVENT, version: 3 },
       result({ event_version: 2, stale: true }),
     );
@@ -235,6 +235,12 @@ describe("action-first event results", () => {
     expect(
       screen.getByText(/현재 사건 버전과 다른 결과이므로/),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /청구 검토 시작/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+    ).toBe(false);
   });
 
   it("renders stale metadata and server calculations without doing browser arithmetic", () => {
@@ -269,6 +275,9 @@ describe("action-first event results", () => {
     expect(screen.getAllByRole("button", { name: /근거 보기/i })).toHaveLength(
       2,
     );
+    expect(
+      screen.queryByRole("button", { name: /청구 검토 시작/ }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/합계|더하기|총액/)).not.toBeInTheDocument();
   });
 });

@@ -16,12 +16,15 @@
 - Persistence remains direct `psycopg` SQL with row mappings; do not introduce SQLAlchemy ORM, insurer APIs, email/fax integrations, Redis, or a separate claim service.
 - Every ClaimCase, checklist, history, snapshot, and transition query uses server-derived `HouseholdScope`; request body IDs are not authorization.
 - ClaimCase stores result/rule/policy/Evidence snapshots and manually entered business metadata only. It never stores diagnosis/receipt/prescription files, images, OCR text, absolute paths, external document IDs, archive keys, or passwords.
+- Result-card ClaimCase creation accepts only `rider_id`; the server resolves the in-scope PolicyContract and insurer from that Rider. The client cannot select policy, insurer, or HouseholdScope directly.
+- A stale decision result cannot create a ClaimCase. Calculations and policy lineage must remain coherent with the exact selected decision run; a policy, Rider, party, or status snapshot change during creation aborts the request.
+- One active ClaimCase exists per `(household_space_id, medical_event_id, rider_id)`. Repeated create requests return that active case instead of creating duplicate payment history.
 - Candidate/analysis results and actual ClaimCase/payment outcomes are separate records. A ClaimCase does not keep a live pointer as its only record of the decision at submission time.
 - Claim snapshots and status events are immutable append-only history. Corrections use an audit event or a new ClaimCase; a closed case is not reopened.
 - Allowed statuses are exactly `preparing`, `submitted`, `supplementation_requested`, `paid`, `partially_paid`, `denied`, and `closed`.
 - Status changes occur only through the transition endpoint with expected version and an allowed target; invalid transitions return `409 INVALID_CLAIM_TRANSITION`, stale writes return `409 VERSION_CONFLICT`.
 - `submitted` records that the user submitted through an insurer channel; FamilyCare never directly submits anything.
-- `paid` and `partially_paid` produce ClaimHistory facts for future frequency/first-payment rules. `denied` never automatically becomes a future `NO_MATCH`; missing/conflicting history produces `UNKNOWN` in the decision engine.
+- `paid` and `partially_paid` produce Rider-scoped ClaimHistory facts for future frequency/first-payment rules. Only history for the same `rider_id` is counted. `denied` never automatically becomes a future `NO_MATCH`; missing/conflicting history produces `UNKNOWN` in the decision engine.
 - Checklist rows contain document-kind requirement, required/conditional flag, prepared state, bounded note code, and source rule/Evidence IDs only. No file field exists.
 - AI can explain verified requirements but cannot alter checklist requirement, snapshot, transition, paid amount, or future decision state.
 - CI and fixtures use wholly synthetic parties, insurers, claim amounts, receipt numbers, and dates. Logs/responses/cache do not contain raw notes, medical input, receipt numbers, tokens, paths, or private identifiers.
@@ -61,7 +64,7 @@ packages/contracts/examples/claim-workflow.v1.json
 
 apps/api/tests/test_claim_workflow_migration.py
 apps/api/tests/test_claim_state_machine.py
-apps/api/tests/test_claim_snapshot.py
+apps/api/tests/unit/claims/test_claim_snapshot.py
 apps/api/tests/test_claim_workflow_api.py
 apps/api/tests/test_claim_workflow_integration.py
 apps/api/tests/test_claim_privacy.py
@@ -69,7 +72,7 @@ apps/api/tests/test_claim_privacy.py
   checklist-only storage, history feedback, and leakage boundaries.
 ```
 
-Root integration owns router registration, common errors, OpenAPI regeneration, and contract-checker registration. The claim module may import the public decision/calculation read interfaces, but it must not update another module's internal tables directly.
+Root integration owns router registration, common errors, OpenAPI regeneration, and contract-checker registration. The claim module may import the public decision/calculation read interfaces, but it must not update another module's internal tables directly. Claim workflow has no insurer submission or claim-file storage integration.
 
 ## Database, Python, HTTP, and JSON Interfaces
 
@@ -82,6 +85,7 @@ claim_cases(
   medical_event_id uuid references medical_events(id),
   family_member_id uuid references family_members(id),
   policy_contract_id uuid references policy_contracts(id),
+  rider_id uuid references riders(id),
   insurer_key varchar(160) not null,
   status varchar(32) not null,
   receipt_number varchar(160) null,
@@ -143,7 +147,7 @@ claim_history(
   medical_event_id uuid references medical_events(id),
   family_member_id uuid references family_members(id),
   policy_contract_id uuid references policy_contracts(id),
-  rider_id uuid references riders(id),
+  rider_id uuid not null references riders(id),
   outcome varchar(16) not null,
   payment_date date null,
   counted_occurrence boolean not null,
@@ -154,7 +158,7 @@ claim_history(
 )
 ```
 
-Named constraints enforce exact status/outcome values, non-negative amounts, valid currency shape, positive versions, one immutable snapshot version per case, and no checklist column named path/file/blob/text/image/OCR. Receipt number is user-entered business metadata and is never logged; it is not an external file identifier.
+Named constraints enforce exact status/outcome values, non-negative amounts, valid currency shape, positive versions, one immutable snapshot version per case, and no checklist column named path/file/blob/text/image/OCR. A partial unique index enforces one active case per event and Rider. Database triggers reject UPDATE/DELETE on ClaimCase snapshots and status events. Receipt number is a bounded ASCII identifier token and is never logged; it is not a note or external file identifier.
 
 ### Python interfaces
 
@@ -195,9 +199,7 @@ def transition_claim(
 def build_claim_snapshot(
     result: DecisionRunResult, calculation: BenefitCalculationResult | None
 ) -> ClaimCaseSnapshot: ...
-def create_claim_case(
-    scope: HouseholdScope, event_id: UUID, insurer_key: str, policy_id: UUID
-) -> ClaimCase: ...
+def create_claim_case(scope: HouseholdScope, event_id: UUID, rider_id: UUID) -> ClaimCase: ...
 def record_claim_outcome(
     scope: HouseholdScope,
     claim_id: UUID,
@@ -207,7 +209,7 @@ def record_claim_outcome(
 ) -> ClaimHistoryFact: ...
 ```
 
-Snapshot builder includes only normalized candidate/rule/policy/Evidence/calculation data and a SHA-256 hash. It excludes natural-language medical input, receipt notes, document text, source path, and external IDs. `claim_history` records `paid`/`partially_paid` facts; a `denied` outcome is retained for audit but is not a future deterministic mismatch.
+Snapshot builder includes only normalized candidate/rule/policy/Evidence/calculation data and a SHA-256 hash. It excludes natural-language medical input, receipt notes, document text, source path, and external IDs. `claim_history` records `paid`/`partially_paid` facts for the selected non-null Rider; a `denied` outcome is retained for audit but is not a future deterministic mismatch. Decision frequency and first-payment rules filter the member history projection to the current Rider before evaluation.
 
 ### HTTP contract
 
@@ -222,7 +224,7 @@ DELETE /api/v1/claims/{id}
 POST   /api/v1/claims/{id}/restore
 ```
 
-`POST /claims` creates `preparing` and captures the immutable initial snapshot. `GET /claims` is server-scoped and supports bounded event/status filters plus cursor pagination; it never accepts household scope. `PATCH /claims/{id}` can update only permitted business metadata using expected version; it cannot set status, rewrite snapshot JSON, or inject a file/path. `POST /transitions` accepts target status, expected version, occurred-at, and allowlisted metadata only. Paid/partial transitions require valid non-negative amount/currency; denied does not require a payment amount. Every response uses bounded reason codes and no raw user note.
+`POST /claims` accepts only `rider_id`, derives policy/insurer in the server-side HouseholdScope, creates `preparing`, and captures the immutable initial snapshot. `GET /claims` is server-scoped and supports bounded event/status filters plus cursor pagination; it never accepts household scope. `PATCH /claims/{id}` can update only permitted business metadata using expected version; it cannot set status, rewrite snapshot JSON, or inject a file/path. `POST /transitions` accepts target status, expected version, occurred-at, and allowlisted metadata only. Paid/partial transitions require valid non-negative amount/currency; denied does not require a payment amount. Every response uses bounded reason codes and no raw user note. FamilyCare never submits the claim to an insurer and stores no claim files.
 
 ### JSON Schema contract
 
@@ -246,9 +248,9 @@ POST   /api/v1/claims/{id}/restore
 - Consumes: `0009_event_structuring`, `medical_events`, candidates, calculations, policy/member tables, and migration-spy conventions.
 - Produces: `revision = "0010_claim_workflow"`, `down_revision = "0009_event_structuring"`, five tables, exact statuses/transitions, and immutable domain values.
 
-- [ ] **Step 1: Write failing migration and state tests.** Assert exact tables/columns, no file/path/blob/OCR fields, UUID FKs, amount checks, snapshot uniqueness, all allowed transitions, every denied transition, closed terminal state, and denied outcome not mapped to a mismatch.
+- [x] **Step 1: Write failing migration and state tests.** Assert exact tables/columns, no file/path/blob/OCR fields, UUID FKs, amount checks, snapshot uniqueness, all allowed transitions, every denied transition, closed terminal state, and denied outcome not mapped to a mismatch.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py -q
@@ -256,7 +258,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: FAIL because `0010_claim_workflow.py` and the claim state machine are absent.
 
-- [ ] **Step 3: Implement the migration and pure transition table.** Use direct Alembic tables/constraints, append-only status events, immutable snapshot rows, and the exact mapping in this plan.
+- [x] **Step 3: Implement the migration and pure transition table.** Use direct Alembic tables/constraints, append-only status events, immutable snapshot rows, and the exact mapping in this plan.
 
   ```python
   def transition_target(source: ClaimStatus, target: ClaimStatus) -> None:
@@ -264,7 +266,7 @@ POST   /api/v1/claims/{id}/restore
           raise InvalidClaimTransition
   ```
 
-- [ ] **Step 4: Run migration/state tests and upgrade.**
+- [x] **Step 4: Run migration/state tests and upgrade.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py -q
@@ -273,7 +275,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: all migration/state cases pass and synthetic PostgreSQL reaches `0010_claim_workflow`.
 
-- [ ] **Step 5: Commit the schema/state foundation.**
+- [x] **Step 5: Commit the schema/state foundation.**
 
   ```bash
   git add apps/api/migrations/versions/0010_claim_workflow.py apps/api/src/familycare_api/claims apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py
@@ -285,24 +287,24 @@ POST   /api/v1/claims/{id}/restore
 **Files:**
 - Create: `apps/api/src/familycare_api/claims/snapshot.py`
 - Modify: `apps/api/src/familycare_api/claims/domain.py`
-- Create: `apps/api/tests/test_claim_snapshot.py`
-- Test: `apps/api/tests/test_claim_snapshot.py`
+- Create: `apps/api/tests/unit/claims/test_claim_snapshot.py`
+- Test: `apps/api/tests/unit/claims/test_claim_snapshot.py`
 
 **Interfaces:**
 - Consumes: public decision `DecisionRunResult`, benefit `BenefitCalculationResult`, policy/Rider/Evidence versions, and `HouseholdScope`.
 - Produces: `build_claim_snapshot`, `ClaimCaseSnapshot`, deterministic snapshot hash, and a create command that stores an immutable initial snapshot.
 
-- [ ] **Step 1: Write failing snapshot tests.** Assert candidate/rule/policy/Evidence/calculation versions are present, snapshot hash is deterministic, raw medical text/receipt note/path/file keys are absent, later rule changes do not mutate the initial snapshot, and a second snapshot version is append-only.
+- [x] **Step 1: Write failing snapshot tests.** Assert candidate/rule/policy/Evidence/calculation versions are present, snapshot hash is deterministic, raw medical text/receipt note/path/file keys are absent, later rule changes do not mutate the initial snapshot, and a second snapshot version is append-only. (현재 파일: `apps/api/tests/unit/claims/test_claim_snapshot.py`)
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
-  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_snapshot.py -q
+  TMPDIR=/tmp uv run pytest apps/api/tests/unit/claims/test_claim_snapshot.py -q
   ```
 
   Expected: FAIL because snapshot builder and immutable storage adapter are absent.
 
-- [ ] **Step 3: Implement sanitized snapshot construction.** Canonicalize JSON with sorted keys/separators, include only normalized IDs/versions/reason codes/Evidence, hash the canonical bytes, and reject forbidden keys before persistence.
+- [x] **Step 3: Implement sanitized snapshot construction.** Canonicalize JSON with sorted keys/separators, include only normalized IDs/versions/reason codes/Evidence, hash the canonical bytes, and reject forbidden keys before persistence.
 
   ```python
   def snapshot_sha256(payload: Mapping[str, object]) -> str:
@@ -312,21 +314,21 @@ POST   /api/v1/claims/{id}/restore
       return hashlib.sha256(encoded).hexdigest()
   ```
 
-- [ ] **Step 4: Run snapshot tests and static checks.**
+- [x] **Step 4: Run snapshot tests and static checks.**
 
   ```bash
-  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_snapshot.py -q
-  TMPDIR=/tmp uv run ruff format --check apps/api/src/familycare_api/claims/snapshot.py apps/api/tests/test_claim_snapshot.py
+  TMPDIR=/tmp uv run pytest apps/api/tests/unit/claims/test_claim_snapshot.py -q
+  TMPDIR=/tmp uv run ruff format --check apps/api/src/familycare_api/claims/snapshot.py apps/api/tests/unit/claims/test_claim_snapshot.py
   TMPDIR=/tmp uv run ruff check apps/api/src/familycare_api/claims
   TMPDIR=/tmp uv run mypy apps/api/src/familycare_api/claims
   ```
 
   Expected: immutable snapshot and forbidden-key tests pass.
 
-- [ ] **Step 5: Commit snapshot behavior.**
+- [x] **Step 5: Commit snapshot behavior.**
 
   ```bash
-  git add apps/api/src/familycare_api/claims/snapshot.py apps/api/src/familycare_api/claims/domain.py apps/api/tests/test_claim_snapshot.py
+  git add apps/api/src/familycare_api/claims/snapshot.py apps/api/src/familycare_api/claims/domain.py apps/api/tests/unit/claims/test_claim_snapshot.py
   git commit -m "feat(claims): preserve immutable result snapshots"
   ```
 
@@ -344,9 +346,9 @@ POST   /api/v1/claims/{id}/restore
 - Consumes: claim tables, snapshot builder, `ClaimHistoryReader` protocol from `008-coverage-decision-engine.md`, and verified rule/Evidence IDs.
 - Produces: `create_checklist_items`, `update_checklist_item(expected_version)`, `record_claim_outcome`, `ClaimHistoryReader.for_family_member`, and checklist-only metadata validation.
 
-- [ ] **Step 1: Write failing checklist/history tests.** Assert required/conditional/prepared fields and source IDs work, file/path/binary/OCR/medical text keys are rejected, paid/partial create counted history, denied is retained but not a future `NO_MATCH`, and missing/conflicting history returns `UNKNOWN` through the decision protocol.
+- [x] **Step 1: Write failing checklist/history tests.** Assert required/conditional/prepared fields and source IDs work, file/path/binary/OCR/medical text keys are rejected, paid/partial create counted history, denied is retained but not a future `NO_MATCH`, and missing/conflicting history returns `UNKNOWN` through the decision protocol.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_history.py -q
@@ -354,7 +356,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: FAIL because checklist/history repository and service methods are absent.
 
-- [ ] **Step 3: Implement checklist/history persistence.** Store only allowlisted metadata and reason codes; use `SELECT ... FOR UPDATE` for expected-version checklist changes; create history in the same transaction as a valid paid/partial outcome; leave denied as an audit fact without feeding mismatch semantics.
+- [x] **Step 3: Implement checklist/history persistence.** Store only allowlisted metadata and reason codes; use `SELECT ... FOR UPDATE` for expected-version checklist changes; create history in the same transaction as a valid paid/partial outcome; leave denied as an audit fact without feeding mismatch semantics.
 
   ```python
   def history_to_fact(row: Mapping[str, object]) -> ClaimHistoryFact:
@@ -365,7 +367,7 @@ POST   /api/v1/claims/{id}/restore
       )
   ```
 
-- [ ] **Step 4: Run history/checklist tests and static checks.**
+- [x] **Step 4: Run history/checklist tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_history.py -q
@@ -376,7 +378,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: checklist/history tests pass and the decision history protocol has no claim-specific table access outside its public adapter.
 
-- [ ] **Step 5: Commit checklist/history feedback.**
+- [x] **Step 5: Commit checklist/history feedback.**
 
   ```bash
   git add apps/api/src/familycare_api/claims apps/api/src/familycare_api/decisions/service.py apps/api/tests/test_claim_history.py
@@ -401,11 +403,11 @@ POST   /api/v1/claims/{id}/restore
 
 **Interfaces:**
 - Consumes: ClaimCase service/state machine/snapshot/history from Tasks 1–3.
-- Produces: the seven claim routes, strict request/response models, exact transition/error envelopes, and `claim-workflow.v1` schema/example.
+- Produces: the claim routes, strict request/response models, exact transition/error envelopes, and `claim-workflow.v1` schema/example.
 
-- [ ] **Step 1: Write failing API/contract tests.** Assert claim creation captures a snapshot and begins `preparing`, direct status PATCH is rejected, allowed/denied transitions map correctly, expected-version conflicts are sanitized, checklist accepts metadata only, paid/partial amount/currency validation works, and response contains no medical document/file/path field.
+- [x] **Step 1: Write failing API/contract tests.** Assert claim creation captures a snapshot and begins `preparing`, direct status PATCH is rejected, allowed/denied transitions map correctly, expected-version conflicts are sanitized, checklist accepts metadata only, paid/partial amount/currency validation works, and response contains no medical document/file/path field.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py -q
@@ -413,7 +415,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: FAIL because claim router, strict schemas, and contract artifacts are absent.
 
-- [ ] **Step 3: Implement the routes and schema.** Status transitions call `transition_claim`; `PATCH /claims/{id}` cannot set status or snapshot; transition metadata is an allowlisted mapping; checklist payload rejects extra file/path/text keys; paid/partial requires non-negative Decimal/currency.
+- [x] **Step 3: Implement the routes and schema.** Status transitions call `transition_claim`; `PATCH /claims/{id}` cannot set status or snapshot; transition metadata is an allowlisted mapping; checklist payload rejects extra file/path/text keys; paid/partial requires non-negative Decimal/currency. Claim creation accepts only `rider_id` and derives policy/insurer server-side.
 
   ```python
   class ClaimTransitionRequest(BaseModel):
@@ -424,7 +426,7 @@ POST   /api/v1/claims/{id}/restore
       metadata: dict[str, str] = Field(default_factory=dict, max_length=8)
   ```
 
-- [ ] **Step 4: Run API/contract checks.**
+- [x] **Step 4: Run API/contract checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py -q
@@ -434,7 +436,7 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: HTTP transitions, strict JSON Schema, and generated OpenAPI pass without raw note/status echo.
 
-- [ ] **Step 5: Commit the claim HTTP boundary.**
+- [x] **Step 5: Commit the claim HTTP boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/claims/schemas.py apps/api/src/familycare_api/claims/router.py apps/api/src/familycare_api/claims/errors.py packages/contracts/schemas/claim-workflow.v1.schema.json packages/contracts/examples/claim-workflow.v1.json apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py
@@ -447,7 +449,7 @@ POST   /api/v1/claims/{id}/restore
 - Create: `apps/api/tests/test_claim_workflow_integration.py`
 - Create: `apps/api/tests/test_claim_privacy.py`
 - Modify: `apps/api/tests/test_claim_state_machine.py` for any transition edge case found in PostgreSQL integration
-- Modify: `apps/api/tests/test_claim_snapshot.py` for any immutable snapshot regression
+- Modify: `apps/api/tests/unit/claims/test_claim_snapshot.py` for any immutable snapshot regression
 - Test: `apps/api/tests/test_claim_workflow_integration.py`
 - Test: `apps/api/tests/test_claim_privacy.py`
 
@@ -455,9 +457,9 @@ POST   /api/v1/claims/{id}/restore
 - Consumes: complete `0009` migration, ClaimCase service/router, snapshot/checklist/history layers, and public decision/calculation results.
 - Produces: synthetic PostgreSQL proof of independent insurer ClaimCases, immutable snapshots, all allowed/denied transitions, soft delete/restore, history feedback, and no medical-document/cache/log leakage.
 
-- [ ] **Step 1: Write failing end-to-end/privacy assertions.** Create one MedicalEvent with two synthetic insurers/policies, capture separate snapshots, transition one through partial payment and the other through denial, close both, reanalyze with a changed rule, and assert snapshots remain unchanged and denial does not produce future `NO_MATCH`.
+- [x] **Step 1: Write failing end-to-end/privacy assertions.** Create one MedicalEvent with two synthetic insurers/policies, capture separate snapshots, transition one through partial payment and the other through denial, close both, reanalyze with a changed rule, and assert snapshots remain unchanged and denial does not produce future `NO_MATCH`.
 
-- [ ] **Step 2: Run the focused RED integration command.**
+- [x] **Step 2: Run the focused RED integration command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_claim_workflow_integration.py -q
@@ -465,25 +467,25 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: FAIL until real PostgreSQL transaction boundaries, immutable snapshots, history projection, and independent ClaimCase scope are complete.
 
-- [ ] **Step 3: Implement only missing transaction/redaction paths.** Lock one ClaimCase per transition, append a status event, update its version, and insert payment history atomically. Never update another insurer's ClaimCase or rewrite its snapshot.
+- [x] **Step 3: Implement only missing transaction/redaction paths.** Lock one ClaimCase per transition, append a status event, update its version, and insert payment history atomically. Never update another insurer's ClaimCase or rewrite its snapshot.
 
-- [ ] **Step 4: Run the complete focused suite.**
+- [x] **Step 4: Run the complete focused suite.**
 
   ```bash
-  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py apps/api/tests/test_claim_privacy.py -q
+  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/unit/claims/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py apps/api/tests/test_claim_privacy.py -q
   TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_claim_workflow_integration.py -q
   TMPDIR=/tmp uv run python scripts/check_contracts.py
-  TMPDIR=/tmp uv run ruff format --check apps/api/src/familycare_api/claims apps/api/src/familycare_api/decisions/service.py apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_claim_privacy.py
+  TMPDIR=/tmp uv run ruff format --check apps/api/src/familycare_api/claims apps/api/src/familycare_api/decisions/service.py apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/unit/claims/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_claim_privacy.py
   TMPDIR=/tmp uv run ruff check apps/api/src/familycare_api/claims apps/api/src/familycare_api/decisions/service.py apps/api/tests
   TMPDIR=/tmp uv run mypy apps/api/src/familycare_api/claims apps/api/src/familycare_api/decisions/service.py
   ```
 
   Expected: all migration, transition, snapshot, checklist, history, HTTP, PostgreSQL, contract, privacy, and static checks pass with synthetic values only.
 
-- [ ] **Step 5: Commit the complete claim acceptance.**
+- [x] **Step 5: Commit the complete claim acceptance.**
 
   ```bash
-  git add apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_claim_privacy.py apps/api/tests/test_claim_state_machine.py apps/api/tests/test_claim_snapshot.py
+  git add apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_claim_privacy.py apps/api/tests/test_claim_state_machine.py apps/api/tests/unit/claims/test_claim_snapshot.py
   git commit -m "test(claims): verify immutable claim outcomes"
   ```
 
@@ -507,7 +509,7 @@ POST   /api/v1/claims/{id}/restore
 - Produces: `/app/claims`, `/app/claims/{claimId}`, and result-card actions that create independent insurer/policy ClaimCases from one MedicalEvent.
 - The Web records checklist state, receipt reference, submitted/paid dates, claimed/paid decimal amounts, currency, and bounded reason codes only. It has no medical-document upload, insurer submission, free-form raw-document field, or persistent browser draft.
 
-- [ ] **Step 1: Write failing state, amount, conflict, and privacy tests.** Cover two independent ClaimCases for one event, allowed transition buttons only, `INVALID_CLAIM_TRANSITION`, optimistic `VERSION_CONFLICT` with draft preservation, metadata-only checklist, negative/currency validation, partial/denied outcomes, soft-delete/restore, immutable snapshot display, and zero Web Storage/service-worker writes.
+- [x] **Step 1: Write failing state, amount, conflict, and privacy tests.** Cover two independent ClaimCases for one event, allowed transition buttons only, `INVALID_CLAIM_TRANSITION`, optimistic `VERSION_CONFLICT` with draft preservation, metadata-only checklist, negative/currency validation, partial/denied outcomes, soft-delete/restore, immutable snapshot display, and zero Web Storage/service-worker writes.
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -516,9 +518,9 @@ POST   /api/v1/claims/{id}/restore
 
   Expected: FAIL because the generated claim client and screens do not exist.
 
-- [ ] **Step 2: Implement the generated client and accessible ClaimCase screens.** Derive available actions from the server's `allowed_transitions`; never let `PATCH /claims/{id}` set status. Use decimal string inputs, ISO date controls, semantic checklist rows, text status, and safe reason-code copy. Clear in-memory form values after mutation, logout, 401, close, or unmount; never place claim values in a URL or console.
+- [x] **Step 2: Implement the generated client and accessible ClaimCase screens.** Derive available actions from the server's `allowed_transitions`; never let `PATCH /claims/{id}` set status. Use decimal string inputs, ISO date controls, semantic checklist rows, text status, and safe reason-code copy. Clear in-memory form values after mutation, logout, 401, close, or unmount; never place claim values in a URL or console.
 
-- [ ] **Step 3: Run GREEN and the synthetic browser flow.**
+- [x] **Step 3: Run GREEN and the synthetic browser flow.**
 
   ```bash
   corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -530,7 +532,7 @@ POST   /api/v1/claims/{id}/restore
 
   The browser flow runs result card → two insurer cases → checklist → submitted → supplementation → partial/denied → closed with synthetic data. It asserts no file input, insurer network request, persistent sensitive cache, URL value, or raw error output.
 
-- [ ] **Step 4: Commit the ClaimCase Web slice.**
+- [x] **Step 4: Commit the ClaimCase Web slice.**
 
   ```bash
   git add apps/web/src/api/claims.ts apps/web/src/features/claims \
@@ -546,7 +548,7 @@ POST   /api/v1/claims/{id}/restore
 
   ```bash
   TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini upgrade head
-  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py -q
+  TMPDIR=/tmp uv run pytest apps/api/tests/test_claim_workflow_migration.py apps/api/tests/test_claim_state_machine.py apps/api/tests/unit/claims/test_claim_snapshot.py apps/api/tests/test_claim_history.py apps/api/tests/test_claim_workflow_api.py apps/api/tests/test_claim_workflow_contracts.py -q
   ```
 
   Expected: the chain reaches `0010_claim_workflow` or a later descendant; every allowed transition and terminal close rule passes.

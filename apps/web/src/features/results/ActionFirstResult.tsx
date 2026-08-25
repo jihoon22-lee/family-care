@@ -36,6 +36,7 @@ export function ActionFirstResult({
     result.evaluations,
   );
   const calculationValues = calculations?.calculations ?? [];
+  const claimStartEnabled = !result.stale;
   const firstReviewCandidate = result.candidates.find(
     (candidate) => candidate.aggregate_result === "MATCH",
   );
@@ -59,7 +60,7 @@ export function ActionFirstResult({
           결과는 보험금 지급을 확정하지 않습니다. 확인 가능한 근거를 열어 보고
           필요한 검토를 시작하세요.
         </p>
-        {firstReviewCandidate && firstReviewLabel ? (
+        {claimStartEnabled && firstReviewCandidate && firstReviewLabel ? (
           <button
             type="button"
             className={styles.primaryButton}
@@ -85,6 +86,7 @@ export function ActionFirstResult({
         candidates={result.candidates}
         evaluations={result.evaluations}
         group="claim_review"
+        claimStartEnabled={claimStartEnabled}
         onOpenEvidence={onOpenEvidence}
         onStartClaim={onStartClaim}
         riderLabels={riderLabels}
@@ -94,6 +96,7 @@ export function ActionFirstResult({
         candidates={result.candidates}
         evaluations={result.evaluations}
         group="needs_information"
+        claimStartEnabled={claimStartEnabled}
         onOpenEvidence={onOpenEvidence}
         onStartClaim={onStartClaim}
         riderLabels={riderLabels}
@@ -103,6 +106,7 @@ export function ActionFirstResult({
         candidates={result.candidates}
         evaluations={result.evaluations}
         group="mismatch"
+        claimStartEnabled={claimStartEnabled}
         onOpenEvidence={onOpenEvidence}
         onStartClaim={onStartClaim}
         riderLabels={riderLabels}

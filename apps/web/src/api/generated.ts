@@ -3,6 +3,12 @@
 
 export const API_PATHS = [
   "/api/v1/analysis-jobs/{job_id}",
+  "/api/v1/claims",
+  "/api/v1/claims/trash",
+  "/api/v1/claims/{claim_id}",
+  "/api/v1/claims/{claim_id}/checklist/{item_id}",
+  "/api/v1/claims/{claim_id}/restore",
+  "/api/v1/claims/{claim_id}/transitions",
   "/api/v1/clauses/search",
   "/api/v1/coverage-rules/{rule_id}/publish",
   "/api/v1/coverage-rules/{rule_id}/versions",
@@ -18,6 +24,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}",
   "/api/v1/medical-events/{event_id}/analyze",
   "/api/v1/medical-events/{event_id}/calculations",
+  "/api/v1/medical-events/{event_id}/claims",
   "/api/v1/medical-events/{event_id}/receipt-lines",
   "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
@@ -51,6 +58,48 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/analysis-jobs/{job_id}",
     operationId: "get_analysis_job_api_v1_analysis_jobs__job_id__get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/claims",
+    operationId: "list_claim_cases_api_v1_claims_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/claims/trash",
+    operationId: "list_deleted_claim_cases_api_v1_claims_trash_get",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/claims/{claim_id}",
+    operationId: "delete_claim_case_api_v1_claims__claim_id__delete",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/claims/{claim_id}",
+    operationId: "get_claim_case_api_v1_claims__claim_id__get",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/claims/{claim_id}",
+    operationId: "update_claim_case_api_v1_claims__claim_id__patch",
+  },
+  {
+    method: "PATCH",
+    path: "/api/v1/claims/{claim_id}/checklist/{item_id}",
+    operationId:
+      "update_claim_checklist_api_v1_claims__claim_id__checklist__item_id__patch",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/claims/{claim_id}/restore",
+    operationId: "restore_claim_case_api_v1_claims__claim_id__restore_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/claims/{claim_id}/transitions",
+    operationId:
+      "transition_claim_case_api_v1_claims__claim_id__transitions_post",
   },
   {
     method: "POST",
@@ -158,6 +207,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/calculations",
     operationId:
       "get_benefit_calculations_api_v1_medical_events__event_id__calculations_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/claims",
+    operationId:
+      "create_claim_case_api_v1_medical_events__event_id__claims_post",
   },
   {
     method: "GET",
@@ -327,6 +382,16 @@ export type ApiOperation = (typeof API_OPERATIONS)[number];
 export type CandidateErrorResponseErrorCode =
   "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
 
+export type ClaimErrorResponseErrorCode =
+  | "AUTHENTICATION_REQUIRED"
+  | "CLAIM_CHECKLIST_ITEM_NOT_FOUND"
+  | "CLAIM_INVALID"
+  | "CLAIM_NOT_FOUND"
+  | "INVALID_CLAIM_TRANSITION"
+  | "INVALID_REQUEST"
+  | "RESOURCE_LIMIT_EXCEEDED"
+  | "VERSION_CONFLICT";
+
 export type ClauseErrorResponseErrorCode =
   | "AUTHENTICATION_REQUIRED"
   | "CLAUSE_NOT_FOUND"
@@ -429,6 +494,12 @@ export interface BenefitCalculationResponse {
 export interface BenefitCalculationsResponse {
   calculations: Array<BenefitCalculationResponse>;
   schema_version: "1";
+}
+
+export interface CalculationSnapshotResponse {
+  calculation_ids?: Array<string>;
+  statuses?: Array<"computed" | "partial" | "unknown">;
+  versions?: Array<number>;
 }
 
 export interface CalculationStepResponse {
@@ -566,10 +637,22 @@ export interface CandidateRejectionRequest {
 
 export type CandidateScalar = string | number | boolean | null;
 
+export interface CandidateSnapshotResponse {
+  aggregate_results?: Array<"MATCH" | "NO_MATCH" | "UNKNOWN">;
+  candidate_ids?: Array<string>;
+  rider_ids?: Array<string>;
+}
+
 export type CandidateStatus =
   "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 
 export type CandidateVersionId = string;
+
+export interface ChecklistUpdateRequest {
+  expected_version: number;
+  note_code?: string | null;
+  prepared: boolean;
+}
 
 export interface ClaimCandidateResponse {
   aggregate_result: "MATCH" | "NO_MATCH" | "UNKNOWN";
@@ -582,6 +665,135 @@ export interface ClaimCandidateResponse {
   rider_id: string;
   rider_label: string;
   rider_type: "fixed" | "indemnity";
+}
+
+export interface ClaimCaseListResponse {
+  items: Array<ClaimCaseResponse>;
+  next_cursor?: string | null;
+  schema_version?: "1";
+}
+
+export interface ClaimCaseResponse {
+  allowed_transitions: Array<
+    | "preparing"
+    | "submitted"
+    | "supplementation_requested"
+    | "paid"
+    | "partially_paid"
+    | "denied"
+    | "closed"
+  >;
+  checklist: Array<ClaimChecklistItemResponse>;
+  claimed_amount: string | null;
+  currency: string | null;
+  deleted: boolean;
+  family_member_id: string;
+  id: string;
+  insurer_key: string;
+  medical_event_id: string;
+  outcome_reason_code: string | null;
+  paid_amount: string | null;
+  policy_contract_id: string;
+  receipt_number: string | null;
+  rider_id: string;
+  schema_version?: "1";
+  snapshot: ClaimSnapshotResponse;
+  status:
+    | "preparing"
+    | "submitted"
+    | "supplementation_requested"
+    | "paid"
+    | "partially_paid"
+    | "denied"
+    | "closed";
+  status_events: Array<ClaimStatusEventResponse>;
+  submitted_at: string | null;
+  version: number;
+}
+
+export interface ClaimChecklistItemResponse {
+  conditional: boolean;
+  document_kind: string;
+  id: string;
+  note_code: string | null;
+  prepared: boolean;
+  required: boolean;
+  requirement_code: string;
+  source_evidence_id: string | null;
+  source_rule_version_id: string | null;
+  version: number;
+}
+
+export interface ClaimCreateRequest {
+  rider_id: string;
+}
+
+export interface ClaimErrorResponse {
+  error_code:
+    | "AUTHENTICATION_REQUIRED"
+    | "CLAIM_CHECKLIST_ITEM_NOT_FOUND"
+    | "CLAIM_INVALID"
+    | "CLAIM_NOT_FOUND"
+    | "INVALID_CLAIM_TRANSITION"
+    | "INVALID_REQUEST"
+    | "RESOURCE_LIMIT_EXCEEDED"
+    | "VERSION_CONFLICT";
+  fields?: Array<string> | null;
+  message: string;
+}
+
+export interface ClaimSnapshotResponse {
+  calculation: CalculationSnapshotResponse;
+  candidate: CandidateSnapshotResponse;
+  evidence: EvidenceSnapshotResponse;
+  policy: PolicySnapshotResponse;
+  rules: RuleSnapshotResponse;
+  snapshot_sha256: string;
+  snapshot_version: number;
+}
+
+export interface ClaimStatusEventResponse {
+  from_status:
+    | "preparing"
+    | "submitted"
+    | "supplementation_requested"
+    | "paid"
+    | "partially_paid"
+    | "denied"
+    | "closed"
+    | null;
+  occurred_at: string;
+  reason_code: string | null;
+  to_status:
+    | "preparing"
+    | "submitted"
+    | "supplementation_requested"
+    | "paid"
+    | "partially_paid"
+    | "denied"
+    | "closed";
+}
+
+export interface ClaimTransitionRequest {
+  expected_version: number;
+  metadata?: Record<string, unknown>;
+  occurred_at: string;
+  target_status:
+    | "preparing"
+    | "submitted"
+    | "supplementation_requested"
+    | "paid"
+    | "partially_paid"
+    | "denied"
+    | "closed";
+}
+
+export interface ClaimUpdateRequest {
+  claimed_amount?: string | null;
+  currency?: string | null;
+  expected_version: number;
+  outcome_reason_code?: string | null;
+  receipt_number?: string | null;
 }
 
 export interface ClauseErrorResponse {
@@ -748,8 +960,9 @@ export interface EvidenceRef {
   page: number;
 }
 
-export interface ExpectedVersionRequest {
-  expected_version: number;
+export interface EvidenceSnapshotResponse {
+  content_sha256?: Array<string>;
+  evidence_ids?: Array<string>;
 }
 
 export interface ExtractionSummaryResponse {
@@ -998,6 +1211,13 @@ export interface PolicyReviewItem {
   status: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 }
 
+export interface PolicySnapshotResponse {
+  captured_at?: string | null;
+  policy_contract_id: string;
+  rider_ids?: Array<string>;
+  status_codes?: Array<string>;
+}
+
 export interface PolicyUpdateRequest {
   coverage_end_date?: string | null;
   expected_version: number;
@@ -1147,6 +1367,12 @@ export interface RuleEvaluationResponse {
   rule_version_id: string;
 }
 
+export interface RuleSnapshotResponse {
+  evaluator_versions?: Array<string>;
+  reason_codes?: Array<string>;
+  rule_version_ids?: Array<string>;
+}
+
 export interface StructureAcceptedResponse {
   job_id: string;
   schema_version?: "1";
@@ -1222,6 +1448,14 @@ export interface TermsEditionResponse {
   version: number;
 }
 
+export interface familycare_api__claims__schemas__ExpectedVersionRequest {
+  expected_version: number;
+}
+
+export interface familycare_api__clauses__schemas__ExpectedVersionRequest {
+  expected_version: number;
+}
+
 export interface familycare_api__decisions__schemas__EvidenceResponse {
   bbox: [number, number, number, number] | null;
   content_sha256: string;
@@ -1232,6 +1466,10 @@ export interface familycare_api__decisions__schemas__EvidenceResponse {
   review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
 }
 
+export interface familycare_api__decisions__schemas__ExpectedVersionRequest {
+  expected_version: number;
+}
+
 export interface familycare_api__policies__schemas__EvidenceResponse {
   bbox: [number, number, number, number] | null;
   content_sha256: string;
@@ -1239,4 +1477,8 @@ export interface familycare_api__policies__schemas__EvidenceResponse {
   evidence_id: string;
   physical_page: number;
   review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
+}
+
+export interface familycare_api__policies__schemas__ExpectedVersionRequest {
+  expected_version: number;
 }

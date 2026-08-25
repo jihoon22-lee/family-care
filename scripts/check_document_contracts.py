@@ -176,16 +176,14 @@ def validate_schema_instance(
         if resolved is None:
             return [f"{path}: unresolved local reference {schema['$ref']}"]
         return validate_schema_instance(resolved, value, root_schema=root, path=path)
+    errors: list[str] = []
     if "anyOf" in schema:
         branches = [
             validate_schema_instance(branch, value, root_schema=root, path=path)
             for branch in schema["anyOf"]
         ]
-        if any(not branch_errors for branch_errors in branches):
-            return []
-        return [f"{path}: no anyOf branch matched"]
-
-    errors: list[str] = []
+        if not any(not branch_errors for branch_errors in branches):
+            errors.append(f"{path}: no anyOf branch matched")
     expected_type = schema.get("type")
     type_matches = {
         "object": isinstance(value, dict),

@@ -1,6 +1,6 @@
 # Data model design
 
-- 상태: Phase 1 완료, v0.1 확장 설계 승인, PR7 benefit-calculation model 반영 및 문서 검토 대기
+- 상태: Phase 1 완료, v0.1 확장 설계 승인, PR7 benefit-calculation·Claim workflow model 반영 및 문서 검토 대기
 - 적용 단계: Phase 1 ingestion 모델과 Phase 2~8 업무 모델
 - 상위 기준: `docs/design/v0.1-product.md`
 
@@ -272,11 +272,23 @@ HTTP projection은 `BenefitCalculationsResponse` envelope로 `schema_version`, c
 
 ### ClaimCase
 
-실제 청구 단위입니다. 상태는 preparing, submitted, supplementation_requested, paid, partially_paid, denied, closed를 사용합니다. submitted는 FamilyCare가 전송했다는 뜻이 아니라 사용자가 보험사 channel에서 접수한 사실을 수동 기록한 상태입니다.
+실제 청구 단위입니다. `claim_cases`는 `household_space_id`, `medical_event_id`, `family_member_id`, `policy_contract_id`, non-null `rider_id`, 서버가 선택 Rider에서 파생한 `insurer_key`, 상태, receipt/submission metadata, claimed/paid 금액과 통화, outcome reason, optimistic `version`, 생성·수정 시각, soft-delete 시각을 보존합니다. 클라이언트는 정책·보험사·가구 범위를 보내지 않고 결과 카드에서 `rider_id`만 보내며, 서버가 같은 HouseholdScope 안에서 계약과 보험사를 확인합니다. `(household_space_id, medical_event_id, rider_id)` active unique 경계로 중복 지급 이력 생성을 막습니다.
+
+상태는 preparing, submitted, supplementation_requested, paid, partially_paid, denied, closed를 사용합니다. submitted는 FamilyCare가 전송했다는 뜻이 아니라 사용자가 보험사 channel에서 접수한 사실을 수동 기록한 상태입니다. FamilyCare에는 보험사 제출 API·email/fax 연동이 없고, ClaimCase에 파일이나 원문을 저장하지 않습니다.
+
+### ClaimCase snapshot
+
+`claim_case_snapshots`는 ClaimCase 생성 시의 Candidate, Rule, Policy, Evidence와 선택한 후보에 연결된 모든 BenefitCalculation을 정규화한 allowlist JSON과 `snapshot_version`, SHA-256을 저장합니다. 계산은 exact decision run에 묶이고, stale run이나 생성 중 policy lineage 변경은 거부됩니다. 각 component는 별도 JSON object로 보존되고 `(claim_case_id, snapshot_version)`이 unique입니다. snapshot에는 ID·version·상태·reason code·content hash 같은 bounded lineage만 들어가며 diagnosis/situation, receipt note/number, 문서 본문·경로·파일·OCR·provider payload와 외부 식별자는 들어가지 않습니다. 이후 재분석이나 원본 행 변경은 기존 snapshot을 수정하지 않으며 DB trigger도 UPDATE/DELETE를 거부합니다.
+
+HTTP 응답은 저장된 전체 JSON을 그대로 노출하지 않고 candidate/rules/policy/evidence/calculation의 ID·version·상태 중심 bounded projection과 snapshot hash를 반환합니다.
+
+### ClaimChecklistItem and ClaimStatusEvent
+
+`claim_checklist_items`는 `document_kind`, `requirement_code`, `required`, `conditional`, `prepared`, bounded `note_code`, source rule version/Evidence ID, version과 시각만 저장합니다. 파일, path, binary, image, OCR, document text, 외부 파일 ID는 없습니다. `claim_status_events`는 허용된 from/to status, occurred-at, bounded reason code와 metadata object를 append-only로 기록합니다.
 
 ### ClaimHistory
 
-지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. 필요서류는 checklist metadata만 가지며 진단서·영수증·처방전 file이나 외부 file 참조를 관리하지 않습니다.
+`claim_history`는 non-null `rider_id`, 지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. paid와 partially_paid는 같은 transaction에서 `counted_occurrence=true`인 사실로 기록하며, denied는 `counted_occurrence=false`인 감사 이력으로 보존합니다. 판정은 같은 Rider 이력만 횟수에 포함합니다. denied는 미래 판정의 `NO_MATCH`로 변환하지 않으며 누락·충돌 이력은 `UNKNOWN`입니다. 필요서류는 checklist metadata만 가지며 진단서·영수증·처방전 file이나 외부 file 참조를 관리하지 않습니다.
 
 ## Evidence
 
@@ -307,6 +319,12 @@ Evidence는 다음을 가집니다.
 12. ReceiptLine 금액은 Decimal/통화 검증을 통과해야 하며 음수·overflow·통화 불일치는 저장·계산되지 않습니다.
 13. BenefitCalculation과 step은 immutable trace이며 정액형과 실손형 금액 경로를 한 계산에서 혼합하지 않습니다.
 14. 복수 indemnity의 독립 예상액을 합산하지 않고 최종 비례분담을 `UNKNOWN`으로 둡니다.
+15. ClaimCase 생성은 `rider_id`를 서버가 검증한 PolicyContract·insurer에만 연결하며 클라이언트 scope를 권위로 사용하지 않습니다.
+16. ClaimCase snapshot은 Candidate·Rule·Policy·Evidence·계산 전체의 immutable lineage이며 ClaimCase가 live result pointer만 보유하지 않습니다.
+17. paid/partially_paid만 `counted_occurrence=true` ClaimHistory가 되고 denied는 audit-only입니다.
+18. Claim 상태·checklist·삭제·복원 변경은 expected version과 허용된 transition을 거치며 soft-deleted 행은 기본 조회에서 숨깁니다.
+19. ClaimCase snapshot과 status event는 application API뿐 아니라 database trigger에서도 update/delete가 거부됩니다.
+20. stale decision result와 decision run 이후 변경된 policy lineage는 ClaimCase를 만들 수 없습니다.
 
 ## Failure behavior
 
@@ -343,6 +361,10 @@ Evidence는 다음을 가집니다.
 - household-scoped receipt CRUD, optimistic version, soft delete, Decimal-string response
 - BenefitCalculation schema의 strict objects, bounded steps/holds, Evidence lineage, private-field exclusion
 - ClaimCase checklist-only와 medical document field 부재
+- ClaimCase의 rider-only create 요청과 서버 파생 policy/insurer scope
+- Candidate/Rule/Policy/Evidence/all-calculation snapshot lineage와 immutable hash
+- status transition, paid/partial counted history, denied audit-only history
+- claim soft delete/trash/restore와 no-store/no-file/no-submission privacy boundary
 - encrypted archive metadata와 key/password 비저장
 - soft delete, 휴지통, 복원, 중복 복원
 - 문서 해시 중복과 버전 교체
@@ -350,4 +372,4 @@ Evidence는 다음을 가집니다.
 
 ## Deferred decisions
 
-Phase 1의 여덟 ingestion table과 성공 extraction unique rule은 완료되었습니다. v0.1 archive key metadata는 `docs/design/private-data-runtime.md`, session은 `docs/design/authentication.md`를 따릅니다. 보존 기간, 실제 증권번호 저장 필요성, 운영 backup policy는 v0.1 이후 별도 결정으로 남깁니다.
+Phase 1의 여덟 ingestion table과 성공 extraction unique rule은 완료되었습니다. v0.1 archive key metadata는 `docs/design/private-data-runtime.md`, session은 `docs/design/authentication.md`를 따릅니다. 보존 기간, 실제 증권번호 저장 필요성, 운영 backup policy는 v0.1 이후 별도 결정으로 남깁니다. 실제 보험사 제출, 실제 문서·개인정보 수용, 모바일 기기·Tailscale acceptance는 아직 이 모델의 검증 범위가 아닙니다.

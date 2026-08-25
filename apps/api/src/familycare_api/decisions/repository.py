@@ -18,6 +18,7 @@ from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import (
     ClaimCandidate,
     ClaimHistoryFact,
+    ClaimHistoryReader,
     DecisionReaders,
     DecisionRunResult,
     FactConfirmation,
@@ -52,8 +53,14 @@ def _database_url(value: str) -> str:
 class DecisionRepository:
     """Use one repeatable-read transaction for input snapshot and result writes."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        history_reader: ClaimHistoryReader | None = None,
+    ) -> None:
         self.database_url = _database_url(database_url)
+        self.history_reader = history_reader
 
     def create_medical_event(
         self,
@@ -473,6 +480,27 @@ class DecisionRepository:
         except psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
+    def versions_by_ids(
+        self,
+        scope: HouseholdScope,
+        rider_id: UUID,
+        rule_version_ids: tuple[UUID, ...],
+    ) -> tuple[CoverageRuleVersion, ...]:
+        """Load the exact scoped rule versions captured by a decision run."""
+
+        if not rule_version_ids:
+            return ()
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                return self._rule_versions_by_ids(
+                    connection,
+                    scope,
+                    rider_id,
+                    rule_version_ids,
+                )
+        except psycopg.Error:
+            raise DecisionRepositoryUnavailable from None
+
     def get_many(
         self,
         scope: HouseholdScope,
@@ -489,8 +517,25 @@ class DecisionRepository:
         scope: HouseholdScope,
         family_member_id: UUID,
     ) -> tuple[ClaimHistoryFact, ...]:
-        del scope, family_member_id
-        return ()
+        if self.history_reader is not None:
+            return self.history_reader.for_family_member(scope, family_member_id)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                return self._claim_history_facts(connection, scope, family_member_id)
+        except psycopg.Error:
+            raise DecisionRepositoryUnavailable from None
+
+    def _claim_history_facts(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        family_member_id: UUID,
+    ) -> tuple[ClaimHistoryFact, ...]:
+        if self.history_reader is not None:
+            return self.history_reader.for_family_member(scope, family_member_id)
+        from familycare_api.claims.repository import read_claim_history
+
+        return read_claim_history(connection, scope, family_member_id)
 
     @staticmethod
     def _event_row(
@@ -677,7 +722,9 @@ class DecisionRepository:
              AND policy.deleted_at IS NULL
             LEFT JOIN coverage_rule_evidence AS linked
               ON linked.coverage_rule_version_id = version.id
-            LEFT JOIN evidence ON evidence.id = linked.evidence_id
+            LEFT JOIN evidence
+              ON evidence.id = linked.evidence_id
+             AND evidence.household_space_id = %(scope)s
             WHERE rule.household_space_id = %(scope)s
               AND rule.current_status = 'published'
               AND rule.deleted_at IS NULL
@@ -689,6 +736,67 @@ class DecisionRepository:
                      evidence.physical_page NULLS LAST, evidence.id NULLS LAST
             """,
             {"scope": scope.household_space_id, "rider": rider_id},
+        ).fetchall()
+        grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
+        for row in rows:
+            version_id = cast(UUID, row["id"])
+            grouped.setdefault(version_id, (row, []))
+            evidence = _evidence(row)
+            if evidence is not None:
+                grouped[version_id][1].append(evidence)
+        return tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
+
+    def _rule_versions_by_ids(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        rider_id: UUID,
+        rule_version_ids: tuple[UUID, ...],
+    ) -> tuple[CoverageRuleVersion, ...]:
+        rows = connection.execute(
+            """
+            SELECT
+              version.id, version.coverage_rule_id, version.candidate_version_id,
+              version.version_number, version.schema_version, version.rule_kind,
+              version.required, version.input_field_paths, version.expression_json,
+              version.result_reason_code, version.review_state, version.executable,
+              version.generator_version, version.verifier_version,
+              version.created_at, version.published_at,
+              evidence.id AS evidence_id,
+              evidence.document_version_id, evidence.extraction_id,
+              evidence.content_sha256, evidence.physical_page,
+              evidence.x0, evidence.y0, evidence.x1, evidence.y1,
+              evidence.review_state AS evidence_review_state
+            FROM coverage_rule_versions AS version
+            JOIN coverage_rules AS rule
+              ON rule.id = version.coverage_rule_id
+             AND rule.household_space_id = %(scope)s
+            JOIN rider_clause_links AS link
+              ON link.id = rule.rider_clause_link_id
+             AND link.household_space_id = %(scope)s
+             AND link.rider_id = %(rider)s
+            JOIN riders AS rider
+              ON rider.id = link.rider_id
+             AND rider.household_space_id = %(scope)s
+             AND rider.deleted_at IS NULL
+            JOIN policy_contracts AS policy
+              ON policy.id = rider.policy_contract_id
+             AND policy.household_space_id = %(scope)s
+             AND policy.deleted_at IS NULL
+            LEFT JOIN coverage_rule_evidence AS linked
+              ON linked.coverage_rule_version_id = version.id
+            LEFT JOIN evidence
+              ON evidence.id = linked.evidence_id
+             AND evidence.household_space_id = %(scope)s
+            WHERE version.id = ANY(%(versions)s)
+            ORDER BY version.id, evidence.physical_page NULLS LAST,
+                     evidence.id NULLS LAST
+            """,
+            {
+                "scope": scope.household_space_id,
+                "rider": rider_id,
+                "versions": list(rule_version_ids),
+            },
         ).fetchall()
         grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
         for row in rows:
@@ -921,8 +1029,11 @@ class _ConnectionReaders:
     def for_family_member(
         self, scope: HouseholdScope, family_member_id: UUID
     ) -> tuple[ClaimHistoryFact, ...]:
-        del scope, family_member_id
-        return ()
+        return self.repository._claim_history_facts(
+            self.connection,
+            scope,
+            family_member_id,
+        )
 
 
 def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:

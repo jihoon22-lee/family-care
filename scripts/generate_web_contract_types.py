@@ -137,6 +137,15 @@ def _render_property(name: str, optional: bool, type_name: str, terminator: str 
 
     rendered_name = f"{_field_name(name)}{'?' if optional else ''}"
     one_line = f"{rendered_name}: {type_name}{terminator}"
+    if type_name.startswith("Array<") and type_name.endswith(">"):
+        item_type = type_name.removeprefix("Array<").removesuffix(">")
+        if " | " in item_type and len(one_line) + 2 > PRINT_WIDTH:
+            members = item_type.split(" | ")
+            return [
+                f"{rendered_name}: Array<",
+                *(f"  | {member}" for member in members),
+                f">{terminator}",
+            ]
     if " | " not in type_name or len(one_line) + 2 <= PRINT_WIDTH:
         return [one_line]
     if len(type_name) + len(terminator) + 4 <= PRINT_WIDTH:

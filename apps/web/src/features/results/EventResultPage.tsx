@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { getEvidence } from "../../api/results";
+import { createClaimCase } from "../../api/claims";
 import type {
   BenefitCalculationsResponse,
   EvidenceDetailResponse,
@@ -30,9 +31,12 @@ export function EventResultPage({
   version: number;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const claimStartingRef = useRef(false);
   const [evidence, setEvidence] = useState<EvidenceDetailResponse[]>([]);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceUnavailable, setEvidenceUnavailable] = useState(false);
+  const [claimStarting, setClaimStarting] = useState(false);
+  const [claimStartError, setClaimStartError] = useState<"request" | "stale">();
   const eventResource = useMedicalEvent(eventId);
   const resultResource = useEventResult(eventId, version);
   const calculationResource = useBenefitCalculations(eventId);
@@ -107,13 +111,29 @@ export function EventResultPage({
     setEvidenceOpen(true);
   }
 
-  const startClaim =
-    onStartClaim ??
-    ((riderId: string) => {
-      window.location.assign(
-        `/app/claims/new?event=${encodeURIComponent(eventId)}&rider=${encodeURIComponent(riderId)}`,
-      );
-    });
+  const startClaim = (riderId: string) => {
+    if (!resultMatchesCurrentEvent) {
+      setClaimStartError("stale");
+      return;
+    }
+    if (claimStartingRef.current) return;
+    if (onStartClaim) {
+      onStartClaim(riderId);
+      return;
+    }
+    claimStartingRef.current = true;
+    setClaimStarting(true);
+    setClaimStartError(undefined);
+    void createClaimCase(eventId, { rider_id: riderId })
+      .then((claim) => {
+        window.location.assign(`/app/claims/${encodeURIComponent(claim.id)}`);
+      })
+      .catch(() => {
+        claimStartingRef.current = false;
+        setClaimStarting(false);
+        setClaimStartError("request");
+      });
+  };
 
   return (
     <main className={styles.page} id="main-content">
@@ -148,6 +168,18 @@ export function EventResultPage({
         result={result}
         riderLabels={riderLabels}
       />
+      {claimStartError ? (
+        <p className={styles.error} role="alert">
+          {claimStartError === "stale"
+            ? "현재 사건과 같은 버전의 결과에서만 청구 기록을 시작할 수 있습니다. 다시 분석해 주세요."
+            : "청구 기록을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요."}
+        </p>
+      ) : null}
+      {claimStarting ? (
+        <p className={styles.loading} role="status" aria-live="polite">
+          청구 기록을 준비하는 중입니다.
+        </p>
+      ) : null}
       {!resultMatchesCurrentEvent ? (
         <p className={styles.error} role="status">
           현재 사건 버전과 다른 결과이므로 예상액 상세를 함께 표시하지 않습니다.
