@@ -59,13 +59,14 @@ class FactValue:
 
 @dataclass(frozen=True)
 class FactContext:
-    """Facts grouped by the four namespaces accepted by the rule DSL."""
+    """Facts grouped by the bounded namespaces accepted by the rule DSL."""
 
     medical_event: Mapping[str, FactValue]
     policy: Mapping[str, FactValue]
     rider: Mapping[str, FactValue]
     claim_history: Mapping[str, FactValue]
     as_of_date: date | None = None
+    receipt: Mapping[str, FactValue] = field(default_factory=dict)
 
     def get(self, field_path: str) -> FactValue | None:
         """Resolve a fully-qualified DSL path without dynamic attribute access."""
@@ -78,6 +79,7 @@ class FactContext:
             "PolicyContract": self.policy,
             "Rider": self.rider,
             "ClaimHistory": self.claim_history,
+            "Receipt": self.receipt,
         }
         values = groups.get(namespace)
         if values is None:

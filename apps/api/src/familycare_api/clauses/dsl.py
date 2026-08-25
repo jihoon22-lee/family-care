@@ -92,6 +92,7 @@ FIELD_PATHS = frozenset(
         "Rider.status",
         "Rider.insured_amount",
         "ClaimHistory.counted_occurrence",
+        "Receipt.confirmed_amount",
     }
 )
 
@@ -218,6 +219,7 @@ _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "Rider.status": _FieldSpec("string", frozenset()),
     "Rider.insured_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
     "ClaimHistory.counted_occurrence": _FieldSpec("integer", frozenset({"occurrences"})),
+    "Receipt.confirmed_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
 }
 
 _RIDER_STATUSES = frozenset({"active", "inactive", "expired", "cancelled", "unknown"})

@@ -184,8 +184,11 @@ class DeterministicCoverageDecisionEngine:
         )
         rider_evaluations: list[RuleEvaluation] = []
         evidence_invalid = False
+        decision_rules = tuple(
+            item for item in rules if item.rule_document.get("calculation") is None
+        )
 
-        for rule in rules:
+        for rule in decision_rules:
             try:
                 evaluation = evaluate_rule(rule, context, rider_id=snapshot.rider_id)
             except RuleRuntimeError:
@@ -218,15 +221,15 @@ class DeterministicCoverageDecisionEngine:
                 )
             rider_evaluations.append(evaluation)
 
-        if not rules:
+        if not decision_rules:
             return (
                 self._unknown_candidate(
                     snapshot,
-                    reason_code="NO_EXECUTABLE_RULE",
+                    reason_code=("NO_EXECUTABLE_DECISION_RULE" if rules else "NO_EXECUTABLE_RULE"),
                     questions=precondition_questions,
                 ),
                 (),
-                (),
+                rules,
                 precondition != "MATCH",
             )
 

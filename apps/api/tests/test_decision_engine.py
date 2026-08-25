@@ -259,6 +259,43 @@ def rule(
     )
 
 
+def calculation_rule() -> CoverageRuleVersion:
+    rule_document: dict[str, object] = {
+        "schema_version": RULE_SCHEMA_VERSION,
+        "rule_kind": "rate_amount",
+        "required": True,
+        "input_field_paths": ["Rider.insured_amount"],
+        "calculation": {
+            "op": "multiply",
+            "args": [
+                {"field": "Rider.insured_amount"},
+                {"value": Decimal("0.5")},
+            ],
+        },
+        "result_reason_code": "SYNTHETIC_RATE_AMOUNT",
+        "evidence_ids": [str(EVIDENCE_ID)],
+    }
+    return CoverageRuleVersion(
+        id=RULE_B,
+        coverage_rule_id=UUID("00000000-0000-0000-0000-000000000071"),
+        candidate_version_id=CANDIDATE_B,
+        version_number=1,
+        schema_version=RULE_SCHEMA_VERSION,
+        rule_kind="rate_amount",
+        required=True,
+        input_field_paths=("Rider.insured_amount",),
+        rule_document=rule_document,
+        result_reason_code="SYNTHETIC_RATE_AMOUNT",
+        review_state="AI_VERIFIED",
+        executable=True,
+        generator_version="synthetic-generator-v1",
+        verifier_version="synthetic-verifier-v1",
+        created_at=NOW,
+        published_at=NOW,
+        evidence=(evidence_ref(),),
+    )
+
+
 def evaluation(
     *,
     rider_id: UUID = RIDER_A,
@@ -362,6 +399,16 @@ def test_only_actual_subscribed_riders_become_candidates() -> None:
     )
 
     assert tuple(candidate.rider_id for candidate in result.candidates) == (RIDER_B,)
+
+
+def test_calculation_rules_do_not_turn_a_matched_eligibility_into_unknown() -> None:
+    result = run(
+        (snapshot(RIDER_A),),
+        {RIDER_A: (rule(), calculation_rule())},
+    )
+
+    assert result.candidates[0].aggregate_result == "MATCH"
+    assert tuple(item.rule_version_id for item in result.evaluations) == (RULE_A,)
 
 
 def test_missing_event_date_still_discovers_candidates_as_unknown() -> None:

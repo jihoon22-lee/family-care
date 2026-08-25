@@ -22,6 +22,7 @@ CalculationStatus = Literal["computed", "partial", "unknown"]
 ReceiptCategory = Literal["outpatient", "inpatient", "pharmacy"]
 CoverageCategory = Literal["covered", "possible_excluded", "excluded", "unknown"]
 ReceiptConfirmation = Literal["user", "ai_structured", "unconfirmed"]
+IndemnityAllocation = Literal["NONE", "SINGLE", "UNKNOWN"]
 
 _CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
 _REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
@@ -135,6 +136,7 @@ class BenefitCalculationResult:
             not isinstance(self.applied_rate, Decimal)
             or not self.applied_rate.is_finite()
             or self.applied_rate < 0
+            or self.applied_rate > 1
         ):
             raise CalculationValidationError("INVALID_RATE")
         if any(_REASON_CODE_PATTERN.fullmatch(item) is None for item in self.hold_reason_codes):
@@ -143,6 +145,28 @@ class BenefitCalculationResult:
     @classmethod
     def unknown(cls, kind: CalculationKind, reason_code: str) -> BenefitCalculationResult:
         return cls(kind=kind, status="unknown", hold_reason_codes=(reason_code,))
+
+
+@dataclass(frozen=True)
+class ReceiptBreakdown:
+    confirmed: Money
+    additional: Money
+    excluded: Money
+
+
+@dataclass(frozen=True)
+class MultipleIndemnityResult:
+    allocation: IndemnityAllocation
+    candidate_ids: tuple[UUID | None, ...]
+    combined_amount: Money | None = None
+
+
+@dataclass(frozen=True)
+class _IndemnityTerms:
+    deductible: Decimal
+    rate: Decimal
+    limit: Decimal
+    rounding_rule: str
 
 
 def calculate_fixed_benefit(
@@ -187,6 +211,180 @@ def calculate_fixed_benefit(
         confirmed=confirmed,
         steps=tuple(state.steps),
     )
+
+
+def split_confirmed_additional_excluded(
+    lines: tuple[ReceiptLine, ...] | list[ReceiptLine],
+) -> ReceiptBreakdown:
+    """Classify receipt values before applying any insurance formula."""
+
+    if not lines:
+        raise CalculationValidationError("RECEIPT_LINES_REQUIRED")
+    currency = lines[0].amount.currency
+    confirmed = Decimal("0")
+    additional = Decimal("0")
+    excluded = Decimal("0")
+    for line in lines:
+        from familycare_api.decisions.calculation_validation import validate_receipt_line
+
+        validate_receipt_line(line)
+        if line.amount.currency != currency:
+            raise CalculationValidationError("CURRENCY_MISMATCH")
+        if line.coverage_category == "excluded":
+            excluded += line.amount.amount
+        elif line.coverage_category == "covered" and line.confirmation_level in {
+            "user",
+            "ai_structured",
+        }:
+            confirmed += line.amount.amount
+        else:
+            additional += line.amount.amount
+    return ReceiptBreakdown(
+        confirmed=Money(confirmed, currency),
+        additional=Money(additional, currency),
+        excluded=Money(excluded, currency),
+    )
+
+
+def calculate_indemnity(
+    candidate: ClaimCandidate,
+    lines: tuple[ReceiptLine, ...] | list[ReceiptLine],
+    rule: CoverageRuleVersion,
+    facts: FactContext,
+) -> BenefitCalculationResult:
+    """Calculate only the confirmed receipt portion using one canonical rule."""
+
+    if candidate.aggregate_result != "MATCH":
+        return BenefitCalculationResult.unknown("indemnity", "CANDIDATE_NOT_MATCHED")
+    if candidate.rider_type != "indemnity":
+        return BenefitCalculationResult.unknown("indemnity", "RIDER_NOT_INDEMNITY")
+    if not lines:
+        return BenefitCalculationResult.unknown("indemnity", "RECEIPT_LINES_REQUIRED")
+    if (
+        not rule.executable
+        or rule.review_state not in _APPROVED_STATES
+        or rule.published_at is None
+    ):
+        return BenefitCalculationResult.unknown("indemnity", "RULE_NOT_EXECUTABLE")
+    if any(item.review_state not in _APPROVED_STATES for item in rule.evidence):
+        return BenefitCalculationResult.unknown("indemnity", "RULE_EVIDENCE_UNAVAILABLE")
+
+    try:
+        breakdown = split_confirmed_additional_excluded(lines)
+        currency = _confirmed_currency(facts)
+        if breakdown.confirmed.currency != currency:
+            raise CalculationValidationError("CURRENCY_MISMATCH")
+        calculation = _compile_calculation(rule)
+        terms = _parse_indemnity_formula(calculation)
+        steps, final = _indemnity_steps(breakdown.confirmed, terms)
+        deductible = Money(terms.deductible, currency)
+        limit = Money(terms.limit, currency)
+    except CalculationValidationError as error:
+        return BenefitCalculationResult.unknown("indemnity", error.reason_code)
+    except RuleValidationError:
+        return BenefitCalculationResult.unknown("indemnity", "UNSUPPORTED_INDEMNITY_FORMULA")
+
+    partial = breakdown.additional.amount > 0
+    return BenefitCalculationResult(
+        kind="indemnity",
+        status="partial" if partial else "computed",
+        confirmed=final,
+        additional=breakdown.additional,
+        excluded=breakdown.excluded,
+        deductible=deductible,
+        applied_rate=terms.rate,
+        applied_limit=limit,
+        steps=steps,
+        hold_reason_codes=("ADDITIONAL_RECEIPT_REVIEW_REQUIRED",) if partial else (),
+    )
+
+
+def detect_multiple_indemnity_contracts(
+    candidates: tuple[ClaimCandidate, ...] | list[ClaimCandidate],
+) -> MultipleIndemnityResult:
+    """Identify independent indemnity candidates without adding their amounts."""
+
+    indemnity = tuple(item for item in candidates if item.rider_type == "indemnity")
+    candidate_ids = tuple(item.id for item in indemnity)
+    if not indemnity:
+        return MultipleIndemnityResult("NONE", ())
+    if len(indemnity) == 1:
+        return MultipleIndemnityResult("SINGLE", candidate_ids)
+    return MultipleIndemnityResult("UNKNOWN", candidate_ids)
+
+
+def _parse_indemnity_formula(node: CompiledCalculation) -> _IndemnityTerms:
+    """Accept one explicit deductible -> rate -> limit -> round formula shape."""
+
+    if node.operator != "round" or node.rounding not in _DECIMAL_ROUNDING:
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA")
+    limited = _calculation_child(node, 0, "min")
+    multiplied = _calculation_child(limited, 0, "multiply")
+    limited_amount = _decimal_operand(limited, 1)
+    eligible = _calculation_child(multiplied, 0, "max")
+    rate = _decimal_operand(multiplied, 1)
+    subtracted = _calculation_child(eligible, 0, "subtract")
+    if _decimal_operand(eligible, 1) != 0:
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA")
+    if subtracted.operands[0] != "Receipt.confirmed_amount":
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA")
+    deductible = _decimal_operand(subtracted, 1)
+    if rate < 0 or rate > 1:
+        raise CalculationValidationError("INVALID_RATE")
+    _validate_decimal_amount(deductible)
+    _validate_decimal_amount(limited_amount)
+    return _IndemnityTerms(deductible, rate, limited_amount, node.rounding)
+
+
+def _calculation_child(
+    parent: CompiledCalculation,
+    index: int,
+    operator: str,
+) -> CompiledCalculation:
+    try:
+        child = parent.operands[index]
+    except IndexError:
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA") from None
+    if not isinstance(child, CompiledCalculation) or child.operator != operator:
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA")
+    return child
+
+
+def _decimal_operand(parent: CompiledCalculation, index: int) -> Decimal:
+    try:
+        value = parent.operands[index]
+    except IndexError:
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA") from None
+    if not isinstance(value, Decimal):
+        raise CalculationValidationError("UNSUPPORTED_INDEMNITY_FORMULA")
+    return value
+
+
+def _indemnity_steps(
+    confirmed: Money,
+    terms: _IndemnityTerms,
+) -> tuple[tuple[CalculationStep, ...], Money]:
+    eligible_amount = max(Decimal("0"), confirmed.amount - terms.deductible)
+    eligible = Money(eligible_amount, confirmed.currency)
+    reimbursed = Money(_validate_decimal_amount(eligible.amount * terms.rate), confirmed.currency)
+    limited = Money(min(reimbursed.amount, terms.limit), confirmed.currency)
+    rounding = _DECIMAL_ROUNDING[terms.rounding_rule]
+    rounded = Money(limited.amount.quantize(Decimal("1"), rounding=rounding), confirmed.currency)
+    steps = (
+        CalculationStep(1, "subtract", confirmed, eligible, None, "INDEMNITY_DEDUCTIBLE"),
+        CalculationStep(2, "max", eligible, eligible, None, "INDEMNITY_NON_NEGATIVE"),
+        CalculationStep(3, "multiply", eligible, reimbursed, None, "INDEMNITY_RATE"),
+        CalculationStep(4, "min", reimbursed, limited, None, "INDEMNITY_LIMIT"),
+        CalculationStep(
+            5,
+            "round",
+            limited,
+            rounded,
+            terms.rounding_rule,
+            "INDEMNITY_ROUND",
+        ),
+    )
+    return steps, rounded
 
 
 def _compile_calculation(rule: CoverageRuleVersion) -> CompiledCalculation:
@@ -290,8 +488,13 @@ __all__ = [
     "CalculationValidationError",
     "CoverageCategory",
     "Money",
+    "MultipleIndemnityResult",
     "ReceiptCategory",
     "ReceiptConfirmation",
     "ReceiptLine",
+    "ReceiptBreakdown",
     "calculate_fixed_benefit",
+    "calculate_indemnity",
+    "detect_multiple_indemnity_contracts",
+    "split_confirmed_additional_excluded",
 ]

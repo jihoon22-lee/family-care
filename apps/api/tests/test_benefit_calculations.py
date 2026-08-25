@@ -21,6 +21,9 @@ from familycare_api.decisions.calculations import (
     Money,
     ReceiptLine,
     calculate_fixed_benefit,
+    calculate_indemnity,
+    detect_multiple_indemnity_contracts,
+    split_confirmed_additional_excluded,
 )
 from familycare_api.decisions.domain import ClaimCandidate, FactContext, FactValue
 
@@ -93,12 +96,57 @@ def _calculation_rule(
     )
 
 
-def _candidate(*, result: str = "MATCH") -> ClaimCandidate:
+def _candidate(
+    *, result: str = "MATCH", rider_type: str = "fixed", value: int = 40
+) -> ClaimCandidate:
     return ClaimCandidate(
-        id=UUID(int=40),
-        rider_id=UUID(int=41),
-        rider_type="fixed",
+        id=UUID(int=value),
+        rider_id=UUID(int=value + 1),
+        rider_type=rider_type,
         aggregate_result=result,  # type: ignore[arg-type]
+    )
+
+
+def _indemnity_rule(
+    *,
+    deductible: str = "10000",
+    rate: str = "0.8",
+    limit: str = "100000",
+) -> CoverageRuleVersion:
+    return _calculation_rule(
+        {
+            "op": "round",
+            "args": [
+                {
+                    "op": "min",
+                    "args": [
+                        {
+                            "op": "multiply",
+                            "args": [
+                                {
+                                    "op": "max",
+                                    "args": [
+                                        {
+                                            "op": "subtract",
+                                            "args": [
+                                                {"field": "Receipt.confirmed_amount"},
+                                                {"value": Decimal(deductible)},
+                                            ],
+                                        },
+                                        {"value": Decimal("0")},
+                                    ],
+                                },
+                                {"value": Decimal(rate)},
+                            ],
+                        },
+                        {"value": Decimal(limit)},
+                    ],
+                }
+            ],
+            "rounding": "half_up",
+        },
+        rule_kind="rate_amount",
+        input_field_paths=("Receipt.confirmed_amount",),
     )
 
 
@@ -335,3 +383,117 @@ def test_fixed_benefit_rejects_overflow_instead_of_returning_zero() -> None:
 
     assert result.status == "unknown"
     assert result.hold_reason_codes == ("AMOUNT_PRECISION_EXCEEDED",)
+
+
+def test_receipt_breakdown_separates_confirmed_additional_and_excluded() -> None:
+    lines = (
+        _line(amount="50000", coverage_category="covered", confirmation_level="user"),
+        replace(
+            _line(
+                amount="20000",
+                coverage_category="possible_excluded",
+                confirmation_level="ai_structured",
+            ),
+            line_id=UUID(int=2),
+        ),
+        replace(
+            _line(amount="5000", coverage_category="excluded", confirmation_level="user"),
+            line_id=UUID(int=3),
+        ),
+        replace(
+            _line(amount="3000", coverage_category="covered", confirmation_level="unconfirmed"),
+            line_id=UUID(int=4),
+        ),
+    )
+
+    breakdown = split_confirmed_additional_excluded(lines)
+
+    assert breakdown.confirmed == Money(Decimal("50000"), "KRW")
+    assert breakdown.additional == Money(Decimal("23000"), "KRW")
+    assert breakdown.excluded == Money(Decimal("5000"), "KRW")
+
+
+def test_indemnity_applies_deductible_rate_limit_and_rounding() -> None:
+    result = calculate_indemnity(
+        _candidate(rider_type="indemnity"),
+        (_line(amount="200000"),),
+        _indemnity_rule(limit="100000"),
+        _fixed_context(),
+    )
+
+    assert result.kind == "indemnity"
+    assert result.status == "computed"
+    assert result.confirmed == Money(Decimal("100000"), "KRW")
+    assert result.additional == Money(Decimal("0"), "KRW")
+    assert result.excluded == Money(Decimal("0"), "KRW")
+    assert result.deductible == Money(Decimal("10000"), "KRW")
+    assert result.applied_rate == Decimal("0.8")
+    assert result.applied_limit == Money(Decimal("100000"), "KRW")
+    assert [step.operation for step in result.steps] == [
+        "subtract",
+        "max",
+        "multiply",
+        "min",
+        "round",
+    ]
+
+
+def test_indemnity_preserves_partial_and_excluded_receipt_amounts() -> None:
+    lines = (
+        _line(amount="50000"),
+        replace(
+            _line(amount="20000", coverage_category="possible_excluded"),
+            line_id=UUID(int=2),
+        ),
+        replace(
+            _line(amount="5000", coverage_category="excluded"),
+            line_id=UUID(int=3),
+        ),
+    )
+
+    result = calculate_indemnity(
+        _candidate(rider_type="indemnity"), lines, _indemnity_rule(), _fixed_context()
+    )
+
+    assert result.status == "partial"
+    assert result.confirmed == Money(Decimal("32000"), "KRW")
+    assert result.additional == Money(Decimal("20000"), "KRW")
+    assert result.excluded == Money(Decimal("5000"), "KRW")
+    assert result.hold_reason_codes == ("ADDITIONAL_RECEIPT_REVIEW_REQUIRED",)
+
+
+def test_indemnity_without_receipts_is_unknown_not_zero() -> None:
+    result = calculate_indemnity(
+        _candidate(rider_type="indemnity"), (), _indemnity_rule(), _fixed_context()
+    )
+
+    assert result.status == "unknown"
+    assert result.confirmed is None
+    assert result.hold_reason_codes == ("RECEIPT_LINES_REQUIRED",)
+
+
+def test_indemnity_currency_mismatch_is_unknown_not_a_partial_sum() -> None:
+    lines = (
+        _line(amount="50000", currency="KRW"),
+        replace(_line(amount="10", currency="USD"), line_id=UUID(int=2)),
+    )
+
+    result = calculate_indemnity(
+        _candidate(rider_type="indemnity"), lines, _indemnity_rule(), _fixed_context()
+    )
+
+    assert result.status == "unknown"
+    assert result.confirmed is None
+    assert result.hold_reason_codes == ("CURRENCY_MISMATCH",)
+
+
+def test_multiple_indemnity_contracts_are_never_summed() -> None:
+    first = _candidate(rider_type="indemnity", value=50)
+    second = _candidate(rider_type="indemnity", value=60)
+    fixed = _candidate(rider_type="fixed", value=70)
+
+    result = detect_multiple_indemnity_contracts((first, fixed, second))
+
+    assert result.allocation == "UNKNOWN"
+    assert result.candidate_ids == (first.id, second.id)
+    assert result.combined_amount is None
