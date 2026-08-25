@@ -239,6 +239,21 @@ def test_transition_requires_expected_version_and_allowed_target(client: TestCli
     assert stale.json()["error_code"] == "VERSION_CONFLICT"
 
 
+def test_transition_rejects_timestamp_without_timezone(client: TestClient) -> None:
+    response = client.post(
+        f"/api/v1/claims/{CLAIM_ID}/transitions",
+        json={
+            "target_status": "submitted",
+            "expected_version": 1,
+            "occurred_at": "2026-08-26T09:00:00",
+            "metadata": {},
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_REQUEST"
+
+
 @pytest.mark.parametrize("target", ["paid", "partially_paid"])
 def test_payment_transition_requires_decimal_amount_currency_and_date(
     client: TestClient, service: _FakeClaimService, target: str

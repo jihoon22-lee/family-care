@@ -95,11 +95,16 @@ class ClaimRepository:
             raise ClaimInvalid
         evaluations = tuple(item for item in result.evaluations if item.rider_id in rider_ids)
         scoped_result = replace(result, candidates=candidates, evaluations=evaluations)
-        rules = tuple(
-            rule
-            for rider_id in sorted(rider_ids, key=str)
-            for rule in decision_repository.executable_for_rider(scope, rider_id)
+        rule_version_ids = tuple(
+            sorted({evaluation.rule_version_id for evaluation in evaluations}, key=str)
         )
+        rules = decision_repository.versions_by_ids(
+            scope,
+            rider_id,
+            rule_version_ids,
+        )
+        if {rule.id for rule in rules} != set(rule_version_ids):
+            raise ClaimInvalid
         evidence = tuple(item for evaluation in evaluations for item in evaluation.evidence)
         calculations = CalculationRepository(self.database_url).calculate_event(scope, event_id)
         candidate_ids = {item.id for item in candidates if item.id is not None}
@@ -635,7 +640,7 @@ class ClaimRepository:
         events = connection.execute(
             """
             SELECT * FROM claim_status_events
-            WHERE claim_case_id = %s ORDER BY occurred_at, created_at, id
+            WHERE claim_case_id = %s ORDER BY created_at, id
             """,
             (claim["id"],),
         ).fetchall()

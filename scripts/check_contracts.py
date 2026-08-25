@@ -1579,6 +1579,10 @@ def validate_claim_workflow_contract() -> list[str]:
     elif {item.get("outcome") for item in history if isinstance(item, dict)} != set(CLAIM_OUTCOMES):
         errors.append("claim-workflow example must cover paid, partially_paid, and denied")
 
+    history_rider = definitions.get("ClaimHistory", {}).get("properties", {}).get("rider_id", {})
+    if history_rider.get("$ref") != "#/$defs/UuidOrNull":
+        errors.append("claim-workflow history rider must allow aggregate null values")
+
     _validate_claim_example_ids(example, "$", errors)
     return errors
 

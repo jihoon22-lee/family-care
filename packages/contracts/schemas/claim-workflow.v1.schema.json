@@ -868,7 +868,7 @@
           "$ref": "#/$defs/Uuid"
         },
         "rider_id": {
-          "$ref": "#/$defs/Uuid"
+          "$ref": "#/$defs/UuidOrNull"
         },
         "outcome": {
           "$ref": "#/$defs/ClaimOutcome"

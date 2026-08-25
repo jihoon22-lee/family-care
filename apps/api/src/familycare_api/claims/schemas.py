@@ -70,6 +70,8 @@ class ClaimTransitionRequest(StrictModel):
 
     @model_validator(mode="after")
     def validate_transition_metadata(self) -> Self:
+        if self.occurred_at.tzinfo is None or self.occurred_at.utcoffset() is None:
+            raise ValueError("occurred_at must be timezone-aware")
         if set(self.metadata) - _TRANSITION_METADATA:
             raise ValueError("unsupported transition metadata")
         reason = self.metadata.get("reason_code")

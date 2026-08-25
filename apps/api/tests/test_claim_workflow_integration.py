@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import cast
 from uuid import UUID
@@ -61,7 +61,7 @@ def database_url() -> str:
     return value
 
 
-def _seed(database_url: str) -> None:
+def _reset_database(database_url: str) -> None:
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         connection.execute(
             """
@@ -69,6 +69,11 @@ def _seed(database_url: str) -> None:
             RESTART IDENTITY CASCADE
             """
         )
+
+
+def _seed(database_url: str) -> None:
+    _reset_database(database_url)
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         connection.execute(
             """
             INSERT INTO household_spaces (id, space_key, display_name)
@@ -400,9 +405,31 @@ def test_checklist_update_is_metadata_only_and_versioned(database_url: str) -> N
     }
 
 
+def test_status_events_keep_append_order_when_user_records_an_earlier_time(
+    database_url: str,
+) -> None:
+    _seed(database_url)
+    repository = ClaimRepository(database_url)
+
+    updated = repository.transition_claim(
+        SCOPE_A,
+        CLAIM_A,
+        target_status="submitted",
+        expected_version=1,
+        occurred_at=NOW - timedelta(days=1),
+        metadata={},
+    )
+
+    assert [event["to_status"] for event in updated["status_events"]] == [
+        "preparing",
+        "submitted",
+    ]
+
+
 def test_create_claim_captures_latest_result_and_survives_later_rule_change(
     database_url: str,
 ) -> None:
+    _reset_database(database_url)
     seed = seed_benefit_graph(database_url)
     event = create_benefit_event(database_url, seed)
     decision_service = benefit_decision_service(database_url, seed.scope_a)
@@ -426,3 +453,28 @@ def test_create_claim_captures_latest_result_and_survives_later_rule_change(
     assert created["snapshot"]["calculation"]["calculation_ids"]
     assert unchanged["snapshot"]["snapshot_sha256"] == original_hash
     assert unchanged["snapshot"]["candidate"]["candidate_ids"] == original_candidates
+
+
+def test_create_claim_uses_rule_versions_from_the_selected_decision_run(
+    database_url: str,
+) -> None:
+    _reset_database(database_url)
+    seed = seed_benefit_graph(database_url)
+    event = create_benefit_event(database_url, seed)
+    decision_service = benefit_decision_service(database_url, seed.scope_a)
+    result = decision_service.analyze_medical_event(event.id)
+    expected_rule_ids = {
+        str(evaluation.rule_version_id)
+        for evaluation in result.evaluations
+        if evaluation.rider_id == seed.fixed_rider_id
+    }
+    changed_rule_id = publish_changed_fixed_rule(database_url, seed)
+
+    created = ClaimRepository(database_url).create_claim_case(
+        seed.scope_a,
+        event.id,
+        rider_id=seed.fixed_rider_id,
+    )
+
+    assert set(created["snapshot"]["rules"]["rule_version_ids"]) == expected_rule_ids
+    assert str(changed_rule_id) not in created["snapshot"]["rules"]["rule_version_ids"]
