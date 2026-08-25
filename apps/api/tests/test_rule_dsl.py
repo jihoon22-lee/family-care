@@ -32,6 +32,7 @@ ALLOWED_FIELDS = (
     "Rider.status",
     "Rider.insured_amount",
     "ClaimHistory.counted_occurrence",
+    "Receipt.confirmed_amount",
 )
 
 EVIDENCE_INDEX = {

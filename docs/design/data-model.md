@@ -1,6 +1,6 @@
 # Data model design
 
-- 상태: Phase 1 완료, v0.1 확장 설계 승인 및 문서 검토 대기
+- 상태: Phase 1 완료, v0.1 확장 설계 승인, PR7 benefit-calculation model 반영 및 문서 검토 대기
 - 적용 단계: Phase 1 ingestion 모델과 Phase 2~8 업무 모델
 - 상위 기준: `docs/design/v0.1-product.md`
 
@@ -15,6 +15,7 @@
 - 가족, 계약 당사자, 가입 Rider의 검수값
 - 약관 조항과 규칙 버전
 - MedicalEvent와 ClaimHistory
+- 사용자 입력 수동 `ReceiptLine`과 확인 수준
 
 원시 추출값은 입력 후보이며 관리자 확정값과 구분합니다.
 
@@ -223,7 +224,17 @@ PolicyContract, Rider, Clause, RiderClauseLink, CoverageRule 후보의 생성·�
 
 ### ReceiptLine
 
-MedicalEvent의 수동 비용 항목입니다. 통원·입원·약제비, 급여 본인부담·비급여·제외 가능 분류, 실제 지출액, 통화, 확인 수준을 가집니다. 원본 영수증 image나 PDF를 저장하지 않습니다.
+MedicalEvent의 수동 비용 항목입니다. PR7의 `0008_benefit_calculations`가 다음 normalized fields를 `receipt_lines`에 저장합니다.
+
+- `id`, server-derived `household_space_id`, `medical_event_id`
+- `category`: `outpatient`/`inpatient`/`pharmacy`
+- `coverage_category`: `covered`/`possible_excluded`/`excluded`/`unknown`
+- non-negative `amount NUMERIC(18,2)`와 uppercase ISO `currency`
+- `confirmation_level`: `user`/`ai_structured`/`unconfirmed`
+- 선택적 `note_code`(최대 64자의 uppercase reason code만 허용)
+- optimistic `version`, `created_at`, `updated_at`, `deleted_at`
+
+ReceiptLine create/update는 수동 구조화 metadata만 받습니다. scoped active-list projection은 재접속 시 편집을 이어갈 ID·version과 구조화 필드만 반환합니다. 원본 영수증 image/PDF, OCR output, diagnosis, external file/path, 자유 형식 note는 저장하지 않습니다. update/delete는 server scope와 `expected_version`을 함께 확인하고, delete는 soft delete로 목록·계산 기본 조회에서 제외합니다.
 
 ### RuleEvaluation
 
@@ -239,6 +250,23 @@ MedicalEvent의 수동 비용 항목입니다. 통원·입원·약제비, 급여
 ### ClaimCandidate
 
 Rider별 평가 집계입니다. 지급 결정이나 ClaimCase가 아닙니다. 정액형 추정, 실손형 계산 보류, 추가 질문, 제외 근거를 분리합니다.
+
+### BenefitCalculation
+
+`benefit_calculations`는 한 ClaimCandidate와 하나의 executable rule version에 대한 immutable 계산 header입니다. `0008_benefit_calculations`는 `0007_coverage_decision_engine` 뒤에 추가되며 다음 값을 보존합니다.
+
+- `calculation_kind`: `fixed` 또는 `indemnity`
+- `status`: `computed`, `partial`, `unknown`
+- 결과 통화와 `confirmed_amount`, `additional_amount`, `excluded_amount`
+- indemnity의 `deductible_amount`, `applied_rate`, `applied_limit`
+- 적용 `rounding_rule`, 첫 hold reason code, 최대 16개의 bounded `excluded_reason_codes`, `rule_version_id`, `engine_version`, optimistic `version`, `created_at`
+- `household_space_id`와 `claim_candidate_id` foreign key
+
+각 header의 `benefit_calculation_steps`는 `step_number`, `operation`, input/output NUMERIC(18,6)와 통화, rounding rule, bounded `reason_code`를 저장하며 `(benefit_calculation_id, step_number)`가 unique입니다. 계산기를 다시 실행할 때 기존 header/step을 갱신하지 않고 새 version row를 생성합니다. 동일 rule/input cutoff trace는 재사용할 수 있지만, 계산에 영향을 주는 Rider 또는 indemnity ReceiptLine 변경이나 새 rule version은 새 trace를 만듭니다.
+
+`BenefitCalculation`은 실행 가능한 `AI_VERIFIED`/`USER_CONFIRMED` rule과 승인된 Policy/Clause Evidence를 다시 확인한 뒤에만 계산됩니다. 순수 계산기는 missing/stale Evidence, missing fact, invalid formula, no receipt, currency mismatch, overflow를 금액 0이 아닌 `UNKNOWN`과 hold reason으로 반환합니다. repository의 rule selector가 유효한 rule/evidence chain을 하나도 찾지 못하면 해당 candidate를 계산 projection에서 제외하며, 금액을 추정하지 않습니다. partial indemnity는 confirmed/additional/excluded를 분리하고, 복수 indemnity는 독립 금액을 합산하지 않으며 allocation을 `UNKNOWN`으로 남깁니다.
+
+HTTP projection은 `BenefitCalculationsResponse` envelope로 `schema_version`, calculation metadata, Decimal-string Money objects, bounded steps, hold/exclusion reason codes, `evidence_ids`를 반환합니다. API는 household scope를 request field로 받지 않고 모든 응답을 `no-store`로 보냅니다.
 
 ## Claim boundary
 
@@ -276,6 +304,9 @@ Evidence는 다음을 가집니다.
 9. `NEEDS_REVIEW` candidate는 executable current version이 될 수 없습니다.
 10. ReceiptLine과 ClaimCase에는 의료 document binary가 없습니다.
 11. AppSession 원본 token, PDF password, archive master key는 저장되지 않습니다.
+12. ReceiptLine 금액은 Decimal/통화 검증을 통과해야 하며 음수·overflow·통화 불일치는 저장·계산되지 않습니다.
+13. BenefitCalculation과 step은 immutable trace이며 정액형과 실손형 금액 경로를 한 계산에서 혼합하지 않습니다.
+14. 복수 indemnity의 독립 예상액을 합산하지 않고 최종 비례분담을 `UNKNOWN`으로 둡니다.
 
 ## Failure behavior
 
@@ -283,6 +314,8 @@ Evidence는 다음을 가집니다.
 - Worker intake의 중복 content hash는 기존 DocumentVersion을 재사용하고, 동일 extractor config의 succeeded Extraction을 재사용합니다. API POST 자체는 source key가 유효하면 AnalysisJob을 enqueue합니다.
 - 충돌하는 계약 상태는 최신 값을 임의 선택하지 않고 conflict와 `UNKNOWN`을 만듭니다.
 - 삭제·복원 충돌은 상태 전이 버전으로 감지합니다.
+- 계산에 필요한 rule/Evidence/fact가 없거나 stale이면 `UNKNOWN` hold를 반환하고 unsupported amount를 추정하지 않습니다.
+- ReceiptLine stale update/delete는 `VERSION_CONFLICT`를 반환하며 private input 값을 error message에 echo하지 않습니다.
 
 ## Security considerations
 
@@ -304,6 +337,11 @@ Evidence는 다음을 가집니다.
 - AI candidate version과 publish 상태 전이
 - AppSession hash, 7일 inactivity, 30일 absolute expiry
 - ReceiptLine partial indemnity calculation input
+- `0008_benefit_calculations`의 exact receipt/calculation/step tables, Decimal precision, FK/check/index/unique constraints
+- fixed calculation trace와 partial indemnity confirmed/additional/excluded split
+- multiple-indemnity allocation `UNKNOWN` 및 독립 금액 비합산
+- household-scoped receipt CRUD, optimistic version, soft delete, Decimal-string response
+- BenefitCalculation schema의 strict objects, bounded steps/holds, Evidence lineage, private-field exclusion
 - ClaimCase checklist-only와 medical document field 부재
 - encrypted archive metadata와 key/password 비저장
 - soft delete, 휴지통, 복원, 중복 복원

@@ -31,7 +31,7 @@ _DATE_FIELDS = frozenset(
         "PolicyContract.contract_end",
     }
 )
-_DECIMAL_FIELDS = frozenset({"Rider.insured_amount"})
+_DECIMAL_FIELDS = frozenset({"Rider.insured_amount", "Receipt.confirmed_amount"})
 _INTEGER_FIELDS = frozenset({"MedicalEvent.admission_days", "ClaimHistory.counted_occurrence"})
 _KNOWN_FIELDS = frozenset(
     {
@@ -44,6 +44,7 @@ _KNOWN_FIELDS = frozenset(
         "Rider.status",
         "Rider.insured_amount",
         "ClaimHistory.counted_occurrence",
+        "Receipt.confirmed_amount",
     }
 )
 _CONFIRMATIONS = frozenset({"user", "ai_structured", "unconfirmed", "conflicting"})
@@ -168,7 +169,7 @@ def _normalize_value(value: object | None, field: str | None) -> object | None:
 
 
 def _qualify_short_field(field: str) -> str:
-    for prefix in ("MedicalEvent", "PolicyContract", "Rider", "ClaimHistory"):
+    for prefix in ("MedicalEvent", "PolicyContract", "Rider", "ClaimHistory", "Receipt"):
         candidate = f"{prefix}.{field}"
         if candidate in _KNOWN_FIELDS:
             return candidate

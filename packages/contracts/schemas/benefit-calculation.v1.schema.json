@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/benefit-calculation.v1.schema.json",
+  "title": "BenefitCalculationEnvelope",
+  "description": "Strict transport-neutral deterministic benefit calculation traces.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "calculations"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "calculations": {
+      "items": {
+        "$ref": "#/$defs/BenefitCalculation"
+      },
+      "maxItems": 64,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Uuid",
+      "type": "string"
+    },
+    "UuidOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "UuidOrNull"
+    },
+    "PositiveVersion": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "PositiveVersionOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "PositiveVersionOrNull"
+    },
+    "DateTime": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?(?:Z|[+-][0-9]{2}:[0-9]{2})$",
+      "title": "DateTime",
+      "type": "string"
+    },
+    "DateTimeOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DateTime"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "DateTimeOrNull"
+    },
+    "VersionString": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "VersionString",
+      "type": "string"
+    },
+    "CurrencyCode": {
+      "maxLength": 3,
+      "minLength": 3,
+      "pattern": "^[A-Z]{3}$",
+      "title": "CurrencyCode",
+      "type": "string"
+    },
+    "DecimalString": {
+      "maxLength": 19,
+      "minLength": 1,
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+      "title": "DecimalString",
+      "type": "string"
+    },
+    "RateString": {
+      "maxLength": 8,
+      "minLength": 1,
+      "pattern": "^(?:0(?:\\.[0-9]{1,6})?|1(?:\\.0{1,6})?)$",
+      "title": "RateString",
+      "type": "string"
+    },
+    "ReasonCode": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "RoundingRule": {
+      "enum": [
+        "half_up",
+        "half_even",
+        "up",
+        "down"
+      ],
+      "title": "RoundingRule",
+      "type": "string"
+    },
+    "RoundingRuleOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RoundingRule"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "RoundingRuleOrNull"
+    },
+    "CurrencyOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CurrencyCode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "CurrencyOrNull"
+    },
+    "DecimalOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecimalString"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "DecimalOrNull"
+    },
+    "RateOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RateString"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "RateOrNull"
+    },
+    "Money": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/DecimalString"
+        },
+        "currency": {
+          "$ref": "#/$defs/CurrencyCode"
+        }
+      },
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "title": "Money",
+      "type": "object"
+    },
+    "MoneyOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Money"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "MoneyOrNull"
+    },
+    "CalculationKind": {
+      "enum": [
+        "fixed",
+        "indemnity"
+      ],
+      "title": "CalculationKind",
+      "type": "string"
+    },
+    "CalculationStatus": {
+      "enum": [
+        "computed",
+        "partial",
+        "unknown"
+      ],
+      "title": "CalculationStatus",
+      "type": "string"
+    },
+    "CalculationStep": {
+      "additionalProperties": false,
+      "properties": {
+        "step_number": {
+          "maximum": 64,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "operation": {
+          "maxLength": 32,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "type": "string"
+        },
+        "input_amount": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "output_amount": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "rounding_rule": {
+          "$ref": "#/$defs/RoundingRuleOrNull"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        }
+      },
+      "required": [
+        "step_number",
+        "operation",
+        "input_amount",
+        "output_amount",
+        "rounding_rule",
+        "reason_code"
+      ],
+      "title": "CalculationStep",
+      "type": "object"
+    },
+    "BenefitCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CalculationKind"
+        },
+        "status": {
+          "$ref": "#/$defs/CalculationStatus"
+        },
+        "calculation_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "claim_candidate_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "currency": {
+          "$ref": "#/$defs/CurrencyOrNull"
+        },
+        "confirmed": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "additional": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "excluded": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "excluded_reason_codes": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "deductible": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "applied_rate": {
+          "$ref": "#/$defs/RateOrNull"
+        },
+        "applied_limit": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "rounding_rule": {
+          "$ref": "#/$defs/RoundingRuleOrNull"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/CalculationStep"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "maxItems": 16,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "rule_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "engine_version": {
+          "$ref": "#/$defs/VersionString"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersionOrNull"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTimeOrNull"
+        }
+      },
+      "required": [
+        "schema_version",
+        "kind",
+        "status",
+        "calculation_id",
+        "claim_candidate_id",
+        "currency",
+        "confirmed",
+        "additional",
+        "excluded",
+        "excluded_reason_codes",
+        "deductible",
+        "applied_rate",
+        "applied_limit",
+        "rounding_rule",
+        "steps",
+        "hold_reason_codes",
+        "rule_version_id",
+        "evidence_ids",
+        "engine_version",
+        "version",
+        "created_at"
+      ],
+      "title": "BenefitCalculation",
+      "type": "object"
+    }
+  }
+}
