@@ -408,7 +408,9 @@ Tasks 1–6 are implemented and locally verified in the current branch: migratio
           if item.rider_type == "indemnity" and item.aggregate_result != "NO_MATCH"
       )
       if len(indemnity) > 1:
-          return MultipleIndemnityResult(allocation="UNKNOWN", candidate_ids=tuple(item.id for item in indemnity))
+          return MultipleIndemnityResult(
+              allocation="UNKNOWN", candidate_ids=tuple(item.id for item in indemnity)
+          )
       return MultipleIndemnityResult(
           allocation="SINGLE" if indemnity else "NONE",
           candidate_ids=tuple(item.id for item in indemnity),
