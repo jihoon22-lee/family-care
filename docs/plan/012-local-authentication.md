@@ -136,7 +136,7 @@ The session cookie is host-only, `Secure`, `HttpOnly`, `SameSite=Strict`, and na
 - Database tables: `app_users` with UUID, household FK, normalized username, display name, Argon2id hash, active flag, timestamps, and deactivated timestamp; `app_sessions` is created in this migration with its full shape for later tasks.
 - The two-admin limit is enforced by locking the single HouseholdSpace row, counting active users, and rejecting a third active account with `ADMIN_LIMIT_REACHED`.
 
-- [ ] **Step 1: Write the failing password and provisioning tests**
+- [x] **Step 1: Write the failing password and provisioning tests**
 
 ~~~python
 def test_password_hash_is_argon2id_and_never_round_trips() -> None:
@@ -161,7 +161,7 @@ def test_third_active_admin_is_rejected_without_persisting_password(
     assert all("synthetic-password" not in row.password_hash for row in provisioner.rows())
 ~~~
 
-- [ ] **Step 2: Run the RED tests and record the expected missing module failure**
+- [x] **Step 2: Run the RED tests and record the expected missing module failure**
 
 Run:
 
@@ -173,7 +173,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because `familycare_api.identity` and the `familycare-admin` entrypoint do not yet exist.
 
-- [ ] **Step 3: Add the migration, Argon2id service, and safe CLI**
+- [x] **Step 3: Add the migration, Argon2id service, and safe CLI**
 
 Use explicit Argon2id parameters and never accept a password option:
 
@@ -199,7 +199,7 @@ def create_admin_from_tty(database_url: str, username: str) -> None:
 
 `set-password` uses the same double `getpass` flow, accepts only the username as a non-secret argument, replaces the hash transactionally, and revokes every existing session for that user. `disable` also revokes all sessions and never deletes HouseholdSpace business data. The migration must lock the HouseholdSpace row during the active-account count and must not create a public bootstrap endpoint. Add `[project.scripts] familycare-admin = "familycare_api.identity.cli:main"` and pin `argon2-cffi` in the API package.
 
-- [ ] **Step 4: Run the GREEN unit tests and migration checks**
+- [x] **Step 4: Run the GREEN unit tests and migration checks**
 
 Run:
 
@@ -213,7 +213,7 @@ TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 
 Expected: password/provisioning tests pass, the new revision is head, and no raw password appears in captured CLI output or fake rows.
 
-- [ ] **Step 5: Commit the schema and provisioning slice**
+- [x] **Step 5: Commit the schema and provisioning slice**
 
 ~~~bash
 git add apps/api/migrations/versions/0011_local_authentication.py \
