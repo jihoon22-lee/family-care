@@ -1,6 +1,26 @@
 import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, vi } from "vitest";
 
 import { App } from "./App";
+import { authStore } from "./features/identity/authStore";
+
+beforeEach(() => {
+  authStore.setAuthenticated({
+    display_name: "Admin A",
+    needs_reauthentication: false,
+    user_id: "synthetic-user-a",
+    username: "admin-a",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new Error("synthetic test")),
+  );
+});
+
+afterEach(() => {
+  authStore.clear();
+  vi.unstubAllGlobals();
+});
 
 describe("FamilyCare foundation shell", () => {
   it("states the product boundary and ledger purpose", () => {
