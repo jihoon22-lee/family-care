@@ -1,8 +1,9 @@
 import type {
+  BenefitCalculationsResponse,
   CoverageDecisionResponse,
   EvidenceDetailResponse,
 } from "./generated";
-import { getEvidence, getEventResult } from "./results";
+import { getBenefitCalculations, getEvidence, getEventResult } from "./results";
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000201";
 const EVIDENCE_ID = "00000000-0000-4000-8000-000000000601";
@@ -29,6 +30,11 @@ const SYNTHETIC_EVIDENCE: EvidenceDetailResponse = {
   evidence_id: EVIDENCE_ID,
   physical_page: 2,
   review_state: "USER_CONFIRMED",
+  schema_version: "1",
+};
+
+const SYNTHETIC_CALCULATIONS: BenefitCalculationsResponse = {
+  calculations: [],
   schema_version: "1",
 };
 
@@ -69,6 +75,21 @@ describe("event result API clients", () => {
     await expect(getEvidence(EVIDENCE_ID)).resolves.toEqual(SYNTHETIC_EVIDENCE);
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/v1/evidence/${EVIDENCE_ID}`,
+      expect.objectContaining({ cache: "no-store", credentials: "include" }),
+    );
+  });
+
+  it("fetches server-calculated benefit details without browser arithmetic", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(SYNTHETIC_CALCULATIONS));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getBenefitCalculations(EVENT_ID)).resolves.toEqual(
+      SYNTHETIC_CALCULATIONS,
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/medical-events/${EVENT_ID}/calculations`,
       expect.objectContaining({ cache: "no-store", credentials: "include" }),
     );
   });

@@ -1,4 +1,5 @@
 import type {
+  BenefitCalculationsResponse,
   CoverageDecisionResponse,
   EvidenceDetailResponse,
 } from "./generated";
@@ -6,6 +7,7 @@ import { apiRequest } from "./http";
 
 export type EventResult = CoverageDecisionResponse;
 export type EvidenceResponse = EvidenceDetailResponse;
+export type BenefitCalculations = BenefitCalculationsResponse;
 
 export function getEventResult(
   eventId: string,
@@ -25,6 +27,16 @@ export function getEvidence(
 ): Promise<EvidenceResponse> {
   return apiRequest<EvidenceResponse>(
     `/api/v1/evidence/${encodeURIComponent(evidenceId)}`,
+    { method: "GET", signal },
+  );
+}
+
+export function getBenefitCalculations(
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<BenefitCalculationsResponse> {
+  return apiRequest<BenefitCalculationsResponse>(
+    `/api/v1/medical-events/${encodeURIComponent(eventId)}/calculations`,
     { method: "GET", signal },
   );
 }
