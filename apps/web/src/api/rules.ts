@@ -3,7 +3,7 @@ import type {
   CoverageRulePublishRequest,
   CoverageRuleVersionResponse,
   CoverageRuleVersionsResponse,
-  ExpectedVersionRequest,
+  familycare_api__clauses__schemas__ExpectedVersionRequest as ExpectedVersionRequest,
   PolicyReviewItem,
   RiderClauseLinkRejectionRequest,
   RiderClauseLinkResponse,

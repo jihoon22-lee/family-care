@@ -14,5 +14,9 @@ describe("FamilyCare foundation shell", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/Evidence-bound ledger/)).toBeInTheDocument();
     expect(screen.getByText(/MATCH · UNKNOWN · NO_MATCH/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "청구 기록" })).toHaveAttribute(
+      "href",
+      "/app/claims",
+    );
   });
 });

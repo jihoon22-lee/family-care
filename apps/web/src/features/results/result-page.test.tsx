@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
@@ -221,7 +221,7 @@ describe("action-first event results", () => {
   });
 
   it("does not mix current calculations into an older event result", async () => {
-    installFetch(
+    const fetchMock = installFetch(
       { ...EVENT, version: 3 },
       result({ event_version: 2, stale: true }),
     );
@@ -235,6 +235,15 @@ describe("action-first event results", () => {
     expect(
       screen.getByText(/현재 사건 버전과 다른 결과이므로/),
     ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /청구 검토 시작/ })[0],
+    );
+    expect(
+      screen.getByText(/현재 사건과 같은 버전의 결과에서만/),
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(([, init]) => init?.method === "POST"),
+    ).toBe(false);
   });
 
   it("renders stale metadata and server calculations without doing browser arithmetic", () => {
