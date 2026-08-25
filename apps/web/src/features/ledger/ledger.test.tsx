@@ -8,6 +8,7 @@ import {
   SYNTHETIC_LEDGER,
 } from "../../test/mockApi";
 import { renderWithProviders } from "../../test/renderWithProviders";
+import { authStore } from "../identity/authStore";
 
 function installFetch(fixture = SYNTHETIC_LEDGER): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(createMockApi(fixture));
@@ -137,8 +138,14 @@ describe("ledger read projection", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("maps a 401 to a safe authentication alert without echoing the response detail", async () => {
+  it("clears authentication on a 401 without echoing the response detail", async () => {
     const privateDetail = "synthetic private upstream detail";
+    authStore.setAuthenticated({
+      display_name: "Admin A",
+      needs_reauthentication: false,
+      user_id: "synthetic-user-a",
+      username: "admin-a",
+    });
     const fetchMock = vi
       .fn()
       .mockResolvedValue(
@@ -151,9 +158,10 @@ describe("ledger read projection", () => {
 
     renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent(/sign in|인증|로그인/i);
-    expect(alert).not.toHaveTextContent(privateDetail);
+    await waitFor(() =>
+      expect(authStore.getSnapshot().status).toBe("unauthenticated"),
+    );
+    expect(document.body).not.toHaveTextContent(privateDetail);
   });
 
   it("sanitizes a non-authentication API failure", async () => {
