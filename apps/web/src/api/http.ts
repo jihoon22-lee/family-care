@@ -1,4 +1,5 @@
 import { ApiError, safeErrorCode } from "./errors";
+import { clearAuthState } from "../features/identity/authApi";
 
 export type ApiRequestInit = RequestInit & { csrfToken?: string };
 
@@ -30,10 +31,12 @@ async function responseError(response: Response): Promise<ApiError> {
       errorCode = undefined;
     }
   }
-  return new ApiError(
+  const error = new ApiError(
     safeErrorCode(errorCode, response.status),
     response.status,
   );
+  if (response.status === 401) clearAuthState();
+  return error;
 }
 
 export async function apiRequest<T>(

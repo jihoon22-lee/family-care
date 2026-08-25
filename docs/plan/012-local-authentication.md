@@ -371,7 +371,7 @@ git commit -m "feat(auth): add secure local sessions"
 - Produces: `login(username, password)`, `logout()`, `loadCurrentUser()`, `loadCsrfToken()`, `reauthenticate(password)`, `changePassword(newPassword)`, `listSessions()`, and `revokeSession(id)`.
 - The client uses `credentials: "include"`, `Cache-Control: no-store`, and a module-scoped CSRF token. It never writes session, bearer, password, medical, policy, or Evidence data to localStorage, sessionStorage, IndexedDB, or a service-worker cache.
 
-- [ ] **Step 1: Write browser-storage and login-flow tests**
+- [x] **Step 1: Write browser-storage and login-flow tests**
 
 ~~~tsx
 test("login uses cookies and does not persist credentials", async () => {
@@ -390,7 +390,7 @@ test("login uses cookies and does not persist credentials", async () => {
 })
 ~~~
 
-- [ ] **Step 2: Run the RED Web tests**
+- [x] **Step 2: Run the RED Web tests**
 
 Run:
 
@@ -402,7 +402,7 @@ corepack pnpm@11.22.0 --filter @familycare/web test -- \
 
 Expected: FAIL because the identity feature files and authenticated shell do not exist.
 
-- [ ] **Step 3: Implement the no-storage auth client and accessible screens**
+- [x] **Step 3: Implement the no-storage auth client and accessible screens**
 
 ~~~ts
 let csrfToken: string | null = null;
@@ -428,7 +428,7 @@ export function clearAuthState(): void {
 
 Keep password values only in controlled component memory and clear them after success, failure, close, unmount, logout, or session expiry. Revoking another device and changing a password first open the keyboard-safe reauthentication dialog. A successful password change revokes all sessions, clears every in-memory business/auth cache, and returns to login. Use labels, focus restoration, and an explicit unauthenticated loading state.
 
-- [ ] **Step 4: Run Web GREEN checks and storage assertions**
+- [x] **Step 4: Run Web GREEN checks and storage assertions**
 
 Run:
 

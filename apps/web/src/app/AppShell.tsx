@@ -22,6 +22,7 @@ export function AppShell({ children }: PropsWithChildren) {
           <a href="/app/claims">청구 기록</a>
           <a href="/app/clauses/search">약관 검색</a>
           <a href="/app/clauses/review">규칙 검토</a>
+          <a href="/app/settings/sessions">기기 세션</a>
         </nav>
       </header>
       {children}
