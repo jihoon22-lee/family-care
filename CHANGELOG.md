@@ -51,6 +51,10 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 5 Event/Result PWA with optional natural-language fact structuring, editable user overrides, manual post-treatment receipt lines, action-first result groups, stale/partial handling, and bounded Evidence disclosure.
 - A separate PostgreSQL event-structuring queue and strict provider-neutral contract that cannot return tri-state decisions or monetary results.
 - Immutable Rider label snapshots on ClaimCandidate results so historical result cards retain the analyzed coverage label.
+- Phase 6 ClaimCase workflow with immutable Candidate/Rule/Policy/Evidence/all-matching-calculation snapshots, exact manual status transitions, metadata-only checklist, and soft-delete/trash/restore.
+- Result-card direct ClaimCase creation that accepts only `rider_id`; the server derives the scoped policy and insurer from the selected Rider.
+- Paid/partially-paid ClaimHistory projection with counted occurrences and denied audit-only outcomes that do not become future `NO_MATCH` evidence.
+- Strict `claim-workflow.v1` schema/example/checker coverage and no-store claim routes without insurer submission or claim-file storage.
 
 ### Changed
 
@@ -70,6 +74,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Phase 1 local synthetic document-analysis API was merged in PR #12 at `1c77f019c9d2b150053e431c31171b97ff3d90c3`; PR and post-merge `main` CI each passed 7/7.
 - Phase 2 candidate review was merged into `main` in PR #16; Phase 4 Clause search remains synthetic-only and its default household scope resolver stays fail-closed until authentication is connected.
 - CoverageRule version reads expose `expected_version`; publication accepts only the expected version and a stored version ID, while deterministic rule evaluation remains deferred to the next phase.
+- Claim workflow records user-entered receipt/payment metadata and expected-version manual transitions; it does not send submissions to insurers or store medical/claim files. Historical snapshots remain immutable when later results are reanalyzed.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
 
 ### Deprecated
@@ -100,5 +105,6 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Clause search uses a no-store JSON POST, server-derived household/date/edition/insurer/product scope, bounded 1-based physical-page Evidence, and no raw query/full-text logging; v0.1 has no live rebuild endpoint, and app/DB or stale-index mismatches fail explicitly as `SEARCH_INDEX_VERSION_MISMATCH` without silent fallback.
 - Rider-Clause and CoverageRule review routes remain server-scoped and no-store. The Web boundary shows bounded Evidence and safe reason-code copy, never raw DSL, provider prose, private paths, or document text; unsupported rule candidates remain informational and cannot be published as executable.
 - Event/result API responses are no-store, the PWA service worker caches only hashed app-shell assets, and browser tests verify that medical events, receipt lines, calculations, Evidence, and results never enter Web Storage, IndexedDB, or sensitive runtime caches.
+- Claim routes derive policy/insurer and HouseholdScope from server-side Rider resolution, reject extra private/file fields, use no-store responses, and keep checklist/outcome data to bounded metadata. Insurer payloads, document paths, raw text, and persistent browser claim cache are outside the workflow.
 
 릴리스되지 않은 비어 있는 섹션은 다음 변경을 안정적으로 분류하기 위해 유지합니다.

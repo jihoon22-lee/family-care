@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA까지 현재 구현된 개발환경의 경계를 설명합니다. 인증 연결 전 API는 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow까지 현재 구현된 개발환경의 경계를 설명합니다. 인증 연결 전 API는 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -143,7 +143,7 @@ curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-0000
 
 분석은 repeatable-read transaction 안에서 하나의 run, RuleEvaluation, Evidence join/snapshot, Rider candidate를 원자적으로 저장합니다. 결과에는 run·event·engine·rule-set version, 후보별 tri-state, 부족/충돌 field, reason code, bounded Evidence가 포함되며 모든 decision response는 `Cache-Control: no-store`입니다. Evidence snapshot에는 당시 문서/추출 ID, 페이지, 좌표, review state, content hash가 있어 나중에 Evidence 원본 행이 바뀌어도 이미 저장된 결과의 근거가 조용히 바뀌지 않습니다. 이후 새 분석에서는 현재 Evidence를 다시 검증하므로 stale이면 `UNKNOWN`이 됩니다.
 
-기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection은 아직 연결하지 않았으며, history가 필요한 규칙은 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
+기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection은 paid/partially_paid의 counted occurrence와 denied의 audit-only 이력을 연결하며, history가 누락·충돌하면 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
 
 ### Benefit calculation boundary
 
@@ -165,6 +165,35 @@ Web은 `/app/events/new`와 `/app/events/{event_id}`에서 병원 방문 전 짧
 버전별 결과 경로 `/app/events/{event_id}/result/{version}`은 현재 사건, 지금 할 일, 청구 검토, 추가 확인 필요, 조건 불일치 순서를 고정합니다. 서버가 계산한 decimal string만 보여주며 브라우저에서 보험금 산술을 다시 수행하지 않습니다. Evidence dialog는 bounded 문서 label·physical page·Clause·excerpt만 표시하고, 키보드 focus trap·Escape 닫기·호출 버튼 focus 복원을 제공합니다.
 
 Web query cache는 메모리에만 있고 API 요청은 `credentials: include`와 `cache: no-store`를 사용합니다. service worker는 hashed app shell만 precache하며 API, 사건, 결과, Evidence, 청구 데이터는 runtime cache나 Web Storage·IndexedDB에 저장하지 않습니다. 이 흐름은 합성 데이터와 Chromium 320px viewport로 검증했으며 Windows 실제 브라우저, 모바일 PWA 설치, Tailscale, 실제 보험 자료는 아직 검증하지 않았습니다.
+
+### Claim workflow boundary
+
+결과 카드의 **청구 검토 시작**은 선택한 Rider 하나를 서버에 전달해 ClaimCase를 만듭니다. 요청 body에는 `rider_id`만 있고 policy ID, insurer, household scope를 넣지 않습니다. 서버가 `rider_id`와 현재 HouseholdScope를 검증해 PolicyContract와 insurer를 파생하고, 그 시점의 Candidate·Rule·Policy·Evidence와 해당 후보에 연결된 모든 계산 metadata snapshot을 `preparing` ClaimCase와 함께 보존합니다.
+
+```text
+POST /api/v1/medical-events/{event_id}/claims
+{"rider_id":"00000000-0000-4000-8000-000000000701"}
+```
+
+현재 ClaimCase API는 다음과 같습니다.
+
+```text
+POST   /api/v1/medical-events/{event_id}/claims
+GET    /api/v1/claims?event_id={event_id}&status={status}&cursor={cursor}&limit={limit}
+GET    /api/v1/claims/trash
+GET    /api/v1/claims/{claim_id}
+PATCH  /api/v1/claims/{claim_id}
+POST   /api/v1/claims/{claim_id}/transitions
+PATCH  /api/v1/claims/{claim_id}/checklist/{item_id}
+DELETE /api/v1/claims/{claim_id}
+POST   /api/v1/claims/{claim_id}/restore
+```
+
+상태는 `preparing → submitted → supplementation_requested`와 `paid`, `partially_paid`, `denied` 결과 전이, 이후 `closed`로 제한됩니다. 상태는 직접 PATCH하지 않고 expected version을 포함한 transition으로만 변경합니다. `paid`와 `partially_paid`는 amount·currency·payment date를 받아 ClaimHistory의 `counted_occurrence`로 기록하고, `denied`는 audit-only로 남겨 미래 `NO_MATCH`로 바꾸지 않습니다. 삭제는 soft delete이며 일반 목록에서는 숨기고 trash에서 expected-version restore를 수행합니다.
+
+Checklist는 `document_kind`, requirement/prepared 상태, bounded `note_code`, source rule/Evidence ID만 기록하는 metadata-only 목록입니다. 파일 업로드, 문서 경로, OCR·원문, 외부 파일 ID는 제공하지 않습니다. `submitted`도 사용자가 보험사 channel에서 접수했다고 수동 기록하는 상태일 뿐 FamilyCare가 보험사 API·email·fax로 제출하는 기능은 없습니다. Claim API 응답은 `no-store`이며 청구 금액·사유·receipt metadata를 Web Storage나 IndexedDB에 보존하지 않습니다.
+
+이 경계의 테스트와 예시는 처음부터 만든 합성 값만 사용합니다. 실제 보험 문서·개인정보, 보험사 제출, Windows·모바일 기기, Tailscale 접속은 아직 검증하지 않았습니다.
 
 ### Planned v0.1 local runtime
 
