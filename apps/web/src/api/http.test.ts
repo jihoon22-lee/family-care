@@ -73,6 +73,64 @@ describe("API request boundary", () => {
     );
   });
 
+  it("refreshes CSRF once when another tab rotated the session proof", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            csrf_token: "synthetic-csrf-a",
+            user: {
+              display_name: "Admin A",
+              needs_reauthentication: false,
+              user_id: "synthetic-user-a",
+              username: "admin-a",
+            },
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ error_code: "CSRF_REQUIRED", message: "rejected" }),
+          { headers: { "Content-Type": "application/json" }, status: 403 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ csrf_token: "synthetic-csrf-b" }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ status: "created" }), {
+          headers: { "Content-Type": "application/json" },
+          status: 201,
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await login("admin-a", "synthetic-auth-secret-a");
+    await expect(
+      apiRequest("/api/v1/medical-events", {
+        body: JSON.stringify({ situation: "Synthetic situation" }),
+        method: "POST",
+      }),
+    ).resolves.toEqual({ status: "created" });
+
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      "/api/v1/auth/login",
+      "/api/v1/medical-events",
+      "/api/v1/auth/csrf",
+      "/api/v1/medical-events",
+    ]);
+    expect(fetchMock.mock.calls[1]?.[1]?.headers).toEqual(
+      expect.objectContaining({ "X-CSRF-Token": "synthetic-csrf-a" }),
+    );
+    expect(fetchMock.mock.calls[3]?.[1]?.headers).toEqual(
+      expect.objectContaining({ "X-CSRF-Token": "synthetic-csrf-b" }),
+    );
+  });
+
   it("keeps response details and request values outside public errors", async () => {
     const privateValue = "synthetic-private-response-detail";
     vi.stubGlobal(

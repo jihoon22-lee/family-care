@@ -17,7 +17,7 @@ from familycare_api.identity.router import (
     AuthService,
     get_auth_service,
 )
-from familycare_api.identity.sessions import IssuedSession
+from familycare_api.identity.sessions import IssuedSession, SessionError
 from familycare_api.main import create_app
 from fastapi.testclient import TestClient
 
@@ -91,11 +91,11 @@ class _FakeAuthService:
         self.revoked.append(session_id)
 
 
-def _client() -> tuple[TestClient, _FakeAuthService]:
+def _client(sessions: Any | None = None) -> tuple[TestClient, _FakeAuthService]:
     app = create_app()
-    sessions = _FakeSessions()
+    session_service = sessions or _FakeSessions()
     auth = _FakeAuthService()
-    app.dependency_overrides[get_session_service] = lambda: sessions
+    app.dependency_overrides[get_session_service] = lambda: session_service
     app.dependency_overrides[get_auth_service] = lambda: auth
     return TestClient(app, base_url="https://testserver"), auth
 
@@ -182,6 +182,60 @@ def test_authenticated_write_requires_csrf_then_same_origin() -> None:
         response.headers["cache-control"] == "no-store"
         for response in (missing, cross_origin, accepted)
     )
+
+
+def test_revoking_current_session_deletes_cookie_without_refreshing_it() -> None:
+    client, auth = _client()
+    login_response = client.post(
+        "/api/v1/auth/login",
+        headers={"Origin": "https://testserver"},
+        json={
+            "username": "admin-a",
+            "password": "synthetic-auth-secret-a",
+            "device_label": "Synthetic browser",
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = client.post(
+        f"/api/v1/auth/sessions/{SESSION_ID}/revoke",
+        headers={"Origin": "https://testserver", "X-CSRF-Token": CSRF_TOKEN},
+    )
+
+    assert response.status_code == 204
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith('familycare_session="";')
+    assert "Max-Age=0" in cookie
+    assert RAW_SESSION not in cookie
+    assert auth.revoked == [SESSION_ID]
+
+
+def test_session_list_store_failure_uses_sanitized_unavailable_contract() -> None:
+    class _UnavailableSessionList(_FakeSessions):
+        def list_for_user(self, user_id: UUID) -> list[Any]:
+            del user_id
+            raise SessionError("SESSION_STORE_UNAVAILABLE")
+
+    client, _auth = _client(_UnavailableSessionList())
+    login_response = client.post(
+        "/api/v1/auth/login",
+        headers={"Origin": "https://testserver"},
+        json={
+            "username": "admin-a",
+            "password": "synthetic-auth-secret-a",
+            "device_label": "Synthetic browser",
+        },
+    )
+    assert login_response.status_code == 200
+
+    response = client.get("/api/v1/auth/sessions")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error_code": "AUTH_STORE_UNAVAILABLE",
+        "message": "authentication service unavailable",
+    }
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_missing_or_expired_cookie_returns_one_unauthenticated_shape() -> None:

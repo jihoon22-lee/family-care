@@ -1,5 +1,9 @@
 import { ApiError, safeErrorCode } from "./errors";
-import { authHeaders, clearAuthState } from "../features/identity/authApi";
+import {
+  authHeaders,
+  clearAuthState,
+  loadCsrfToken,
+} from "../features/identity/authApi";
 
 export type ApiRequestInit = RequestInit & { csrfToken?: string };
 
@@ -68,7 +72,19 @@ export async function apiRequest<T>(
     void error;
     throw new ApiError("NETWORK_ERROR", 0);
   }
-  if (!response.ok) throw await responseError(response);
+  if (!response.ok) {
+    const error = await responseError(response);
+    const method = (init.method ?? "GET").toUpperCase();
+    if (
+      error.code === "CSRF_REQUIRED" &&
+      !SAFE_METHODS.has(method) &&
+      init.csrfToken === undefined
+    ) {
+      const refreshedToken = await loadCsrfToken();
+      return apiRequest<T>(path, { ...init, csrfToken: refreshedToken });
+    }
+    throw error;
+  }
   if (response.status === 204) return undefined as T;
   if (!response.headers.get("content-type")?.includes("application/json")) {
     throw new ApiError("INVALID_RESPONSE", 502);

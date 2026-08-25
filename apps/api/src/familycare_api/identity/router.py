@@ -539,6 +539,10 @@ def list_sessions(
     sessions: SessionDependency,
 ) -> list[AuthSessionResponse]:
     now = utc_now()
+    try:
+        rows = sessions.list_for_user(context.user_id)
+    except SessionError:
+        raise AuthenticationStoreUnavailable from None
     return [
         AuthSessionResponse(
             session_id=row.id,
@@ -548,7 +552,7 @@ def list_sessions(
             last_seen_at=row.last_seen_at,
             expires_at=row.expires_at,
         )
-        for row in sessions.list_for_user(context.user_id)
+        for row in rows
         if row.revoked_at is None and now <= row.expires_at and now <= row.absolute_expires_at
     ]
 
@@ -562,9 +566,20 @@ def revoke_session(
     session_id: UUID,
     context: AuthDependency,
     service: AuthServiceDependency,
+    response: Response,
 ) -> Response:
     service.revoke_session(context, session_id, utc_now())
-    return Response(status_code=status.HTTP_204_NO_CONTENT, headers={"Cache-Control": "no-store"})
+    if session_id == context.session_id:
+        response.delete_cookie(
+            _COOKIE_NAME,
+            secure=True,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+    response.status_code = status.HTTP_204_NO_CONTENT
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 __all__ = [
