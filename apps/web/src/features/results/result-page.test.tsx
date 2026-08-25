@@ -220,6 +220,23 @@ describe("action-first event results", () => {
     );
   });
 
+  it("does not mix current calculations into an older event result", async () => {
+    installFetch(
+      { ...EVENT, version: 3 },
+      result({ event_version: 2, stale: true }),
+    );
+
+    renderWithProviders(<EventResultPage eventId={EVENT_ID} version={2} />);
+
+    expect(
+      await screen.findByRole("heading", { name: "현재 사건" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("120000 KRW")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/현재 사건 버전과 다른 결과이므로/),
+    ).toBeInTheDocument();
+  });
+
   it("renders stale metadata and server calculations without doing browser arithmetic", () => {
     const onStartClaim = vi.fn();
     const onOpenEvidence = vi.fn();

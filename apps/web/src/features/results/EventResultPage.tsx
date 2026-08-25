@@ -73,6 +73,10 @@ export function EventResultPage({
 
   const event = eventResource.data;
   const result = resultResource.data;
+  const resultMatchesCurrentEvent = event.version === result.event_version;
+  const visibleCalculations = resultMatchesCurrentEvent
+    ? (calculations ?? calculationResource.data)
+    : undefined;
   const reanalyze = () => {
     if (onReanalyze) {
       void onReanalyze();
@@ -135,7 +139,7 @@ export function EventResultPage({
         <p className={styles.situation}>{event.situation}</p>
       </header>
       <ActionFirstResult
-        calculations={calculations ?? calculationResource.data}
+        calculations={visibleCalculations}
         onOpenEvidence={(evidenceIds) => {
           void openEvidence(evidenceIds);
         }}
@@ -144,7 +148,15 @@ export function EventResultPage({
         result={result}
         riderLabels={riderLabels}
       />
-      {calculationResource.error && !calculations ? (
+      {!resultMatchesCurrentEvent ? (
+        <p className={styles.error} role="status">
+          현재 사건 버전과 다른 결과이므로 예상액 상세를 함께 표시하지 않습니다.
+          다시 분석한 뒤 확인해 주세요.
+        </p>
+      ) : null}
+      {resultMatchesCurrentEvent &&
+      calculationResource.error &&
+      !calculations ? (
         <p className={styles.error} role="status">
           예상액 상세를 불러오지 못했습니다. 보장 판정 결과는 계속 확인할 수
           있습니다.

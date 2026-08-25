@@ -138,11 +138,19 @@ function EventEditor({
         situation: draft.situation,
         visit_date: draft.visit_date,
       });
-      const savedLines = await synchronizeReceiptLines(
-        created.id,
-        draft.receipt_lines,
-        [],
-      );
+      let savedLines: ReceiptLineView[];
+      try {
+        savedLines = await synchronizeReceiptLines(
+          created.id,
+          draft.receipt_lines,
+          [],
+        );
+      } catch {
+        // The server event already exists. Retain its identity so retrying the
+        // still-mounted editor updates it instead of creating a duplicate.
+        setMedicalEvent(created);
+        throw new Error("receipt synchronization failed");
+      }
       setMedicalEvent(created);
       setReceiptLines(savedLines);
       return created;
@@ -181,7 +189,7 @@ function EventEditor({
 
   return (
     <EventComposer
-      key={medicalEvent ? `${medicalEvent.id}:${editorRevision}` : "new"}
+      key={`${initialEvent?.id ?? "new"}:${editorRevision}`}
       memberId={memberId}
       initialEvent={medicalEvent}
       initialReceiptLines={receiptLines}

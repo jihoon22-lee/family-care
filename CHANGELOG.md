@@ -82,6 +82,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - 생성된 PWA 산출물이 소스 포맷 검사에 다시 포함되지 않습니다.
 - 로컬 필수 Ruff 검사의 범위를 CI와 동일하게 맞춰 문서의 Python 코드블록 포맷 차이도 PR 전에 발견합니다.
 - A failed optional structuring job no longer remounts the event editor or discards manually entered analysis facts.
+- Evidence disclosure rejects content-hash mismatches, failed extractions, and out-of-page coordinates instead of presenting stale source text.
+- Receipt-save retries reuse the already created MedicalEvent, and historical event results never mix in calculations from a newer event version.
 
 ### Security
 

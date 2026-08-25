@@ -155,7 +155,7 @@ curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-0000
 POST   /api/v1/medical-events/{id}/receipt-lines
 PATCH  /api/v1/medical-events/{id}/receipt-lines/{line_id}
 DELETE /api/v1/medical-events/{id}/receipt-lines/{line_id}
-GET    /api/v1/medical-events/{id}/calculations/{version}
+GET    /api/v1/medical-events/{id}/calculations
 ```
 
 ### Event and result PWA boundary

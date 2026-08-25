@@ -35,6 +35,7 @@ const SYNTHETIC_LINE: ReceiptLineView = {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("hybrid medical event input", () => {
@@ -164,6 +165,99 @@ describe("hybrid medical event input", () => {
       "직접 입력한 내용으로 계속할 수 있습니다",
     );
     expect(screen.getByRole("button", { name: "결과 확인" })).toBeEnabled();
+  });
+
+  it("reuses a created event when the first receipt save fails", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState({}, "", "/app/events/new?mode=post_treatment");
+    const baseEvent = {
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000202",
+      id: "00000000-0000-4000-8000-000000000201",
+      mode: "post_treatment",
+      optional_questions: [],
+      situation: "Synthetic post-treatment situation",
+      structured_facts: [],
+      visit_date: null,
+    };
+    let eventCreates = 0;
+    let receiptCreates = 0;
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        const jsonResponse = (body: unknown, status = 200) =>
+          new Response(JSON.stringify(body), {
+            status,
+            headers: { "Content-Type": "application/json" },
+          });
+        if (
+          url.pathname === "/api/v1/medical-events" &&
+          init?.method === "POST"
+        ) {
+          eventCreates += 1;
+          return jsonResponse({ ...baseEvent, version: 1 }, 201);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "PATCH"
+        ) {
+          return jsonResponse({ ...baseEvent, version: 2 });
+        }
+        if (
+          url.pathname ===
+            `/api/v1/medical-events/${baseEvent.id}/receipt-lines` &&
+          init?.method === "POST"
+        ) {
+          receiptCreates += 1;
+          if (receiptCreates === 1) {
+            return jsonResponse(
+              { error_code: "RESOURCE_LIMIT_EXCEEDED", message: "unavailable" },
+              503,
+            );
+          }
+          return jsonResponse(
+            {
+              ...SYNTHETIC_LINE,
+              event_id: baseEvent.id,
+              version: 1,
+            },
+            201,
+          );
+        }
+        return jsonResponse(
+          { error_code: "NOT_FOUND", message: "not found" },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewEventPage memberId={baseEvent.family_member_id} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      baseEvent.situation,
+    );
+    await user.click(screen.getByRole("button", { name: "영수증 항목 추가" }));
+    await user.type(
+      screen.getByRole("spinbutton", { name: "금액" }),
+      "12000.00",
+    );
+    await user.click(screen.getByRole("button", { name: "항목 저장" }));
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "현재 상황을 저장하지 못했습니다",
+    );
+
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    expect(
+      await screen.findByText(
+        "현재 입력을 저장했습니다. 추가 확인 질문은 선택 사항입니다.",
+      ),
+    ).toBeInTheDocument();
+    expect(eventCreates).toBe(1);
+    expect(receiptCreates).toBe(2);
   });
 
   it("requires a situation but does not persist an unsaved draft", async () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 import type {
@@ -66,6 +66,8 @@ export interface EventComposerProps {
   onAnalyze?: (draft: EventDraftView) => void | Promise<void>;
 }
 
+const EMPTY_RECEIPT_LINES: ReceiptLineView[] = [];
+
 function initialFacts(event?: MedicalEventResponse): EventFactView[] {
   return (event?.structured_facts ?? []).map(
     (fact: StructuredFactResponse) => ({
@@ -117,7 +119,7 @@ export function EventComposer({
   memberId,
   memberLabel,
   initialEvent,
-  initialReceiptLines = [],
+  initialReceiptLines = EMPTY_RECEIPT_LINES,
   mode: requestedMode,
   onSubmit,
   onStructure,
@@ -141,6 +143,10 @@ export function EventComposer({
   const [working, setWorking] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setReceiptLines(initialReceiptLines);
+  }, [initialReceiptLines]);
 
   function draft(): EventDraftView {
     return {
