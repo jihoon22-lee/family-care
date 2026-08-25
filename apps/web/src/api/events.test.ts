@@ -1,21 +1,27 @@
 import type {
   CoverageDecisionResponse,
   MedicalEventResponse,
+  ReceiptLineResponse,
   StructureAcceptedResponse,
   StructuringJobResponse,
 } from "./generated";
 import {
   analyzeMedicalEvent,
+  createReceiptLine,
   createMedicalEvent,
+  deleteReceiptLine,
   getMedicalEvent,
+  listReceiptLines,
   getStructuringJob,
   structureMedicalEvent,
+  updateReceiptLine,
   updateMedicalEvent,
 } from "./events";
 
 const EVENT_ID = "00000000-0000-4000-8000-000000000201";
 const MEMBER_ID = "00000000-0000-4000-8000-000000000202";
 const JOB_ID = "00000000-0000-4000-8000-000000000301";
+const LINE_ID = "00000000-0000-4000-8000-000000000501";
 
 const SYNTHETIC_EVENT: MedicalEventResponse = {
   deleted: false,
@@ -40,6 +46,18 @@ const SYNTHETIC_DECISION: CoverageDecisionResponse = {
   run_id: "00000000-0000-4000-8000-000000000401",
   stale: false,
   schema_version: "1",
+};
+
+const SYNTHETIC_LINE: ReceiptLineResponse = {
+  amount: "12000.00",
+  category: "outpatient",
+  confirmation_level: "user",
+  coverage_category: "covered",
+  currency: "KRW",
+  deleted: false,
+  id: LINE_ID,
+  note_code: null,
+  version: 1,
 };
 
 function jsonResponse<T>(value: T, status = 200): Response {
@@ -185,5 +203,48 @@ describe("medical event API clients", () => {
         credentials: "include",
       }),
     );
+  });
+
+  it("creates, lists, updates, and deletes decimal receipt lines", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(SYNTHETIC_LINE, 201))
+      .mockResolvedValueOnce(
+        jsonResponse({ schema_version: "1", receipt_lines: [SYNTHETIC_LINE] }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ ...SYNTHETIC_LINE, amount: "13000.00", version: 2 }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createReceiptLine(EVENT_ID, {
+      amount: "12000.00",
+      category: "outpatient",
+      confirmation_level: "user",
+      coverage_category: "covered",
+      currency: "KRW",
+    });
+    await listReceiptLines(EVENT_ID);
+    await updateReceiptLine(EVENT_ID, LINE_ID, {
+      amount: "13000.00",
+      expected_version: 1,
+    });
+    await deleteReceiptLine(EVENT_ID, LINE_ID, 2);
+
+    expect(fetchMock.mock.calls.map((call) => call[1]?.method)).toEqual([
+      "POST",
+      "GET",
+      "PATCH",
+      "DELETE",
+    ]);
+    expect(fetchMock.mock.calls[3]?.[1]?.body).toBe(
+      JSON.stringify({ expected_version: 2 }),
+    );
+    for (const call of fetchMock.mock.calls) {
+      expect(call[1]).toEqual(
+        expect.objectContaining({ cache: "no-store", credentials: "include" }),
+      );
+    }
   });
 });

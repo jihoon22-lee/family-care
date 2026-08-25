@@ -4,6 +4,10 @@ import type {
   MedicalEventCreateRequest,
   MedicalEventResponse,
   MedicalEventUpdateRequest,
+  ReceiptLineCreateRequest,
+  ReceiptLineResponse,
+  ReceiptLinesResponse,
+  ReceiptLineUpdateRequest,
   StructureAcceptedResponse,
   StructuringJobResponse,
 } from "./generated";
@@ -13,6 +17,7 @@ export type CreateMedicalEventRequest = MedicalEventCreateRequest;
 export type UpdateMedicalEventRequest = MedicalEventUpdateRequest;
 export type MedicalEvent = MedicalEventResponse;
 export type AnalysisResponse = CoverageDecisionResponse;
+export type ReceiptLine = ReceiptLineResponse;
 
 function eventPath(eventId: string, suffix = ""): string {
   return `/api/v1/medical-events/${encodeURIComponent(eventId)}${suffix}`;
@@ -85,6 +90,63 @@ export function analyzeMedicalEvent(
 ): Promise<AnalysisResponse> {
   return apiRequest<AnalysisResponse>(eventPath(eventId, "/analyze"), {
     method: "POST",
+    signal,
+  });
+}
+
+function receiptPath(eventId: string, lineId?: string): string {
+  const base = eventPath(eventId, "/receipt-lines");
+  return lineId ? `${base}/${encodeURIComponent(lineId)}` : base;
+}
+
+export function createReceiptLine(
+  eventId: string,
+  input: ReceiptLineCreateRequest,
+  signal?: AbortSignal,
+): Promise<ReceiptLineResponse> {
+  return apiRequest<ReceiptLineResponse>(receiptPath(eventId), {
+    body: JSON.stringify(input),
+    method: "POST",
+    signal,
+  });
+}
+
+export async function listReceiptLines(
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<ReceiptLineResponse[]> {
+  const response = await apiRequest<ReceiptLinesResponse>(
+    receiptPath(eventId),
+    {
+      method: "GET",
+      signal,
+    },
+  );
+  return response.receipt_lines;
+}
+
+export function updateReceiptLine(
+  eventId: string,
+  lineId: string,
+  input: ReceiptLineUpdateRequest,
+  signal?: AbortSignal,
+): Promise<ReceiptLineResponse> {
+  return apiRequest<ReceiptLineResponse>(receiptPath(eventId, lineId), {
+    body: JSON.stringify(input),
+    method: "PATCH",
+    signal,
+  });
+}
+
+export function deleteReceiptLine(
+  eventId: string,
+  lineId: string,
+  expectedVersion: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiRequest<void>(receiptPath(eventId, lineId), {
+    body: JSON.stringify({ expected_version: expectedVersion }),
+    method: "DELETE",
     signal,
   });
 }
