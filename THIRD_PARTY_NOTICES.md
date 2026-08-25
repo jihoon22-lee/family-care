@@ -13,6 +13,7 @@ notices required by the package distributions.
 
 | Package | Version | Boundary | Declared license | Official source |
 | --- | --- | --- | --- | --- |
+| `cryptography` | `50.0.0` | Worker runtime; managed archive encryption and parser dependency | Apache-2.0 or BSD-3-Clause; contributions under both | [project](https://github.com/pyca/cryptography) |
 | `pdfplumber` | `0.11.10` | Worker runtime | MIT | [project license](https://github.com/jsvine/pdfplumber/blob/stable/LICENSE.txt) |
 | `pypdf` | `6.16.2` | Worker runtime | BSD-3-Clause | [project license](https://github.com/py-pdf/pypdf/blob/main/LICENSE) |
 | `reportlab` | `5.0.1` | Development/test fixtures only; not a Worker runtime dependency | BSD-3-Clause | [project metadata](https://pypi.org/project/reportlab/) |
@@ -28,7 +29,6 @@ current lockfile. Their package-provided license files remain authoritative.
 | `pypdfium2` | `5.13.0` | `pdfplumber` | Apache-2.0 and BSD-3-Clause; dependency licenses | [project](https://github.com/pypdfium2-team/pypdfium2) |
 | `pillow` | `12.3.0` | `pdfplumber`, `reportlab` | MIT-CMU (Pillow License) | [project license](https://github.com/python-pillow/Pillow/blob/main/LICENSE) |
 | `charset-normalizer` | `3.5.1` | `pdfminer-six`, `reportlab` | MIT | [project license](https://github.com/jawah/charset_normalizer/blob/master/LICENSE) |
-| `cryptography` | `50.0.0` | `pdfminer-six` | Apache-2.0 or BSD-3-Clause; contributions under both | [project](https://github.com/pyca/cryptography) |
 | `cffi` | `2.1.1` | `cryptography` | MIT-0 (MIT No Attribution) | [project license](https://github.com/python-cffi/cffi/blob/main/LICENSE) |
 | `pycparser` | `3.0` | `cffi` | BSD-3-Clause | [project license](https://github.com/eliben/pycparser/blob/main/LICENSE) |
 

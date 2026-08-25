@@ -263,6 +263,7 @@ git commit -m "feat(documents): define encrypted batch contracts"
 **Files:**
 
 - Create: apps/api/src/familycare_api/documents/secret_channel.py
+- Create: workers/analyzer/src/familycare_worker/imports/secret_channel.py
 - Create: workers/analyzer/src/familycare_worker/imports/password_scope.py
 - Create: workers/analyzer/src/familycare_worker/archive/keys.py
 - Create: workers/analyzer/src/familycare_worker/archive/crypto.py
@@ -285,7 +286,7 @@ git commit -m "feat(documents): define encrypted batch contracts"
 - PasswordScope.dispose() removes all string references it owns and is called on success, failure, cancellation, worker shutdown, and socket error.
 - Archive writes use an opaque UUID object key and a temporary mode-0600 file followed by an atomic rename; a database row is inserted only after the ciphertext is durable.
 
-- [ ] **Step 1: Write failing IPC, key, round-trip, tamper, and rotation tests**
+- [x] **Step 1: Write failing IPC, key, round-trip, tamper, and rotation tests**
 
 ~~~python
 def test_reused_handoff_id_is_rejected(socket_server) -> None:
@@ -314,7 +315,7 @@ def test_archive_round_trip_and_tamper_detection(tmp_path: Path) -> None:
         decrypt_document(metadata, tampered, master_key=key)
 ~~~
 
-- [ ] **Step 2: Run the RED cryptography tests**
+- [x] **Step 2: Run the RED cryptography tests**
 
 Run:
 
@@ -328,7 +329,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the socket server, password scope, master-key loader, and archive implementation do not exist.
 
-- [ ] **Step 3: Implement one-time socket framing and AES-GCM/AES-KW**
+- [x] **Step 3: Implement one-time socket framing and AES-GCM/AES-KW**
 
 Use a bounded length-prefixed JSON frame for UUIDs and expiry, then send the password bytes only in the socket frame. The Worker consumes the frame once and keeps the password only in a batch-local object:
 
@@ -342,7 +343,7 @@ def take(self, batch_id: UUID, handoff_id: UUID, now: datetime) -> str | None:
 
 Use AESGCM(data_key).encrypt(nonce, plaintext, aad) and aes_key_wrap(master_key, data_key). Split the final 16-byte GCM tag into auth_tag metadata and ciphertext bytes for the archive object. Use hmac.compare_digest for token-like frame IDs, reject frames above the fixed 64 KiB control limit, set socket mode 0660, and discard stale entries on every receive/take operation. Never use pickle, shell commands, or a path-based secret handoff.
 
-- [ ] **Step 4: Run the GREEN crypto and dependency checks**
+- [x] **Step 4: Run the GREEN crypto and dependency checks**
 
 Run:
 
@@ -359,7 +360,7 @@ TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src
 
 Expected: all tests pass for round-trip, tamper, wrong key, missing key, expiry, reuse, disposal, atomic object writes, and key rewrap; the lockfile contains the pinned direct cryptography dependency and notices name its license boundary.
 
-- [ ] **Step 5: Commit the IPC and archive slice**
+- [x] **Step 5: Commit the IPC and archive slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/documents/secret_channel.py \
