@@ -441,7 +441,7 @@ corepack pnpm@11.22.0 web:check
 
 Expected: identity tests and the complete Web check pass, with no persistent credential storage.
 
-- [ ] **Step 5: Commit the Web slice**
+- [x] **Step 5: Commit the Web slice**
 
 ~~~bash
 git add apps/web/src/App.tsx apps/web/src/styles.css \
@@ -464,7 +464,7 @@ git commit -m "feat(web): add local authentication screens"
 - Consumes: all identity tables, routes, Web screens, and generated OpenAPI.
 - Produces: repeatable migration upgrade/downgrade evidence and documentation for `familycare-admin`, login, session expiry, and the fact that Tailscale does not replace app login.
 
-- [ ] **Step 1: Write PostgreSQL and privacy regression tests**
+- [x] **Step 1: Write PostgreSQL and privacy regression tests**
 
 ~~~python
 @pytest.mark.integration
@@ -478,7 +478,7 @@ def test_raw_password_and_session_token_are_absent_from_rows(db) -> None:
     assert all(row["token_hash"] != issued.raw_token for row in rows.sessions)
 ~~~
 
-- [ ] **Step 2: Run the RED integration test against a clean PostgreSQL schema**
+- [x] **Step 2: Run the RED integration test against a clean PostgreSQL schema**
 
 Run:
 
@@ -489,7 +489,7 @@ TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_auth_database.py -q
 
 Expected: FAIL until the migration, row mapping, and session transaction boundaries are present.
 
-- [ ] **Step 3: Add guide/changelog evidence without sensitive examples**
+- [x] **Step 3: Add guide/changelog evidence without sensitive examples**
 
 Document only synthetic CLI examples and external path shapes, for example:
 
@@ -499,7 +499,7 @@ docker compose run --rm api familycare-admin create --username admin-a
 
 State that the password is prompted through TTY/stdin, that signup/reset/invite are absent, and that actual private-device acceptance is reported separately.
 
-- [ ] **Step 4: Run the complete focused auth gate**
+- [x] **Step 4: Run the complete focused auth gate**
 
 Run serially:
 
@@ -519,7 +519,7 @@ git diff --check
 
 Expected: all checks pass; no password, cookie, session token, actual path, or private document value appears in tracked files or test output.
 
-- [ ] **Step 5: Commit the integration/documentation slice and invoke the Root PR gate**
+- [x] **Step 5: Commit the integration/documentation slice and invoke the Root PR gate**
 
 ~~~bash
 git add apps/api/tests/test_auth_database.py \

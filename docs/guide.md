@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow까지 현재 구현된 개발환경의 경계를 설명합니다. 인증 연결 전 API는 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow까지 현재 구현된 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -59,13 +59,13 @@ Foundation 서비스:
 - API readiness: `http://127.0.0.1:8000/health/ready`
 - PostgreSQL: 로컬 개발 포트 5432
 
-Phase 1의 문서 endpoint와 analyzer는 인증이 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아닙니다. Phase 7은 외부 provider가 아니라 `docs/design/authentication.md`의 두 로컬 관리자와 server-side session을 추가합니다.
+Phase 1의 문서 endpoint와 analyzer는 인증이 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아닙니다. 업무 API와 Web PWA는 외부 provider가 아니라 `docs/design/authentication.md`의 두 로컬 관리자와 server-side session으로 보호됩니다.
 
 ### Phase 2 policy ledger boundary
 
 Migration `0003_policy_ledger`는 `HouseholdSpace`, `FamilyMember`, Evidence, `PolicyContract`, `PolicyParty`, 실제 가입 Rider, 시점별 상태 snapshot을 추가합니다. 가족과 계약 API는 soft delete·휴지통·복원, optimistic version 충돌, household object scope를 적용하며 계약과 당사자·Rider 응답은 검증된 증권 page Evidence만 노출합니다.
 
-Policy route는 항상 등록되지만 클라이언트가 `household_space_id`를 보내 권한을 선택할 수 없습니다. Phase 7 인증이 PostgreSQL session에서 `HouseholdScope`를 제공하기 전까지 기본 resolver는 모든 Policy route를 `401 AUTHENTICATION_REQUIRED`로 닫습니다. 현재는 합성 테스트가 resolver를 주입할 때만 lifecycle을 실행하며, 인증을 우회하는 로컬 household 환경변수나 header는 제공하지 않습니다.
+Policy route는 항상 등록되지만 클라이언트가 `household_space_id`를 보내 권한을 선택할 수 없습니다. 활성 PostgreSQL session에서 파생한 `HouseholdScope`가 없으면 기본 resolver는 모든 Policy route를 `401 AUTHENTICATION_REQUIRED`로 닫습니다. 인증을 우회하는 로컬 household 환경변수나 header는 제공하지 않습니다.
 
 계약 원장 발행에 사용하는 Evidence는 같은 household의 성공 extraction과 실제 policy 문서 버전, 1-based physical page, page 범위 안의 선택 좌표, 일치하는 content SHA-256을 가져야 합니다. `AI_VERIFIED` 또는 `USER_CONFIRMED`만 현재 원장에 발행할 수 있고 `NEEDS_REVIEW`와 terms-only Evidence는 거부됩니다.
 
@@ -79,7 +79,7 @@ Phase 2 candidate review는 main PR #16에 merge되었습니다. Phase 4 Clause 
 - `GET /api/v1/terms-editions/{id}/clauses`
 - `POST /api/v1/clauses/search`
 
-검색어는 no-store JSON POST body로만 전송하고 URL, browser history, 일반 log 또는 Web Storage에 저장하지 않습니다. 모든 route는 server-derived `HouseholdScope`를 사용하며 클라이언트가 household를 선택할 수 없습니다. 기본 scope resolver는 인증 연결 전까지 `401 AUTHENTICATION_REQUIRED`로 fail-closed하므로 합성 테스트에서 resolver를 주입한 경우 외에는 현재 실제 인증된 route로 사용할 수 없습니다. 인증을 우회하는 local household 환경변수나 header는 제공하지 않습니다.
+검색어는 no-store JSON POST body로만 전송하고 URL, browser history, 일반 log 또는 Web Storage에 저장하지 않습니다. 모든 route는 server-derived `HouseholdScope`를 사용하며 클라이언트가 household를 선택할 수 없습니다. 활성 local session이 없으면 기본 scope resolver가 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. 인증을 우회하는 local household 환경변수나 header는 제공하지 않습니다.
 
 v0.1에는 별도 live search-index rebuild endpoint가 없습니다. 초기 normalization version은 DB constraint로 고정합니다. 향후 version bump가 필요하면 PostgreSQL transaction migration이 old committed state를 transaction commit 전까지 유지하고, commit 시 새 version으로 원자적으로 전환합니다. 앱/DB mismatch나 stale hit는 `SEARCH_INDEX_VERSION_MISMATCH`로 명시적으로 실패하며 silent fallback하지 않습니다.
 
@@ -129,7 +129,7 @@ GET    /api/v1/evidence/{evidence_id}
 
 생성·수정 body에는 `family_member_id`, `pre_visit` 또는 `post_treatment` mode, 사건/방문일, 그리고 제한된 구조화 fact만 넣습니다. fact는 `value`와 `confirmation`(`user`, `ai_structured`, `unconfirmed`, `conflicting`)으로 구성합니다. 클라이언트가 `household_space_id`, Evidence ID, tri-state, 후보, 금액, 지급 보장 문구를 입력할 수 없도록 strict schema가 적용됩니다. 수정·삭제·복원은 현재 `expected_version`을 요구하며 stale version은 `409` 충돌로 처리됩니다.
 
-Phase 7 인증 연결 뒤 동일 API에 보낼 최소 요청 모양은 다음과 같습니다. 아래 UUID와 값은 저장소 안에서만 쓰는 합성 예시이며, 현재 단계에서 명령을 그대로 실행하면 fail-closed scope resolver 때문에 `401 AUTHENTICATION_REQUIRED`가 정상입니다.
+인증된 local session에서 동일 API에 보낼 최소 요청 모양은 다음과 같습니다. 아래 UUID와 값은 저장소 안에서만 쓰는 합성 예시이며, 실제 요청에는 로그인으로 발급된 host-only cookie와 state-changing 요청용 CSRF header가 필요합니다.
 
 ```bash
 curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events \
@@ -143,7 +143,7 @@ curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-0000
 
 분석은 repeatable-read transaction 안에서 하나의 run, RuleEvaluation, Evidence join/snapshot, Rider candidate를 원자적으로 저장합니다. 결과에는 run·event·engine·rule-set version, 후보별 tri-state, 부족/충돌 field, reason code, bounded Evidence가 포함되며 모든 decision response는 `Cache-Control: no-store`입니다. Evidence snapshot에는 당시 문서/추출 ID, 페이지, 좌표, review state, content hash가 있어 나중에 Evidence 원본 행이 바뀌어도 이미 저장된 결과의 근거가 조용히 바뀌지 않습니다. 이후 새 분석에서는 현재 Evidence를 다시 검증하므로 stale이면 `UNKNOWN`이 됩니다.
 
-기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection은 paid/partially_paid의 counted occurrence와 denied의 audit-only 이력을 연결하며, history가 누락·충돌하면 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
+기본 API scope resolver는 활성 local session이 없으면 fail-closed이므로 일반적인 미인증 요청은 `401 AUTHENTICATION_REQUIRED`가 됩니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 합성 household scope만 사용합니다. ClaimHistory projection은 paid/partially_paid의 counted occurrence와 denied의 audit-only 이력을 연결하며, history가 누락·충돌하면 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
 
 ### Benefit calculation boundary
 
@@ -197,13 +197,56 @@ Checklist는 `document_kind`, requirement/prepared 상태, bounded `note_code`, 
 
 ### Planned v0.1 local runtime
 
-v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 이 문서는 인증 연결과 운영 migration 적용을 완료로 표시하지 않으며, 실제 운영 사용 절차는 별도 승인과 acceptance 뒤에 추가합니다.
+v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 로컬 인증 구현과 합성 검증은 이 가이드에 기록하지만, 운영 migration 적용과 외부 acceptance는 별도 승인 뒤에 확인합니다.
 
 - existing WSL `OPENAI_API_KEY`는 Worker container에만 주입합니다.
 - Gemini와 Google Drive API는 사용하지 않습니다.
 - encrypted PDF password는 family-scoped batch process memory에서만 사용합니다.
 - managed archive key는 저장소 밖 file secret으로 제공합니다.
 - LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
+
+### Local authentication
+
+업무 API와 Web PWA는 하나의 `HouseholdSpace`에 연결된 동일 권한의 활성 로컬 관리자 두 계정으로 보호됩니다. v0.1에서는 활성 관리자를 정확히 두 개까지 둘 수 있고, 두 계정은 역할 차등 없이 같은 가족 원장과 계약을 관리합니다. 세 번째 활성 계정 생성은 `ADMIN_LIMIT_REACHED`로 거부됩니다.
+
+관리자 수명주기는 API container의 `familycare-admin` 명령으로만 관리합니다. 아래 계정명과 표시명은 합성 예시이며, 각 명령은 독립적으로 실행합니다.
+
+```bash
+docker compose run --rm api familycare-admin create \
+  --username admin-a \
+  --display-name "Admin A"
+
+docker compose run --rm api familycare-admin create \
+  --username admin-b \
+  --display-name "Admin B"
+
+docker compose run --rm api familycare-admin set-password --username admin-a
+
+docker compose run --rm api familycare-admin disable --username admin-b
+```
+
+`create`와 `set-password`는 TTY에서 비밀번호와 확인을 두 번 묻고, 비대화형 실행에서는 stdin의 두 줄을 읽습니다. 비밀번호는 명령 옵션·argv·환경변수·shell history·로그에 넣지 않습니다. CLI에는 `--password` 옵션이 없으며, 위 예시에도 비밀번호 값을 적지 않았습니다. `set-password`는 해당 관리자의 기존 session을 폐기하고, `disable`은 계정과 session만 비활성화하며 가족·계약·청구 기록을 삭제하지 않습니다. 복구용 자격 증명은 사용자가 관리하는 외부 password vault에 보관할 수 있지만 앱이 자동 동기화하지 않습니다.
+
+Web 로그인 성공 시 원본 session token은 `familycare_session` host-only cookie로만 전달됩니다. cookie는 `Secure`, `HttpOnly`, `SameSite=Strict`이며 `Domain`을 지정하지 않습니다. 서버는 PostgreSQL에 token hash와 최소 device label·lifecycle 시각만 저장하고 원본 token과 raw password를 저장하지 않습니다. session은 마지막 활동 후 7일 또는 생성 후 30일 중 먼저 도달하면 만료됩니다.
+
+인증 API는 다음의 좁은 surface를 제공합니다.
+
+```text
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+GET  /api/v1/auth/me
+GET  /api/v1/auth/csrf
+POST /api/v1/auth/reauthenticate
+POST /api/v1/auth/password
+GET  /api/v1/auth/sessions
+POST /api/v1/auth/sessions/{session_id}/revoke
+```
+
+모든 state-changing 요청은 same-origin과 session별 CSRF token을 함께 검사합니다. Web의 계정 화면에서는 현재 기기와 다른 기기의 session을 목록으로 보고 폐기할 수 있으며, 다른 기기 session 폐기와 비밀번호 변경은 최근 재인증을 요구합니다. 비밀번호 변경은 해당 사용자의 모든 session을 폐기하고, logout·만료·비활성화도 session을 폐기합니다. signup, email reset, invite endpoint는 제공하지 않습니다.
+
+Tailscale은 private network 접근 경로일 뿐 app login을 대체하지 않습니다. Tailscale에 연결된 기기도 FamilyCare 로그인과 유효한 session cookie, state-changing 요청의 CSRF 검사를 통과해야 합니다.
+
+이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 실제 Tailscale 기기/네트워크, 실제 private document acceptance는 아직 검증하지 않았습니다. 이 문서는 PR·merge·release·운영 배포 완료를 주장하지 않습니다.
 
 ### Use the local synthetic document-analysis API
 
