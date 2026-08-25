@@ -189,6 +189,7 @@ def test_benefit_calculations_store_bounded_results_and_rule_lineage() -> None:
         "applied_limit",
         "rounding_rule",
         "hold_reason_code",
+        "excluded_reason_codes",
         "rule_version_id",
         "engine_version",
         "version",
@@ -228,6 +229,13 @@ def test_benefit_calculations_store_bounded_results_and_rule_lineage() -> None:
     )
     assert "confirmed_amount IS NULL OR confirmed_amount >= 0" in calculation_checks.values()
     assert "additional_amount IS NULL OR additional_amount >= 0" in calculation_checks.values()
+    assert calculation_checks["ck_benefit_calculations_excluded_reason_count"] == (
+        "cardinality(excluded_reason_codes) <= 16"
+    )
+    assert (
+        "array_to_string(excluded_reason_codes, ',')"
+        in calculation_checks["ck_benefit_calculations_excluded_reason_format"]
+    )
     assert "excluded_amount IS NULL OR excluded_amount >= 0" in calculation_checks.values()
     assert "deductible_amount IS NULL OR deductible_amount >= 0" in calculation_checks.values()
     assert "applied_limit IS NULL OR applied_limit >= 0" in calculation_checks.values()

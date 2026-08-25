@@ -126,6 +126,7 @@ class BenefitCalculationResult:
     applied_limit: Money | None = None
     steps: tuple[CalculationStep, ...] = ()
     hold_reason_codes: tuple[str, ...] = ()
+    excluded_reason_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.kind not in {"fixed", "indemnity"}:
@@ -141,6 +142,8 @@ class BenefitCalculationResult:
             raise CalculationValidationError("INVALID_RATE")
         if any(_REASON_CODE_PATTERN.fullmatch(item) is None for item in self.hold_reason_codes):
             raise CalculationValidationError("INVALID_HOLD_REASON")
+        if any(_REASON_CODE_PATTERN.fullmatch(item) is None for item in self.excluded_reason_codes):
+            raise CalculationValidationError("INVALID_EXCLUDED_REASON")
 
     @classmethod
     def unknown(cls, kind: CalculationKind, reason_code: str) -> BenefitCalculationResult:
@@ -152,6 +155,7 @@ class ReceiptBreakdown:
     confirmed: Money
     additional: Money
     excluded: Money
+    excluded_reason_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -227,6 +231,7 @@ def split_confirmed_additional_excluded(
     confirmed = Decimal("0")
     additional = Decimal("0")
     excluded = Decimal("0")
+    excluded_reason_codes: list[str] = []
     for line in lines:
         from familycare_api.decisions.calculation_validation import validate_receipt_line
 
@@ -235,6 +240,7 @@ def split_confirmed_additional_excluded(
             raise CalculationValidationError("CURRENCY_MISMATCH")
         if line.coverage_category == "excluded":
             excluded += line.amount.amount
+            excluded_reason_codes.append(line.note_code or "EXCLUDED_RECEIPT_ITEM")
         elif line.coverage_category == "covered" and line.confirmation_level in {
             "user",
             "ai_structured",
@@ -246,6 +252,7 @@ def split_confirmed_additional_excluded(
         confirmed=Money(confirmed, currency),
         additional=Money(additional, currency),
         excluded=Money(excluded, currency),
+        excluded_reason_codes=tuple(dict.fromkeys(excluded_reason_codes)),
     )
 
 
@@ -302,6 +309,7 @@ def calculate_indemnity(
         applied_limit=limit,
         steps=steps,
         hold_reason_codes=("ADDITIONAL_RECEIPT_REVIEW_REQUIRED",) if partial else (),
+        excluded_reason_codes=breakdown.excluded_reason_codes,
     )
 
 

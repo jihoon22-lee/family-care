@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
+from threading import Barrier
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +19,7 @@ from familycare_api.decisions.calculation_schemas import (
     ReceiptLineUpdateRequest,
 )
 from familycare_api.decisions.calculation_service import CalculationService
-from familycare_api.decisions.errors import ReceiptLineNotFound
+from familycare_api.decisions.errors import MedicalEventNotFound, ReceiptLineNotFound
 from familycare_api.decisions.repository import DecisionRepository
 from familycare_api.decisions.router import get_calculation_service, router
 from familycare_api.decisions.service import DecisionService
@@ -983,6 +985,11 @@ def test_receipt_crud_scope_version_and_persisted_fixed_partial_calculations(
         ),
     )
     assert covered.version == possible.version == excluded.version == 1
+    assert calculation_service.list_receipt_lines(event.id) == (
+        covered,
+        possible,
+        excluded,
+    )
 
     with pytest.raises(ReceiptLineNotFound):
         _calculation_service(database_url, seed.scope_b).update_receipt_line(
@@ -990,6 +997,8 @@ def test_receipt_crud_scope_version_and_persisted_fixed_partial_calculations(
             covered.line_id,
             ReceiptLineUpdateRequest(expected_version=1, amount="60000.00"),
         )
+    with pytest.raises(MedicalEventNotFound):
+        _calculation_service(database_url, seed.scope_b).list_receipt_lines(event.id)
     with pytest.raises(VersionConflict):
         calculation_service.update_receipt_line(
             event.id,
@@ -1007,6 +1016,7 @@ def test_receipt_crud_scope_version_and_persisted_fixed_partial_calculations(
     assert indemnity["confirmed"] == {"amount": 32000, "currency": "KRW"}
     assert indemnity["additional"] == {"amount": 20000, "currency": "KRW"}
     assert indemnity["excluded"] == {"amount": 5000, "currency": "KRW"}
+    assert indemnity["excluded_reason_codes"] == ("EXCLUDED_ITEM",)
     assert indemnity["hold_reason_codes"] == ("ADDITIONAL_RECEIPT_REVIEW_REQUIRED",)
     assert [step["operation"] for step in indemnity["steps"]] == [
         "subtract",
@@ -1064,6 +1074,7 @@ def test_receipt_crud_scope_version_and_persisted_fixed_partial_calculations(
     assert second_by_kind["indemnity"]["calculation_id"] != old_indemnity_id
     assert second_by_kind["indemnity"]["additional"] == {"amount": 22000, "currency": "KRW"}
     assert second_by_kind["indemnity"]["excluded"] == {"amount": 0, "currency": "KRW"}
+    assert second_by_kind["indemnity"]["excluded_reason_codes"] == ()
     assert (
         _rows(
             database_url,
@@ -1200,3 +1211,31 @@ def test_invalid_evidence_chain_excludes_calculation_rules(
         )
 
     assert calculation_service.get_calculations(event.id) == ()
+
+
+def test_concurrent_calculation_reads_reuse_one_trace_per_candidate(
+    database_url: str,
+    seed: BenefitSeed,
+) -> None:
+    event = _create_event(database_url, seed)
+    _decision_service(database_url, seed.scope_a).analyze_medical_event(event.id)
+    calculation_service = _calculation_service(database_url, seed.scope_a)
+    calculation_service.create_receipt_line(event.id, _receipt_request(amount="50000.00"))
+    start = Barrier(4)
+
+    def calculate() -> tuple[dict[str, object], ...]:
+        start.wait(timeout=5)
+        return calculation_service.get_calculations(event.id)
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = tuple(executor.map(lambda _: calculate(), range(4)))
+
+    assert all(len(result) == 2 for result in results)
+    ids_by_kind = tuple(
+        {str(item["kind"]): item["calculation_id"] for item in result} for result in results
+    )
+    assert all(value == ids_by_kind[0] for value in ids_by_kind)
+    assert _row(
+        database_url,
+        "SELECT count(*) AS count FROM benefit_calculations",
+    ) == {"count": 2}

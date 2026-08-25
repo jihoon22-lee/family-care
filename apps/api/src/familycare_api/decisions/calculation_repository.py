@@ -85,6 +85,38 @@ class CalculationRepository:
             raise MedicalEventNotFound
         return _receipt_line(row)
 
+    def list_receipt_lines(
+        self,
+        scope: HouseholdScope,
+        event_id: UUID,
+    ) -> tuple[ReceiptLine, ...]:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                event = connection.execute(
+                    """
+                    SELECT id FROM medical_events
+                    WHERE id = %s AND household_space_id = %s
+                      AND deleted_at IS NULL
+                    """,
+                    (event_id, scope.household_space_id),
+                ).fetchone()
+                if event is None:
+                    raise MedicalEventNotFound
+                rows = connection.execute(
+                    """
+                    SELECT * FROM receipt_lines
+                    WHERE household_space_id = %s AND medical_event_id = %s
+                      AND deleted_at IS NULL
+                    ORDER BY created_at, id
+                    """,
+                    (scope.household_space_id, event_id),
+                ).fetchall()
+        except MedicalEventNotFound:
+            raise
+        except psycopg.Error:
+            raise DecisionRepositoryUnavailable from None
+        return tuple(_receipt_line(row) for row in rows)
+
     def update_receipt_line(
         self,
         scope: HouseholdScope,
@@ -273,6 +305,22 @@ class CalculationRepository:
         receipt_rows: list[dict[str, Any]],
     ) -> dict[str, object] | None:
         candidate = _claim_candidate(row)
+        if candidate.id is None:
+            raise DecisionRepositoryUnavailable
+        locked = connection.execute(
+            """
+            SELECT candidate.id
+            FROM claim_candidates AS candidate
+            JOIN decision_runs AS run
+              ON run.id = candidate.decision_run_id
+             AND run.household_space_id = %s
+            WHERE candidate.id = %s
+            FOR UPDATE OF candidate
+            """,
+            (scope.household_space_id, candidate.id),
+        ).fetchone()
+        if locked is None:
+            raise DecisionRepositoryUnavailable
         rules = self._calculation_rules(
             connection,
             scope,
@@ -354,16 +402,6 @@ class CalculationRepository:
         if candidate.id is None:
             raise DecisionRepositoryUnavailable
         calculation_id = uuid4()
-        locked = connection.execute(
-            """
-            SELECT id FROM claim_candidates
-            WHERE id = %s
-            FOR UPDATE
-            """,
-            (candidate.id,),
-        ).fetchone()
-        if locked is None:
-            raise DecisionRepositoryUnavailable
         version_row = connection.execute(
             """
             SELECT COALESCE(max(version), 0) + 1 AS next_version
@@ -388,11 +426,11 @@ class CalculationRepository:
               id, household_space_id, claim_candidate_id, calculation_kind,
               status, currency, confirmed_amount, additional_amount,
               excluded_amount, deductible_amount, applied_rate, applied_limit,
-              rounding_rule, hold_reason_code, rule_version_id,
+              rounding_rule, hold_reason_code, excluded_reason_codes, rule_version_id,
               engine_version, version
             ) VALUES (
               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-              %s, %s, %s
+              %s, %s, %s, %s
             )
             RETURNING *
             """,
@@ -411,6 +449,7 @@ class CalculationRepository:
                 _amount(result.applied_limit),
                 rounding_rule,
                 result.hold_reason_codes[0] if result.hold_reason_codes else None,
+                list(result.excluded_reason_codes),
                 rule.id,
                 CALCULATION_ENGINE_VERSION,
                 version,
@@ -607,7 +646,7 @@ class CalculationRepository:
             "created_at": row["created_at"],
             "steps": steps,
             "hold_reason_codes": (hold,) if isinstance(hold, str) and hold else (),
-            "excluded_reason_codes": (),
+            "excluded_reason_codes": tuple(row.get("excluded_reason_codes") or ()),
             "evidence_ids": tuple(value["evidence_id"] for value in evidence_rows),
         }
 

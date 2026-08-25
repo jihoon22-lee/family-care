@@ -82,6 +82,10 @@ class _FakeCalculationService:
         self.created.append((event_id, request))
         return _line()
 
+    def list_receipt_lines(self, event_id: UUID) -> tuple[ReceiptLine, ...]:
+        assert event_id == EVENT_ID
+        return (_line(),)
+
     def update_receipt_line(self, event_id: UUID, line_id: UUID, request: object) -> ReceiptLine:
         data = request.model_dump(exclude_unset=True)  # type: ignore[attr-defined]
         if data["expected_version"] != self.version:
@@ -142,6 +146,29 @@ def test_receipt_create_round_trips_decimal_string_without_scope(client: TestCli
     assert response.json()["amount"] == "12500.50"
     assert response.json()["currency"] == "KRW"
     assert "household_space_id" not in response.json()
+    _assert_no_store(response)
+
+
+def test_receipt_list_returns_reopenable_versioned_metadata(client: TestClient) -> None:
+    response = client.get(f"/api/v1/medical-events/{EVENT_ID}/receipt-lines")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "schema_version": "1",
+        "receipt_lines": [
+            {
+                "id": str(LINE_ID),
+                "category": "outpatient",
+                "coverage_category": "covered",
+                "amount": "12500.50",
+                "currency": "KRW",
+                "confirmation_level": "user",
+                "note_code": "USER_ENTERED",
+                "version": 1,
+                "deleted": False,
+            }
+        ],
+    }
     _assert_no_store(response)
 
 

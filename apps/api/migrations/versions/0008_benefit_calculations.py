@@ -21,6 +21,7 @@ _CONFIRMATION_LEVELS = "'user', 'ai_structured', 'unconfirmed'"
 _CALCULATION_KINDS = "'fixed', 'indemnity'"
 _CALCULATION_STATUSES = "'computed', 'partial', 'unknown'"
 _CURRENCY_PATTERN = "'^[A-Z]{3}$'"
+_REASON_CODE_PATTERN = "'^[A-Z][A-Z0-9_]{0,63}$'"
 
 
 def _uuid(name: str, *, primary_key: bool = False) -> sa.Column[Any]:
@@ -105,6 +106,10 @@ def upgrade() -> None:
             name="ck_receipt_lines_currency",
         ),
         sa.CheckConstraint("version >= 1", name="ck_receipt_lines_version"),
+        sa.CheckConstraint(
+            f"note_code IS NULL OR note_code ~ {_REASON_CODE_PATTERN}",
+            name="ck_receipt_lines_note_code",
+        ),
     )
     op.create_index(
         "ix_receipt_lines_household_active",
@@ -133,6 +138,12 @@ def upgrade() -> None:
         sa.Column("applied_limit", sa.Numeric(18, 2), nullable=True),
         sa.Column("rounding_rule", sa.String(length=32), nullable=True),
         sa.Column("hold_reason_code", sa.String(length=64), nullable=True),
+        sa.Column(
+            "excluded_reason_codes",
+            sa.ARRAY(sa.String(length=64)),
+            nullable=False,
+            server_default=sa.text("'{}'::varchar[]"),
+        ),
         _foreign_uuid("rule_version_id", "coverage_rule_versions.id"),
         sa.Column("engine_version", sa.String(length=64), nullable=False),
         _version(),
@@ -180,6 +191,17 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "hold_reason_code IS NULL OR hold_reason_code <> ''",
             name="ck_benefit_calculations_hold_reason_code",
+        ),
+        sa.CheckConstraint(
+            "cardinality(excluded_reason_codes) <= 16",
+            name="ck_benefit_calculations_excluded_reason_count",
+        ),
+        sa.CheckConstraint(
+            "array_position(excluded_reason_codes, NULL) IS NULL AND "
+            "(cardinality(excluded_reason_codes) = 0 OR "
+            "array_to_string(excluded_reason_codes, ',') ~ "
+            "'^[A-Z][A-Z0-9_]{0,63}(,[A-Z][A-Z0-9_]{0,63})*$')",
+            name="ck_benefit_calculations_excluded_reason_format",
         ),
         sa.CheckConstraint(
             "engine_version <> ''",

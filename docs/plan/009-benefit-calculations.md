@@ -105,6 +105,7 @@ benefit_calculations(
   applied_limit numeric(18,2) null,
   rounding_rule varchar(32) null,
   hold_reason_code varchar(64) null,
+  excluded_reason_codes varchar(64)[] not null default '{}',
   rule_version_id uuid references coverage_rule_versions(id),
   engine_version varchar(64) not null,
   version integer not null default 1,
@@ -126,7 +127,7 @@ benefit_calculation_steps(
 )
 ```
 
-Named checks enforce `category = outpatient|inpatient|pharmacy`, `coverage_category = covered|possible_excluded|excluded|unknown`, `confirmation_level = user|ai_structured|unconfirmed`, `calculation_kind = fixed|indemnity`, `status = computed|partial|unknown`, positive versions, valid ISO currency shape, and non-negative amounts. Calculation step rows are immutable; a reanalysis creates a new calculation row/version rather than updating historical steps.
+Named checks enforce `category = outpatient|inpatient|pharmacy`, `coverage_category = covered|possible_excluded|excluded|unknown`, `confirmation_level = user|ai_structured|unconfirmed`, `calculation_kind = fixed|indemnity`, `status = computed|partial|unknown`, positive versions, valid ISO currency/reason-code shapes, at most 16 exclusion reasons, and non-negative amounts. Calculation step rows are immutable; a reanalysis creates a new calculation row/version rather than updating historical steps.
 
 ### Python interfaces
 
@@ -216,12 +217,13 @@ If a line or condition is not confirmed, preserve it in `additional` or `exclude
 
 ```text
 POST   /api/v1/medical-events/{event_id}/receipt-lines
+GET    /api/v1/medical-events/{event_id}/receipt-lines
 PATCH  /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
 DELETE /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
 GET    /api/v1/medical-events/{event_id}/calculations
 ```
 
-Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amounts, three-letter uppercase currency, explicit category/confirmation, bounded `note_code`, and expected version for update/delete. A client cannot submit `confirmed_amount`, `applied_rate`, or a rule version as authoritative calculation output. `GET .../calculations` returns a `BenefitCalculationsResponse` envelope with Decimal-string Money objects, calculation IDs/version/created time, rule/evidence IDs, bounded calculation steps, hold/exclusion reason codes, and `Cache-Control: no-store`; it does not return receipt notes/full medical text.
+Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amounts, three-letter uppercase currency, explicit category/confirmation, bounded `note_code`, and expected version for update/delete. A client cannot submit `confirmed_amount`, `applied_rate`, or a rule version as authoritative calculation output. `GET .../receipt-lines` returns the active, versioned manual metadata needed to reopen the editor. `GET .../calculations` returns a `BenefitCalculationsResponse` envelope with Decimal-string Money objects, calculation IDs/version/created time, rule/evidence IDs, bounded calculation steps, hold/exclusion reason codes, and `Cache-Control: no-store`; neither endpoint returns receipt documents, free-form notes, or full medical text.
 
 ### JSON Schema contract
 
@@ -450,7 +452,7 @@ Tasks 1–6 are implemented and locally verified in the current branch: migratio
 
 **Interfaces:**
 - Consumes: pure calculators, `medical_events`, `claim_candidates`, and `0008` tables.
-- Produces: receipt-line CRUD, calculation retrieval, strict schemas, and the four HTTP routes in this plan.
+- Produces: receipt-line CRUD, calculation retrieval, strict schemas, and the five HTTP operations in this plan.
 
 - [x] **Step 1: Write failing HTTP/contract tests.** Assert extra fields are rejected, client cannot submit authoritative result fields, expected-version conflict is sanitized, Decimal wire values round-trip, response includes steps/hold reasons, and no file/path/raw note appears.
 

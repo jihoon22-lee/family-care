@@ -21,6 +21,9 @@ class CalculationStore(Protocol):
     def create_receipt_line(
         self, scope: HouseholdScope, event_id: UUID, line: ReceiptLine
     ) -> ReceiptLine: ...
+    def list_receipt_lines(
+        self, scope: HouseholdScope, event_id: UUID
+    ) -> tuple[ReceiptLine, ...]: ...
     def update_receipt_line(
         self,
         scope: HouseholdScope,
@@ -65,6 +68,9 @@ class CalculationService:
         line = request.to_domain(line_id=uuid4())
         validate_receipt_line(line)
         return self.repository.create_receipt_line(self.scope, event_id, line)
+
+    def list_receipt_lines(self, event_id: UUID) -> tuple[ReceiptLine, ...]:
+        return self.repository.list_receipt_lines(self.scope, event_id)
 
     def update_receipt_line(
         self,

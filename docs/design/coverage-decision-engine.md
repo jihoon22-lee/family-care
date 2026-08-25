@@ -138,16 +138,17 @@ Rule publication 단계는 다음 불변식을 보장해야 합니다.
 
 ## Receipt and calculation HTTP boundary
 
-PR7은 다음 네 개의 household-scoped operation을 `MedicalEvent` router에 추가했습니다.
+PR7은 다음 다섯 개의 household-scoped operation을 `MedicalEvent` router에 추가했습니다.
 
 ```text
 POST   /api/v1/medical-events/{event_id}/receipt-lines
+GET    /api/v1/medical-events/{event_id}/receipt-lines
 PATCH  /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
 DELETE /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
 GET    /api/v1/medical-events/{event_id}/calculations
 ```
 
-create/update는 category, coverage category, Decimal 문자열 amount, uppercase currency, confirmation level과 bounded `note_code`만 받습니다. update/delete는 `expected_version`을 요구하고 stale write는 value-free `409 VERSION_CONFLICT`로 반환합니다. receipt line 삭제는 soft delete이며 기본 계산 조회에서 제외됩니다. 계산 결과는 `BenefitCalculationsResponse` envelope와 bounded steps/hold/exclusion reason 및 `evidence_ids`를 반환하고, 모든 네 route는 `Cache-Control: no-store`를 사용합니다. client는 confirmed amount, applied rate, rule version, household scope, 파일/path/raw note를 authoritative input으로 제출할 수 없습니다.
+create/update는 category, coverage category, Decimal 문자열 amount, uppercase currency, confirmation level과 bounded `note_code`만 받습니다. list는 재접속한 이벤트 editor가 수정·삭제를 이어가도록 active line의 ID와 version을 반환합니다. update/delete는 `expected_version`을 요구하고 stale write는 value-free `409 VERSION_CONFLICT`로 반환합니다. receipt line 삭제는 soft delete이며 기본 목록·계산 조회에서 제외됩니다. 계산 결과는 `BenefitCalculationsResponse` envelope와 bounded steps/hold/exclusion reason 및 `evidence_ids`를 반환하고, 모든 다섯 route는 `Cache-Control: no-store`를 사용합니다. client는 confirmed amount, applied rate, rule version, household scope, 파일/path/raw note를 authoritative input으로 제출할 수 없습니다.
 
 ## HTTP lifecycle implemented in PR6/PR7
 

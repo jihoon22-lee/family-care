@@ -475,6 +475,7 @@ def test_indemnity_preserves_partial_and_excluded_receipt_amounts() -> None:
         replace(
             _line(amount="5000", coverage_category="excluded"),
             line_id=UUID(int=3),
+            note_code="SYNTHETIC_EXCLUDED_ITEM",
         ),
     )
 
@@ -486,6 +487,7 @@ def test_indemnity_preserves_partial_and_excluded_receipt_amounts() -> None:
     assert result.confirmed == Money(Decimal("32000"), "KRW")
     assert result.additional == Money(Decimal("20000"), "KRW")
     assert result.excluded == Money(Decimal("5000"), "KRW")
+    assert result.excluded_reason_codes == ("SYNTHETIC_EXCLUDED_ITEM",)
     assert result.hold_reason_codes == ("ADDITIONAL_RECEIPT_REVIEW_REQUIRED",)
 
 

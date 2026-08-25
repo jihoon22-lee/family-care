@@ -2938,6 +2938,31 @@
         "title": "ReceiptLineUpdateRequest",
         "type": "object"
       },
+      "ReceiptLinesResponse": {
+        "additionalProperties": false,
+        "description": "Bounded active receipt metadata for reopening an event editor.",
+        "properties": {
+          "receipt_lines": {
+            "items": {
+              "$ref": "#/components/schemas/ReceiptLineResponse"
+            },
+            "maxItems": 256,
+            "title": "Receipt Lines",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "receipt_lines"
+        ],
+        "title": "ReceiptLinesResponse",
+        "type": "object"
+      },
       "ReviewIssue": {
         "additionalProperties": false,
         "properties": {
@@ -5131,6 +5156,87 @@
       }
     },
     "/api/v1/medical-events/{event_id}/receipt-lines": {
+      "get": {
+        "operationId": "list_receipt_lines_api_v1_medical_events__event_id__receipt_lines_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReceiptLinesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Receipt Lines",
+        "tags": [
+          "coverage decisions"
+        ]
+      },
       "post": {
         "operationId": "create_receipt_line_api_v1_medical_events__event_id__receipt_lines_post",
         "parameters": [

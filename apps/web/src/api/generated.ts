@@ -146,6 +146,12 @@ export const API_OPERATIONS = [
       "get_benefit_calculations_api_v1_medical_events__event_id__calculations_get",
   },
   {
+    method: "GET",
+    path: "/api/v1/medical-events/{event_id}/receipt-lines",
+    operationId:
+      "list_receipt_lines_api_v1_medical_events__event_id__receipt_lines_get",
+  },
+  {
     method: "POST",
     path: "/api/v1/medical-events/{event_id}/receipt-lines",
     operationId:
@@ -968,6 +974,11 @@ export interface ReceiptLineUpdateRequest {
   currency?: string | null;
   expected_version: number;
   note_code?: string | null;
+}
+
+export interface ReceiptLinesResponse {
+  receipt_lines: Array<ReceiptLineResponse>;
+  schema_version: "1";
 }
 
 export interface ReviewIssue {

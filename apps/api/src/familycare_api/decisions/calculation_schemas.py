@@ -225,6 +225,13 @@ class ReceiptLineResponse(_StrictModel):
         return cls.model_validate(payload)
 
 
+class ReceiptLinesResponse(_StrictModel):
+    """Bounded active receipt metadata for reopening an event editor."""
+
+    schema_version: Literal["1"]
+    receipt_lines: tuple[ReceiptLineResponse, ...] = Field(max_length=256)
+
+
 class CalculationStepResponse(_StrictModel):
     """Bounded arithmetic trace entry; only normalized values are exposed."""
 
@@ -302,7 +309,6 @@ class BenefitCalculationResponse(_StrictModel):
         version: int | None = None,
         created_at: datetime | None = None,
         rounding_rule: RoundingRule | None = None,
-        excluded_reason_codes: tuple[str, ...] = (),
     ) -> Self:
         currency = _result_currency(value)
         if rounding_rule is None:
@@ -355,7 +361,7 @@ class BenefitCalculationResponse(_StrictModel):
             created_at=created_at,
             steps=tuple(CalculationStepResponse.from_domain(item) for item in value.steps),
             hold_reason_codes=value.hold_reason_codes,
-            excluded_reason_codes=excluded_reason_codes,
+            excluded_reason_codes=value.excluded_reason_codes,
             evidence_ids=evidence_ids,
         )
 
@@ -431,6 +437,7 @@ __all__ = [
     "ReceiptLineCreateRequest",
     "ReceiptLineDeleteRequest",
     "ReceiptLineResponse",
+    "ReceiptLinesResponse",
     "ReceiptLineUpdateRequest",
     "ReasonCode",
     "ReceiptDecimalString",

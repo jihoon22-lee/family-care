@@ -34,6 +34,7 @@ def test_receipt_requests_and_calculation_responses_have_no_private_fields() -> 
         calculation_schemas.ReceiptLineUpdateRequest,
         calculation_schemas.ReceiptLineDeleteRequest,
         calculation_schemas.ReceiptLineResponse,
+        calculation_schemas.ReceiptLinesResponse,
         calculation_schemas.BenefitCalculationResponse,
     )
 

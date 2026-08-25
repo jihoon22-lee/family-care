@@ -78,7 +78,7 @@
         "currency": "KRW"
       },
       "excluded_reason_codes": [
-        "POSSIBLE_EXCLUDED_LINE"
+        "EXCLUDED_RECEIPT_ITEM"
       ],
       "deductible": {
         "amount": "20000",

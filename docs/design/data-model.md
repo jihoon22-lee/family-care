@@ -234,7 +234,7 @@ MedicalEvent의 수동 비용 항목입니다. PR7의 `0008_benefit_calculations
 - 선택적 `note_code`(최대 64자의 uppercase reason code만 허용)
 - optimistic `version`, `created_at`, `updated_at`, `deleted_at`
 
-ReceiptLine create/update는 수동 구조화 metadata만 받습니다. 원본 영수증 image/PDF, OCR output, diagnosis, external file/path, 자유 형식 note는 저장하지 않습니다. update/delete는 server scope와 `expected_version`을 함께 확인하고, delete는 soft delete로 계산 기본 조회에서 제외합니다.
+ReceiptLine create/update는 수동 구조화 metadata만 받습니다. scoped active-list projection은 재접속 시 편집을 이어갈 ID·version과 구조화 필드만 반환합니다. 원본 영수증 image/PDF, OCR output, diagnosis, external file/path, 자유 형식 note는 저장하지 않습니다. update/delete는 server scope와 `expected_version`을 함께 확인하고, delete는 soft delete로 목록·계산 기본 조회에서 제외합니다.
 
 ### RuleEvaluation
 
@@ -259,7 +259,7 @@ Rider별 평가 집계입니다. 지급 결정이나 ClaimCase가 아닙니다. 
 - `status`: `computed`, `partial`, `unknown`
 - 결과 통화와 `confirmed_amount`, `additional_amount`, `excluded_amount`
 - indemnity의 `deductible_amount`, `applied_rate`, `applied_limit`
-- 적용 `rounding_rule`, 첫 hold reason code, `rule_version_id`, `engine_version`, optimistic `version`, `created_at`
+- 적용 `rounding_rule`, 첫 hold reason code, 최대 16개의 bounded `excluded_reason_codes`, `rule_version_id`, `engine_version`, optimistic `version`, `created_at`
 - `household_space_id`와 `claim_candidate_id` foreign key
 
 각 header의 `benefit_calculation_steps`는 `step_number`, `operation`, input/output NUMERIC(18,6)와 통화, rounding rule, bounded `reason_code`를 저장하며 `(benefit_calculation_id, step_number)`가 unique입니다. 계산기를 다시 실행할 때 기존 header/step을 갱신하지 않고 새 version row를 생성합니다. 동일 rule/input cutoff trace는 재사용할 수 있지만, 계산에 영향을 주는 Rider 또는 indemnity ReceiptLine 변경이나 새 rule version은 새 trace를 만듭니다.

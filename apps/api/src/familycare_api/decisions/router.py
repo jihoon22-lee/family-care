@@ -14,6 +14,7 @@ from familycare_api.decisions.calculation_schemas import (
     ReceiptLineCreateRequest,
     ReceiptLineDeleteRequest,
     ReceiptLineResponse,
+    ReceiptLinesResponse,
     ReceiptLineUpdateRequest,
 )
 from familycare_api.decisions.calculation_service import CalculationService
@@ -182,6 +183,25 @@ def create_receipt_line(
     return ReceiptLineResponse.from_domain(service.create_receipt_line(event_id, request))
 
 
+@router.get(
+    "/{event_id}/receipt-lines",
+    response_model=ReceiptLinesResponse,
+    responses=_COMMON_ERRORS,
+)
+def list_receipt_lines(
+    event_id: UUID,
+    response: Response,
+    service: CalculationServiceDependency,
+) -> ReceiptLinesResponse:
+    _no_store(response)
+    return ReceiptLinesResponse(
+        schema_version="1",
+        receipt_lines=tuple(
+            ReceiptLineResponse.from_domain(value) for value in service.list_receipt_lines(event_id)
+        ),
+    )
+
+
 @router.patch(
     "/{event_id}/receipt-lines/{line_id}",
     response_model=ReceiptLineResponse,
@@ -234,7 +254,7 @@ def get_benefit_calculations(
         calculations=tuple(
             BenefitCalculationResponse.from_value(value)
             for value in service.get_calculations(event_id)
-        )
+        ),
     )
 
 
