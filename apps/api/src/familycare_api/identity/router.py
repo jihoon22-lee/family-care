@@ -30,7 +30,7 @@ from familycare_api.identity.context import (
     utc_now,
 )
 from familycare_api.identity.csrf import CsrfService, SameOriginService
-from familycare_api.identity.password import PasswordHasher
+from familycare_api.identity.password import PasswordHasher, PasswordHashError
 from familycare_api.identity.rate_limit import LoginRateLimiter
 from familycare_api.identity.sessions import (
     IssuedSession,
@@ -70,6 +70,12 @@ class AuthSessionNotFound(ApiBoundaryError):
     status_code = 404
     error_code = "SESSION_NOT_FOUND"
     public_message = "session not found"
+
+
+class AuthInvalidRequest(ApiBoundaryError):
+    status_code = 422
+    error_code = "INVALID_REQUEST"
+    public_message = "request validation failed"
 
 
 @dataclass(frozen=True)
@@ -229,7 +235,9 @@ class AuthService:
                 raise AuthenticationStoreUnavailable from None
         try:
             return user, self.sessions.issue(user.id, device_label, now)
-        except SessionError:
+        except SessionError as error:
+            if error.code == "INVALID_DEVICE_LABEL":
+                raise AuthInvalidRequest from None
             raise AuthenticationStoreUnavailable from None
 
     def reauthenticate(
@@ -272,7 +280,10 @@ class AuthService:
     ) -> None:
         if context.needs_reauthentication:
             raise ReauthenticationRequired
-        encoded = self.password_hasher.hash(raw_password)
+        try:
+            encoded = self.password_hasher.hash(raw_password)
+        except PasswordHashError:
+            raise AuthInvalidRequest from None
         self.users.replace_password_and_revoke(context.user_id, encoded, now)
 
     def revoke_session(self, context: AuthContext, session_id: UUID, now: datetime) -> None:

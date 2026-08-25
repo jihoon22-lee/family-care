@@ -59,6 +59,20 @@ def create_app(
         response = await call_next(request)
         if request.url.path.startswith("/api/v1/"):
             response.headers["Cache-Control"] = "no-store"
+        raw_session = getattr(request.state, "session_cookie_refresh", None)
+        session_cookie_headers = response.headers.getlist("set-cookie")
+        if raw_session and not any(
+            header.startswith("familycare_session=") for header in session_cookie_headers
+        ):
+            response.set_cookie(
+                "familycare_session",
+                raw_session,
+                max_age=7 * 24 * 60 * 60,
+                secure=True,
+                httponly=True,
+                samesite="strict",
+                path="/",
+            )
         return response
 
     app.add_api_route(

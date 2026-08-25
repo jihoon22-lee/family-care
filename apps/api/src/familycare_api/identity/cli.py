@@ -230,14 +230,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         provisioner = AdminProvisioner(os.getenv("FAMILYCARE_DATABASE_URL", ""))
         if args.command == "create":
             raw_password = read_confirmed_password()
-            provisioner.create(
-                args.username,
-                raw_password,
-                display_name=args.display_name or args.username,
-            )
+            try:
+                provisioner.create(
+                    args.username,
+                    raw_password,
+                    display_name=args.display_name or args.username,
+                )
+            finally:
+                del raw_password
         elif args.command == "set-password":
             raw_password = read_confirmed_password()
-            provisioner.set_password(args.username, raw_password)
+            try:
+                provisioner.set_password(args.username, raw_password)
+            finally:
+                del raw_password
         else:
             provisioner.disable(args.username)
         return 0

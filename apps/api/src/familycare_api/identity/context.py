@@ -86,6 +86,7 @@ def resolve_auth_context(
         )
         SameOriginService().validate(request)
     request.state.auth_context = context
+    request.state.session_cookie_refresh = raw_session
     return context
 
 
