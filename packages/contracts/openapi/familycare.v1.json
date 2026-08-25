@@ -142,10 +142,33 @@
         "additionalProperties": false,
         "properties": {
           "error_code": {
-            "maxLength": 64,
-            "minLength": 1,
+            "enum": [
+              "AUTHENTICATION_REQUIRED",
+              "AUTH_FAILED",
+              "AUTH_RATE_LIMITED",
+              "AUTH_STORE_UNAVAILABLE",
+              "CSRF_REQUIRED",
+              "INVALID_REQUEST",
+              "ORIGIN_REQUIRED",
+              "REAUTHENTICATION_REQUIRED",
+              "SESSION_NOT_FOUND"
+            ],
             "title": "Error Code",
             "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
           },
           "message": {
             "maxLength": 160,
@@ -211,6 +234,10 @@
             "title": "Display Name",
             "type": "string"
           },
+          "needs_reauthentication": {
+            "title": "Needs Reauthentication",
+            "type": "boolean"
+          },
           "user_id": {
             "format": "uuid",
             "title": "User Id",
@@ -224,7 +251,8 @@
         "required": [
           "user_id",
           "username",
-          "display_name"
+          "display_name",
+          "needs_reauthentication"
         ],
         "title": "AuthUserResponse",
         "type": "object"
@@ -2787,19 +2815,6 @@
         "title": "FamilyMemberUpdateRequest",
         "type": "object"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
       "HealthResponse": {
         "description": "Stable public health response.",
         "properties": {
@@ -4927,46 +4942,6 @@
         "title": "TermsEditionResponse",
         "type": "object"
       },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
-      },
       "familycare_api__claims__schemas__ExpectedVersionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5301,6 +5276,16 @@
             },
             "description": "Session not found"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -5409,11 +5394,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/AuthErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5478,6 +5463,16 @@
               }
             },
             "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5554,6 +5549,16 @@
               }
             },
             "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5638,11 +5643,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/AuthErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5727,11 +5732,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/AuthErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5812,6 +5817,16 @@
               }
             },
             "description": "Session not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
           },
           "429": {
             "content": {
@@ -5898,11 +5913,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/AuthErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "429": {
             "content": {

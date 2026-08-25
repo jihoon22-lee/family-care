@@ -427,6 +427,17 @@ export const API_OPERATIONS = [
 
 export type ApiOperation = (typeof API_OPERATIONS)[number];
 
+export type AuthErrorResponseErrorCode =
+  | "AUTHENTICATION_REQUIRED"
+  | "AUTH_FAILED"
+  | "AUTH_RATE_LIMITED"
+  | "AUTH_STORE_UNAVAILABLE"
+  | "CSRF_REQUIRED"
+  | "INVALID_REQUEST"
+  | "ORIGIN_REQUIRED"
+  | "REAUTHENTICATION_REQUIRED"
+  | "SESSION_NOT_FOUND";
+
 export type CandidateErrorResponseErrorCode =
   "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
 
@@ -516,7 +527,17 @@ export interface AnalysisJobStatusResponse {
 }
 
 export interface AuthErrorResponse {
-  error_code: string;
+  error_code:
+    | "AUTHENTICATION_REQUIRED"
+    | "AUTH_FAILED"
+    | "AUTH_RATE_LIMITED"
+    | "AUTH_STORE_UNAVAILABLE"
+    | "CSRF_REQUIRED"
+    | "INVALID_REQUEST"
+    | "ORIGIN_REQUIRED"
+    | "REAUTHENTICATION_REQUIRED"
+    | "SESSION_NOT_FOUND";
+  fields?: Array<string> | null;
   message: string;
 }
 
@@ -531,6 +552,7 @@ export interface AuthSessionResponse {
 
 export interface AuthUserResponse {
   display_name: string;
+  needs_reauthentication: boolean;
   user_id: string;
   username: string;
 }
@@ -1095,10 +1117,6 @@ export interface FamilyMemberUpdateRequest {
   internal_alias?: string | null;
 }
 
-export interface HTTPValidationError {
-  detail?: Array<ValidationError>;
-}
-
 export interface HealthResponse {
   service?: "api";
   status: "ok" | "ready" | "unavailable";
@@ -1542,14 +1560,6 @@ export interface TermsEditionResponse {
   product_display: string;
   product_key: string;
   version: number;
-}
-
-export interface ValidationError {
-  ctx?: Record<string, unknown>;
-  input?: unknown;
-  loc: Array<string | number>;
-  msg: string;
-  type: string;
 }
 
 export interface familycare_api__claims__schemas__ExpectedVersionRequest {

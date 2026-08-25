@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
 import psycopg
@@ -323,6 +323,7 @@ class AuthUserResponse(BaseModel):
     user_id: UUID
     username: str
     display_name: str
+    needs_reauthentication: bool
 
 
 class LoginResponse(BaseModel):
@@ -353,8 +354,19 @@ class AuthSessionResponse(BaseModel):
 class AuthErrorResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: str = Field(min_length=1, max_length=64)
+    error_code: Literal[
+        "AUTHENTICATION_REQUIRED",
+        "AUTH_FAILED",
+        "AUTH_RATE_LIMITED",
+        "AUTH_STORE_UNAVAILABLE",
+        "CSRF_REQUIRED",
+        "INVALID_REQUEST",
+        "ORIGIN_REQUIRED",
+        "REAUTHENTICATION_REQUIRED",
+        "SESSION_NOT_FOUND",
+    ]
     message: str = Field(min_length=1, max_length=160)
+    fields: list[str] | None = None
 
 
 def get_identity_repository() -> IdentityRepository:
@@ -382,16 +394,22 @@ _AUTH_ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": AuthErrorResponse, "description": "Authentication failed"},
     403: {"model": AuthErrorResponse, "description": "CSRF or reauthentication required"},
     404: {"model": AuthErrorResponse, "description": "Session not found"},
+    422: {"model": AuthErrorResponse, "description": "Invalid request"},
     429: {"model": AuthErrorResponse, "description": "Rate limited"},
     503: {"model": AuthErrorResponse, "description": "Authentication unavailable"},
 }
 
 
-def _user_response(user: AppUserRecord) -> AuthUserResponse:
+def _user_response(
+    user: AppUserRecord,
+    *,
+    needs_reauthentication: bool = False,
+) -> AuthUserResponse:
     return AuthUserResponse(
         user_id=user.id,
         username=user.username,
         display_name=user.display_name,
+        needs_reauthentication=needs_reauthentication,
     )
 
 
@@ -461,7 +479,10 @@ def current_user(
     user = service.users.get(context.user_id)
     if user is None or not user.is_active:
         raise AuthenticationFailed
-    return _user_response(user)
+    return _user_response(
+        user,
+        needs_reauthentication=context.needs_reauthentication,
+    )
 
 
 @router.get("/csrf", response_model=CsrfResponse, responses=_AUTH_ERRORS)

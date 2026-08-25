@@ -141,6 +141,7 @@ def test_login_sets_only_secure_host_cookie_and_no_store() -> None:
     assert response.json()["csrf_token"] == CSRF_TOKEN
 
     current = client.get("/api/v1/auth/me")
+    assert current.json()["needs_reauthentication"] is False
     assert f"{RAW_SESSION}" in current.headers["set-cookie"]
     assert "Max-Age=604800" in current.headers["set-cookie"]
 
