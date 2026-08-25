@@ -715,6 +715,7 @@ def _create_event(service: Any, member_id: UUID) -> Any:
     return service.create_medical_event(
         family_member_id=member_id,
         mode="post_treatment",
+        situation="Synthetic Member received outpatient treatment.",
         event_date=date(2025, 6, 15),
         visit_date=date(2025, 6, 16),
         facts={"MedicalEvent.classification": "injury"},

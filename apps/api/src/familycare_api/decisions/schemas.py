@@ -20,6 +20,11 @@ from familycare_api.decisions.domain import (
     RuleEvaluation,
     TriState,
 )
+from familycare_api.decisions.structuring_schemas import (
+    FactFieldId,
+    OptionalQuestionResponse,
+    StructuredFactResponse,
+)
 
 FactScalar = str | int | Decimal | date | None
 _EVENT_FIELDS = frozenset(
@@ -39,15 +44,23 @@ class FactInput(StrictModel):
     confirmation: FactConfirmation
 
 
+class StructuredFactInput(StrictModel):
+    field_id: FactFieldId
+    value: Annotated[str, Field(min_length=1, max_length=160)] | bool | None
+
+
 class MedicalEventCreateRequest(StrictModel):
     family_member_id: UUID
     mode: Literal["pre_visit", "post_treatment"]
+    situation: Annotated[str, Field(min_length=1, max_length=2_000)]
     event_date: date | None = None
     visit_date: date | None = None
     facts: dict[str, FactInput] = Field(default_factory=dict, max_length=16)
 
     @model_validator(mode="after")
     def validate_fact_paths(self) -> Self:
+        if not self.situation.strip():
+            raise ValueError("situation cannot be blank")
         _require_event_fields(self.facts)
         return self
 
@@ -55,18 +68,28 @@ class MedicalEventCreateRequest(StrictModel):
 class MedicalEventUpdateRequest(StrictModel):
     expected_version: Annotated[int, Field(ge=1)]
     mode: Literal["pre_visit", "post_treatment"] | None = None
+    situation: Annotated[str, Field(min_length=1, max_length=2_000)] | None = None
     event_date: date | None = None
     visit_date: date | None = None
     facts: dict[str, FactInput] | None = Field(default=None, max_length=16)
+    structured_facts: list[StructuredFactInput] | None = Field(default=None, max_length=32)
 
     @model_validator(mode="after")
     def validate_update(self) -> Self:
         if "mode" in self.model_fields_set and self.mode is None:
             raise ValueError("mode cannot be null")
+        if "situation" in self.model_fields_set and (
+            self.situation is None or not self.situation.strip()
+        ):
+            raise ValueError("situation cannot be blank")
         if "facts" in self.model_fields_set and self.facts is None:
             raise ValueError("facts cannot be null")
+        if "structured_facts" in self.model_fields_set and self.structured_facts is None:
+            raise ValueError("structured facts cannot be null")
         if self.facts is not None:
             _require_event_fields(self.facts)
+        if self.structured_facts is not None:
+            _require_structured_facts(self.structured_facts)
         if self.model_fields_set <= {"expected_version"}:
             raise ValueError("empty update")
         return self
@@ -89,9 +112,12 @@ class MedicalEventResponse(StrictModel):
     id: UUID
     family_member_id: UUID
     mode: Literal["pre_visit", "post_treatment"]
+    situation: str
     event_date: date | None
     visit_date: date | None
     facts: dict[str, FactResponse]
+    structured_facts: list[StructuredFactResponse] = Field(default_factory=list)
+    optional_questions: list[OptionalQuestionResponse] = Field(default_factory=list)
     version: int
     deleted: bool
 
@@ -102,9 +128,17 @@ class MedicalEventResponse(StrictModel):
                 id=value.id,
                 family_member_id=value.family_member_id,
                 mode=value.mode,
+                situation=value.situation,
                 event_date=value.event_date,
                 visit_date=value.visit_date,
                 facts={key: FactResponse.from_domain(item) for key, item in value.facts.items()},
+                structured_facts=[
+                    StructuredFactResponse.model_validate(item) for item in value.structured_facts
+                ],
+                optional_questions=[
+                    OptionalQuestionResponse.model_validate(item)
+                    for item in value.optional_questions
+                ],
                 version=value.version,
                 deleted=value.deleted_at is not None,
             )
@@ -254,6 +288,25 @@ def _require_event_fields(facts: dict[str, FactInput]) -> None:
             raise ValueError("invalid admission days")
 
 
+def _require_structured_facts(facts: list[StructuredFactInput]) -> None:
+    if not facts or len({item.field_id for item in facts}) != len(facts):
+        raise ValueError("structured fact fields must be unique")
+    boolean_fields = {"admission", "outpatient", "pharmacy"}
+    for item in facts:
+        if item.field_id in boolean_fields:
+            if item.value is not None and not isinstance(item.value, bool):
+                raise ValueError("invalid structured boolean fact")
+        elif item.value is not None and not isinstance(item.value, str):
+            raise ValueError("invalid structured text fact")
+        if item.field_id in {"event_date", "visit_date"} and item.value is not None:
+            if not isinstance(item.value, str):
+                raise ValueError("invalid structured date fact")
+            try:
+                date.fromisoformat(item.value)
+            except ValueError:
+                raise ValueError("invalid structured date fact") from None
+
+
 __all__ = [
     "CoverageDecisionResponse",
     "DecisionErrorResponse",
@@ -262,4 +315,5 @@ __all__ = [
     "MedicalEventCreateRequest",
     "MedicalEventResponse",
     "MedicalEventUpdateRequest",
+    "StructuredFactInput",
 ]

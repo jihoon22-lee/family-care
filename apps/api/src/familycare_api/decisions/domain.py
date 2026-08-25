@@ -95,9 +95,12 @@ class MedicalEvent:
     household_space_id: UUID
     family_member_id: UUID
     mode: EventMode
+    situation: str
     event_date: date | None
     visit_date: date | None
     facts: Mapping[str, FactValue] = field(default_factory=dict)
+    structured_facts: tuple[Mapping[str, object], ...] = ()
+    optional_questions: tuple[Mapping[str, str], ...] = ()
     confirmation: Mapping[str, FactConfirmation] = field(default_factory=dict)
     version: int = 1
     created_at: datetime | None = None
@@ -110,6 +113,8 @@ class MedicalEvent:
         _require_nonzero_uuid(self.family_member_id, "family member")
         if self.mode not in {"pre_visit", "post_treatment"}:
             raise ValueError("unsupported event mode")
+        if not isinstance(self.situation, str) or len(self.situation) > 2_000:
+            raise ValueError("invalid event situation")
         if isinstance(self.version, bool) or self.version < 1:
             raise ValueError("event version must be positive")
 

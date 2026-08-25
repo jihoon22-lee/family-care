@@ -29,11 +29,17 @@ from familycare_api.decisions.domain import (
 )
 from familycare_api.decisions.engine import DeterministicCoverageDecisionEngine
 from familycare_api.decisions.errors import (
+    DecisionInvalid,
     DecisionRepositoryUnavailable,
     DecisionResultNotFound,
     MedicalEventNotFound,
 )
 from familycare_api.decisions.facts import FactNormalizationError, normalize_facts
+from familycare_api.decisions.structuring_repository import _facts as _structured_fact_records
+from familycare_api.decisions.structuring_repository import _merge_user_overrides
+from familycare_api.decisions.structuring_repository import (
+    _questions as _structured_question_records,
+)
 from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
 
 
@@ -55,6 +61,7 @@ class DecisionRepository:
         *,
         family_member_id: UUID,
         mode: str,
+        situation: str,
         event_date: date | None,
         visit_date: date | None,
         facts: Mapping[str, FactValue],
@@ -65,10 +72,10 @@ class DecisionRepository:
                 row = connection.execute(
                     """
                     INSERT INTO medical_events (
-                      household_space_id, family_member_id, mode, event_date,
-                      visit_date, facts_json, confirmation_json
+                      household_space_id, family_member_id, mode, situation_text,
+                      event_date, visit_date, facts_json, confirmation_json
                     )
-                    SELECT %s, member.id, %s, %s, %s, %s, %s
+                    SELECT %s, member.id, %s, %s, %s, %s, %s, %s
                     FROM family_members AS member
                     WHERE member.id = %s
                       AND member.household_space_id = %s
@@ -78,6 +85,7 @@ class DecisionRepository:
                     (
                         scope.household_space_id,
                         mode,
+                        situation,
                         event_date,
                         visit_date,
                         Jsonb(values),
@@ -144,10 +152,23 @@ class DecisionRepository:
                 if int(current["version"]) != expected_version:
                     raise VersionConflict
                 mode = changes.get("mode", current["mode"])
+                situation = changes.get("situation", current.get("situation_text", ""))
                 event_date = changes.get("event_date", current.get("event_date"))
                 visit_date = changes.get("visit_date", current.get("visit_date"))
                 fact_values = current["facts_json"]
                 confirmation_values = current["confirmation_json"]
+                structured_values = current.get("structured_facts_json")
+                structured_questions = current.get("structured_questions_json")
+                structured_issues = current.get("structured_issues_json")
+                structured_update: (
+                    tuple[
+                        dict[str, dict[str, object]],
+                        list[dict[str, str]],
+                        tuple[str, ...],
+                        bool,
+                    ]
+                    | None
+                ) = None
                 if "facts" in changes:
                     facts = changes["facts"]
                     if not isinstance(facts, Mapping):
@@ -155,10 +176,42 @@ class DecisionRepository:
                     fact_values, confirmation_values = _event_json(
                         cast(Mapping[str, FactValue], facts)
                     )
+                if "structured_facts" in changes:
+                    overrides = changes["structured_facts"]
+                    if not isinstance(overrides, Mapping):
+                        raise DecisionRepositoryUnavailable
+                    structured_update = _merge_user_overrides(
+                        structured_values,
+                        structured_questions,
+                        cast(Mapping[Any, str | bool | None], overrides),
+                    )
+                    structured_values, structured_questions, _, _ = structured_update
+                    fact_values = dict(cast(Mapping[str, object | None], fact_values))
+                    confirmation_values = dict(
+                        cast(Mapping[str, FactConfirmation], confirmation_values)
+                    )
+                    condition_value = overrides.get("condition_class")
+                    if "condition_class" in overrides:
+                        fact_values["MedicalEvent.classification"] = condition_value
+                        confirmation_values["MedicalEvent.classification"] = (
+                            "user" if condition_value is not None else "unconfirmed"
+                        )
+                    if "admission" in overrides:
+                        admission = overrides.get("admission")
+                        fact_values["MedicalEvent.admission_days"] = (
+                            0 if admission is False else None
+                        )
+                        confirmation_values["MedicalEvent.admission_days"] = (
+                            "user" if admission is False else "unconfirmed"
+                        )
+                    if "event_date" in overrides:
+                        event_date = _structured_date(overrides.get("event_date"))
+                    if "visit_date" in overrides:
+                        visit_date = _structured_date(overrides.get("visit_date"))
                 row = connection.execute(
                     """
                     UPDATE medical_events
-                    SET mode = %s, event_date = %s, visit_date = %s,
+                    SET mode = %s, situation_text = %s, event_date = %s, visit_date = %s,
                         facts_json = %s, confirmation_json = %s,
                         version = version + 1, updated_at = clock_timestamp()
                     WHERE id = %s AND household_space_id = %s
@@ -167,6 +220,7 @@ class DecisionRepository:
                     """,
                     (
                         mode,
+                        situation,
                         event_date,
                         visit_date,
                         Jsonb(fact_values),
@@ -176,6 +230,84 @@ class DecisionRepository:
                         expected_version,
                     ),
                 ).fetchone()
+                if row is not None and structured_update is not None:
+                    (
+                        structured_values,
+                        structured_questions,
+                        changed_fields,
+                        conflict,
+                    ) = structured_update
+                    parent_id = current.get("structured_fact_version_id")
+                    parent_version = int(current.get("structured_fact_version") or 0)
+                    if parent_id is not None:
+                        connection.execute(
+                            """
+                            UPDATE medical_event_fact_versions
+                            SET is_current = false, version_state = 'superseded'
+                            WHERE id = %s AND household_space_id = %s
+                            """,
+                            (parent_id, scope.household_space_id),
+                        )
+                    fact_version = connection.execute(
+                        """
+                        INSERT INTO medical_event_fact_versions (
+                          household_space_id, medical_event_id, structuring_job_id,
+                          parent_version_id, event_version, version, source,
+                          version_state, facts_json, questions_json,
+                          issue_codes_json, is_current
+                        ) VALUES (
+                          %s, %s, NULL, %s, %s, %s, 'user', 'applied',
+                          %s, %s, %s, true
+                        )
+                        RETURNING id
+                        """,
+                        (
+                            scope.household_space_id,
+                            event_id,
+                            parent_id,
+                            int(row["version"]),
+                            parent_version + 1,
+                            Jsonb(structured_values),
+                            Jsonb(structured_questions),
+                            Jsonb(structured_issues if isinstance(structured_issues, list) else []),
+                        ),
+                    ).fetchone()
+                    if fact_version is None:
+                        raise DecisionRepositoryUnavailable
+                    action = (
+                        "conflict_detected"
+                        if conflict
+                        else ("overridden" if parent_id is not None else "created")
+                    )
+                    reason_code = "USER_AI_CONFLICT" if conflict else "USER_OVERRIDE"
+                    connection.execute(
+                        """
+                        INSERT INTO medical_event_fact_audit (
+                          household_space_id, medical_event_id, fact_version_id,
+                          parent_version_id, event_version, action, actor_kind,
+                          changed_fields_json, reason_code
+                        ) VALUES (%s, %s, %s, %s, %s, %s, 'user', %s, %s)
+                        """,
+                        (
+                            scope.household_space_id,
+                            event_id,
+                            fact_version["id"],
+                            parent_id,
+                            int(row["version"]),
+                            action,
+                            Jsonb(list(changed_fields)),
+                            reason_code,
+                        ),
+                    )
+                    row["structured_facts_json"] = structured_values
+                    row["structured_questions_json"] = structured_questions
+                    row["structured_issues_json"] = (
+                        structured_issues if isinstance(structured_issues, list) else []
+                    )
+                elif row is not None:
+                    row["structured_facts_json"] = structured_values
+                    row["structured_questions_json"] = structured_questions
+                    row["structured_issues_json"] = structured_issues
         except MedicalEventNotFound, VersionConflict:
             raise
         except psycopg.Error:
@@ -370,11 +502,25 @@ class DecisionRepository:
         for_update: bool = False,
     ) -> dict[str, Any] | None:
         deleted = "IS NOT NULL" if deleted_only else "IS NULL"
-        locking = "FOR UPDATE" if for_update else ""
+        locking = "FOR UPDATE OF event" if for_update else ""
         return connection.execute(
             f"""
-            SELECT * FROM medical_events
-            WHERE id = %s AND household_space_id = %s AND deleted_at {deleted}
+            SELECT event.*,
+                   version.id AS structured_fact_version_id,
+                   version.version AS structured_fact_version,
+                   version.facts_json AS structured_facts_json,
+                   version.questions_json AS structured_questions_json,
+                   version.issue_codes_json AS structured_issues_json
+            FROM medical_events AS event
+            LEFT JOIN LATERAL (
+              SELECT id, version, facts_json, questions_json, issue_codes_json
+              FROM medical_event_fact_versions
+              WHERE medical_event_id = event.id AND is_current = true
+              ORDER BY version DESC, id DESC
+              LIMIT 1
+            ) AS version ON true
+            WHERE event.id = %s AND event.household_space_id = %s
+              AND event.deleted_at {deleted}
             {locking}
             """,
             (event_id, scope.household_space_id),
@@ -784,14 +930,33 @@ def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:
         )
     except FactNormalizationError:
         raise DecisionRepositoryUnavailable from None
+    structured_facts = _structured_fact_records(row.get("structured_facts_json"))
+    optional_questions = _structured_question_records(row.get("structured_questions_json"))
     return MedicalEvent(
         id=cast(UUID, row["id"]),
         household_space_id=cast(UUID, row["household_space_id"]),
         family_member_id=cast(UUID, row["family_member_id"]),
         mode=cast(Any, row["mode"]),
+        situation=cast(str, row.get("situation_text", "")),
         event_date=cast(date | None, row.get("event_date")),
         visit_date=cast(date | None, row.get("visit_date")),
         facts=facts,
+        structured_facts=tuple(
+            {
+                "fact_id": item.fact_id,
+                "field_id": item.field_id,
+                "value": item.value,
+                "source": item.source,
+                "state": item.state,
+                "confidence": item.confidence,
+                "evidence_ids": item.evidence_ids,
+            }
+            for item in structured_facts
+        ),
+        optional_questions=tuple(
+            {"question_code": item.question_code, "field_id": item.field_id}
+            for item in optional_questions
+        ),
         confirmation=cast(Mapping[str, FactConfirmation], confirmations),
         version=int(row["version"]),
         created_at=cast(datetime, row["created_at"]),
@@ -807,6 +972,17 @@ def _event_json(
         {key: _json_value(value.value) for key, value in facts.items()},
         {key: value.confirmation for key, value in facts.items()},
     )
+
+
+def _structured_date(value: object) -> date | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise DecisionInvalid
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        raise DecisionInvalid from None
 
 
 def _json_value(value: object | None) -> object | None:

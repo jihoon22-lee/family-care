@@ -10,6 +10,7 @@ DecisionErrorCode = Literal[
     "MEDICAL_EVENT_NOT_FOUND",
     "DECISION_RESULT_NOT_FOUND",
     "DECISION_INVALID",
+    "EVIDENCE_NOT_FOUND",
     "RECEIPT_LINE_NOT_FOUND",
     "RESOURCE_LIMIT_EXCEEDED",
 ]
@@ -43,6 +44,12 @@ class ReceiptLineNotFound(DecisionError):
     public_message = "receipt line not found"
 
 
+class EvidenceNotFound(DecisionError):
+    status_code = 404
+    error_code: DecisionErrorCode = "EVIDENCE_NOT_FOUND"
+    public_message = "evidence not found"
+
+
 class DecisionRepositoryUnavailable(DecisionError):
     status_code = 503
     error_code: DecisionErrorCode = "RESOURCE_LIMIT_EXCEEDED"
@@ -55,6 +62,7 @@ __all__ = [
     "DecisionInvalid",
     "DecisionRepositoryUnavailable",
     "DecisionResultNotFound",
+    "EvidenceNotFound",
     "MedicalEventNotFound",
     "ReceiptLineNotFound",
 ]

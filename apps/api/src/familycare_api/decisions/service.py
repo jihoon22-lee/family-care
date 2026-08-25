@@ -30,6 +30,7 @@ class DecisionStore(Protocol):
         *,
         family_member_id: UUID,
         mode: str,
+        situation: str,
         event_date: date | None,
         visit_date: date | None,
         facts: Mapping[str, FactValue],
@@ -82,6 +83,7 @@ class DecisionService:
         *,
         family_member_id: UUID | None = None,
         mode: str | None = None,
+        situation: str | None = None,
         event_date: date | None = None,
         visit_date: date | None = None,
         facts: Mapping[str, object] | None = None,
@@ -90,17 +92,25 @@ class DecisionService:
         if request is not None:
             family_member_id = request.family_member_id
             mode = request.mode
+            situation = request.situation
             event_date = request.event_date
             visit_date = request.visit_date
             facts = {key: item.value for key, item in request.facts.items()}
             confirmation = {key: item.confirmation for key, item in request.facts.items()}
-        if family_member_id is None or mode not in {"pre_visit", "post_treatment"}:
+        if (
+            family_member_id is None
+            or mode not in {"pre_visit", "post_treatment"}
+            or situation is None
+            or not situation.strip()
+            or len(situation) > 2_000
+        ):
             raise DecisionInvalid
         normalized = self._facts(facts or {}, confirmation or {})
         return self.repository.create_medical_event(
             self.scope,
             family_member_id=family_member_id,
             mode=mode,
+            situation=situation,
             event_date=event_date,
             visit_date=visit_date,
             facts=normalized,
@@ -134,6 +144,10 @@ class DecisionService:
                 if request.mode is None:
                     raise DecisionInvalid
                 changes["mode"] = request.mode
+            if "situation" in request.model_fields_set:
+                if request.situation is None:
+                    raise DecisionInvalid
+                changes["situation"] = request.situation
             if "event_date" in request.model_fields_set:
                 changes["event_date"] = request.event_date
             if "visit_date" in request.model_fields_set:
@@ -141,6 +155,10 @@ class DecisionService:
             if request.facts is not None:
                 facts = {key: item.value for key, item in request.facts.items()}
                 confirmation = {key: item.confirmation for key, item in request.facts.items()}
+            if request.structured_facts is not None:
+                changes["structured_facts"] = {
+                    item.field_id: item.value for item in request.structured_facts
+                }
         if expected_version is None:
             raise DecisionInvalid
         if facts is not None:

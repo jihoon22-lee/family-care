@@ -21,6 +21,7 @@ DecisionBoundaryErrorCode = Literal[
     "MEDICAL_EVENT_NOT_FOUND",
     "DECISION_RESULT_NOT_FOUND",
     "DECISION_INVALID",
+    "EVIDENCE_NOT_FOUND",
     "RECEIPT_LINE_NOT_FOUND",
 ]
 ApiErrorCode = (

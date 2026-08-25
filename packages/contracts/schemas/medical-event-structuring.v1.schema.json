@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/medical-event-structuring.v1.schema.json",
+  "title": "MedicalEventStructuringEnvelope",
+  "description": "Strict provider-neutral event fact candidates and job projections.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request",
+    "response",
+    "job"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "request": {
+      "$ref": "#/$defs/StructuringRequest"
+    },
+    "response": {
+      "$ref": "#/$defs/StructuringResult"
+    },
+    "job": {
+      "$ref": "#/$defs/StructuringJob"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Uuid",
+      "type": "string"
+    },
+    "Date": {
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "title": "Date",
+      "type": "string"
+    },
+    "DateOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Date"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "DateOrNull"
+    },
+    "BoundedValue": {
+      "anyOf": [
+        {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "BoundedValue"
+    },
+    "ReasonCode": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "EventMode": {
+      "enum": [
+        "pre_visit",
+        "post_treatment"
+      ],
+      "title": "EventMode",
+      "type": "string"
+    },
+    "FactFieldId": {
+      "enum": [
+        "event_date",
+        "visit_date",
+        "condition_class",
+        "diagnosis_label",
+        "treatment_kind",
+        "admission",
+        "outpatient",
+        "pharmacy"
+      ],
+      "title": "FactFieldId",
+      "type": "string"
+    },
+    "FactSource": {
+      "enum": [
+        "user",
+        "ai",
+        "system"
+      ],
+      "title": "FactSource",
+      "type": "string"
+    },
+    "FactState": {
+      "enum": [
+        "confirmed",
+        "ambiguous",
+        "missing",
+        "conflict"
+      ],
+      "title": "FactState",
+      "type": "string"
+    },
+    "FactConfidence": {
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ],
+      "title": "FactConfidence",
+      "type": "string"
+    },
+    "FactIssueCode": {
+      "enum": [
+        "INVENTED_FIELD",
+        "INVALID_VALUE",
+        "INVALID_STATE",
+        "DUPLICATE_FIELD",
+        "INVENTED_QUESTION",
+        "INVENTED_EVIDENCE",
+        "UNSUPPORTED_SOURCE",
+        "INVALID_CONFIDENCE"
+      ],
+      "title": "FactIssueCode",
+      "type": "string"
+    },
+    "QuestionCode": {
+      "enum": [
+        "event_date",
+        "visit_date",
+        "condition_class",
+        "diagnosis_label",
+        "treatment_kind",
+        "admission",
+        "outpatient",
+        "pharmacy"
+      ],
+      "title": "QuestionCode",
+      "type": "string"
+    },
+    "StructuringJobState": {
+      "enum": [
+        "queued",
+        "running",
+        "succeeded",
+        "retryable_failed",
+        "permanently_failed",
+        "cancelled"
+      ],
+      "title": "StructuringJobState",
+      "type": "string"
+    },
+    "StructuringErrorCode": {
+      "enum": [
+        "STRUCTURING_AUTHENTICATION_FAILED",
+        "STRUCTURING_INVALID_RESPONSE",
+        "STRUCTURING_PROVIDER_TIMEOUT",
+        "STRUCTURING_RATE_LIMITED",
+        "STRUCTURING_UNAVAILABLE"
+      ],
+      "title": "StructuringErrorCode",
+      "type": "string"
+    },
+    "StructuringErrorCodeOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StructuringErrorCode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "StructuringErrorCodeOrNull"
+    },
+    "MedicalEventFact": {
+      "additionalProperties": false,
+      "properties": {
+        "fact_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "field_id": {
+          "$ref": "#/$defs/FactFieldId"
+        },
+        "value": {
+          "$ref": "#/$defs/BoundedValue"
+        },
+        "source": {
+          "$ref": "#/$defs/FactSource"
+        },
+        "state": {
+          "$ref": "#/$defs/FactState"
+        },
+        "confidence": {
+          "$ref": "#/$defs/FactConfidence"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 8,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "fact_id",
+        "field_id",
+        "value",
+        "source",
+        "state",
+        "confidence",
+        "evidence_ids"
+      ],
+      "title": "MedicalEventFact",
+      "type": "object"
+    },
+    "OptionalQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "question_code": {
+          "$ref": "#/$defs/QuestionCode"
+        },
+        "field_id": {
+          "$ref": "#/$defs/FactFieldId"
+        }
+      },
+      "required": [
+        "question_code",
+        "field_id"
+      ],
+      "title": "OptionalQuestion",
+      "type": "object"
+    },
+    "FactIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/FactIssueCode"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "FactIssue",
+      "type": "object"
+    },
+    "StructuringRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "mode": {
+          "$ref": "#/$defs/EventMode"
+        },
+        "situation": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_date": {
+          "$ref": "#/$defs/DateOrNull"
+        },
+        "visit_date": {
+          "$ref": "#/$defs/DateOrNull"
+        }
+      },
+      "required": [
+        "schema_version",
+        "mode",
+        "situation",
+        "event_date",
+        "visit_date"
+      ],
+      "title": "StructuringRequest",
+      "type": "object"
+    },
+    "StructuringResult": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/MedicalEventFact"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/OptionalQuestion"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/FactIssue"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "facts",
+        "questions",
+        "issues"
+      ],
+      "title": "StructuringResult",
+      "type": "object"
+    },
+    "StructuringJob": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "job_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "state": {
+          "$ref": "#/$defs/StructuringJobState"
+        },
+        "attempts": {
+          "maximum": 10,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/MedicalEventFact"
+          },
+          "maxItems": 32,
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/OptionalQuestion"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/FactIssue"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "error_code": {
+          "$ref": "#/$defs/StructuringErrorCodeOrNull"
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_id",
+        "state",
+        "attempts",
+        "facts",
+        "questions",
+        "issues",
+        "error_code"
+      ],
+      "title": "StructuringJob",
+      "type": "object"
+    }
+  }
+}

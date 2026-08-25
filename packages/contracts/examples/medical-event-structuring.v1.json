@@ -1,0 +1,74 @@
+{
+  "schema_version": "1",
+  "request": {
+    "schema_version": "1",
+    "mode": "pre_visit",
+    "situation": "Synthetic Member A plans a routine outpatient visit.",
+    "event_date": "2026-08-25",
+    "visit_date": null
+  },
+  "response": {
+    "schema_version": "1",
+    "facts": [
+      {
+        "fact_id": "00000000-0000-4000-8000-000000000a01",
+        "field_id": "condition_class",
+        "value": "routine outpatient",
+        "source": "ai",
+        "state": "confirmed",
+        "confidence": "medium",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "00000000-0000-4000-8000-000000000a02",
+        "field_id": "visit_date",
+        "value": null,
+        "source": "ai",
+        "state": "missing",
+        "confidence": "low",
+        "evidence_ids": []
+      }
+    ],
+    "questions": [
+      {
+        "question_code": "visit_date",
+        "field_id": "visit_date"
+      }
+    ],
+    "issues": []
+  },
+  "job": {
+    "schema_version": "1",
+    "job_id": "00000000-0000-4000-8000-000000000a03",
+    "state": "succeeded",
+    "attempts": 1,
+    "facts": [
+      {
+        "fact_id": "00000000-0000-4000-8000-000000000a01",
+        "field_id": "condition_class",
+        "value": "routine outpatient",
+        "source": "ai",
+        "state": "confirmed",
+        "confidence": "medium",
+        "evidence_ids": []
+      },
+      {
+        "fact_id": "00000000-0000-4000-8000-000000000a02",
+        "field_id": "visit_date",
+        "value": null,
+        "source": "ai",
+        "state": "missing",
+        "confidence": "low",
+        "evidence_ids": []
+      }
+    ],
+    "questions": [
+      {
+        "question_code": "visit_date",
+        "field_id": "visit_date"
+      }
+    ],
+    "issues": [],
+    "error_code": null
+  }
+}

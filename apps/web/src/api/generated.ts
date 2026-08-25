@@ -7,10 +7,12 @@ export const API_PATHS = [
   "/api/v1/coverage-rules/{rule_id}/publish",
   "/api/v1/coverage-rules/{rule_id}/versions",
   "/api/v1/documents/analysis",
+  "/api/v1/evidence/{evidence_id}",
   "/api/v1/family-members",
   "/api/v1/family-members/trash",
   "/api/v1/family-members/{member_id}",
   "/api/v1/family-members/{member_id}/restore",
+  "/api/v1/medical-event-structuring-jobs/{job_id}",
   "/api/v1/medical-events",
   "/api/v1/medical-events/trash",
   "/api/v1/medical-events/{event_id}",
@@ -20,6 +22,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
   "/api/v1/medical-events/{event_id}/results/{version}",
+  "/api/v1/medical-events/{event_id}/structure",
   "/api/v1/policies",
   "/api/v1/policies/trash",
   "/api/v1/policies/{policy_id}",
@@ -73,6 +76,11 @@ export const API_OPERATIONS = [
   },
   {
     method: "GET",
+    path: "/api/v1/evidence/{evidence_id}",
+    operationId: "get_evidence_api_v1_evidence__evidence_id__get",
+  },
+  {
+    method: "GET",
     path: "/api/v1/family-members",
     operationId: "list_family_members_api_v1_family_members_get",
   },
@@ -107,6 +115,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/family-members/{member_id}/restore",
     operationId:
       "restore_family_member_api_v1_family_members__member_id__restore_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-event-structuring-jobs/{job_id}",
+    operationId:
+      "get_structuring_job_api_v1_medical_event_structuring_jobs__job_id__get",
   },
   {
     method: "POST",
@@ -180,6 +194,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/results/{version}",
     operationId:
       "get_decision_result_api_v1_medical_events__event_id__results__version__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/structure",
+    operationId:
+      "structure_medical_event_api_v1_medical_events__event_id__structure_post",
   },
   {
     method: "GET",
@@ -704,6 +724,18 @@ export interface ErrorResponse {
   message: string;
 }
 
+export interface EvidenceDetailResponse {
+  bbox: [number, number, number, number] | null;
+  bounded_excerpt: string;
+  clause_label?: string | null;
+  document_label: string;
+  document_version_id: string;
+  evidence_id: string;
+  physical_page: number;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
+  schema_version?: "1";
+}
+
 export type EvidenceId = string;
 
 export interface EvidenceRef {
@@ -735,6 +767,18 @@ export interface ExtractorConfigRequest {
 export interface FactInput {
   confirmation: "user" | "ai_structured" | "unconfirmed" | "conflicting";
   value: string | number | null;
+}
+
+export interface FactIssueResponse {
+  code:
+    | "INVENTED_FIELD"
+    | "INVALID_VALUE"
+    | "INVALID_STATE"
+    | "DUPLICATE_FIELD"
+    | "INVENTED_QUESTION"
+    | "INVENTED_EVIDENCE"
+    | "UNSUPPORTED_SOURCE"
+    | "INVALID_CONFIDENCE";
 }
 
 export interface FactResponse {
@@ -772,6 +816,7 @@ export interface MedicalEventCreateRequest {
   facts?: Record<string, unknown>;
   family_member_id: string;
   mode: "pre_visit" | "post_treatment";
+  situation: string;
   visit_date?: string | null;
 }
 
@@ -782,6 +827,9 @@ export interface MedicalEventResponse {
   family_member_id: string;
   id: string;
   mode: "pre_visit" | "post_treatment";
+  optional_questions?: Array<OptionalQuestionResponse>;
+  situation: string;
+  structured_facts?: Array<StructuredFactResponse>;
   version: number;
   visit_date: string | null;
 }
@@ -791,12 +839,35 @@ export interface MedicalEventUpdateRequest {
   expected_version: number;
   facts?: Record<string, unknown> | null;
   mode?: "pre_visit" | "post_treatment" | null;
+  situation?: string | null;
+  structured_facts?: Array<StructuredFactInput> | null;
   visit_date?: string | null;
 }
 
 export interface MoneyResponse {
   amount: string;
   currency: string;
+}
+
+export interface OptionalQuestionResponse {
+  field_id:
+    | "event_date"
+    | "visit_date"
+    | "condition_class"
+    | "diagnosis_label"
+    | "treatment_kind"
+    | "admission"
+    | "outpatient"
+    | "pharmacy";
+  question_code:
+    | "event_date"
+    | "visit_date"
+    | "condition_class"
+    | "diagnosis_label"
+    | "treatment_kind"
+    | "admission"
+    | "outpatient"
+    | "pharmacy";
 }
 
 export interface PolicyCandidate {
@@ -1073,6 +1144,67 @@ export interface RuleEvaluationResponse {
   result: "MATCH" | "NO_MATCH" | "UNKNOWN";
   rider_id: string;
   rule_version_id: string;
+}
+
+export interface StructureAcceptedResponse {
+  job_id: string;
+  schema_version?: "1";
+  state: "queued";
+  status_url: string;
+}
+
+export interface StructuredFactInput {
+  field_id:
+    | "event_date"
+    | "visit_date"
+    | "condition_class"
+    | "diagnosis_label"
+    | "treatment_kind"
+    | "admission"
+    | "outpatient"
+    | "pharmacy";
+  value: string | boolean | null;
+}
+
+export interface StructuredFactResponse {
+  confidence: "high" | "medium" | "low";
+  evidence_ids: Array<string>;
+  fact_id: string;
+  field_id:
+    | "event_date"
+    | "visit_date"
+    | "condition_class"
+    | "diagnosis_label"
+    | "treatment_kind"
+    | "admission"
+    | "outpatient"
+    | "pharmacy";
+  source: "user" | "ai" | "system";
+  state: "confirmed" | "ambiguous" | "missing" | "conflict";
+  value: string | boolean | null;
+}
+
+export interface StructuringJobResponse {
+  attempts: number;
+  error_code:
+    | "STRUCTURING_AUTHENTICATION_FAILED"
+    | "STRUCTURING_INVALID_RESPONSE"
+    | "STRUCTURING_PROVIDER_TIMEOUT"
+    | "STRUCTURING_RATE_LIMITED"
+    | "STRUCTURING_UNAVAILABLE"
+    | null;
+  facts: Array<StructuredFactResponse>;
+  issues: Array<FactIssueResponse>;
+  job_id: string;
+  questions: Array<OptionalQuestionResponse>;
+  schema_version?: "1";
+  state:
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "retryable_failed"
+    | "permanently_failed"
+    | "cancelled";
 }
 
 export interface TermsEditionResponse {
