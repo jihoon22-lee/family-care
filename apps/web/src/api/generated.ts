@@ -649,14 +649,15 @@ export interface ClaimCaseListResponse {
 }
 
 export interface ClaimCaseResponse {
-  allowed_transitions:
-    | Array<"preparing"
+  allowed_transitions: Array<
+    | "preparing"
     | "submitted"
     | "supplementation_requested"
     | "paid"
     | "partially_paid"
     | "denied"
-    | "closed">;
+    | "closed"
+  >;
   checklist: Array<ClaimChecklistItemResponse>;
   claimed_amount: string | null;
   currency: string | null;
