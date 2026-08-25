@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import get_args
+from uuid import UUID
 
 import pytest
-from familycare_api.claims.domain import ClaimOutcome, ClaimStatus
+from familycare_api.claims.domain import ClaimCase, ClaimOutcome, ClaimStatus, ClaimStatusEvent
 from familycare_api.claims.state_machine import (
     ALLOWED_TRANSITIONS,
     InvalidClaimTransition,
@@ -120,3 +122,28 @@ def test_unknown_status_values_are_rejected(current: str, target: str) -> None:
 def test_denied_is_an_outcome_not_a_future_mismatch() -> None:
     assert "denied" in get_args(ClaimOutcome)
     assert "NO_MATCH" not in get_args(ClaimOutcome)
+
+
+def test_claim_case_rejects_receipt_text_instead_of_a_bounded_identifier() -> None:
+    with pytest.raises(ValueError, match="receipt number"):
+        ClaimCase(
+            id=UUID("00000000-0000-4000-8000-000000000401"),
+            household_space_id=UUID("00000000-0000-4000-8000-000000000402"),
+            medical_event_id=UUID("00000000-0000-4000-8000-000000000403"),
+            family_member_id=UUID("00000000-0000-4000-8000-000000000404"),
+            policy_contract_id=UUID("00000000-0000-4000-8000-000000000405"),
+            rider_id=UUID("00000000-0000-4000-8000-000000000406"),
+            insurer_key="synthetic-insurer",
+            receipt_number="synthetic-receipt\nmedical-note",
+        )
+
+
+def test_claim_status_event_requires_timezone_aware_time() -> None:
+    with pytest.raises(ValueError, match="occurred at"):
+        ClaimStatusEvent(
+            id=UUID("00000000-0000-4000-8000-000000000411"),
+            claim_case_id=UUID("00000000-0000-4000-8000-000000000412"),
+            from_status="preparing",
+            to_status="submitted",
+            occurred_at=datetime(2026, 8, 26, 9, 0),
+        )

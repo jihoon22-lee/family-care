@@ -43,6 +43,7 @@ def _claim(*, status: str = "preparing", version: int = 1, deleted: bool = False
         "medical_event_id": str(EVENT_ID),
         "family_member_id": "00000000-0000-4000-8000-000000000801",
         "policy_contract_id": str(POLICY_ID),
+        "rider_id": str(RIDER_ID),
         "insurer_key": "synthetic-insurer-a",
         "status": status,
         "receipt_number": None,
@@ -185,6 +186,16 @@ def test_create_and_list_claims_without_client_scope(client: TestClient) -> None
     assert created.headers["cache-control"] == listed.headers["cache-control"] == "no-store"
 
 
+def test_claim_routes_publish_a_bounded_claim_error_component(client: TestClient) -> None:
+    schemas = client.app.openapi()["components"]["schemas"]
+    codes = schemas["ClaimErrorResponse"]["properties"]["error_code"]["enum"]
+
+    assert "CLAIM_INVALID" in codes
+    assert "INVALID_CLAIM_TRANSITION" in codes
+    assert "VERSION_CONFLICT" in codes
+    assert "DOCUMENT_TOO_LARGE" not in codes
+
+
 @pytest.mark.parametrize(
     "field",
     ["status", "snapshot", "file_path", "document_text", "household_space_id"],
@@ -280,6 +291,44 @@ def test_payment_transition_requires_decimal_amount_currency_and_date(
 
     assert missing.status_code == negative.status_code == 422
     assert "-1.00" not in negative.text
+
+
+def test_payment_transition_rejects_non_extended_iso_date(
+    client: TestClient, service: _FakeClaimService
+) -> None:
+    service.status = "submitted"
+
+    response = client.post(
+        f"/api/v1/claims/{CLAIM_ID}/transitions",
+        json={
+            "target_status": "paid",
+            "expected_version": 1,
+            "occurred_at": NOW.isoformat(),
+            "metadata": {
+                "amount": "1000.00",
+                "currency": "KRW",
+                "payment_date": "20260826",
+            },
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_REQUEST"
+
+
+def test_claim_update_rejects_receipt_text_instead_of_a_bounded_identifier(
+    client: TestClient,
+) -> None:
+    response = client.patch(
+        f"/api/v1/claims/{CLAIM_ID}",
+        json={
+            "expected_version": 1,
+            "receipt_number": "synthetic-receipt\nmedical-note",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["error_code"] == "INVALID_REQUEST"
 
 
 def test_checklist_payload_is_metadata_only(client: TestClient) -> None:

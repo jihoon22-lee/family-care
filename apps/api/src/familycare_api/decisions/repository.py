@@ -517,14 +517,25 @@ class DecisionRepository:
         scope: HouseholdScope,
         family_member_id: UUID,
     ) -> tuple[ClaimHistoryFact, ...]:
-        return self._claim_history_reader().for_family_member(scope, family_member_id)
-
-    def _claim_history_reader(self) -> ClaimHistoryReader:
         if self.history_reader is not None:
-            return self.history_reader
-        from familycare_api.claims.repository import ClaimRepository
+            return self.history_reader.for_family_member(scope, family_member_id)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                return self._claim_history_facts(connection, scope, family_member_id)
+        except psycopg.Error:
+            raise DecisionRepositoryUnavailable from None
 
-        return ClaimRepository(self.database_url)
+    def _claim_history_facts(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        family_member_id: UUID,
+    ) -> tuple[ClaimHistoryFact, ...]:
+        if self.history_reader is not None:
+            return self.history_reader.for_family_member(scope, family_member_id)
+        from familycare_api.claims.repository import read_claim_history
+
+        return read_claim_history(connection, scope, family_member_id)
 
     @staticmethod
     def _event_row(
@@ -1018,7 +1029,11 @@ class _ConnectionReaders:
     def for_family_member(
         self, scope: HouseholdScope, family_member_id: UUID
     ) -> tuple[ClaimHistoryFact, ...]:
-        return self.repository._claim_history_reader().for_family_member(scope, family_member_id)
+        return self.repository._claim_history_facts(
+            self.connection,
+            scope,
+            family_member_id,
+        )
 
 
 def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:

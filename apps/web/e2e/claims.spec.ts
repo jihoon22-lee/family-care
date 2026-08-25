@@ -91,6 +91,7 @@ function claim(
     outcome_reason_code: null,
     paid_amount: null,
     policy_contract_id: POLICY_ID,
+    rider_id: RIDER_ID,
     receipt_number: null,
     schema_version: "1",
     snapshot: {

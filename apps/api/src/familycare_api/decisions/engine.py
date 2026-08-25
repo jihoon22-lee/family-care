@@ -177,7 +177,8 @@ class DeterministicCoverageDecisionEngine:
                 True,
             )
 
-        context = _fact_context(event, snapshot, history)
+        rider_history = tuple(item for item in history if item.rider_id == snapshot.rider_id)
+        context = _fact_context(event, snapshot, rider_history)
         precondition, precondition_reason, precondition_questions = _policy_precondition(
             event,
             snapshot,

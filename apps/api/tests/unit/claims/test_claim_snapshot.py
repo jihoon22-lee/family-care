@@ -167,9 +167,7 @@ def test_build_claim_snapshot_keeps_versions_and_excludes_raw_medical_fields() -
     assert snapshot.evidence_snapshot["evidence"][0]["physical_page"] == 3
     assert snapshot.calculation_snapshot["calculations"][0]["confirmed"]["amount"] == "120000"
     assert snapshot.calculation_snapshot["calculations"][0]["version"] == 2
-    assert snapshot.calculation_snapshot["calculations"][0]["evidence_ids"] == (
-        str(EVIDENCE_ID),
-    )
+    assert snapshot.calculation_snapshot["calculations"][0]["evidence_ids"] == (str(EVIDENCE_ID),)
     serialized = canonical_json(snapshot.payload())
     assert "synthetic clinical detail" not in serialized
     assert "situation" not in serialized

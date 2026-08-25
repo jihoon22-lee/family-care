@@ -25,6 +25,8 @@
 
 ClaimCase는 analysis result의 live pointer만 저장하지 않는다. 생성 당시 Candidate·Rule·Policy·Evidence와 선택한 후보에 연결된 모든 계산의 정규화된 allowlist snapshot 및 SHA-256을 보존하고, later reanalysis와 차이를 별도 표시한다. 저장된 snapshot은 이후 규칙 재분석이나 원본 행 변경으로 덮어쓰지 않는다. API는 이 snapshot의 bounded ID·version·상태 projection만 반환한다.
 
+stale result는 ClaimCase를 만들 수 없다. 계산은 선택한 exact decision run만 사용하며 생성 도중 PolicyContract, selected Rider, PolicyParty 또는 관련 status snapshot이 바뀌면 전체 생성을 중단한다. 하나의 사건·Rider에는 active ClaimCase 하나만 있고 반복 POST는 기존 active case를 반환한다.
+
 ## State machine
 
 ```text
@@ -57,7 +59,7 @@ AI explanation은 verified rules에서 checklist wording을 만들 수 있지만
 
 ## Claim history feedback
 
-paid, partially_paid, denied result는 ClaimHistory projection을 만든다. decision engine은 최초 1회, 지급 횟수, 과거 지급 필요 rule에서 이 projection을 읽는다.
+paid, partially_paid, denied result는 non-null `rider_id`가 있는 ClaimHistory projection을 만든다. decision engine은 최초 1회, 지급 횟수, 과거 지급 필요 rule에서 현재 평가 Rider와 같은 이력만 읽는다.
 
 - paid/partially_paid는 payment date와 `counted_occurrence=true`를 같은 transaction에서 명시한다.
 - denied는 `counted_occurrence=false`인 감사 이력으로 남으며 자동으로 future `NO_MATCH` 근거가 되지 않는다.
@@ -83,6 +85,7 @@ paid, partially_paid, denied result는 ClaimHistory projection을 만든다. dec
 ## Failure behavior
 
 - invalid transition은 `409 INVALID_CLAIM_TRANSITION`이다.
+- stale result 또는 생성 중 정책 lineage 변경은 ClaimCase를 만들지 않는다.
 - stale expected version은 `409 VERSION_CONFLICT`다.
 - paid amount가 음수거나 currency/date 형식이 잘못되면 validation error다.
 - related Evidence가 stale이어도 historical ClaimCase snapshot을 삭제하지 않고 warning을 표시한다.
@@ -92,7 +95,7 @@ paid, partially_paid, denied result는 ClaimHistory projection을 만든다. dec
 
 ## Privacy boundary
 
-- insurer receipt number는 user-visible business metadata이며 일반 log에 남기지 않는다.
+- insurer receipt number는 제한된 ASCII identifier token이며 자유 메모를 허용하지 않고 일반 log에 남기지 않는다.
 - diagnosis, receipt, prescription file과 scan은 저장하지 않는다.
 - bounded `note_code`와 reason code는 API body이므로 일반 log에 남기지 않는다.
 - claim amount와 reason은 browser persistent cache에 저장하지 않는다.
@@ -102,12 +105,12 @@ paid, partially_paid, denied result는 ClaimHistory projection을 만든다. dec
 ## Tests
 
 - one MedicalEvent with independent insurer/policy ClaimCases
-- result/rule/Evidence snapshot immutability
+- result/rule/Evidence snapshot immutability, database-level UPDATE/DELETE rejection
 - all allowed and denied state transitions
 - supplementation_requested resubmission and terminal close
 - checklist metadata with no file/path fields
 - optimistic concurrency, soft delete, restore
-- paid/partially_paid history and frequency/first-payment projection
+- paid/partially_paid history and same-Rider frequency/first-payment projection
 - denied result does not force future NO_MATCH
 - response/log/cache absence of medical document and user note content
 - synthetic Web flow from result card to checklist, submitted and paid/denied record

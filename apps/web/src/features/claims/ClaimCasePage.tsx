@@ -75,6 +75,22 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
     setOutcomeResetKey((value) => value + 1);
   }
 
+  async function refreshAfterVersionConflict(
+    error: ApiError | undefined,
+  ): Promise<void> {
+    if (error?.code !== "VERSION_CONFLICT") return;
+    try {
+      setClaim(await getClaimCase(claimId));
+    } catch (refreshError) {
+      if (
+        refreshError instanceof ApiError &&
+        refreshError.code === "AUTHENTICATION_REQUIRED"
+      ) {
+        clearSensitiveDrafts();
+      }
+    }
+  }
+
   async function applyMutation(
     operation: () => Promise<ClaimCase>,
   ): Promise<boolean> {
@@ -91,6 +107,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
         clearSensitiveDrafts();
       }
+      await refreshAfterVersionConflict(apiError);
       return false;
     } finally {
       setBusy(false);
@@ -110,7 +127,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
         metadata,
       }),
     );
-    if (succeeded) setOutcomeTarget(undefined);
+    if (succeeded) clearSensitiveDrafts();
   }
 
   async function updateMetadata(): Promise<void> {
@@ -129,7 +146,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       setMutationError("결과 사유는 등록된 코드 형식으로 입력해 주세요.");
       return;
     }
-    await applyMutation(() =>
+    const succeeded = await applyMutation(() =>
       updateClaimCase(claim.id, {
         expected_version: claim.version,
         receipt_number: receiptNumber || null,
@@ -138,6 +155,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
         outcome_reason_code: reasonCode || null,
       }),
     );
+    if (succeeded) clearSensitiveDrafts();
   }
 
   async function updateChecklist(
@@ -160,6 +178,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
         clearSensitiveDrafts();
       }
+      await refreshAfterVersionConflict(apiError);
     } finally {
       setBusyChecklist(undefined);
     }
@@ -178,6 +197,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
         clearSensitiveDrafts();
       }
+      await refreshAfterVersionConflict(apiError);
       setBusy(false);
     }
   }

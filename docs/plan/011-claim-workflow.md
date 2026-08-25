@@ -17,12 +17,14 @@
 - Every ClaimCase, checklist, history, snapshot, and transition query uses server-derived `HouseholdScope`; request body IDs are not authorization.
 - ClaimCase stores result/rule/policy/Evidence snapshots and manually entered business metadata only. It never stores diagnosis/receipt/prescription files, images, OCR text, absolute paths, external document IDs, archive keys, or passwords.
 - Result-card ClaimCase creation accepts only `rider_id`; the server resolves the in-scope PolicyContract and insurer from that Rider. The client cannot select policy, insurer, or HouseholdScope directly.
+- A stale decision result cannot create a ClaimCase. Calculations and policy lineage must remain coherent with the exact selected decision run; a policy, Rider, party, or status snapshot change during creation aborts the request.
+- One active ClaimCase exists per `(household_space_id, medical_event_id, rider_id)`. Repeated create requests return that active case instead of creating duplicate payment history.
 - Candidate/analysis results and actual ClaimCase/payment outcomes are separate records. A ClaimCase does not keep a live pointer as its only record of the decision at submission time.
 - Claim snapshots and status events are immutable append-only history. Corrections use an audit event or a new ClaimCase; a closed case is not reopened.
 - Allowed statuses are exactly `preparing`, `submitted`, `supplementation_requested`, `paid`, `partially_paid`, `denied`, and `closed`.
 - Status changes occur only through the transition endpoint with expected version and an allowed target; invalid transitions return `409 INVALID_CLAIM_TRANSITION`, stale writes return `409 VERSION_CONFLICT`.
 - `submitted` records that the user submitted through an insurer channel; FamilyCare never directly submits anything.
-- `paid` and `partially_paid` produce ClaimHistory facts for future frequency/first-payment rules. `denied` never automatically becomes a future `NO_MATCH`; missing/conflicting history produces `UNKNOWN` in the decision engine.
+- `paid` and `partially_paid` produce Rider-scoped ClaimHistory facts for future frequency/first-payment rules. Only history for the same `rider_id` is counted. `denied` never automatically becomes a future `NO_MATCH`; missing/conflicting history produces `UNKNOWN` in the decision engine.
 - Checklist rows contain document-kind requirement, required/conditional flag, prepared state, bounded note code, and source rule/Evidence IDs only. No file field exists.
 - AI can explain verified requirements but cannot alter checklist requirement, snapshot, transition, paid amount, or future decision state.
 - CI and fixtures use wholly synthetic parties, insurers, claim amounts, receipt numbers, and dates. Logs/responses/cache do not contain raw notes, medical input, receipt numbers, tokens, paths, or private identifiers.
@@ -83,6 +85,7 @@ claim_cases(
   medical_event_id uuid references medical_events(id),
   family_member_id uuid references family_members(id),
   policy_contract_id uuid references policy_contracts(id),
+  rider_id uuid references riders(id),
   insurer_key varchar(160) not null,
   status varchar(32) not null,
   receipt_number varchar(160) null,
@@ -144,7 +147,7 @@ claim_history(
   medical_event_id uuid references medical_events(id),
   family_member_id uuid references family_members(id),
   policy_contract_id uuid references policy_contracts(id),
-  rider_id uuid references riders(id),
+  rider_id uuid not null references riders(id),
   outcome varchar(16) not null,
   payment_date date null,
   counted_occurrence boolean not null,
@@ -155,7 +158,7 @@ claim_history(
 )
 ```
 
-Named constraints enforce exact status/outcome values, non-negative amounts, valid currency shape, positive versions, one immutable snapshot version per case, and no checklist column named path/file/blob/text/image/OCR. Receipt number is user-entered business metadata and is never logged; it is not an external file identifier.
+Named constraints enforce exact status/outcome values, non-negative amounts, valid currency shape, positive versions, one immutable snapshot version per case, and no checklist column named path/file/blob/text/image/OCR. A partial unique index enforces one active case per event and Rider. Database triggers reject UPDATE/DELETE on ClaimCase snapshots and status events. Receipt number is a bounded ASCII identifier token and is never logged; it is not a note or external file identifier.
 
 ### Python interfaces
 
@@ -196,9 +199,7 @@ def transition_claim(
 def build_claim_snapshot(
     result: DecisionRunResult, calculation: BenefitCalculationResult | None
 ) -> ClaimCaseSnapshot: ...
-def create_claim_case(
-    scope: HouseholdScope, event_id: UUID, rider_id: UUID
-) -> ClaimCase: ...
+def create_claim_case(scope: HouseholdScope, event_id: UUID, rider_id: UUID) -> ClaimCase: ...
 def record_claim_outcome(
     scope: HouseholdScope,
     claim_id: UUID,
@@ -208,7 +209,7 @@ def record_claim_outcome(
 ) -> ClaimHistoryFact: ...
 ```
 
-Snapshot builder includes only normalized candidate/rule/policy/Evidence/calculation data and a SHA-256 hash. It excludes natural-language medical input, receipt notes, document text, source path, and external IDs. `claim_history` records `paid`/`partially_paid` facts; a `denied` outcome is retained for audit but is not a future deterministic mismatch.
+Snapshot builder includes only normalized candidate/rule/policy/Evidence/calculation data and a SHA-256 hash. It excludes natural-language medical input, receipt notes, document text, source path, and external IDs. `claim_history` records `paid`/`partially_paid` facts for the selected non-null Rider; a `denied` outcome is retained for audit but is not a future deterministic mismatch. Decision frequency and first-payment rules filter the member history projection to the current Rider before evaluation.
 
 ### HTTP contract
 

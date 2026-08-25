@@ -581,6 +581,33 @@ def test_missing_history_is_unknown_not_zero_occurrences() -> None:
     assert result.evaluations[0].result == "UNKNOWN"
 
 
+def test_claim_history_counts_only_the_current_rider() -> None:
+    frequency_rule = rule(
+        field="ClaimHistory.counted_occurrence",
+        operator="count_before",
+        value=1,
+    )
+
+    result = run(
+        (snapshot(RIDER_A), snapshot(RIDER_B)),
+        {RIDER_A: (frequency_rule,), RIDER_B: (frequency_rule,)},
+        history=FakeHistoryReader(
+            (
+                ClaimHistoryFact(
+                    "paid",
+                    True,
+                    date(2026, 8, 1),
+                    rider_id=RIDER_A,
+                ),
+            )
+        ),
+    )
+
+    candidates = {candidate.rider_id: candidate for candidate in result.candidates}
+    assert candidates[RIDER_A].aggregate_result == "MATCH"
+    assert candidates[RIDER_B].aggregate_result == "UNKNOWN"
+
+
 @pytest.mark.parametrize(
     "evidence_repository",
     [

@@ -50,6 +50,7 @@ class RecordingOperations:
         self.indexes: dict[str, dict[str, Any]] = {}
         self.dropped_tables: list[str] = []
         self.dropped_indexes: list[str] = []
+        self.executed_sql: list[str] = []
 
     def create_table(self, name: str, *elements: Any, **kwargs: Any) -> sa.Table:
         table = sa.Table(name, self.metadata, *elements, **kwargs)
@@ -70,6 +71,9 @@ class RecordingOperations:
 
     def drop_index(self, name: str, **kwargs: Any) -> None:
         self.dropped_indexes.append(name)
+
+    def execute(self, statement: object) -> None:
+        self.executed_sql.append(str(statement))
 
 
 def load_migration() -> ModuleType:
@@ -141,6 +145,7 @@ def test_claim_cases_are_scoped_and_have_bounded_claim_metadata() -> None:
         "medical_event_id",
         "family_member_id",
         "policy_contract_id",
+        "rider_id",
         "insurer_key",
         "status",
         "receipt_number",
@@ -159,7 +164,9 @@ def test_claim_cases_are_scoped_and_have_bounded_claim_metadata() -> None:
         "medical_event_id": ("medical_events.id", "RESTRICT"),
         "family_member_id": ("family_members.id", "RESTRICT"),
         "policy_contract_id": ("policy_contracts.id", "RESTRICT"),
+        "rider_id": ("riders.id", "RESTRICT"),
     }
+    assert table.c.rider_id.nullable is False
     assert table.c.insurer_key.type.length == 160
     assert table.c.receipt_number.type.length == 160
     assert table.c.outcome_reason_code.type.length == 64
@@ -176,6 +183,19 @@ def test_claim_cases_are_scoped_and_have_bounded_claim_metadata() -> None:
     assert "claimed_amount IS NULL OR claimed_amount >= 0" in table_checks.values()
     assert "paid_amount IS NULL OR paid_amount >= 0" in table_checks.values()
     assert "currency IS NULL OR currency ~ '^[A-Z]{3}$'" in table_checks.values()
+    assert (
+        "receipt_number IS NULL OR receipt_number ~ "
+        "'^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$'" in table_checks.values()
+    )
+    active_rider_index = operations.indexes["uq_claim_cases_active_event_rider"]
+    assert active_rider_index["table_name"] == "claim_cases"
+    assert active_rider_index["columns"] == [
+        "household_space_id",
+        "medical_event_id",
+        "rider_id",
+    ]
+    assert active_rider_index["unique"] is True
+    assert str(active_rider_index["postgresql_where"]) == "deleted_at IS NULL"
     assert "version >= 1" in table_checks.values()
 
 
@@ -270,6 +290,10 @@ def test_checklist_and_status_events_store_metadata_not_files() -> None:
         in event_checks.values()
     )
     assert "jsonb_typeof(metadata_json) = 'object'" in event_checks.values()
+    assert operations.indexes["ix_claim_status_events_case_created"] == {
+        "table_name": "claim_status_events",
+        "columns": ["claim_case_id", "created_at", "id"],
+    }
 
 
 def test_claim_history_has_explicit_outcome_and_payment_bounds() -> None:
@@ -298,11 +322,22 @@ def test_claim_history_has_explicit_outcome_and_payment_bounds() -> None:
         "policy_contract_id": ("policy_contracts.id", "RESTRICT"),
         "rider_id": ("riders.id", "RESTRICT"),
     }
+    assert table.c.rider_id.nullable is False
     assert isinstance(table.c.amount.type, sa.Numeric)
     assert table.c.amount.type.precision == 18
     assert table.c.amount.type.scale == 2
     history_checks = checks(table)
     assert "outcome IN ('paid', 'partially_paid', 'denied')" in history_checks.values()
+    assert (
+        "(outcome IN ('paid', 'partially_paid') AND counted_occurrence) OR "
+        "(outcome = 'denied' AND NOT counted_occurrence)" in history_checks.values()
+    )
+    assert (
+        "(outcome IN ('paid', 'partially_paid') AND payment_date IS NOT NULL "
+        "AND amount IS NOT NULL AND currency IS NOT NULL) OR "
+        "(outcome = 'denied' AND payment_date IS NULL AND amount IS NULL "
+        "AND currency IS NULL)" in history_checks.values()
+    )
     assert "amount IS NULL OR amount >= 0" in history_checks.values()
     assert "currency IS NULL OR currency ~ '^[A-Z]{3}$'" in history_checks.values()
     assert (
@@ -317,6 +352,15 @@ def test_migration_never_adds_private_document_or_medical_columns() -> None:
         column.name.lower() for table in operations.tables.values() for column in table.columns
     }
     assert not FORBIDDEN_COLUMNS & columns
+
+
+def test_snapshot_and_status_event_rows_are_database_enforced_append_only() -> None:
+    _, operations = run_upgrade()
+    sql = "\n".join(operations.executed_sql)
+
+    assert "CREATE FUNCTION reject_claim_audit_mutation" in sql
+    assert "BEFORE UPDATE OR DELETE ON claim_case_snapshots" in sql
+    assert "BEFORE UPDATE OR DELETE ON claim_status_events" in sql
 
 
 def test_downgrade_drops_tables_in_reverse_dependency_order() -> None:

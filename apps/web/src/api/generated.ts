@@ -382,6 +382,16 @@ export type ApiOperation = (typeof API_OPERATIONS)[number];
 export type CandidateErrorResponseErrorCode =
   "INVALID_CANDIDATE_CORRECTION" | "REVIEW_ITEM_NOT_FOUND" | "VERSION_CONFLICT";
 
+export type ClaimErrorResponseErrorCode =
+  | "AUTHENTICATION_REQUIRED"
+  | "CLAIM_CHECKLIST_ITEM_NOT_FOUND"
+  | "CLAIM_INVALID"
+  | "CLAIM_NOT_FOUND"
+  | "INVALID_CLAIM_TRANSITION"
+  | "INVALID_REQUEST"
+  | "RESOURCE_LIMIT_EXCEEDED"
+  | "VERSION_CONFLICT";
+
 export type ClauseErrorResponseErrorCode =
   | "AUTHENTICATION_REQUIRED"
   | "CLAUSE_NOT_FOUND"
@@ -392,6 +402,21 @@ export type ClauseErrorResponseErrorCode =
   | "SEARCH_INDEX_VERSION_MISMATCH"
   | "TERMS_EDITION_NOT_FOUND"
   | "VERSION_CONFLICT";
+
+export type ErrorResponseErrorCode =
+  | "ANALYSIS_JOB_NOT_FOUND"
+  | "DOCUMENT_NOT_FOUND"
+  | "DOCUMENT_PATH_ESCAPE"
+  | "DOCUMENT_TOO_LARGE"
+  | "EXTRACTION_TIMEOUT"
+  | "INVALID_REQUEST"
+  | "PAGE_LIMIT_EXCEEDED"
+  | "PASSWORD_INVALID"
+  | "PASSWORD_REQUIRED"
+  | "PDF_CORRUPT"
+  | "RESOURCE_LIMIT_EXCEEDED"
+  | "TEMP_CLEANUP_FAILED"
+  | "UNSUPPORTED_FILE_TYPE";
 
 export type PolicyErrorResponseErrorCode =
   | "AUTHENTICATION_REQUIRED"
@@ -670,6 +695,7 @@ export interface ClaimCaseResponse {
   paid_amount: string | null;
   policy_contract_id: string;
   receipt_number: string | null;
+  rider_id: string;
   schema_version?: "1";
   snapshot: ClaimSnapshotResponse;
   status:
@@ -700,6 +726,20 @@ export interface ClaimChecklistItemResponse {
 
 export interface ClaimCreateRequest {
   rider_id: string;
+}
+
+export interface ClaimErrorResponse {
+  error_code:
+    | "AUTHENTICATION_REQUIRED"
+    | "CLAIM_CHECKLIST_ITEM_NOT_FOUND"
+    | "CLAIM_INVALID"
+    | "CLAIM_NOT_FOUND"
+    | "INVALID_CLAIM_TRANSITION"
+    | "INVALID_REQUEST"
+    | "RESOURCE_LIMIT_EXCEEDED"
+    | "VERSION_CONFLICT";
+  fields?: Array<string> | null;
+  message: string;
 }
 
 export interface ClaimSnapshotResponse {
@@ -892,28 +932,7 @@ export interface ErrorResponse {
     | "PDF_CORRUPT"
     | "RESOURCE_LIMIT_EXCEEDED"
     | "TEMP_CLEANUP_FAILED"
-    | "UNSUPPORTED_FILE_TYPE"
-    | "AUTHENTICATION_REQUIRED"
-    | "EVIDENCE_INVALID"
-    | "FAMILY_MEMBER_NOT_FOUND"
-    | "POLICY_NOT_FOUND"
-    | "POLICY_STATE_CONFLICT"
-    | "VERSION_CONFLICT"
-    | "INVALID_CANDIDATE_CORRECTION"
-    | "REVIEW_ITEM_NOT_FOUND"
-    | "VERSION_CONFLICT"
-    | "TERMS_EDITION_NOT_FOUND"
-    | "CLAUSE_NOT_FOUND"
-    | "SEARCH_INDEX_VERSION_MISMATCH"
-    | "MEDICAL_EVENT_NOT_FOUND"
-    | "DECISION_RESULT_NOT_FOUND"
-    | "DECISION_INVALID"
-    | "EVIDENCE_NOT_FOUND"
-    | "RECEIPT_LINE_NOT_FOUND"
-    | "CLAIM_NOT_FOUND"
-    | "CLAIM_CHECKLIST_ITEM_NOT_FOUND"
-    | "INVALID_CLAIM_TRANSITION"
-    | "CLAIM_INVALID";
+    | "UNSUPPORTED_FILE_TYPE";
   fields?: Array<string> | null;
   message: string;
 }

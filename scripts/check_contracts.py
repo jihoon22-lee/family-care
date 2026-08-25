@@ -1529,6 +1529,66 @@ def validate_claim_workflow_contract() -> list[str]:
     if definitions.get("ClaimOutcome", {}).get("enum") != CLAIM_OUTCOMES:
         errors.append("claim-workflow ClaimOutcome enum changed")
     claim_case = definitions.get("ClaimCase", {})
+    claim_case_properties = claim_case.get("properties", {})
+    if claim_case_properties.get("schema_version", {}).get("const") != "1":
+        errors.append("claim-workflow ClaimCase schema_version must be 1")
+    if {
+        "schema_version",
+        "rider_id",
+        "deleted",
+    } - set(claim_case.get("required", [])):
+        errors.append("claim-workflow ClaimCase must require schema_version, rider_id, and deleted")
+    if "deleted_at" in claim_case_properties:
+        errors.append("claim-workflow ClaimCase must not expose deleted_at")
+    candidate = definitions.get("CandidateSnapshot", {})
+    if candidate.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-candidate-snapshot-v1"
+    ):
+        errors.append("claim-workflow candidate snapshot version changed")
+    candidate_item = definitions.get("CandidateSnapshotItem", {}).get("properties", {})
+    if "id" not in candidate_item or "candidate_id" in candidate_item:
+        errors.append("claim-workflow candidate snapshot must use id")
+    rule = definitions.get("RuleSnapshot", {})
+    if rule.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-rule-snapshot-v1"
+    ):
+        errors.append("claim-workflow rule snapshot version changed")
+    if "versions" not in rule.get("properties", {}) or "evaluations" in rule.get("properties", {}):
+        errors.append("claim-workflow rule snapshot must expose versions")
+    policy = definitions.get("PolicySnapshot", {})
+    if policy.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-policy-snapshot-v1"
+    ):
+        errors.append("claim-workflow policy snapshot version changed")
+    if "snapshots" not in policy.get("properties", {}):
+        errors.append("claim-workflow policy snapshot must expose snapshots")
+    evidence = definitions.get("EvidenceSnapshot", {})
+    if evidence.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-evidence-snapshot-v1"
+    ):
+        errors.append("claim-workflow evidence snapshot version changed")
+    calculation = definitions.get("CalculationSnapshot", {})
+    if calculation.get("properties", {}).get("schema_version", {}).get("const") != (
+        "claim-calculation-snapshot-v1"
+    ):
+        errors.append("claim-workflow calculation snapshot version changed")
+    transition_metadata = definitions.get("TransitionMetadata", {}).get("properties", {})
+    if "changed_fields" not in transition_metadata:
+        errors.append("claim-workflow transition metadata must expose changed_fields")
+    transition_request = definitions.get("ClaimTransitionRequest", {}).get("properties", {})
+    if transition_request.get("metadata", {}).get("$ref") != "#/$defs/ClaimTransitionMetadata":
+        errors.append("claim-workflow transition request metadata shape changed")
+    if definitions.get("ClaimErrorCode", {}).get("enum") != [
+        "AUTHENTICATION_REQUIRED",
+        "CLAIM_NOT_FOUND",
+        "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+        "CLAIM_INVALID",
+        "INVALID_CLAIM_TRANSITION",
+        "INVALID_REQUEST",
+        "RESOURCE_LIMIT_EXCEEDED",
+        "VERSION_CONFLICT",
+    ]:
+        errors.append("claim-workflow error codes changed")
     if claim_case.get("properties", {}).get("allowed_transitions", {}).get("maxItems") != 6:
         errors.append("claim-workflow allowed transitions must be bounded at 6")
     checklist = definitions.get("ChecklistItem", {})
@@ -1580,8 +1640,8 @@ def validate_claim_workflow_contract() -> list[str]:
         errors.append("claim-workflow example must cover paid, partially_paid, and denied")
 
     history_rider = definitions.get("ClaimHistory", {}).get("properties", {}).get("rider_id", {})
-    if history_rider.get("$ref") != "#/$defs/UuidOrNull":
-        errors.append("claim-workflow history rider must allow aggregate null values")
+    if history_rider.get("$ref") != "#/$defs/Uuid":
+        errors.append("claim-workflow history rider must be required and non-null")
 
     _validate_claim_example_ids(example, "$", errors)
     return errors

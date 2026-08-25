@@ -19,6 +19,7 @@ _CLAIM_STATUSES = (
 _CLAIM_OUTCOMES = "'paid', 'partially_paid', 'denied'"
 _CURRENCY_PATTERN = "'^[A-Z]{3}$'"
 _REASON_CODE_PATTERN = "'^[A-Z][A-Z0-9_]{0,63}$'"
+_RECEIPT_NUMBER_PATTERN = "'^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$'"
 
 
 def _uuid(name: str, *, primary_key: bool = False) -> sa.Column[Any]:
@@ -92,6 +93,7 @@ def upgrade() -> None:
         _foreign_uuid("medical_event_id", "medical_events.id"),
         _foreign_uuid("family_member_id", "family_members.id"),
         _foreign_uuid("policy_contract_id", "policy_contracts.id"),
+        _foreign_uuid("rider_id", "riders.id"),
         sa.Column("insurer_key", sa.String(length=160), nullable=False),
         sa.Column("status", sa.String(length=32), nullable=False),
         sa.Column("receipt_number", sa.String(length=160), nullable=True),
@@ -113,7 +115,7 @@ def upgrade() -> None:
             name="ck_claim_cases_insurer_key",
         ),
         sa.CheckConstraint(
-            "receipt_number IS NULL OR btrim(receipt_number) <> ''",
+            f"receipt_number IS NULL OR receipt_number ~ {_RECEIPT_NUMBER_PATTERN}",
             name="ck_claim_cases_receipt_number",
         ),
         sa.CheckConstraint(
@@ -143,6 +145,13 @@ def upgrade() -> None:
         "ix_claim_cases_event_active",
         "claim_cases",
         ["medical_event_id", "deleted_at", "id"],
+    )
+    op.create_index(
+        "uq_claim_cases_active_event_rider",
+        "claim_cases",
+        ["household_space_id", "medical_event_id", "rider_id"],
+        unique=True,
+        postgresql_where=sa.text("deleted_at IS NULL"),
     )
 
     op.create_table(
@@ -264,9 +273,33 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        "ix_claim_status_events_case_occurred",
+        "ix_claim_status_events_case_created",
         "claim_status_events",
-        ["claim_case_id", "occurred_at", "id"],
+        ["claim_case_id", "created_at", "id"],
+    )
+    op.execute(
+        """
+        CREATE FUNCTION reject_claim_audit_mutation() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          RAISE EXCEPTION 'immutable claim audit row';
+        END;
+        $$
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER reject_claim_snapshot_mutation
+        BEFORE UPDATE OR DELETE ON claim_case_snapshots
+        FOR EACH ROW EXECUTE FUNCTION reject_claim_audit_mutation()
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER reject_claim_status_event_mutation
+        BEFORE UPDATE OR DELETE ON claim_status_events
+        FOR EACH ROW EXECUTE FUNCTION reject_claim_audit_mutation()
+        """
     )
 
     op.create_table(
@@ -276,7 +309,7 @@ def upgrade() -> None:
         _foreign_uuid("medical_event_id", "medical_events.id"),
         _foreign_uuid("family_member_id", "family_members.id"),
         _foreign_uuid("policy_contract_id", "policy_contracts.id"),
-        _foreign_uuid("rider_id", "riders.id", nullable=True),
+        _foreign_uuid("rider_id", "riders.id"),
         sa.Column("outcome", sa.String(length=16), nullable=False),
         sa.Column("payment_date", sa.Date(), nullable=True),
         sa.Column("counted_occurrence", sa.Boolean(), nullable=False),
@@ -287,6 +320,18 @@ def upgrade() -> None:
         sa.CheckConstraint(
             f"outcome IN ({_CLAIM_OUTCOMES})",
             name="ck_claim_history_outcome",
+        ),
+        sa.CheckConstraint(
+            "(outcome IN ('paid', 'partially_paid') AND counted_occurrence) OR "
+            "(outcome = 'denied' AND NOT counted_occurrence)",
+            name="ck_claim_history_counted_outcome",
+        ),
+        sa.CheckConstraint(
+            "(outcome IN ('paid', 'partially_paid') AND payment_date IS NOT NULL "
+            "AND amount IS NOT NULL AND currency IS NOT NULL) OR "
+            "(outcome = 'denied' AND payment_date IS NULL AND amount IS NULL "
+            "AND currency IS NULL)",
+            name="ck_claim_history_payment_outcome",
         ),
         sa.CheckConstraint(
             "amount IS NULL OR amount >= 0",
@@ -319,7 +364,7 @@ def downgrade() -> None:
     op.drop_index("ix_claim_history_rider", table_name="claim_history")
     op.drop_index("ix_claim_history_household_member", table_name="claim_history")
     op.drop_table("claim_history")
-    op.drop_index("ix_claim_status_events_case_occurred", table_name="claim_status_events")
+    op.drop_index("ix_claim_status_events_case_created", table_name="claim_status_events")
     op.drop_table("claim_status_events")
     op.drop_index("ix_claim_checklist_items_case", table_name="claim_checklist_items")
     op.drop_table("claim_checklist_items")
@@ -328,6 +373,8 @@ def downgrade() -> None:
         table_name="claim_case_snapshots",
     )
     op.drop_table("claim_case_snapshots")
+    op.execute("DROP FUNCTION reject_claim_audit_mutation()")
+    op.drop_index("uq_claim_cases_active_event_rider", table_name="claim_cases")
     op.drop_index("ix_claim_cases_event_active", table_name="claim_cases")
     op.drop_index("ix_claim_cases_household_active", table_name="claim_cases")
     op.drop_table("claim_cases")

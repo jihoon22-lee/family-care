@@ -1087,6 +1087,11 @@
             ],
             "title": "Receipt Number"
           },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          },
           "schema_version": {
             "const": "1",
             "default": "1",
@@ -1140,6 +1145,7 @@
           "medical_event_id",
           "family_member_id",
           "policy_contract_id",
+          "rider_id",
           "insurer_key",
           "status",
           "receipt_number",
@@ -1259,6 +1265,49 @@
           "rider_id"
         ],
         "title": "ClaimCreateRequest",
+        "type": "object"
+      },
+      "ClaimErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "enum": [
+              "AUTHENTICATION_REQUIRED",
+              "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+              "CLAIM_INVALID",
+              "CLAIM_NOT_FOUND",
+              "INVALID_CLAIM_TRANSITION",
+              "INVALID_REQUEST",
+              "RESOURCE_LIMIT_EXCEEDED",
+              "VERSION_CONFLICT"
+            ],
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "ClaimErrorResponse",
         "type": "object"
       },
       "ClaimSnapshotResponse": {
@@ -2171,73 +2220,23 @@
         "description": "Stable error envelope that never echoes request values.",
         "properties": {
           "error_code": {
-            "anyOf": [
-              {
-                "enum": [
-                  "ANALYSIS_JOB_NOT_FOUND",
-                  "DOCUMENT_NOT_FOUND",
-                  "DOCUMENT_PATH_ESCAPE",
-                  "DOCUMENT_TOO_LARGE",
-                  "EXTRACTION_TIMEOUT",
-                  "INVALID_REQUEST",
-                  "PAGE_LIMIT_EXCEEDED",
-                  "PASSWORD_INVALID",
-                  "PASSWORD_REQUIRED",
-                  "PDF_CORRUPT",
-                  "RESOURCE_LIMIT_EXCEEDED",
-                  "TEMP_CLEANUP_FAILED",
-                  "UNSUPPORTED_FILE_TYPE"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "AUTHENTICATION_REQUIRED",
-                  "EVIDENCE_INVALID",
-                  "FAMILY_MEMBER_NOT_FOUND",
-                  "POLICY_NOT_FOUND",
-                  "POLICY_STATE_CONFLICT",
-                  "VERSION_CONFLICT"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "INVALID_CANDIDATE_CORRECTION",
-                  "REVIEW_ITEM_NOT_FOUND",
-                  "VERSION_CONFLICT"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "TERMS_EDITION_NOT_FOUND",
-                  "CLAUSE_NOT_FOUND",
-                  "SEARCH_INDEX_VERSION_MISMATCH"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "MEDICAL_EVENT_NOT_FOUND",
-                  "DECISION_RESULT_NOT_FOUND",
-                  "DECISION_INVALID",
-                  "EVIDENCE_NOT_FOUND",
-                  "RECEIPT_LINE_NOT_FOUND"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "CLAIM_NOT_FOUND",
-                  "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
-                  "INVALID_CLAIM_TRANSITION",
-                  "CLAIM_INVALID"
-                ],
-                "type": "string"
-              }
+            "enum": [
+              "ANALYSIS_JOB_NOT_FOUND",
+              "DOCUMENT_NOT_FOUND",
+              "DOCUMENT_PATH_ESCAPE",
+              "DOCUMENT_TOO_LARGE",
+              "EXTRACTION_TIMEOUT",
+              "INVALID_REQUEST",
+              "PAGE_LIMIT_EXCEEDED",
+              "PASSWORD_INVALID",
+              "PASSWORD_REQUIRED",
+              "PDF_CORRUPT",
+              "RESOURCE_LIMIT_EXCEEDED",
+              "TEMP_CLEANUP_FAILED",
+              "UNSUPPORTED_FILE_TYPE"
             ],
-            "title": "Error Code"
+            "title": "Error Code",
+            "type": "string"
           },
           "fields": {
             "anyOf": [
@@ -5098,7 +5097,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5108,7 +5107,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5118,7 +5117,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5128,7 +5127,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5138,7 +5137,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5169,7 +5168,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5179,7 +5178,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5189,7 +5188,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5199,7 +5198,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5209,7 +5208,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5255,7 +5254,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5265,7 +5264,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5275,7 +5274,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5285,7 +5284,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5295,7 +5294,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5336,7 +5335,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5346,7 +5345,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5356,7 +5355,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5366,7 +5365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5376,7 +5375,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5427,7 +5426,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5437,7 +5436,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5447,7 +5446,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5457,7 +5456,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5467,7 +5466,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5530,7 +5529,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5540,7 +5539,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5550,7 +5549,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5560,7 +5559,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5570,7 +5569,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5623,7 +5622,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5633,7 +5632,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5643,7 +5642,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5653,7 +5652,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5663,7 +5662,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5716,7 +5715,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5726,7 +5725,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5736,7 +5735,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5746,7 +5745,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -5756,7 +5755,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -7434,7 +7433,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -7444,7 +7443,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -7454,7 +7453,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -7464,7 +7463,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },
@@ -7474,7 +7473,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                  "$ref": "#/components/schemas/ClaimErrorResponse"
                 }
               }
             },

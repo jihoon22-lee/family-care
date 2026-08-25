@@ -272,13 +272,13 @@ HTTP projection은 `BenefitCalculationsResponse` envelope로 `schema_version`, c
 
 ### ClaimCase
 
-실제 청구 단위입니다. `claim_cases`는 `household_space_id`, `medical_event_id`, `family_member_id`, `policy_contract_id`, 서버가 선택 Rider에서 파생한 `insurer_key`, 상태, receipt/submission metadata, claimed/paid 금액과 통화, outcome reason, optimistic `version`, 생성·수정 시각, soft-delete 시각을 보존합니다. 클라이언트는 정책·보험사·가구 범위를 보내지 않고 결과 카드에서 `rider_id`만 보내며, 서버가 같은 HouseholdScope 안에서 계약과 보험사를 확인합니다.
+실제 청구 단위입니다. `claim_cases`는 `household_space_id`, `medical_event_id`, `family_member_id`, `policy_contract_id`, non-null `rider_id`, 서버가 선택 Rider에서 파생한 `insurer_key`, 상태, receipt/submission metadata, claimed/paid 금액과 통화, outcome reason, optimistic `version`, 생성·수정 시각, soft-delete 시각을 보존합니다. 클라이언트는 정책·보험사·가구 범위를 보내지 않고 결과 카드에서 `rider_id`만 보내며, 서버가 같은 HouseholdScope 안에서 계약과 보험사를 확인합니다. `(household_space_id, medical_event_id, rider_id)` active unique 경계로 중복 지급 이력 생성을 막습니다.
 
 상태는 preparing, submitted, supplementation_requested, paid, partially_paid, denied, closed를 사용합니다. submitted는 FamilyCare가 전송했다는 뜻이 아니라 사용자가 보험사 channel에서 접수한 사실을 수동 기록한 상태입니다. FamilyCare에는 보험사 제출 API·email/fax 연동이 없고, ClaimCase에 파일이나 원문을 저장하지 않습니다.
 
 ### ClaimCase snapshot
 
-`claim_case_snapshots`는 ClaimCase 생성 시의 Candidate, Rule, Policy, Evidence와 선택한 후보에 연결된 모든 BenefitCalculation을 정규화한 allowlist JSON과 `snapshot_version`, SHA-256을 저장합니다. 각 component는 별도 JSON object로 보존되고 `(claim_case_id, snapshot_version)`이 unique입니다. snapshot에는 ID·version·상태·reason code·content hash 같은 bounded lineage만 들어가며 diagnosis/situation, receipt note/number, 문서 본문·경로·파일·OCR·provider payload와 외부 식별자는 들어가지 않습니다. 이후 재분석이나 원본 행 변경은 기존 snapshot을 수정하지 않습니다.
+`claim_case_snapshots`는 ClaimCase 생성 시의 Candidate, Rule, Policy, Evidence와 선택한 후보에 연결된 모든 BenefitCalculation을 정규화한 allowlist JSON과 `snapshot_version`, SHA-256을 저장합니다. 계산은 exact decision run에 묶이고, stale run이나 생성 중 policy lineage 변경은 거부됩니다. 각 component는 별도 JSON object로 보존되고 `(claim_case_id, snapshot_version)`이 unique입니다. snapshot에는 ID·version·상태·reason code·content hash 같은 bounded lineage만 들어가며 diagnosis/situation, receipt note/number, 문서 본문·경로·파일·OCR·provider payload와 외부 식별자는 들어가지 않습니다. 이후 재분석이나 원본 행 변경은 기존 snapshot을 수정하지 않으며 DB trigger도 UPDATE/DELETE를 거부합니다.
 
 HTTP 응답은 저장된 전체 JSON을 그대로 노출하지 않고 candidate/rules/policy/evidence/calculation의 ID·version·상태 중심 bounded projection과 snapshot hash를 반환합니다.
 
@@ -288,7 +288,7 @@ HTTP 응답은 저장된 전체 JSON을 그대로 노출하지 않고 candidate/
 
 ### ClaimHistory
 
-`claim_history`는 지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. paid와 partially_paid는 같은 transaction에서 `counted_occurrence=true`인 사실로 기록하며, denied는 `counted_occurrence=false`인 감사 이력으로 보존합니다. denied는 미래 판정의 `NO_MATCH`로 변환하지 않으며 누락·충돌 이력은 `UNKNOWN`입니다. 필요서류는 checklist metadata만 가지며 진단서·영수증·처방전 file이나 외부 file 참조를 관리하지 않습니다.
+`claim_history`는 non-null `rider_id`, 지급일, 지급 결과, 횟수 제한에 필요한 최소 이력을 보존합니다. paid와 partially_paid는 같은 transaction에서 `counted_occurrence=true`인 사실로 기록하며, denied는 `counted_occurrence=false`인 감사 이력으로 보존합니다. 판정은 같은 Rider 이력만 횟수에 포함합니다. denied는 미래 판정의 `NO_MATCH`로 변환하지 않으며 누락·충돌 이력은 `UNKNOWN`입니다. 필요서류는 checklist metadata만 가지며 진단서·영수증·처방전 file이나 외부 file 참조를 관리하지 않습니다.
 
 ## Evidence
 
@@ -323,6 +323,8 @@ Evidence는 다음을 가집니다.
 16. ClaimCase snapshot은 Candidate·Rule·Policy·Evidence·계산 전체의 immutable lineage이며 ClaimCase가 live result pointer만 보유하지 않습니다.
 17. paid/partially_paid만 `counted_occurrence=true` ClaimHistory가 되고 denied는 audit-only입니다.
 18. Claim 상태·checklist·삭제·복원 변경은 expected version과 허용된 transition을 거치며 soft-deleted 행은 기본 조회에서 숨깁니다.
+19. ClaimCase snapshot과 status event는 application API뿐 아니라 database trigger에서도 update/delete가 거부됩니다.
+20. stale decision result와 decision run 이후 변경된 policy lineage는 ClaimCase를 만들 수 없습니다.
 
 ## Failure behavior
 

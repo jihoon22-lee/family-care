@@ -26,6 +26,7 @@ ClaimOutcome = Literal["paid", "partially_paid", "denied"]
 
 _CURRENCY_PATTERN = re.compile(r"^[A-Z]{3}$")
 _REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_RECEIPT_NUMBER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$")
 _MAX_NUMERIC_AMOUNT = Decimal("10000000000000000")
 
 
@@ -45,6 +46,20 @@ def _optional_bounded_text(value: object | None, label: str, maximum: int) -> st
     if value is None:
         return None
     return _require_bounded_text(value, label, maximum)
+
+
+def _validate_receipt_number(value: object | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or _RECEIPT_NUMBER_PATTERN.fullmatch(value) is None:
+        raise ValueError("receipt number must be a bounded identifier")
+    return value
+
+
+def _require_aware_datetime(value: object, label: str) -> datetime:
+    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{label} must be timezone-aware")
+    return value
 
 
 def _validate_amount(value: object | None, label: str) -> Decimal | None:
@@ -112,6 +127,7 @@ class ClaimCase:
     medical_event_id: UUID
     family_member_id: UUID
     policy_contract_id: UUID
+    rider_id: UUID
     insurer_key: str
     status: ClaimStatus = "preparing"
     receipt_number: str | None = None
@@ -132,11 +148,12 @@ class ClaimCase:
             (self.medical_event_id, "medical event"),
             (self.family_member_id, "family member"),
             (self.policy_contract_id, "policy contract"),
+            (self.rider_id, "rider"),
         ):
             _require_uuid(value, label)
         _require_bounded_text(self.insurer_key, "insurer key", 160)
         _validate_status(self.status)
-        _optional_bounded_text(self.receipt_number, "receipt number", 160)
+        _validate_receipt_number(self.receipt_number)
         _validate_amount(self.claimed_amount, "claimed amount")
         _validate_amount(self.paid_amount, "paid amount")
         _validate_currency(self.currency)
@@ -200,6 +217,7 @@ class ClaimStatusEvent:
         if self.from_status is not None:
             _validate_status(self.from_status)
         _validate_status(self.to_status)
+        _require_aware_datetime(self.occurred_at, "occurred at")
         _validate_reason_code(self.reason_code)
         object.__setattr__(self, "metadata", _freeze_mapping(self.metadata, "status metadata"))
 
@@ -213,7 +231,7 @@ class ClaimHistoryRecord:
     medical_event_id: UUID
     family_member_id: UUID
     policy_contract_id: UUID
-    rider_id: UUID | None
+    rider_id: UUID
     outcome: ClaimOutcome
     payment_date: date | None
     counted_occurrence: bool
@@ -231,14 +249,25 @@ class ClaimHistoryRecord:
             (self.policy_contract_id, "policy contract"),
         ):
             _require_uuid(value, label)
-        if self.rider_id is not None:
-            _require_uuid(self.rider_id, "rider")
+        _require_uuid(self.rider_id, "rider")
         _validate_outcome(self.outcome)
         if not isinstance(self.counted_occurrence, bool):
             raise ValueError("counted occurrence must be boolean")
+        if self.counted_occurrence is not (self.outcome in {"paid", "partially_paid"}):
+            raise ValueError("counted occurrence must agree with outcome")
         _validate_amount(self.amount, "history amount")
         _validate_currency(self.currency)
         _validate_reason_code(self.reason_code)
+        has_complete_payment = (
+            self.payment_date is not None and self.amount is not None and self.currency is not None
+        )
+        has_any_payment = any(
+            value is not None for value in (self.payment_date, self.amount, self.currency)
+        )
+        if (self.outcome in {"paid", "partially_paid"} and not has_complete_payment) or (
+            self.outcome == "denied" and has_any_payment
+        ):
+            raise ValueError("payment details must agree with outcome")
 
 
 ClaimHistory = ClaimHistoryRecord

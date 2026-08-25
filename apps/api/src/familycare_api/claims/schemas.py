@@ -15,11 +15,29 @@ from familycare_api.claims.domain import ClaimStatus
 _REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 _AMOUNT = re.compile(r"^(0|[1-9][0-9]{0,15})(\.[0-9]{1,2})?$")
+_DATE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+_RECEIPT_NUMBER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$")
 _TRANSITION_METADATA = frozenset({"amount", "currency", "payment_date", "reason_code"})
+ClaimApiErrorCode = Literal[
+    "AUTHENTICATION_REQUIRED",
+    "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+    "CLAIM_INVALID",
+    "CLAIM_NOT_FOUND",
+    "INVALID_CLAIM_TRANSITION",
+    "INVALID_REQUEST",
+    "RESOURCE_LIMIT_EXCEEDED",
+    "VERSION_CONFLICT",
+]
 
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+class ClaimErrorResponse(StrictModel):
+    error_code: ClaimApiErrorCode
+    message: str
+    fields: list[str] | None = None
 
 
 class ClaimCreateRequest(StrictModel):
@@ -37,8 +55,11 @@ class ClaimUpdateRequest(StrictModel):
     def validate_update(self) -> Self:
         if self.model_fields_set <= {"expected_version"}:
             raise ValueError("empty update")
-        if self.receipt_number is not None and not self.receipt_number.strip():
-            raise ValueError("blank receipt number")
+        if (
+            self.receipt_number is not None
+            and _RECEIPT_NUMBER.fullmatch(self.receipt_number) is None
+        ):
+            raise ValueError("invalid receipt number")
         if self.claimed_amount is not None:
             _validate_amount(self.claimed_amount)
             if self.currency is None:
@@ -84,6 +105,8 @@ class ClaimTransitionRequest(StrictModel):
             _validate_amount(self.metadata["amount"])
             if _CURRENCY.fullmatch(self.metadata["currency"]) is None:
                 raise ValueError("invalid currency")
+            if _DATE.fullmatch(self.metadata["payment_date"]) is None:
+                raise ValueError("invalid payment date")
             try:
                 date.fromisoformat(self.metadata["payment_date"])
             except ValueError:
@@ -189,6 +212,7 @@ class ClaimCaseResponse(StrictModel):
     medical_event_id: UUID
     family_member_id: UUID
     policy_contract_id: UUID
+    rider_id: UUID
     insurer_key: str
     status: ClaimStatus
     receipt_number: str | None

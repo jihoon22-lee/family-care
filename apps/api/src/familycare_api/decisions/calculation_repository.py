@@ -217,6 +217,8 @@ class CalculationRepository:
         self,
         scope: HouseholdScope,
         event_id: UUID,
+        *,
+        decision_run_id: UUID | None = None,
     ) -> tuple[dict[str, object], ...]:
         """Calculate from one immutable decision run and persist an atomic trace."""
         try:
@@ -234,13 +236,14 @@ class CalculationRepository:
                         AND decision.household_space_id = event.household_space_id
                         AND decision.event_version = event.version
                         AND decision.status = 'succeeded'
+                        AND (%s::uuid IS NULL OR decision.id = %s)
                       ORDER BY decision.created_at DESC, decision.id DESC
                       LIMIT 1
                     ) AS run ON true
                     WHERE event.id = %s AND event.household_space_id = %s
                       AND event.deleted_at IS NULL
                     """,
-                    (event_id, scope.household_space_id),
+                    (decision_run_id, decision_run_id, event_id, scope.household_space_id),
                 ).fetchone()
                 if event is None:
                     raise MedicalEventNotFound

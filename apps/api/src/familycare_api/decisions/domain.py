@@ -126,12 +126,14 @@ class ClaimHistoryFact:
     outcome: ClaimHistoryOutcome
     counted_occurrence: bool
     payment_date: date | None
+    rider_id: UUID
 
     def __post_init__(self) -> None:
         if self.outcome not in {"paid", "partially_paid", "denied"}:
             raise ValueError("unsupported claim history outcome")
         if not isinstance(self.counted_occurrence, bool):
             raise ValueError("counted_occurrence must be boolean")
+        _require_nonzero_uuid(self.rider_id, "claim history rider")
 
 
 @dataclass(frozen=True)

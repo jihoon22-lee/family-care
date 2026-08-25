@@ -14,6 +14,7 @@ import styles from "./Results.module.css";
 
 export function ClaimCandidateCard({
   candidate,
+  claimStartEnabled,
   calculations,
   evaluations,
   label,
@@ -21,6 +22,7 @@ export function ClaimCandidateCard({
   onStartClaim,
 }: {
   candidate: ClaimCandidateResponse;
+  claimStartEnabled: boolean;
   calculations: BenefitCalculationResponse[];
   evaluations: RuleEvaluationResponse[];
   label: string;
@@ -112,7 +114,7 @@ export function ClaimCandidateCard({
         </div>
       </dl>
       <div className={styles.cardActions}>
-        {isReviewable ? (
+        {claimStartEnabled && isReviewable ? (
           <button
             type="button"
             className={styles.primaryButton}

@@ -13,13 +13,13 @@ from familycare_api.claims.schemas import (
     ClaimCaseListResponse,
     ClaimCaseResponse,
     ClaimCreateRequest,
+    ClaimErrorResponse,
     ClaimTransitionRequest,
     ClaimUpdateRequest,
     ExpectedVersionRequest,
 )
 from familycare_api.claims.service import ClaimService
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
-from familycare_api.decisions.schemas import DecisionErrorResponse
 
 ScopeDependency = Annotated[HouseholdScope, Depends(resolve_household_scope)]
 
@@ -33,11 +33,11 @@ medical_event_claim_router = APIRouter(prefix="/api/v1/medical-events", tags=["c
 router = APIRouter(prefix="/api/v1/claims", tags=["claim workflow"])
 
 _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
-    401: {"model": DecisionErrorResponse, "description": "Authentication required"},
-    404: {"model": DecisionErrorResponse, "description": "Scoped record not found"},
-    409: {"model": DecisionErrorResponse, "description": "Claim state or version conflict"},
-    422: {"model": DecisionErrorResponse, "description": "Sanitized invalid request"},
-    503: {"model": DecisionErrorResponse, "description": "Local database unavailable"},
+    401: {"model": ClaimErrorResponse, "description": "Authentication required"},
+    404: {"model": ClaimErrorResponse, "description": "Scoped record not found"},
+    409: {"model": ClaimErrorResponse, "description": "Claim state or version conflict"},
+    422: {"model": ClaimErrorResponse, "description": "Sanitized invalid request"},
+    503: {"model": ClaimErrorResponse, "description": "Local database unavailable"},
 }
 
 

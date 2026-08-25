@@ -1,9 +1,11 @@
 {
   "schema_version": "1",
   "claim_case": {
+    "schema_version": "1",
     "id": "00000000-0000-4000-8000-000000001001",
     "medical_event_id": "00000000-0000-4000-8000-000000001002",
     "family_member_id": "00000000-0000-4000-8000-000000001003",
+    "rider_id": "00000000-0000-4000-8000-000000001040",
     "policy_contract_id": "00000000-0000-4000-8000-000000001004",
     "insurer_key": "synthetic-insurer-a",
     "status": "closed",
@@ -14,9 +16,7 @@
     "currency": "KRW",
     "outcome_reason_code": "PARTIAL_SETTLEMENT",
     "version": 5,
-    "created_at": "2026-08-25T09:00:00Z",
-    "updated_at": "2026-08-25T12:00:00Z",
-    "deleted_at": null,
+    "deleted": false,
     "allowed_transitions": []
   },
   "snapshot": {
@@ -24,56 +24,119 @@
     "claim_case_id": "00000000-0000-4000-8000-000000001001",
     "snapshot_version": 1,
     "candidate_snapshot": {
-      "schema_version": "1",
+      "schema_version": "claim-candidate-snapshot-v1",
       "run_id": "00000000-0000-4000-8000-000000001020",
       "medical_event_id": "00000000-0000-4000-8000-000000001002",
       "event_version": 2,
+      "engine_version": "synthetic-decision-engine-v1",
+      "rule_set_version": "synthetic-rule-set-v1",
+      "policy_snapshot_at": "2026-08-25T09:00:00+00:00",
+      "stale": false,
       "candidates": [
         {
-          "candidate_id": "00000000-0000-4000-8000-000000001030",
+          "id": "00000000-0000-4000-8000-000000001030",
           "rider_id": "00000000-0000-4000-8000-000000001040",
+          "decision_run_id": "00000000-0000-4000-8000-000000001020",
           "rider_type": "fixed",
+          "rider_label": "Sample Rider",
           "aggregate_result": "MATCH",
-          "required_match_count": 2,
+          "version": 2,
+          "required_match_count": 1,
           "required_unknown_count": 0,
           "required_no_match_count": 0,
-          "hold_reason_codes": []
+          "hold_reason_codes": [],
+          "evaluations": [
+            {
+              "id": "00000000-0000-4000-8000-000000001050",
+              "rider_id": "00000000-0000-4000-8000-000000001040",
+              "rule_version_id": "00000000-0000-4000-8000-000000001060",
+              "result": "MATCH",
+              "required": true,
+              "reason_code": "RULE_MATCH",
+              "fact_paths": ["MedicalEvent.event_date"],
+              "missing_fields": [],
+              "conflicting_fields": [],
+              "evidence_ids": ["00000000-0000-4000-8000-000000001070"],
+              "evaluator_version": "synthetic-decision-engine-v1"
+            }
+          ]
+        }
+      ],
+      "evaluations": [
+        {
+          "id": "00000000-0000-4000-8000-000000001050",
+          "rider_id": "00000000-0000-4000-8000-000000001040",
+          "rule_version_id": "00000000-0000-4000-8000-000000001060",
+          "result": "MATCH",
+          "required": true,
+          "reason_code": "RULE_MATCH",
+          "fact_paths": ["MedicalEvent.event_date"],
+          "missing_fields": [],
+          "conflicting_fields": [],
+          "evidence_ids": ["00000000-0000-4000-8000-000000001070"],
+          "evaluator_version": "synthetic-decision-engine-v1"
         }
       ]
     },
     "rule_snapshot": {
-      "schema_version": "1",
-      "run_id": "00000000-0000-4000-8000-000000001020",
-      "engine_version": "synthetic-decision-engine-v1",
+      "schema_version": "claim-rule-snapshot-v1",
       "rule_set_version": "synthetic-rule-set-v1",
-      "evaluations": [
+      "versions": [
         {
-          "evaluation_id": "00000000-0000-4000-8000-000000001050",
-          "rider_id": "00000000-0000-4000-8000-000000001040",
-          "rule_version_id": "00000000-0000-4000-8000-000000001060",
-          "result": "MATCH",
-          "reason_code": "RULE_MATCH",
-          "missing_fields": [],
-          "conflicting_fields": [],
-          "evidence_ids": [
-            "00000000-0000-4000-8000-000000001070"
-          ],
-          "engine_version": "synthetic-decision-engine-v1"
+          "id": "00000000-0000-4000-8000-000000001060",
+          "coverage_rule_id": "00000000-0000-4000-8000-000000001061",
+          "candidate_version_id": "00000000-0000-4000-8000-000000001062",
+          "version_number": 3,
+          "schema_version": "coverage-rule-v1",
+          "rule_kind": "fixed_amount",
+          "required": true,
+          "input_field_paths": ["MedicalEvent.event_date"],
+          "result_reason_code": "RULE_MATCH",
+          "review_state": "USER_CONFIRMED",
+          "executable": true,
+          "generator_version": "synthetic-generator-v1",
+          "verifier_version": "synthetic-verifier-v1",
+          "published_at": "2026-08-25T08:30:00+00:00",
+          "rule_document": {
+            "schema_version": "coverage-rule-v1",
+            "rule_kind": "fixed_amount",
+            "required": true,
+            "input_field_paths": ["MedicalEvent.event_date"],
+            "calculation": {
+              "op": "multiply",
+              "args": [
+                {"field": "Rider.insured_amount"},
+                {"value": 0.1}
+              ]
+            },
+            "result_reason_code": "RULE_MATCH",
+            "evidence_ids": ["00000000-0000-4000-8000-000000001070"]
+          },
+          "evidence_ids": ["00000000-0000-4000-8000-000000001070"]
         }
       ]
     },
     "policy_snapshot": {
-      "schema_version": "1",
-      "policy_snapshot_at": "2026-08-25T09:00:00Z",
-      "policy_contract_id": "00000000-0000-4000-8000-000000001004",
-      "family_member_id": "00000000-0000-4000-8000-000000001003",
-      "insurer_key": "synthetic-insurer-a",
-      "rider_ids": [
-        "00000000-0000-4000-8000-000000001040"
+      "schema_version": "claim-policy-snapshot-v1",
+      "snapshots": [
+        {
+          "policy_id": "00000000-0000-4000-8000-000000001004",
+          "rider_id": "00000000-0000-4000-8000-000000001040",
+          "effective_status": "active",
+          "rider_type": "fixed",
+          "rider_label": "Sample Rider",
+          "contract_start": "2020-01-01",
+          "rider_status": "active",
+          "insured_amount": "1000000",
+          "currency": "KRW",
+          "renewable": true,
+          "status_checked_at": "2026-08-25T08:00:00+00:00",
+          "evidence_ids": ["00000000-0000-4000-8000-000000001070"]
+        }
       ]
     },
     "evidence_snapshot": {
-      "schema_version": "1",
+      "schema_version": "claim-evidence-snapshot-v1",
       "evidence": [
         {
           "evidence_id": "00000000-0000-4000-8000-000000001070",
@@ -86,21 +149,22 @@
       ]
     },
     "calculation_snapshot": {
-      "schema_version": "1",
+      "schema_version": "claim-calculation-snapshot-v1",
       "calculations": [
         {
           "calculation_id": "00000000-0000-4000-8000-000000001100",
           "claim_candidate_id": "00000000-0000-4000-8000-000000001030",
+          "rule_version_id": "00000000-0000-4000-8000-000000001060",
           "kind": "fixed",
           "status": "computed",
+          "applied_rate": "0.8",
+          "engine_version": "synthetic-calculation-v1",
+          "version": 2,
           "confirmed": {
             "amount": "120000",
             "currency": "KRW"
           },
-          "additional": null,
-          "excluded": null,
           "hold_reason_codes": [],
-          "rule_version_id": "00000000-0000-4000-8000-000000001060",
           "evidence_ids": [
             "00000000-0000-4000-8000-000000001070"
           ]
@@ -161,7 +225,7 @@
       "occurred_at": "2026-08-25T10:00:00Z",
       "reason_code": null,
       "metadata": {
-        "channel": "insurer_app"
+        "changed_fields": ["status", "submitted_at"]
       },
       "created_at": "2026-08-25T10:00:00Z"
     },
@@ -172,7 +236,7 @@
       "to_status": "supplementation_requested",
       "occurred_at": "2026-08-25T10:30:00Z",
       "reason_code": "MISSING_REQUIREMENT",
-      "metadata": {},
+      "metadata": {"changed_fields": ["status"]},
       "created_at": "2026-08-25T10:30:00Z"
     },
     {
@@ -183,8 +247,7 @@
       "occurred_at": "2026-08-25T11:30:00Z",
       "reason_code": "PARTIAL_SETTLEMENT",
       "metadata": {
-        "channel": "insurer_web",
-        "outcome_reason_code": "PARTIAL_SETTLEMENT"
+        "changed_fields": ["paid_amount", "payment_date", "status"]
       },
       "created_at": "2026-08-25T11:30:00Z"
     },
@@ -195,7 +258,7 @@
       "to_status": "closed",
       "occurred_at": "2026-08-25T12:00:00Z",
       "reason_code": null,
-      "metadata": {},
+      "metadata": {"changed_fields": ["status"]},
       "created_at": "2026-08-25T12:00:00Z"
     }
   ],

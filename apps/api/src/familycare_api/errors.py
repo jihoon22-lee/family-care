@@ -68,7 +68,7 @@ class ErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: ApiErrorCode
+    error_code: ErrorCode
     message: str
     fields: list[str] | None = None
 

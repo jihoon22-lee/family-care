@@ -9,6 +9,7 @@ import styles from "./Results.module.css";
 export type ResultGroupKey = "claim_review" | "needs_information" | "mismatch";
 
 export interface ResultGroupProps {
+  claimStartEnabled: boolean;
   calculations: BenefitCalculationResponse[];
   candidates: ClaimCandidateResponse[];
   evaluations: RuleEvaluationResponse[];
@@ -88,6 +89,7 @@ function emptyCopy(group: ResultGroupKey): string {
 }
 
 export function ResultGroup({
+  claimStartEnabled,
   calculations,
   candidates,
   evaluations,
@@ -115,6 +117,7 @@ export function ResultGroup({
             return (
               <li key={candidate.candidate_id}>
                 <ClaimCandidateCard
+                  claimStartEnabled={claimStartEnabled}
                   candidate={candidate}
                   calculations={calculations.filter(
                     (calculation) =>

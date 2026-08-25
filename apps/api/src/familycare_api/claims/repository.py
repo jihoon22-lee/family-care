@@ -41,6 +41,33 @@ def _database_url(value: str) -> str:
     return value.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
+def read_claim_history(
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    family_member_id: UUID,
+) -> tuple[ClaimHistoryFact, ...]:
+    """Project ClaimHistory through an existing caller-owned transaction."""
+
+    rows = connection.execute(
+        """
+        SELECT outcome, counted_occurrence, payment_date, rider_id
+        FROM claim_history
+        WHERE household_space_id = %s AND family_member_id = %s
+        ORDER BY created_at, id
+        """,
+        (scope.household_space_id, family_member_id),
+    ).fetchall()
+    return tuple(
+        ClaimHistoryFact(
+            outcome=cast(Any, row["outcome"]),
+            counted_occurrence=bool(row["counted_occurrence"]),
+            payment_date=cast(date | None, row["payment_date"]),
+            rider_id=cast(UUID, row["rider_id"]),
+        )
+        for row in rows
+    )
+
+
 class ClaimRepository:
     """Store ClaimCases without files, document bodies, or insurer submission calls."""
 
@@ -60,26 +87,39 @@ class ClaimRepository:
                     """
                     SELECT rider.id AS rider_id,
                            policy.id AS policy_contract_id,
-                           policy.insurer_key
+                           policy.insurer_key,
+                           active_claim.id AS active_claim_id
                     FROM riders AS rider
                     JOIN policy_contracts AS policy
                       ON policy.id = rider.policy_contract_id
                      AND policy.household_space_id = rider.household_space_id
                      AND policy.deleted_at IS NULL
+                    LEFT JOIN claim_cases AS active_claim
+                      ON active_claim.household_space_id = rider.household_space_id
+                     AND active_claim.medical_event_id = %s
+                     AND active_claim.rider_id = rider.id
+                     AND active_claim.deleted_at IS NULL
                     WHERE rider.id = %s AND rider.household_space_id = %s
                       AND rider.deleted_at IS NULL
                     """,
-                    (rider_id, scope.household_space_id),
+                    (event_id, rider_id, scope.household_space_id),
                 ).fetchone()
         except psycopg.Error:
             raise ClaimRepositoryUnavailable from None
         if selected is None:
             raise ClaimInvalid
+        if selected.get("active_claim_id") is not None:
+            return self.get_claim_case(
+                scope,
+                cast(UUID, selected["active_claim_id"]),
+            )
         policy_contract_id = cast(UUID, selected["policy_contract_id"])
         insurer_key = cast(str, selected["insurer_key"])
         decision_repository = DecisionRepository(self.database_url)
         event = decision_repository.get_medical_event(scope, event_id)
         result = decision_repository.get_decision_result(scope, event_id, event.version)
+        if result.stale:
+            raise ClaimInvalid
         policy_snapshots = tuple(
             snapshot
             for snapshot in decision_repository.for_event_date(
@@ -106,7 +146,11 @@ class ClaimRepository:
         if {rule.id for rule in rules} != set(rule_version_ids):
             raise ClaimInvalid
         evidence = tuple(item for evaluation in evaluations for item in evaluation.evidence)
-        calculations = CalculationRepository(self.database_url).calculate_event(scope, event_id)
+        calculations = CalculationRepository(self.database_url).calculate_event(
+            scope,
+            event_id,
+            decision_run_id=result.run_id,
+        )
         candidate_ids = {item.id for item in candidates if item.id is not None}
         matching_calculations = tuple(
             item for item in calculations if item.get("claim_candidate_id") in candidate_ids
@@ -126,34 +170,77 @@ class ClaimRepository:
                     """
                     INSERT INTO claim_cases (
                       id, household_space_id, medical_event_id, family_member_id,
-                      policy_contract_id, insurer_key, status
+                      policy_contract_id, rider_id, insurer_key, status
                     )
                     SELECT %s, event.household_space_id, event.id, event.family_member_id,
-                           policy.id, %s, 'preparing'
+                           policy.id, selected_rider.id, %s, 'preparing'
                     FROM medical_events AS event
+                    JOIN decision_runs AS decision
+                      ON decision.id = %s
+                     AND decision.household_space_id = event.household_space_id
+                     AND decision.medical_event_id = event.id
+                     AND decision.event_version = event.version
+                     AND decision.status = 'succeeded'
+                     AND NOT decision.stale
                     JOIN policy_contracts AS policy
                       ON policy.id = %s
                      AND policy.household_space_id = event.household_space_id
                      AND policy.insurer_key = %s
                      AND policy.deleted_at IS NULL
+                     AND policy.updated_at <= decision.created_at
+                    JOIN riders AS selected_rider
+                      ON selected_rider.id = %s
+                     AND selected_rider.household_space_id = event.household_space_id
+                     AND selected_rider.policy_contract_id = policy.id
+                     AND selected_rider.deleted_at IS NULL
+                     AND selected_rider.updated_at <= decision.created_at
                     WHERE event.id = %s AND event.household_space_id = %s
                       AND event.deleted_at IS NULL
+                      AND NOT EXISTS (
+                        SELECT 1 FROM policy_parties AS party
+                        WHERE party.household_space_id = event.household_space_id
+                          AND party.policy_contract_id = policy.id
+                          AND party.updated_at > decision.created_at
+                      )
+                      AND NOT EXISTS (
+                        SELECT 1 FROM policy_status_snapshots AS state
+                        WHERE state.household_space_id = event.household_space_id
+                          AND (state.policy_contract_id = policy.id
+                               OR state.rider_id = selected_rider.id)
+                          AND state.updated_at > decision.created_at
+                      )
+                    ON CONFLICT (household_space_id, medical_event_id, rider_id)
+                      WHERE deleted_at IS NULL
+                    DO NOTHING
                     RETURNING id
                     """,
                     (
                         claim_id,
                         insurer_key,
+                        result.run_id,
                         policy_contract_id,
                         insurer_key,
+                        rider_id,
                         event_id,
                         scope.household_space_id,
                     ),
                 ).fetchone()
                 if row is None:
-                    raise ClaimInvalid
-                values = snapshot.persistence_values()
-                connection.execute(
-                    """
+                    existing = connection.execute(
+                        """
+                        SELECT id FROM claim_cases
+                        WHERE household_space_id = %s AND medical_event_id = %s
+                          AND rider_id = %s AND deleted_at IS NULL
+                        """,
+                        (scope.household_space_id, event_id, rider_id),
+                    ).fetchone()
+                    if existing is None:
+                        raise ClaimInvalid
+                    claim_id = cast(UUID, existing["id"])
+                else:
+                    values = snapshot.persistence_values()
+                    connection.execute(
+                        """
                     INSERT INTO claim_case_snapshots (
                       id, claim_case_id, snapshot_version,
                       candidate_snapshot_json, rule_snapshot_json,
@@ -161,29 +248,29 @@ class ClaimRepository:
                       calculation_snapshot_json, snapshot_sha256
                     ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (
-                        snapshot_id,
-                        claim_id,
-                        values["snapshot_version"],
-                        Jsonb(values["candidate_snapshot"]),
-                        Jsonb(values["rule_snapshot"]),
-                        Jsonb(values["policy_snapshot"]),
-                        Jsonb(values["evidence_snapshot"]),
-                        Jsonb(values["calculation_snapshot"]),
-                        values["snapshot_sha256"],
-                    ),
-                )
-                connection.execute(
-                    """
+                        (
+                            snapshot_id,
+                            claim_id,
+                            values["snapshot_version"],
+                            Jsonb(values["candidate_snapshot"]),
+                            Jsonb(values["rule_snapshot"]),
+                            Jsonb(values["policy_snapshot"]),
+                            Jsonb(values["evidence_snapshot"]),
+                            Jsonb(values["calculation_snapshot"]),
+                            values["snapshot_sha256"],
+                        ),
+                    )
+                    connection.execute(
+                        """
                     INSERT INTO claim_status_events (
                       claim_case_id, from_status, to_status, occurred_at,
                       reason_code, metadata_json
                     ) VALUES (%s, NULL, 'preparing', clock_timestamp(),
                               'CLAIM_CREATED', '{}'::jsonb)
                     """,
-                    (claim_id,),
-                )
-                self._create_checklist(connection, claim_id, rules)
+                        (claim_id,),
+                    )
+                    self._create_checklist(connection, claim_id, rules)
         except ClaimInvalid:
             raise
         except psycopg.Error:
@@ -270,7 +357,7 @@ class ClaimRepository:
                     raise ClaimNotFound
                 if int(current["version"]) != expected_version:
                     raise VersionConflict
-                if current["status"] == "closed":
+                if current["status"] in {"paid", "partially_paid", "denied", "closed"}:
                     raise ClaimInvalid
                 values = {key: current.get(key) for key in allowed}
                 values.update(changes)
@@ -312,7 +399,11 @@ class ClaimRepository:
         occurred_at: object,
         metadata: Mapping[str, object],
     ) -> dict[str, object]:
-        if not isinstance(occurred_at, datetime):
+        if (
+            not isinstance(occurred_at, datetime)
+            or occurred_at.tzinfo is None
+            or occurred_at.utcoffset() is None
+        ):
             raise ClaimInvalid
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -330,6 +421,7 @@ class ClaimRepository:
                 submitted_at = current.get("submitted_at")
                 paid_amount = current.get("paid_amount")
                 currency = current.get("currency")
+                outcome_reason_code = current.get("outcome_reason_code")
                 changed_fields = ["status"]
                 if target_status == "submitted":
                     submitted_at = occurred_at
@@ -345,7 +437,8 @@ class ClaimRepository:
                         raise ClaimInvalid
                     currency = payment_currency
                     changed_fields.extend(("paid_amount", "payment_date"))
-                if target_status == "denied":
+                if target_status in {"paid", "partially_paid", "denied"}:
+                    outcome_reason_code = reason_code
                     changed_fields.append("outcome_reason_code")
                 row = connection.execute(
                     """
@@ -362,7 +455,7 @@ class ClaimRepository:
                         submitted_at,
                         paid_amount,
                         currency,
-                        reason_code,
+                        outcome_reason_code,
                         claim_id,
                         scope.household_space_id,
                         expected_version,
@@ -472,25 +565,9 @@ class ClaimRepository:
     ) -> tuple[ClaimHistoryFact, ...]:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-                rows = connection.execute(
-                    """
-                    SELECT outcome, counted_occurrence, payment_date
-                    FROM claim_history
-                    WHERE household_space_id = %s AND family_member_id = %s
-                    ORDER BY created_at, id
-                    """,
-                    (scope.household_space_id, family_member_id),
-                ).fetchall()
+                return read_claim_history(connection, scope, family_member_id)
         except psycopg.Error:
             raise ClaimRepositoryUnavailable from None
-        return tuple(
-            ClaimHistoryFact(
-                outcome=cast(Any, row["outcome"]),
-                counted_occurrence=bool(row["counted_occurrence"]),
-                payment_date=cast(date | None, row["payment_date"]),
-            )
-            for row in rows
-        )
 
     @staticmethod
     def _create_checklist(
@@ -530,27 +607,27 @@ class ClaimRepository:
         amount: Decimal | None,
         reason_code: str | None,
     ) -> None:
-        # The current public DecisionReader is member/event scoped rather than
-        # Rider scoped. Persist one aggregate occurrence per ClaimCase so a
-        # policy with several selected Riders is not counted several times.
+        # Persist one occurrence for the selected Rider. The decision engine
+        # filters the member-level read projection by this identifier.
         connection.execute(
             """
             INSERT INTO claim_history (
               household_space_id, medical_event_id, family_member_id,
               policy_contract_id, rider_id, outcome, payment_date,
               counted_occurrence, amount, currency, reason_code
-            ) VALUES (%s, %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 claim["household_space_id"],
                 claim["medical_event_id"],
                 claim["family_member_id"],
                 claim["policy_contract_id"],
+                claim["rider_id"],
                 outcome,
                 payment_date,
                 outcome in {"paid", "partially_paid"},
                 amount,
-                claim.get("currency"),
+                claim.get("currency") if outcome in {"paid", "partially_paid"} else None,
                 reason_code,
             ),
         )
@@ -593,6 +670,8 @@ class ClaimRepository:
                     raise VersionConflict
         except ClaimNotFound, VersionConflict:
             raise
+        except psycopg.errors.UniqueViolation:
+            raise ClaimInvalid from None
         except psycopg.Error:
             raise ClaimRepositoryUnavailable from None
 
@@ -651,6 +730,7 @@ class ClaimRepository:
             "medical_event_id": claim["medical_event_id"],
             "family_member_id": claim["family_member_id"],
             "policy_contract_id": claim["policy_contract_id"],
+            "rider_id": claim["rider_id"],
             "insurer_key": claim["insurer_key"],
             "status": status,
             "receipt_number": claim.get("receipt_number"),
@@ -757,4 +837,4 @@ def _snapshot_view(snapshot: Mapping[str, Any], policy_id: UUID) -> dict[str, ob
     }
 
 
-__all__ = ["ClaimRepository"]
+__all__ = ["ClaimRepository", "read_claim_history"]

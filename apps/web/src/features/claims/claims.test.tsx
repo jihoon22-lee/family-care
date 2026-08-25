@@ -74,6 +74,7 @@ const CLAIM: ClaimCaseResponse = {
   outcome_reason_code: null,
   paid_amount: null,
   policy_contract_id: POLICY_ID,
+  rider_id: RIDER_ID,
   receipt_number: null,
   schema_version: "1",
   snapshot: SNAPSHOT,
@@ -262,7 +263,17 @@ describe("claim workflow controls", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(submittedClaim))
-      .mockResolvedValueOnce(errorResponse("VERSION_CONFLICT", 409));
+      .mockResolvedValueOnce(errorResponse("VERSION_CONFLICT", 409))
+      .mockResolvedValueOnce(jsonResponse({ ...submittedClaim, version: 3 }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          ...submittedClaim,
+          allowed_transitions: ["closed"],
+          paid_amount: "120000.00",
+          status: "paid",
+          version: 4,
+        }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     renderWithProviders(<ClaimCasePage claimId={CLAIM_ID} />);
@@ -283,6 +294,53 @@ describe("claim workflow controls", () => {
       120000,
     );
     expect(screen.getByLabelText("지급일")).toHaveValue("2026-08-26");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    fireEvent.click(screen.getByRole("button", { name: "전액 지급 기록" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(4));
+    const retryBody = JSON.parse(
+      String((fetchMock.mock.calls[3]?.[1] as RequestInit | undefined)?.body),
+    ) as { expected_version: number; metadata: { amount: string } };
+    expect(retryBody.expected_version).toBe(3);
+    expect(retryBody.metadata.amount).toBe("120000.00");
+  });
+
+  it("clears sensitive metadata drafts after a successful update", async () => {
+    const updatedClaim: ClaimCaseResponse = {
+      ...CLAIM,
+      claimed_amount: "1000.00",
+      currency: "KRW",
+      outcome_reason_code: "SYNTHETIC_REASON",
+      receipt_number: "synthetic-receipt-003",
+      version: 2,
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(CLAIM))
+      .mockResolvedValueOnce(jsonResponse(updatedClaim));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<ClaimCasePage claimId={CLAIM_ID} />);
+    expect(
+      await screen.findByRole("heading", { name: "synthetic-insurer" }),
+    ).toBeInTheDocument();
+    const receipt = screen.getByLabelText("보험사 접수 번호");
+    const amount = screen.getByLabelText("청구 금액");
+    const currency = screen.getByLabelText("통화");
+    const reason = screen.getByLabelText("결과 사유 코드");
+    fireEvent.change(receipt, { target: { value: "synthetic-receipt-003" } });
+    fireEvent.change(amount, { target: { value: "1000.00" } });
+    fireEvent.change(currency, { target: { value: "KRW" } });
+    fireEvent.change(reason, { target: { value: "SYNTHETIC_REASON" } });
+    fireEvent.click(screen.getByRole("button", { name: "기록 저장" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(receipt).toHaveValue("");
+      expect(amount).toHaveValue(null);
+      expect(currency).toHaveValue("");
+      expect(reason).toHaveValue("");
+    });
   });
 
   it("clears sensitive manual drafts after authentication expiry", async () => {
