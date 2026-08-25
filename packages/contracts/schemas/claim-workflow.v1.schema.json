@@ -1,0 +1,977 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/claim-workflow.v1.schema.json",
+  "title": "ClaimWorkflowEnvelope",
+  "description": "Strict transport-neutral ClaimCase, checklist, transition, snapshot, and history data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "claim_case",
+    "snapshot",
+    "checklist",
+    "status_events",
+    "history"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "claim_case": {
+      "$ref": "#/$defs/ClaimCase"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/ClaimCaseSnapshot"
+    },
+    "checklist": {
+      "items": {
+        "$ref": "#/$defs/ChecklistItem"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "status_events": {
+      "items": {
+        "$ref": "#/$defs/ClaimStatusEvent"
+      },
+      "maxItems": 64,
+      "type": "array"
+    },
+    "history": {
+      "items": {
+        "$ref": "#/$defs/ClaimHistory"
+      },
+      "maxItems": 64,
+      "type": "array"
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Uuid",
+      "type": "string"
+    },
+    "UuidOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Uuid"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "UuidOrNull"
+    },
+    "PositiveVersion": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "PositiveVersion",
+      "type": "integer"
+    },
+    "PositiveVersionOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "PositiveVersionOrNull"
+    },
+    "DateTime": {
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$",
+      "title": "DateTime",
+      "type": "string"
+    },
+    "DateOrNull": {
+      "anyOf": [
+        {
+          "format": "date",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "DateOrNull"
+    },
+    "VersionString": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "VersionString",
+      "type": "string"
+    },
+    "Code": {
+      "maxLength": 160,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$",
+      "title": "Code",
+      "type": "string"
+    },
+    "ReasonCode": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "ReasonCodeOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "ReasonCodeOrNull"
+    },
+    "CurrencyCode": {
+      "maxLength": 3,
+      "minLength": 3,
+      "pattern": "^[A-Z]{3}$",
+      "title": "CurrencyCode",
+      "type": "string"
+    },
+    "CurrencyCodeOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CurrencyCode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "CurrencyCodeOrNull"
+    },
+    "DecimalString": {
+      "maxLength": 19,
+      "minLength": 1,
+      "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,2})?$",
+      "title": "DecimalString",
+      "type": "string"
+    },
+    "DecimalStringOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DecimalString"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "DecimalStringOrNull"
+    },
+    "Money": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "$ref": "#/$defs/DecimalString"
+        },
+        "currency": {
+          "$ref": "#/$defs/CurrencyCode"
+        }
+      },
+      "required": ["amount", "currency"],
+      "title": "Money",
+      "type": "object"
+    },
+    "MoneyOrNull": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Money"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "MoneyOrNull"
+    },
+    "ClaimStatus": {
+      "enum": [
+        "preparing",
+        "submitted",
+        "supplementation_requested",
+        "paid",
+        "partially_paid",
+        "denied",
+        "closed"
+      ],
+      "title": "ClaimStatus",
+      "type": "string"
+    },
+    "ClaimOutcome": {
+      "enum": ["paid", "partially_paid", "denied"],
+      "title": "ClaimOutcome",
+      "type": "string"
+    },
+    "RiderType": {
+      "enum": ["fixed", "indemnity"],
+      "title": "RiderType",
+      "type": "string"
+    },
+    "TriState": {
+      "enum": ["MATCH", "NO_MATCH", "UNKNOWN"],
+      "title": "TriState",
+      "type": "string"
+    },
+    "ClaimCase": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "medical_event_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "family_member_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "policy_contract_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "insurer_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ClaimStatus"
+        },
+        "receipt_number": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "submitted_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claimed_amount": {
+          "$ref": "#/$defs/DecimalStringOrNull"
+        },
+        "paid_amount": {
+          "$ref": "#/$defs/DecimalStringOrNull"
+        },
+        "currency": {
+          "$ref": "#/$defs/CurrencyCodeOrNull"
+        },
+        "outcome_reason_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "deleted_at": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateTime"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "allowed_transitions": {
+          "items": {
+            "$ref": "#/$defs/ClaimStatus"
+          },
+          "maxItems": 6,
+          "uniqueItems": true,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "medical_event_id",
+        "family_member_id",
+        "policy_contract_id",
+        "insurer_key",
+        "status",
+        "receipt_number",
+        "submitted_at",
+        "claimed_amount",
+        "paid_amount",
+        "currency",
+        "outcome_reason_code",
+        "version",
+        "created_at",
+        "updated_at",
+        "deleted_at",
+        "allowed_transitions"
+      ],
+      "title": "ClaimCase",
+      "type": "object"
+    },
+    "CandidateSnapshotItem": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_type": {
+          "$ref": "#/$defs/RiderType"
+        },
+        "aggregate_result": {
+          "$ref": "#/$defs/TriState"
+        },
+        "required_match_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_unknown_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required_no_match_count": {
+          "maximum": 64,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "rider_id",
+        "rider_type",
+        "aggregate_result",
+        "required_match_count",
+        "required_unknown_count",
+        "required_no_match_count",
+        "hold_reason_codes"
+      ],
+      "title": "CandidateSnapshotItem",
+      "type": "object"
+    },
+    "CandidateSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "medical_event_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "event_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidateSnapshotItem"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": ["schema_version", "run_id", "medical_event_id", "event_version", "candidates"],
+      "title": "CandidateSnapshot",
+      "type": "object"
+    },
+    "RuleEvaluationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluation_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rule_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "result": {
+          "$ref": "#/$defs/TriState"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "missing_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}\\.[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "conflicting_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}\\.[a-z][a-z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "engine_version": {
+          "$ref": "#/$defs/VersionString"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "rider_id",
+        "rule_version_id",
+        "result",
+        "reason_code",
+        "missing_fields",
+        "conflicting_fields",
+        "evidence_ids",
+        "engine_version"
+      ],
+      "title": "RuleEvaluationSnapshot",
+      "type": "object"
+    },
+    "RuleSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "run_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "engine_version": {
+          "$ref": "#/$defs/VersionString"
+        },
+        "rule_set_version": {
+          "$ref": "#/$defs/VersionString"
+        },
+        "evaluations": {
+          "items": {
+            "$ref": "#/$defs/RuleEvaluationSnapshot"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": ["schema_version", "run_id", "engine_version", "rule_set_version", "evaluations"],
+      "title": "RuleSnapshot",
+      "type": "object"
+    },
+    "PolicySnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "policy_snapshot_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "policy_contract_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "family_member_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "insurer_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$",
+          "type": "string"
+        },
+        "rider_ids": {
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "policy_snapshot_at",
+        "policy_contract_id",
+        "family_member_id",
+        "insurer_key",
+        "rider_ids"
+      ],
+      "title": "PolicySnapshot",
+      "type": "object"
+    },
+    "EvidenceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "extraction_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "content_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "physical_page": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "review_state": {
+          "enum": ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"],
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "document_version_id",
+        "extraction_id",
+        "content_sha256",
+        "physical_page",
+        "review_state"
+      ],
+      "title": "EvidenceReference",
+      "type": "object"
+    },
+    "EvidenceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceReference"
+          },
+          "maxItems": 256,
+          "type": "array"
+        }
+      },
+      "required": ["schema_version", "evidence"],
+      "title": "EvidenceSnapshot",
+      "type": "object"
+    },
+    "CalculationReference": {
+      "additionalProperties": false,
+      "properties": {
+        "calculation_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "claim_candidate_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "kind": {
+          "$ref": "#/$defs/RiderType"
+        },
+        "status": {
+          "enum": ["computed", "partial", "unknown"],
+          "type": "string"
+        },
+        "confirmed": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "additional": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "excluded": {
+          "$ref": "#/$defs/MoneyOrNull"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "rule_version_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "evidence_ids": {
+          "items": {
+            "$ref": "#/$defs/Uuid"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "required": [
+        "calculation_id",
+        "claim_candidate_id",
+        "kind",
+        "status",
+        "confirmed",
+        "additional",
+        "excluded",
+        "hold_reason_codes",
+        "rule_version_id",
+        "evidence_ids"
+      ],
+      "title": "CalculationReference",
+      "type": "object"
+    },
+    "CalculationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "calculations": {
+          "items": {
+            "$ref": "#/$defs/CalculationReference"
+          },
+          "maxItems": 64,
+          "type": "array"
+        }
+      },
+      "required": ["schema_version", "calculations"],
+      "title": "CalculationSnapshot",
+      "type": "object"
+    },
+    "ClaimCaseSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "claim_case_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "snapshot_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "candidate_snapshot": {
+          "$ref": "#/$defs/CandidateSnapshot"
+        },
+        "rule_snapshot": {
+          "$ref": "#/$defs/RuleSnapshot"
+        },
+        "policy_snapshot": {
+          "$ref": "#/$defs/PolicySnapshot"
+        },
+        "evidence_snapshot": {
+          "$ref": "#/$defs/EvidenceSnapshot"
+        },
+        "calculation_snapshot": {
+          "$ref": "#/$defs/CalculationSnapshot"
+        },
+        "snapshot_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTime"
+        }
+      },
+      "required": [
+        "id",
+        "claim_case_id",
+        "snapshot_version",
+        "candidate_snapshot",
+        "rule_snapshot",
+        "policy_snapshot",
+        "evidence_snapshot",
+        "calculation_snapshot",
+        "snapshot_sha256",
+        "created_at"
+      ],
+      "title": "ClaimCaseSnapshot",
+      "type": "object"
+    },
+    "ChecklistItem": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "claim_case_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "document_kind": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        "requirement_code": {
+          "$ref": "#/$defs/ReasonCode"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "conditional": {
+          "type": "boolean"
+        },
+        "prepared": {
+          "type": "boolean"
+        },
+        "note_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        },
+        "source_rule_version_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "source_evidence_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/DateTime"
+        }
+      },
+      "required": [
+        "id",
+        "claim_case_id",
+        "document_kind",
+        "requirement_code",
+        "required",
+        "conditional",
+        "prepared",
+        "note_code",
+        "source_rule_version_id",
+        "source_evidence_id",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "ChecklistItem",
+      "type": "object"
+    },
+    "TransitionMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "enum": ["insurer_app", "insurer_web", "fax", "in_person", "other"],
+          "type": "string"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        },
+        "outcome_reason_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        }
+      },
+      "title": "TransitionMetadata",
+      "type": "object"
+    },
+    "ClaimStatusEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "claim_case_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "from_status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimStatus"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to_status": {
+          "$ref": "#/$defs/ClaimStatus"
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        },
+        "metadata": {
+          "$ref": "#/$defs/TransitionMetadata"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTime"
+        }
+      },
+      "required": [
+        "id",
+        "claim_case_id",
+        "from_status",
+        "to_status",
+        "occurred_at",
+        "reason_code",
+        "metadata",
+        "created_at"
+      ],
+      "title": "ClaimStatusEvent",
+      "type": "object"
+    },
+    "ClaimHistory": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "medical_event_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "family_member_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "policy_contract_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "rider_id": {
+          "$ref": "#/$defs/Uuid"
+        },
+        "outcome": {
+          "$ref": "#/$defs/ClaimOutcome"
+        },
+        "payment_date": {
+          "$ref": "#/$defs/DateOrNull"
+        },
+        "counted_occurrence": {
+          "type": "boolean"
+        },
+        "amount": {
+          "$ref": "#/$defs/DecimalStringOrNull"
+        },
+        "currency": {
+          "$ref": "#/$defs/CurrencyCodeOrNull"
+        },
+        "reason_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        },
+        "created_at": {
+          "$ref": "#/$defs/DateTime"
+        }
+      },
+      "required": [
+        "id",
+        "medical_event_id",
+        "family_member_id",
+        "policy_contract_id",
+        "rider_id",
+        "outcome",
+        "payment_date",
+        "counted_occurrence",
+        "amount",
+        "currency",
+        "reason_code",
+        "created_at"
+      ],
+      "title": "ClaimHistory",
+      "type": "object"
+    },
+    "ClaimTransitionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "target_status": {
+          "$ref": "#/$defs/ClaimStatus"
+        },
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/DateTime"
+        },
+        "metadata": {
+          "$ref": "#/$defs/TransitionMetadata"
+        }
+      },
+      "required": ["target_status", "expected_version", "occurred_at", "metadata"],
+      "title": "ClaimTransitionRequest",
+      "type": "object"
+    },
+    "ClaimChecklistUpdateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_version": {
+          "$ref": "#/$defs/PositiveVersion"
+        },
+        "prepared": {
+          "type": "boolean"
+        },
+        "note_code": {
+          "$ref": "#/$defs/ReasonCodeOrNull"
+        }
+      },
+      "required": ["expected_version", "prepared", "note_code"],
+      "title": "ClaimChecklistUpdateRequest",
+      "type": "object"
+    },
+    "ClaimErrorCode": {
+      "enum": [
+        "AUTHENTICATION_REQUIRED",
+        "CLAIM_NOT_FOUND",
+        "CHECKLIST_ITEM_NOT_FOUND",
+        "INVALID_CLAIM_TRANSITION",
+        "INVALID_REQUEST",
+        "VERSION_CONFLICT"
+      ],
+      "title": "ClaimErrorCode",
+      "type": "string"
+    },
+    "ClaimError": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "type": "string"
+        },
+        "code": {
+          "$ref": "#/$defs/ClaimErrorCode"
+        }
+      },
+      "required": ["schema_version", "code"],
+      "title": "ClaimError",
+      "type": "object"
+    }
+  }
+}

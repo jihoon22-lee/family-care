@@ -18,6 +18,7 @@ from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import (
     ClaimCandidate,
     ClaimHistoryFact,
+    ClaimHistoryReader,
     DecisionReaders,
     DecisionRunResult,
     FactConfirmation,
@@ -52,8 +53,14 @@ def _database_url(value: str) -> str:
 class DecisionRepository:
     """Use one repeatable-read transaction for input snapshot and result writes."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(
+        self,
+        database_url: str,
+        *,
+        history_reader: ClaimHistoryReader | None = None,
+    ) -> None:
         self.database_url = _database_url(database_url)
+        self.history_reader = history_reader
 
     def create_medical_event(
         self,
@@ -489,8 +496,14 @@ class DecisionRepository:
         scope: HouseholdScope,
         family_member_id: UUID,
     ) -> tuple[ClaimHistoryFact, ...]:
-        del scope, family_member_id
-        return ()
+        return self._claim_history_reader().for_family_member(scope, family_member_id)
+
+    def _claim_history_reader(self) -> ClaimHistoryReader:
+        if self.history_reader is not None:
+            return self.history_reader
+        from familycare_api.claims.repository import ClaimRepository
+
+        return ClaimRepository(self.database_url)
 
     @staticmethod
     def _event_row(
@@ -921,8 +934,7 @@ class _ConnectionReaders:
     def for_family_member(
         self, scope: HouseholdScope, family_member_id: UUID
     ) -> tuple[ClaimHistoryFact, ...]:
-        del scope, family_member_id
-        return ()
+        return self.repository._claim_history_reader().for_family_member(scope, family_member_id)
 
 
 def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:

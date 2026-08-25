@@ -1,0 +1,246 @@
+{
+  "schema_version": "1",
+  "claim_case": {
+    "id": "00000000-0000-4000-8000-000000001001",
+    "medical_event_id": "00000000-0000-4000-8000-000000001002",
+    "family_member_id": "00000000-0000-4000-8000-000000001003",
+    "policy_contract_id": "00000000-0000-4000-8000-000000001004",
+    "insurer_key": "synthetic-insurer-a",
+    "status": "closed",
+    "receipt_number": "synthetic-receipt-001",
+    "submitted_at": "2026-08-25T10:00:00Z",
+    "claimed_amount": "125000",
+    "paid_amount": "80000",
+    "currency": "KRW",
+    "outcome_reason_code": "PARTIAL_SETTLEMENT",
+    "version": 5,
+    "created_at": "2026-08-25T09:00:00Z",
+    "updated_at": "2026-08-25T12:00:00Z",
+    "deleted_at": null,
+    "allowed_transitions": []
+  },
+  "snapshot": {
+    "id": "00000000-0000-4000-8000-000000001010",
+    "claim_case_id": "00000000-0000-4000-8000-000000001001",
+    "snapshot_version": 1,
+    "candidate_snapshot": {
+      "schema_version": "1",
+      "run_id": "00000000-0000-4000-8000-000000001020",
+      "medical_event_id": "00000000-0000-4000-8000-000000001002",
+      "event_version": 2,
+      "candidates": [
+        {
+          "candidate_id": "00000000-0000-4000-8000-000000001030",
+          "rider_id": "00000000-0000-4000-8000-000000001040",
+          "rider_type": "fixed",
+          "aggregate_result": "MATCH",
+          "required_match_count": 2,
+          "required_unknown_count": 0,
+          "required_no_match_count": 0,
+          "hold_reason_codes": []
+        }
+      ]
+    },
+    "rule_snapshot": {
+      "schema_version": "1",
+      "run_id": "00000000-0000-4000-8000-000000001020",
+      "engine_version": "synthetic-decision-engine-v1",
+      "rule_set_version": "synthetic-rule-set-v1",
+      "evaluations": [
+        {
+          "evaluation_id": "00000000-0000-4000-8000-000000001050",
+          "rider_id": "00000000-0000-4000-8000-000000001040",
+          "rule_version_id": "00000000-0000-4000-8000-000000001060",
+          "result": "MATCH",
+          "reason_code": "RULE_MATCH",
+          "missing_fields": [],
+          "conflicting_fields": [],
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000001070"
+          ],
+          "engine_version": "synthetic-decision-engine-v1"
+        }
+      ]
+    },
+    "policy_snapshot": {
+      "schema_version": "1",
+      "policy_snapshot_at": "2026-08-25T09:00:00Z",
+      "policy_contract_id": "00000000-0000-4000-8000-000000001004",
+      "family_member_id": "00000000-0000-4000-8000-000000001003",
+      "insurer_key": "synthetic-insurer-a",
+      "rider_ids": [
+        "00000000-0000-4000-8000-000000001040"
+      ]
+    },
+    "evidence_snapshot": {
+      "schema_version": "1",
+      "evidence": [
+        {
+          "evidence_id": "00000000-0000-4000-8000-000000001070",
+          "document_version_id": "00000000-0000-4000-8000-000000001080",
+          "extraction_id": "00000000-0000-4000-8000-000000001090",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "physical_page": 3,
+          "review_state": "USER_CONFIRMED"
+        }
+      ]
+    },
+    "calculation_snapshot": {
+      "schema_version": "1",
+      "calculations": [
+        {
+          "calculation_id": "00000000-0000-4000-8000-000000001100",
+          "claim_candidate_id": "00000000-0000-4000-8000-000000001030",
+          "kind": "fixed",
+          "status": "computed",
+          "confirmed": {
+            "amount": "120000",
+            "currency": "KRW"
+          },
+          "additional": null,
+          "excluded": null,
+          "hold_reason_codes": [],
+          "rule_version_id": "00000000-0000-4000-8000-000000001060",
+          "evidence_ids": [
+            "00000000-0000-4000-8000-000000001070"
+          ]
+        }
+      ]
+    },
+    "snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "created_at": "2026-08-25T09:00:00Z"
+  },
+  "checklist": [
+    {
+      "id": "00000000-0000-4000-8000-000000001201",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "document_kind": "claim_form",
+      "requirement_code": "REQUIRED_CLAIM_FORM",
+      "required": true,
+      "conditional": false,
+      "prepared": true,
+      "note_code": null,
+      "source_rule_version_id": "00000000-0000-4000-8000-000000001060",
+      "source_evidence_id": "00000000-0000-4000-8000-000000001070",
+      "version": 1,
+      "created_at": "2026-08-25T09:00:00Z",
+      "updated_at": "2026-08-25T11:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001202",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "document_kind": "supporting_statement",
+      "requirement_code": "CONDITIONAL_SUPPORT",
+      "required": false,
+      "conditional": true,
+      "prepared": false,
+      "note_code": "NOT_REQUESTED",
+      "source_rule_version_id": null,
+      "source_evidence_id": null,
+      "version": 1,
+      "created_at": "2026-08-25T09:00:00Z",
+      "updated_at": "2026-08-25T09:00:00Z"
+    }
+  ],
+  "status_events": [
+    {
+      "id": "00000000-0000-4000-8000-000000001301",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "from_status": null,
+      "to_status": "preparing",
+      "occurred_at": "2026-08-25T09:00:00Z",
+      "reason_code": null,
+      "metadata": {},
+      "created_at": "2026-08-25T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001302",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "from_status": "preparing",
+      "to_status": "submitted",
+      "occurred_at": "2026-08-25T10:00:00Z",
+      "reason_code": null,
+      "metadata": {
+        "channel": "insurer_app"
+      },
+      "created_at": "2026-08-25T10:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001303",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "from_status": "submitted",
+      "to_status": "supplementation_requested",
+      "occurred_at": "2026-08-25T10:30:00Z",
+      "reason_code": "MISSING_REQUIREMENT",
+      "metadata": {},
+      "created_at": "2026-08-25T10:30:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001304",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "from_status": "supplementation_requested",
+      "to_status": "partially_paid",
+      "occurred_at": "2026-08-25T11:30:00Z",
+      "reason_code": "PARTIAL_SETTLEMENT",
+      "metadata": {
+        "channel": "insurer_web",
+        "outcome_reason_code": "PARTIAL_SETTLEMENT"
+      },
+      "created_at": "2026-08-25T11:30:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001305",
+      "claim_case_id": "00000000-0000-4000-8000-000000001001",
+      "from_status": "partially_paid",
+      "to_status": "closed",
+      "occurred_at": "2026-08-25T12:00:00Z",
+      "reason_code": null,
+      "metadata": {},
+      "created_at": "2026-08-25T12:00:00Z"
+    }
+  ],
+  "history": [
+    {
+      "id": "00000000-0000-4000-8000-000000001401",
+      "medical_event_id": "00000000-0000-4000-8000-000000001002",
+      "family_member_id": "00000000-0000-4000-8000-000000001003",
+      "policy_contract_id": "00000000-0000-4000-8000-000000001004",
+      "rider_id": "00000000-0000-4000-8000-000000001040",
+      "outcome": "partially_paid",
+      "payment_date": "2026-08-25",
+      "counted_occurrence": true,
+      "amount": "80000",
+      "currency": "KRW",
+      "reason_code": "PARTIAL_SETTLEMENT",
+      "created_at": "2026-08-25T11:30:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001402",
+      "medical_event_id": "00000000-0000-4000-8000-000000001002",
+      "family_member_id": "00000000-0000-4000-8000-000000001003",
+      "policy_contract_id": "00000000-0000-4000-8000-000000001004",
+      "rider_id": "00000000-0000-4000-8000-000000001041",
+      "outcome": "paid",
+      "payment_date": "2026-08-26",
+      "counted_occurrence": true,
+      "amount": "50000",
+      "currency": "KRW",
+      "reason_code": "FULL_SETTLEMENT",
+      "created_at": "2026-08-26T09:00:00Z"
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000001403",
+      "medical_event_id": "00000000-0000-4000-8000-000000001002",
+      "family_member_id": "00000000-0000-4000-8000-000000001003",
+      "policy_contract_id": "00000000-0000-4000-8000-000000001004",
+      "rider_id": "00000000-0000-4000-8000-000000001042",
+      "outcome": "denied",
+      "payment_date": null,
+      "counted_occurrence": false,
+      "amount": null,
+      "currency": null,
+      "reason_code": "DENIAL_REVIEW_ONLY",
+      "created_at": "2026-08-26T10:00:00Z"
+    }
+  ]
+}

@@ -409,6 +409,43 @@
         "title": "BenefitCalculationsResponse",
         "type": "object"
       },
+      "CalculationSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Calculation Ids",
+            "type": "array"
+          },
+          "statuses": {
+            "items": {
+              "enum": [
+                "computed",
+                "partial",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Statuses",
+            "type": "array"
+          },
+          "versions": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 64,
+            "title": "Versions",
+            "type": "array"
+          }
+        },
+        "title": "CalculationSnapshotResponse",
+        "type": "object"
+      },
       "CalculationStepResponse": {
         "additionalProperties": false,
         "description": "Bounded arithmetic trace entry; only normalized values are exposed.",
@@ -749,6 +786,78 @@
           }
         ]
       },
+      "CandidateSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregate_results": {
+            "items": {
+              "enum": [
+                "MATCH",
+                "NO_MATCH",
+                "UNKNOWN"
+              ],
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Aggregate Results",
+            "type": "array"
+          },
+          "candidate_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "rider_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Rider Ids",
+            "type": "array"
+          }
+        },
+        "title": "CandidateSnapshotResponse",
+        "type": "object"
+      },
+      "ChecklistUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "note_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Code"
+          },
+          "prepared": {
+            "title": "Prepared",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "expected_version",
+          "prepared"
+        ],
+        "title": "ChecklistUpdateRequest",
+        "type": "object"
+      },
       "ClaimCandidateResponse": {
         "additionalProperties": false,
         "properties": {
@@ -828,6 +937,557 @@
           "hold_reason_codes"
         ],
         "title": "ClaimCandidateResponse",
+        "type": "object"
+      },
+      "ClaimCaseListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimCaseResponse"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ClaimCaseListResponse",
+        "type": "object"
+      },
+      "ClaimCaseResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_transitions": {
+            "items": {
+              "enum": [
+                "preparing",
+                "submitted",
+                "supplementation_requested",
+                "paid",
+                "partially_paid",
+                "denied",
+                "closed"
+              ],
+              "type": "string"
+            },
+            "title": "Allowed Transitions",
+            "type": "array"
+          },
+          "checklist": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimChecklistItemResponse"
+            },
+            "maxItems": 128,
+            "title": "Checklist",
+            "type": "array"
+          },
+          "claimed_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "deleted": {
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurer_key": {
+            "title": "Insurer Key",
+            "type": "string"
+          },
+          "medical_event_id": {
+            "format": "uuid",
+            "title": "Medical Event Id",
+            "type": "string"
+          },
+          "outcome_reason_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason Code"
+          },
+          "paid_amount": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid Amount"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          },
+          "receipt_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Number"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/ClaimSnapshotResponse"
+          },
+          "status": {
+            "enum": [
+              "preparing",
+              "submitted",
+              "supplementation_requested",
+              "paid",
+              "partially_paid",
+              "denied",
+              "closed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_events": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimStatusEventResponse"
+            },
+            "maxItems": 256,
+            "title": "Status Events",
+            "type": "array"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "medical_event_id",
+          "family_member_id",
+          "policy_contract_id",
+          "insurer_key",
+          "status",
+          "receipt_number",
+          "submitted_at",
+          "claimed_amount",
+          "paid_amount",
+          "currency",
+          "outcome_reason_code",
+          "version",
+          "deleted",
+          "allowed_transitions",
+          "snapshot",
+          "checklist",
+          "status_events"
+        ],
+        "title": "ClaimCaseResponse",
+        "type": "object"
+      },
+      "ClaimChecklistItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "conditional": {
+            "title": "Conditional",
+            "type": "boolean"
+          },
+          "document_kind": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "note_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note Code"
+          },
+          "prepared": {
+            "title": "Prepared",
+            "type": "boolean"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "requirement_code": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Requirement Code",
+            "type": "string"
+          },
+          "source_evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Evidence Id"
+          },
+          "source_rule_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Rule Version Id"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "document_kind",
+          "requirement_code",
+          "required",
+          "conditional",
+          "prepared",
+          "note_code",
+          "source_rule_version_id",
+          "source_evidence_id",
+          "version"
+        ],
+        "title": "ClaimChecklistItemResponse",
+        "type": "object"
+      },
+      "ClaimCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "insurer_key": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Key",
+            "type": "string"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "insurer_key",
+          "policy_contract_id"
+        ],
+        "title": "ClaimCreateRequest",
+        "type": "object"
+      },
+      "ClaimSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calculation": {
+            "$ref": "#/components/schemas/CalculationSnapshotResponse"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/CandidateSnapshotResponse"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceSnapshotResponse"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/PolicySnapshotResponse"
+          },
+          "rules": {
+            "$ref": "#/components/schemas/RuleSnapshotResponse"
+          },
+          "snapshot_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Snapshot Sha256",
+            "type": "string"
+          },
+          "snapshot_version": {
+            "minimum": 1.0,
+            "title": "Snapshot Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "snapshot_version",
+          "snapshot_sha256",
+          "candidate",
+          "rules",
+          "policy",
+          "evidence",
+          "calculation"
+        ],
+        "title": "ClaimSnapshotResponse",
+        "type": "object"
+      },
+      "ClaimStatusEventResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "from_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preparing",
+                  "submitted",
+                  "supplementation_requested",
+                  "paid",
+                  "partially_paid",
+                  "denied",
+                  "closed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Status"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "reason_code": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Code"
+          },
+          "to_status": {
+            "enum": [
+              "preparing",
+              "submitted",
+              "supplementation_requested",
+              "paid",
+              "partially_paid",
+              "denied",
+              "closed"
+            ],
+            "title": "To Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_status",
+          "to_status",
+          "occurred_at",
+          "reason_code"
+        ],
+        "title": "ClaimStatusEventResponse",
+        "type": "object"
+      },
+      "ClaimTransitionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxProperties": 8,
+            "propertyNames": {
+              "maxLength": 32,
+              "minLength": 1
+            },
+            "title": "Metadata",
+            "type": "object"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "target_status": {
+            "enum": [
+              "preparing",
+              "submitted",
+              "supplementation_requested",
+              "paid",
+              "partially_paid",
+              "denied",
+              "closed"
+            ],
+            "title": "Target Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_status",
+          "expected_version",
+          "occurred_at"
+        ],
+        "title": "ClaimTransitionRequest",
+        "type": "object"
+      },
+      "ClaimUpdateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "claimed_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claimed Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "maxLength": 3,
+                "minLength": 3,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "expected_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          },
+          "outcome_reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Reason Code"
+          },
+          "receipt_number": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Receipt Number"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ClaimUpdateRequest",
         "type": "object"
       },
       "ClauseErrorResponse": {
@@ -1518,23 +2178,73 @@
         "description": "Stable error envelope that never echoes request values.",
         "properties": {
           "error_code": {
-            "enum": [
-              "ANALYSIS_JOB_NOT_FOUND",
-              "DOCUMENT_NOT_FOUND",
-              "DOCUMENT_PATH_ESCAPE",
-              "DOCUMENT_TOO_LARGE",
-              "EXTRACTION_TIMEOUT",
-              "INVALID_REQUEST",
-              "PAGE_LIMIT_EXCEEDED",
-              "PASSWORD_INVALID",
-              "PASSWORD_REQUIRED",
-              "PDF_CORRUPT",
-              "RESOURCE_LIMIT_EXCEEDED",
-              "TEMP_CLEANUP_FAILED",
-              "UNSUPPORTED_FILE_TYPE"
+            "anyOf": [
+              {
+                "enum": [
+                  "ANALYSIS_JOB_NOT_FOUND",
+                  "DOCUMENT_NOT_FOUND",
+                  "DOCUMENT_PATH_ESCAPE",
+                  "DOCUMENT_TOO_LARGE",
+                  "EXTRACTION_TIMEOUT",
+                  "INVALID_REQUEST",
+                  "PAGE_LIMIT_EXCEEDED",
+                  "PASSWORD_INVALID",
+                  "PASSWORD_REQUIRED",
+                  "PDF_CORRUPT",
+                  "RESOURCE_LIMIT_EXCEEDED",
+                  "TEMP_CLEANUP_FAILED",
+                  "UNSUPPORTED_FILE_TYPE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "AUTHENTICATION_REQUIRED",
+                  "EVIDENCE_INVALID",
+                  "FAMILY_MEMBER_NOT_FOUND",
+                  "POLICY_NOT_FOUND",
+                  "POLICY_STATE_CONFLICT",
+                  "VERSION_CONFLICT"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "INVALID_CANDIDATE_CORRECTION",
+                  "REVIEW_ITEM_NOT_FOUND",
+                  "VERSION_CONFLICT"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "TERMS_EDITION_NOT_FOUND",
+                  "CLAUSE_NOT_FOUND",
+                  "SEARCH_INDEX_VERSION_MISMATCH"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "MEDICAL_EVENT_NOT_FOUND",
+                  "DECISION_RESULT_NOT_FOUND",
+                  "DECISION_INVALID",
+                  "EVIDENCE_NOT_FOUND",
+                  "RECEIPT_LINE_NOT_FOUND"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CLAIM_NOT_FOUND",
+                  "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+                  "INVALID_CLAIM_TRANSITION",
+                  "CLAIM_INVALID"
+                ],
+                "type": "string"
+              }
             ],
-            "title": "Error Code",
-            "type": "string"
+            "title": "Error Code"
           },
           "fields": {
             "anyOf": [
@@ -1660,19 +2370,29 @@
         "title": "EvidenceDetailResponse",
         "type": "object"
       },
-      "ExpectedVersionRequest": {
+      "EvidenceSnapshotResponse": {
         "additionalProperties": false,
         "properties": {
-          "expected_version": {
-            "minimum": 1.0,
-            "title": "Expected Version",
-            "type": "integer"
+          "content_sha256": {
+            "items": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "maxItems": 512,
+            "title": "Content Sha256",
+            "type": "array"
+          },
+          "evidence_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 512,
+            "title": "Evidence Ids",
+            "type": "array"
           }
         },
-        "required": [
-          "expected_version"
-        ],
-        "title": "ExpectedVersionRequest",
+        "title": "EvidenceSnapshotResponse",
         "type": "object"
       },
       "ExtractionSummaryResponse": {
@@ -2805,6 +3525,50 @@
         "title": "PolicyReviewItem",
         "type": "object"
       },
+      "PolicySnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          },
+          "rider_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Rider Ids",
+            "type": "array"
+          },
+          "status_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Status Codes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "policy_contract_id"
+        ],
+        "title": "PolicySnapshotResponse",
+        "type": "object"
+      },
       "PolicyUpdateRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3591,6 +4355,38 @@
         "title": "RuleEvaluationResponse",
         "type": "object"
       },
+      "RuleSnapshotResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluator_versions": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evaluator Versions",
+            "type": "array"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "rule_version_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 256,
+            "title": "Rule Version Ids",
+            "type": "array"
+          }
+        },
+        "title": "RuleSnapshotResponse",
+        "type": "object"
+      },
       "StructureAcceptedResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3935,6 +4731,37 @@
         "title": "TermsEditionResponse",
         "type": "object"
       },
+      "familycare_api__claims__schemas__ExpectedVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedVersionRequest",
+        "type": "object"
+      },
+      "familycare_api__clauses__schemas__ExpectedVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedVersionRequest",
+        "type": "object"
+      },
       "familycare_api__decisions__schemas__EvidenceResponse": {
         "additionalProperties": false,
         "properties": {
@@ -4013,6 +4840,21 @@
         "title": "EvidenceResponse",
         "type": "object"
       },
+      "familycare_api__decisions__schemas__ExpectedVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedVersionRequest",
+        "type": "object"
+      },
       "familycare_api__policies__schemas__EvidenceResponse": {
         "additionalProperties": false,
         "properties": {
@@ -4082,6 +4924,21 @@
           "review_state"
         ],
         "title": "EvidenceResponse",
+        "type": "object"
+      },
+      "familycare_api__policies__schemas__ExpectedVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedVersionRequest",
         "type": "object"
       }
     }
@@ -4154,6 +5011,768 @@
         "summary": "Get a synthetic document analysis job",
         "tags": [
           "local synthetic document analysis"
+        ]
+      }
+    },
+    "/api/v1/claims": {
+      "get": {
+        "operationId": "list_claim_cases_api_v1_claims_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "preparing",
+                    "submitted",
+                    "supplementation_requested",
+                    "paid",
+                    "partially_paid",
+                    "denied",
+                    "closed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Claim Cases",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
+    "/api/v1/claims/trash": {
+      "get": {
+        "operationId": "list_deleted_claim_cases_api_v1_claims_trash_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "List Deleted Claim Cases",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
+    "/api/v1/claims/{claim_id}": {
+      "delete": {
+        "operationId": "delete_claim_case_api_v1_claims__claim_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/familycare_api__claims__schemas__ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Delete Claim Case",
+        "tags": [
+          "claim workflow"
+        ]
+      },
+      "get": {
+        "operationId": "get_claim_case_api_v1_claims__claim_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Claim Case",
+        "tags": [
+          "claim workflow"
+        ]
+      },
+      "patch": {
+        "operationId": "update_claim_case_api_v1_claims__claim_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Claim Case",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
+    "/api/v1/claims/{claim_id}/checklist/{item_id}": {
+      "patch": {
+        "operationId": "update_claim_checklist_api_v1_claims__claim_id__checklist__item_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChecklistUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Update Claim Checklist",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
+    "/api/v1/claims/{claim_id}/restore": {
+      "post": {
+        "operationId": "restore_claim_case_api_v1_claims__claim_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/familycare_api__claims__schemas__ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Restore Claim Case",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
+    "/api/v1/claims/{claim_id}/transitions": {
+      "post": {
+        "operationId": "transition_claim_case_api_v1_claims__claim_id__transitions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Transition Claim Case",
+        "tags": [
+          "claim workflow"
         ]
       }
     },
@@ -4787,7 +6406,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -5045,7 +6664,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -5377,7 +6996,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__decisions__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -5782,6 +7401,99 @@
         ]
       }
     },
+    "/api/v1/medical-events/{event_id}/claims": {
+      "post": {
+        "operationId": "create_claim_case_api_v1_medical_events__event_id__claims_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Claim state or version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Create Claim Case",
+        "tags": [
+          "claim workflow"
+        ]
+      }
+    },
     "/api/v1/medical-events/{event_id}/receipt-lines": {
       "get": {
         "operationId": "list_receipt_lines_api_v1_medical_events__event_id__receipt_lines_get",
@@ -6172,7 +7884,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__decisions__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -6359,7 +8071,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__decisions__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -6681,7 +8393,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -7048,7 +8760,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__policies__schemas__ExpectedVersionRequest"
               }
             }
           },
@@ -7744,7 +9456,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ExpectedVersionRequest"
+                "$ref": "#/components/schemas/familycare_api__clauses__schemas__ExpectedVersionRequest"
               }
             }
           },

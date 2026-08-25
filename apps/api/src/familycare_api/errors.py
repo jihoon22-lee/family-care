@@ -24,12 +24,19 @@ DecisionBoundaryErrorCode = Literal[
     "EVIDENCE_NOT_FOUND",
     "RECEIPT_LINE_NOT_FOUND",
 ]
+ClaimBoundaryErrorCode = Literal[
+    "CLAIM_NOT_FOUND",
+    "CLAIM_CHECKLIST_ITEM_NOT_FOUND",
+    "INVALID_CLAIM_TRANSITION",
+    "CLAIM_INVALID",
+]
 ApiErrorCode = (
     ErrorCode
     | PolicyErrorCode
     | CandidateErrorCode
     | ClauseBoundaryErrorCode
     | DecisionBoundaryErrorCode
+    | ClaimBoundaryErrorCode
 )
 
 
@@ -61,7 +68,7 @@ class ErrorResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    error_code: ErrorCode
+    error_code: ApiErrorCode
     message: str
     fields: list[str] | None = None
 
