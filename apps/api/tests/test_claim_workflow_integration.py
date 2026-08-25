@@ -412,8 +412,7 @@ def test_create_claim_captures_latest_result_and_survives_later_rule_change(
     created = repository.create_claim_case(
         seed.scope_a,
         event.id,
-        insurer_key="synthetic-insurer",
-        policy_contract_id=seed.policy_id,
+        rider_id=seed.fixed_rider_id,
     )
     original_hash = created["snapshot"]["snapshot_sha256"]
     original_candidates = list(created["snapshot"]["candidate"]["candidate_ids"])

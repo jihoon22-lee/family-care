@@ -1249,21 +1249,14 @@
       "ClaimCreateRequest": {
         "additionalProperties": false,
         "properties": {
-          "insurer_key": {
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Insurer Key",
-            "type": "string"
-          },
-          "policy_contract_id": {
+          "rider_id": {
             "format": "uuid",
-            "title": "Policy Contract Id",
+            "title": "Rider Id",
             "type": "string"
           }
         },
         "required": [
-          "insurer_key",
-          "policy_contract_id"
+          "rider_id"
         ],
         "title": "ClaimCreateRequest",
         "type": "object"

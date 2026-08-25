@@ -698,8 +698,7 @@ export interface ClaimChecklistItemResponse {
 }
 
 export interface ClaimCreateRequest {
-  insurer_key: string;
-  policy_contract_id: string;
+  rider_id: string;
 }
 
 export interface ClaimSnapshotResponse {

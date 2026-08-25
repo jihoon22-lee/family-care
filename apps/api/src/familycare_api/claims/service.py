@@ -24,8 +24,7 @@ class ClaimStore(Protocol):
         scope: HouseholdScope,
         event_id: UUID,
         *,
-        insurer_key: str,
-        policy_contract_id: UUID,
+        rider_id: UUID,
     ) -> object: ...
 
     def list_claim_cases(
@@ -101,8 +100,7 @@ class ClaimService:
         return self.repository.create_claim_case(
             self.scope,
             event_id,
-            insurer_key=request.insurer_key,
-            policy_contract_id=request.policy_contract_id,
+            rider_id=request.rider_id,
         )
 
     def list_claim_cases(

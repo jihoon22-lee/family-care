@@ -23,6 +23,7 @@ POLICY_ID = UUID("00000000-0000-4000-8000-000000000401")
 CHECKLIST_ID = UUID("00000000-0000-4000-8000-000000000501")
 RULE_ID = UUID("00000000-0000-4000-8000-000000000601")
 EVIDENCE_ID = UUID("00000000-0000-4000-8000-000000000701")
+RIDER_ID = UUID("00000000-0000-4000-8000-000000000901")
 NOW = datetime(2026, 8, 26, 9, 0, tzinfo=UTC)
 
 
@@ -95,7 +96,7 @@ class _FakeClaimService:
 
     def create_claim_case(self, event_id: UUID, request: object) -> dict[str, Any]:
         assert event_id == EVENT_ID
-        assert request.policy_contract_id == POLICY_ID  # type: ignore[attr-defined]
+        assert request.rider_id == RIDER_ID  # type: ignore[attr-defined]
         return _claim()
 
     def list_claim_cases(self, **filters: object) -> dict[str, object]:
@@ -171,7 +172,7 @@ def client(service: _FakeClaimService) -> Iterator[TestClient]:
 def test_create_and_list_claims_without_client_scope(client: TestClient) -> None:
     created = client.post(
         f"/api/v1/medical-events/{EVENT_ID}/claims",
-        json={"insurer_key": "synthetic-insurer-a", "policy_contract_id": str(POLICY_ID)},
+        json={"rider_id": str(RIDER_ID)},
     )
     listed = client.get(f"/api/v1/claims?event_id={EVENT_ID}&status=preparing")
 

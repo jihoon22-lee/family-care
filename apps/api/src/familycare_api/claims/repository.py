@@ -52,9 +52,31 @@ class ClaimRepository:
         scope: HouseholdScope,
         event_id: UUID,
         *,
-        insurer_key: str,
-        policy_contract_id: UUID,
+        rider_id: UUID,
     ) -> dict[str, object]:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                selected = connection.execute(
+                    """
+                    SELECT rider.id AS rider_id,
+                           policy.id AS policy_contract_id,
+                           policy.insurer_key
+                    FROM riders AS rider
+                    JOIN policy_contracts AS policy
+                      ON policy.id = rider.policy_contract_id
+                     AND policy.household_space_id = rider.household_space_id
+                     AND policy.deleted_at IS NULL
+                    WHERE rider.id = %s AND rider.household_space_id = %s
+                      AND rider.deleted_at IS NULL
+                    """,
+                    (rider_id, scope.household_space_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise ClaimRepositoryUnavailable from None
+        if selected is None:
+            raise ClaimInvalid
+        policy_contract_id = cast(UUID, selected["policy_contract_id"])
+        insurer_key = cast(str, selected["insurer_key"])
         decision_repository = DecisionRepository(self.database_url)
         event = decision_repository.get_medical_event(scope, event_id)
         result = decision_repository.get_decision_result(scope, event_id, event.version)
@@ -63,12 +85,12 @@ class ClaimRepository:
             for snapshot in decision_repository.for_event_date(
                 scope, event.family_member_id, event.event_date
             )
-            if snapshot.policy_id == policy_contract_id
+            if snapshot.policy_id == policy_contract_id and snapshot.rider_id == rider_id
         )
         if not policy_snapshots:
             raise ClaimInvalid
-        rider_ids = {snapshot.rider_id for snapshot in policy_snapshots}
-        candidates = tuple(item for item in result.candidates if item.rider_id in rider_ids)
+        rider_ids = {rider_id}
+        candidates = tuple(item for item in result.candidates if item.rider_id == rider_id)
         if not candidates:
             raise ClaimInvalid
         evaluations = tuple(item for item in result.evaluations if item.rider_id in rider_ids)

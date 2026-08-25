@@ -14,7 +14,6 @@ from familycare_api.claims.domain import ClaimStatus
 
 _REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
-_INSURER_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
 _AMOUNT = re.compile(r"^(0|[1-9][0-9]{0,15})(\.[0-9]{1,2})?$")
 _TRANSITION_METADATA = frozenset({"amount", "currency", "payment_date", "reason_code"})
 
@@ -24,14 +23,7 @@ class StrictModel(BaseModel):
 
 
 class ClaimCreateRequest(StrictModel):
-    insurer_key: Annotated[str, Field(min_length=1, max_length=160)]
-    policy_contract_id: UUID
-
-    @model_validator(mode="after")
-    def validate_insurer_key(self) -> Self:
-        if _INSURER_KEY.fullmatch(self.insurer_key) is None:
-            raise ValueError("invalid insurer key")
-        return self
+    rider_id: UUID
 
 
 class ClaimUpdateRequest(StrictModel):
