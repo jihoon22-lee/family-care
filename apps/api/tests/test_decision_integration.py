@@ -11,6 +11,8 @@ from uuid import UUID
 import psycopg
 import pytest
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.decisions.errors import EvidenceNotFound
+from familycare_api.decisions.evidence_repository import EvidenceRepository
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -896,3 +898,55 @@ def test_decision_service_denies_cross_scope_reads_and_preserves_soft_deleted_ev
     restored = service_a.restore_medical_event(event.id, expected_version=deleted.version)
     assert restored.deleted_at is None
     assert service_a.get_medical_event(event.id).version == restored.version
+
+
+def test_evidence_disclosure_rejects_content_hash_mismatch(
+    database_url: str,
+    seed: DecisionSeed,
+) -> None:
+    repository = EvidenceRepository(database_url)
+    detail = repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)
+    assert detail.clause_label == "Article good"
+    assert detail.bounded_excerpt == "Synthetic coverage condition"
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "UPDATE evidence SET content_sha256 = %s WHERE id = %s",
+            ("e" * 64, seed.good_terms_evidence_id),
+        )
+
+    with pytest.raises(EvidenceNotFound):
+        repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)
+
+
+@pytest.mark.parametrize("invalid_source", ["failed_extraction", "out_of_page_bbox"])
+def test_evidence_disclosure_rejects_invalid_extraction_source(
+    database_url: str,
+    seed: DecisionSeed,
+    invalid_source: str,
+) -> None:
+    repository = EvidenceRepository(database_url)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        if invalid_source == "failed_extraction":
+            connection.execute(
+                """
+                UPDATE extractions
+                SET status = 'failed', succeeded_at = NULL
+                WHERE id = (
+                  SELECT extraction_id FROM evidence WHERE id = %s
+                )
+                """,
+                (seed.good_terms_evidence_id,),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE evidence
+                SET x0 = 0, y0 = 0, x1 = 700, y1 = 800
+                WHERE id = %s
+                """,
+                (seed.good_terms_evidence_id,),
+            )
+
+    with pytest.raises(EvidenceNotFound):
+        repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)

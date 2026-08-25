@@ -52,9 +52,17 @@ class EvidenceRepository:
                     FROM evidence
                     JOIN document_versions AS version
                       ON version.id = evidence.document_version_id
+                     AND version.content_sha256 = evidence.content_sha256
                     JOIN documents AS document
                       ON document.id = version.document_id
                      AND document.deleted_at IS NULL
+                    JOIN extractions AS current_extraction
+                      ON current_extraction.id = evidence.extraction_id
+                     AND current_extraction.document_version_id = evidence.document_version_id
+                     AND current_extraction.status = 'succeeded'
+                    JOIN extraction_pages AS evidence_page
+                      ON evidence_page.extraction_id = current_extraction.id
+                     AND evidence_page.page_number = evidence.physical_page
                     LEFT JOIN terms_editions AS terms
                       ON terms.document_version_id = evidence.document_version_id
                      AND terms.household_space_id = evidence.household_space_id
@@ -86,6 +94,14 @@ class EvidenceRepository:
                     ) AS excerpt ON true
                     WHERE evidence.id = %s
                       AND evidence.household_space_id = %s
+                      AND evidence.physical_page BETWEEN 1 AND version.page_count
+                      AND (
+                        evidence.x0 IS NULL OR (
+                          evidence.x0 >= 0 AND evidence.y0 >= 0
+                          AND evidence.x1 <= evidence_page.width_points
+                          AND evidence.y1 <= evidence_page.height_points
+                        )
+                      )
                     LIMIT 1
                     """,
                     (evidence_id, scope.household_space_id),
