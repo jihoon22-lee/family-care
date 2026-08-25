@@ -148,9 +148,7 @@ BENEFIT_CALCULATION_STATUSES = ["computed", "partial", "unknown"]
 STRUCTURING_SCHEMA_PATH = (
     ROOT / "packages/contracts/schemas/medical-event-structuring.v1.schema.json"
 )
-STRUCTURING_EXAMPLE_PATH = (
-    ROOT / "packages/contracts/examples/medical-event-structuring.v1.json"
-)
+STRUCTURING_EXAMPLE_PATH = ROOT / "packages/contracts/examples/medical-event-structuring.v1.json"
 STRUCTURING_FORBIDDEN_FIELDS = {
     "absolute_path",
     "amount",
@@ -1302,9 +1300,7 @@ def _validate_structuring_example_ids(value: Any, path: str, errors: list[str]) 
                 for index, evidence_id in enumerate(child):
                     evidence_path = f"{child_path}[{index}]"
                     if not valid_uuid4(evidence_id):
-                        errors.append(
-                            f"medical-event-structuring {evidence_path} must be a UUIDv4"
-                        )
+                        errors.append(f"medical-event-structuring {evidence_path} must be a UUIDv4")
                     elif not str(evidence_id).startswith("00000000-0000-4000-8000-"):
                         errors.append(
                             f"medical-event-structuring {evidence_path} must use a synthetic UUID"
