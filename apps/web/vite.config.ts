@@ -29,7 +29,14 @@ export default defineConfig({
       workbox: {
         // API responses and documents require a separately approved cache-policy change.
         globPatterns: ["**/*.{css,html,js,svg}"],
-        navigateFallbackDenylist: [/^\/api\//, /^\/documents\//],
+        navigateFallbackDenylist: [
+          /^\/api\//,
+          /^\/documents\//,
+          /^\/evidence\//,
+          /^\/medical-events\//,
+          /^\/results\//,
+          /^\/claims\//,
+        ],
       },
     }),
   ],

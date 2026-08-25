@@ -6,9 +6,9 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Phase 0 (Foundation)과 Phase 1 (Synthetic PDF Ingestion)은 완료되었고, Phase 2의 core Policy Ledger와 candidate review가 구현되어 main PR #16에 merge되었습니다. 합성 PDF의 descriptor-safe intake, extraction, PostgreSQL job queue와 local synthetic API에 이어 household-scoped 가족·계약·계약 당사자·가입 Rider 원장과 Evidence 계약이 준비됐습니다. Phase 4 Clause search 구현은 TermsEdition/Clause hierarchy, PostgreSQL `simple` FTS와 `pg_trgm`, household/date/edition/insurer/product scope, bounded Evidence-backed results, private no-store Web search를 추가합니다.
+Phase 0 (Foundation)과 Phase 1 (Synthetic PDF Ingestion)은 완료되었고, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산이 `main`에 순차 merge되었습니다. 현재 Phase 5 Event/Result PWA는 병원 방문 전·치료 후 사건 입력, 선택적 AI 사실 구조화, 행동 우선 결과, bounded Evidence 확인을 구현하고 전체 PR 검증을 진행 중입니다.
 
-Clause search는 가입 여부나 지급 여부를 확정하지 않는 조사 도구이며, Evidence의 페이지는 1-based PDF physical page입니다. 기본 scope resolver는 인증 연결 전까지 `401 AUTHENTICATION_REQUIRED`로 fail-closed하므로 현재 실제 인증된 route라고 과장하지 않으며, 합성 테스트로만 scope 경계를 검증합니다. 이 Phase 4 변경에서는 실제 보험 자료, 외부 AI, Google Drive, 운영 배포를 사용하거나 검증하지 않았습니다. 목표 릴리스는 `v0.1.0`이며 약관 연결 이후의 결정론적 판정·정액/실손 계산, 행동 우선 PWA, 청구 이력, 두 로컬 관리자, 암호 PDF batch·선택적 OCR·개인 WSL/Tailscale acceptance는 별도 후속 범위입니다.
+Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 기본 scope resolver는 인증 연결 전까지 `401 AUTHENTICATION_REQUIRED`로 fail-closed하므로 현재 실제 로그인 사용이 가능하다고 과장하지 않습니다. 목표 릴리스는 `v0.1.0`이며 남은 후속 범위는 청구 이력, 두 로컬 관리자, 암호 PDF batch·선택적 OCR·개인 WSL/Tailscale acceptance입니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 

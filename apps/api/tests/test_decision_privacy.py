@@ -119,6 +119,7 @@ def _event_body() -> dict[str, Any]:
     return {
         "family_member_id": MEMBER_ID,
         "mode": "post_treatment",
+        "situation": "Synthetic Member received outpatient treatment.",
         "event_date": "2026-08-25",
         "visit_date": "2026-08-25",
         "facts": {

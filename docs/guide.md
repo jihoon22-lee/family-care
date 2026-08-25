@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1, 구현·merge된 Phase 2 core ledger와 candidate review, 그리고 Phase 4 Clause search 개발환경의 경계를 설명합니다. Clause search는 합성 corpus와 인증 연결 전 fail-closed scope 경계까지만 검증되었으며 실제 보험 자료 분석 기능으로 사용할 수 없습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA까지 현재 구현된 개발환경의 경계를 설명합니다. 인증 연결 전 API는 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -120,8 +120,11 @@ PATCH  /api/v1/medical-events/{id}
 DELETE /api/v1/medical-events/{id}
 GET    /api/v1/medical-events/trash
 POST   /api/v1/medical-events/{id}/restore
+POST   /api/v1/medical-events/{id}/structure
+GET    /api/v1/medical-event-structuring-jobs/{job_id}
 POST   /api/v1/medical-events/{id}/analyze
 GET    /api/v1/medical-events/{id}/results/{version}
+GET    /api/v1/evidence/{evidence_id}
 ```
 
 생성·수정 body에는 `family_member_id`, `pre_visit` 또는 `post_treatment` mode, 사건/방문일, 그리고 제한된 구조화 fact만 넣습니다. fact는 `value`와 `confirmation`(`user`, `ai_structured`, `unconfirmed`, `conflicting`)으로 구성합니다. 클라이언트가 `household_space_id`, Evidence ID, tri-state, 후보, 금액, 지급 보장 문구를 입력할 수 없도록 strict schema가 적용됩니다. 수정·삭제·복원은 현재 `expected_version`을 요구하며 stale version은 `409` 충돌로 처리됩니다.
@@ -131,7 +134,7 @@ Phase 7 인증 연결 뒤 동일 API에 보낼 최소 요청 모양은 다음과
 ```bash
 curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events \
   -H 'content-type: application/json' \
-  --data '{"family_member_id":"00000000-0000-4000-8000-000000000101","mode":"pre_visit","event_date":"2026-08-25","facts":{"MedicalEvent.classification":{"value":"injury","confirmation":"user"}}}'
+  --data '{"family_member_id":"00000000-0000-4000-8000-000000000101","mode":"pre_visit","situation":"진료 전에 확인할 합성 상황입니다.","event_date":"2026-08-25","facts":{"MedicalEvent.classification":{"value":"injury","confirmation":"user"}}}'
 
 curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-000000000102/analyze
 
@@ -140,7 +143,28 @@ curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-0000
 
 분석은 repeatable-read transaction 안에서 하나의 run, RuleEvaluation, Evidence join/snapshot, Rider candidate를 원자적으로 저장합니다. 결과에는 run·event·engine·rule-set version, 후보별 tri-state, 부족/충돌 field, reason code, bounded Evidence가 포함되며 모든 decision response는 `Cache-Control: no-store`입니다. Evidence snapshot에는 당시 문서/추출 ID, 페이지, 좌표, review state, content hash가 있어 나중에 Evidence 원본 행이 바뀌어도 이미 저장된 결과의 근거가 조용히 바뀌지 않습니다. 이후 새 분석에서는 현재 Evidence를 다시 검증하므로 stale이면 `UNKNOWN`이 됩니다.
 
-기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection과 정액형·실손형 금액 계산은 아직 연결하지 않았고, history가 필요한 규칙은 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
+기본 API scope resolver는 Phase 7 인증 전까지 fail-closed이므로 일반적인 로컬 요청은 `401 AUTHENTICATION_REQUIRED`가 될 수 있습니다. 이 Phase의 API·PostgreSQL 검증은 처음부터 만든 합성 데이터와 주입된 household scope만 사용합니다. ClaimHistory projection은 아직 연결하지 않았으며, history가 필요한 규칙은 임의로 0회로 계산하지 않고 `UNKNOWN`으로 반환합니다.
+
+### Benefit calculation boundary
+
+정액형 계산은 검증된 규칙의 금액·횟수 조건만 Decimal로 평가합니다. 실손형 계산은 사용자가 직접 입력한 영수증 항목의 `covered`, `possibly_excluded`, `unknown` 구분과 자기부담 조건을 사용해 확인액·추가 확인액·제외액을 분리합니다. 영수증 이미지 업로드와 브라우저 금액 계산은 제공하지 않으며, 통화 불일치·복수 실손 배분·필요 조건 누락은 금액을 억지로 확정하지 않고 `UNKNOWN` 또는 partial 결과로 남깁니다.
+
+관련 API는 수기 영수증 항목 CRUD와 버전별 계산 조회를 제공합니다. 모든 금액은 decimal string이며 응답은 `Cache-Control: no-store`입니다.
+
+```text
+POST   /api/v1/medical-events/{id}/receipt-lines
+PATCH  /api/v1/medical-events/{id}/receipt-lines/{line_id}
+DELETE /api/v1/medical-events/{id}/receipt-lines/{line_id}
+GET    /api/v1/medical-events/{id}/calculations
+```
+
+### Event and result PWA boundary
+
+Web은 `/app/events/new`와 `/app/events/{event_id}`에서 병원 방문 전 짧은 상황 입력과 치료 후 수기 영수증 항목을 같은 흐름으로 제공합니다. 자연어 구조화는 선택 단계이며 실패해도 사용자가 사실을 직접 수정하고 결정론적 분석을 계속할 수 있습니다. 추가 질문을 답하지 않아도 현재 정보로 분석할 수 있고, 부족한 정보는 `UNKNOWN`으로 표시됩니다.
+
+버전별 결과 경로 `/app/events/{event_id}/result/{version}`은 현재 사건, 지금 할 일, 청구 검토, 추가 확인 필요, 조건 불일치 순서를 고정합니다. 서버가 계산한 decimal string만 보여주며 브라우저에서 보험금 산술을 다시 수행하지 않습니다. Evidence dialog는 bounded 문서 label·physical page·Clause·excerpt만 표시하고, 키보드 focus trap·Escape 닫기·호출 버튼 focus 복원을 제공합니다.
+
+Web query cache는 메모리에만 있고 API 요청은 `credentials: include`와 `cache: no-store`를 사용합니다. service worker는 hashed app shell만 precache하며 API, 사건, 결과, Evidence, 청구 데이터는 runtime cache나 Web Storage·IndexedDB에 저장하지 않습니다. 이 흐름은 합성 데이터와 Chromium 320px viewport로 검증했으며 Windows 실제 브라우저, 모바일 PWA 설치, Tailscale, 실제 보험 자료는 아직 검증하지 않았습니다.
 
 ### Planned v0.1 local runtime
 

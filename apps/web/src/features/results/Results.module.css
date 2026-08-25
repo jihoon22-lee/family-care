@@ -1,0 +1,403 @@
+.page {
+  width: min(100%, 820px);
+  min-width: 0;
+  margin: 0 auto;
+  padding: 36px 0 80px;
+}
+
+.pageHeading,
+.actionSection,
+.group {
+  min-width: 0;
+}
+
+.pageHeading {
+  margin-bottom: 34px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid var(--ink, #10233f);
+}
+
+.kicker,
+.groupKicker,
+.cardKicker {
+  margin: 0;
+  color: var(--evidence-blue, #246bfe);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.pageHeading h1,
+.groupHeading h2 {
+  margin: 5px 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.pageHeading h1 {
+  font-size: clamp(2.8rem, 8vw, 5.2rem);
+  line-height: 0.98;
+}
+
+.groupHeading h2 {
+  font-size: clamp(1.75rem, 5vw, 2.6rem);
+  line-height: 1;
+}
+
+.eventSummary,
+.metadata,
+.countList,
+.amountList {
+  display: grid;
+  min-width: 0;
+  margin: 24px 0 0;
+}
+
+.eventSummary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule, #c8d6df);
+}
+
+.eventSummary div,
+.metadata div,
+.countList div,
+.amountList div {
+  min-width: 0;
+  padding: 11px 13px;
+  background: rgb(251 252 253 / 88%);
+}
+
+.eventSummary dt,
+.metadata dt,
+.countList dt,
+.amountList dt {
+  color: var(--quiet, #5d6b7d);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.eventSummary dd,
+.metadata dd,
+.countList dd,
+.amountList dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.situation {
+  max-width: 680px;
+  margin: 20px 0 0;
+  color: #31445d;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.resultBody {
+  display: grid;
+  gap: 32px;
+}
+
+.actionSection {
+  padding: 22px;
+  border: 1px solid var(--ink, #10233f);
+  background: rgb(251 252 253 / 86%);
+}
+
+.actionLead,
+.cardCopy,
+.muted,
+.calculationStatus,
+.detailLine {
+  color: var(--quiet, #5d6b7d);
+  line-height: 1.55;
+}
+
+.actionLead {
+  max-width: 680px;
+  margin: 18px 0 0;
+}
+
+.group {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.groupHeading {
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--rule, #c8d6df);
+}
+
+.emptyGroup,
+.loading,
+.error,
+.muted {
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 3px solid var(--rule, #c8d6df);
+  background: rgb(251 252 253 / 84%);
+  line-height: 1.55;
+}
+
+.error {
+  color: #9e4f00;
+  border-left-color: var(--caution, #d98500);
+}
+
+.candidateList,
+.reasonList,
+.stepList {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.candidateCard,
+.calculationCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: var(--paper, #fbfcfd);
+}
+
+.cardHeading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.cardHeading strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.1rem;
+  overflow-wrap: anywhere;
+}
+
+.resultBadge,
+.calculationKind {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--rule, #c8d6df);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.resultMATCH {
+  color: var(--confirmed, #087f6d);
+  border-color: var(--confirmed, #087f6d);
+}
+
+.resultUNKNOWN {
+  color: #9e4f00;
+  border-color: var(--caution, #d98500);
+}
+
+.resultNO_MATCH {
+  color: var(--quiet, #5d6b7d);
+}
+
+.cardCopy,
+.calculationStatus {
+  margin: 0;
+}
+
+.factNotice {
+  padding: 12px 14px;
+  border-left: 3px solid var(--caution, #d98500);
+  background: rgb(217 133 0 / 8%);
+}
+
+.factNotice strong {
+  font-size: 0.78rem;
+}
+
+.factNotice ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.reasonList {
+  padding-left: 17px;
+  list-style: disc;
+  color: #9e4f00;
+  line-height: 1.5;
+}
+
+.countList {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule, #c8d6df);
+}
+
+.countList dd {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.cardActions,
+.calculationCard > button {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.primaryButton,
+.secondaryButton,
+.quietButton {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 9px 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryButton {
+  color: white;
+  background: var(--ink, #10233f);
+}
+
+.secondaryButton {
+  color: var(--ink, #10233f);
+  border-color: var(--rule, #c8d6df);
+  background: white;
+}
+
+.quietButton {
+  color: var(--quiet, #5d6b7d);
+  border-color: var(--rule, #c8d6df);
+  background: transparent;
+}
+
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.quietButton:focus-visible {
+  outline: 3px solid rgb(36 107 254 / 35%);
+  outline-offset: 2px;
+}
+
+.partialBanner,
+.staleBanner {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 15px;
+  border-left: 3px solid var(--caution, #d98500);
+  background: rgb(217 133 0 / 8%);
+}
+
+.partialBanner p,
+.staleBanner p {
+  margin: 0;
+  color: #6e4a14;
+  line-height: 1.5;
+}
+
+.partialBanner button,
+.staleBanner button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.staleBanner {
+  border-left-color: var(--evidence-blue, #246bfe);
+  background: rgb(36 107 254 / 7%);
+}
+
+.staleBanner p {
+  color: #31445d;
+}
+
+.metadata {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule, #c8d6df);
+}
+
+.calculationStack {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.amountList {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--rule, #c8d6df);
+}
+
+.amountList dd {
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+}
+
+.detailLine {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.stepList {
+  padding: 12px;
+  border: 1px solid var(--rule, #c8d6df);
+  list-style: decimal inside;
+}
+
+.stepList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.5;
+}
+
+.stepList small {
+  color: var(--quiet, #5d6b7d);
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding-top: 24px;
+  }
+
+  .eventSummary,
+  .metadata,
+  .countList,
+  .amountList {
+    grid-template-columns: 1fr;
+  }
+
+  .actionSection,
+  .candidateCard,
+  .calculationCard {
+    padding: 15px;
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .quietButton {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primaryButton,
+  .secondaryButton,
+  .quietButton {
+    scroll-behavior: auto;
+  }
+}

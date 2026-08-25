@@ -35,10 +35,12 @@ def _event_request(
     *,
     event_date: str | None = "2026-08-25",
     visit_date: str | None = "2026-08-25",
+    situation: str = "Synthetic Member visited a clinic after a minor injury.",
 ) -> dict[str, Any]:
     return {
         "family_member_id": str(MEMBER_ID),
         "mode": mode,
+        "situation": situation,
         "event_date": event_date,
         "visit_date": visit_date,
         "facts": {
@@ -50,11 +52,18 @@ def _event_request(
     }
 
 
-def _event_payload(*, version: int = 1, deleted: bool = False) -> dict[str, Any]:
+def _event_payload(
+    *,
+    version: int = 1,
+    deleted: bool = False,
+    situation: str = "Synthetic Member visited a clinic after a minor injury.",
+    structured_facts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     return {
         "id": str(EVENT_ID),
         "family_member_id": str(MEMBER_ID),
         "mode": "post_treatment",
+        "situation": situation,
         "event_date": "2026-08-25",
         "visit_date": "2026-08-25",
         "facts": {
@@ -63,6 +72,8 @@ def _event_payload(*, version: int = 1, deleted: bool = False) -> dict[str, Any]
                 "confirmation": "user",
             }
         },
+        "structured_facts": structured_facts or [],
+        "optional_questions": [],
         "version": version,
         "deleted": deleted,
     }
@@ -82,6 +93,7 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
             {
                 "candidate_id": str(UUID("00000000-0000-4000-8000-000000000701")),
                 "rider_id": str(RIDER_ID),
+                "rider_label": "Sample Rider A",
                 "rider_type": "fixed",
                 "aggregate_result": "UNKNOWN",
                 "required_match_count": 0,
@@ -159,6 +171,7 @@ class _FakeDecisionService:
         response.update(
             {
                 "mode": mode,
+                "situation": data.get("situation", ""),
                 "event_date": event_date,
                 "visit_date": visit_date,
             }
@@ -173,7 +186,31 @@ class _FakeDecisionService:
         if expected_version != self.version:
             raise VersionConflict
         self.version += 1
-        return _event_payload(version=self.version)
+        structured_facts = data.get("structured_facts")
+        projected_facts = []
+        if isinstance(structured_facts, list):
+            projected_facts = [
+                {
+                    "fact_id": "00000000-0000-4000-8000-000000000901",
+                    "field_id": item["field_id"],
+                    "value": item["value"],
+                    "source": "user",
+                    "state": "missing" if item["value"] is None else "confirmed",
+                    "confidence": "high",
+                    "evidence_ids": [],
+                }
+                for item in structured_facts
+            ]
+        return _event_payload(
+            version=self.version,
+            situation=str(
+                data.get(
+                    "situation",
+                    "Synthetic Member visited a clinic after a minor injury.",
+                )
+            ),
+            structured_facts=projected_facts,
+        )
 
     def analyze_medical_event(self, event_id: UUID) -> dict[str, Any]:
         self._require_visible()
@@ -288,6 +325,9 @@ def test_create_medical_event_supports_pre_and_post_modes(
 
     assert response.status_code == 201
     assert response.json()["mode"] == mode
+    assert response.json()["situation"] == (
+        "Synthetic Member visited a clinic after a minor injury."
+    )
     assert response.json()["version"] == 1
     assert "household_space_id" not in response.json()
     assert len(service.created_requests) == 1
@@ -369,7 +409,56 @@ def test_patch_requires_expected_version_and_returns_conflict_for_stale_write(
     _assert_no_store(stale)
 
 
-@pytest.mark.parametrize("field", ["facts", "mode"])
+def test_patch_updates_bounded_situation_with_expected_version(client: TestClient) -> None:
+    response = client.patch(
+        f"/api/v1/medical-events/{EVENT_ID}",
+        json={
+            "expected_version": 1,
+            "situation": "Synthetic Member now has additional visit details.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["situation"] == ("Synthetic Member now has additional visit details.")
+    assert response.json()["version"] == 2
+    _assert_no_store(response)
+
+
+def test_user_structured_fact_patch_returns_user_projection(client: TestClient) -> None:
+    response = client.patch(
+        f"/api/v1/medical-events/{EVENT_ID}",
+        json={
+            "expected_version": 1,
+            "structured_facts": [
+                {"field_id": "condition_class", "value": "synthetic-correction"},
+                {"field_id": "admission", "value": False},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert [item["field_id"] for item in response.json()["structured_facts"]] == [
+        "condition_class",
+        "admission",
+    ]
+    assert all(item["source"] == "user" for item in response.json()["structured_facts"])
+    assert response.json()["version"] == 2
+
+
+@pytest.mark.parametrize("situation", ["", "   ", "x" * 2_001])
+def test_create_rejects_blank_or_unbounded_situation(
+    client: TestClient,
+    situation: str,
+) -> None:
+    response = client.post(
+        "/api/v1/medical-events",
+        json=_event_request(situation=situation),
+    )
+
+    _assert_value_free_error(response)
+
+
+@pytest.mark.parametrize("field", ["facts", "mode", "situation"])
 def test_patch_rejects_explicit_null_for_non_nullable_fields(
     client: TestClient,
     field: str,
@@ -425,6 +514,7 @@ def test_analyze_returns_unknown_normally_with_exact_versions_and_evidence(
     assert body["rule_set_version"] == "coverage-rules-v1"
     assert body["policy_snapshot_at"] == "2026-08-25T09:00:00Z"
     assert body["candidates"][0]["aggregate_result"] == "UNKNOWN"
+    assert body["candidates"][0]["rider_label"] == "Sample Rider A"
     assert "evaluations" not in body["candidates"][0]
     evaluation = body["evaluations"][0]
     assert evaluation["rule_version_id"] == str(RULE_VERSION_ID)

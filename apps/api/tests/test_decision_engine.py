@@ -144,6 +144,7 @@ def event(
         household_space_id=SCOPE_ID,
         family_member_id=MEMBER_ID,
         mode="post_treatment",
+        situation="Synthetic Member received outpatient treatment.",
         event_date=event_date,
         visit_date=event_date,
         facts=facts or {},

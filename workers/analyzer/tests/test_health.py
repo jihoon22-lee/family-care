@@ -5,8 +5,15 @@ from typing import Any
 
 import psycopg
 import pytest
-from familycare_worker.__main__ import main, run_idle, run_worker_loop
+from familycare_worker.__main__ import (
+    FairJobRunner,
+    _runner_from_environment,
+    main,
+    run_idle,
+    run_worker_loop,
+)
 from familycare_worker.health import database_is_ready, health_payload
+from familycare_worker.runner import EventStructuringJobRunner
 from pytest import CaptureFixture, MonkeyPatch
 
 
@@ -154,6 +161,40 @@ def test_worker_loop_rejects_non_finite_poll_interval() -> None:
                 worker_id="worker-a",
                 poll_interval_seconds=invalid_interval,
             )
+
+
+def test_fair_runner_checks_both_queues_without_starvation() -> None:
+    calls: list[str] = []
+
+    class SyntheticRunner:
+        def __init__(self, name: str, results: list[bool]) -> None:
+            self.name = name
+            self.results = results
+
+        def run_once(self, worker_id: str) -> bool:
+            assert worker_id == "worker-a"
+            calls.append(self.name)
+            return self.results.pop(0)
+
+    events = SyntheticRunner("events", [False, True])
+    documents = SyntheticRunner("documents", [True, False])
+    runner = FairJobRunner(events=events, documents=documents)
+
+    assert runner.run_once("worker-a") is True
+    assert runner.run_once("worker-a") is True
+    assert calls == ["events", "documents", "documents", "events"]
+
+
+def test_environment_builds_event_runner_without_document_roots(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.delenv("FAMILYCARE_DOCUMENT_ROOT", raising=False)
+    monkeypatch.delenv("FAMILYCARE_WORK_ROOT", raising=False)
+
+    runner = _runner_from_environment(Event())
+
+    assert isinstance(runner, EventStructuringJobRunner)
 
 
 def test_console_entrypoint_reads_process_arguments(

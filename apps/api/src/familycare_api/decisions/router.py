@@ -27,6 +27,11 @@ from familycare_api.decisions.schemas import (
     MedicalEventUpdateRequest,
 )
 from familycare_api.decisions.service import DecisionService
+from familycare_api.decisions.structuring_schemas import (
+    StructureAcceptedResponse,
+    StructuringJobResponse,
+)
+from familycare_api.decisions.structuring_service import EventStructuringService
 
 ScopeDependency = Annotated[HouseholdScope, Depends(resolve_household_scope)]
 
@@ -38,6 +43,16 @@ def get_decision_service(scope: ScopeDependency) -> DecisionService:
 ServiceDependency = Annotated[DecisionService, Depends(get_decision_service)]
 
 
+def get_event_structuring_service(scope: ScopeDependency) -> EventStructuringService:
+    return EventStructuringService.from_environment(scope)
+
+
+StructuringServiceDependency = Annotated[
+    EventStructuringService,
+    Depends(get_event_structuring_service),
+]
+
+
 def get_calculation_service(scope: ScopeDependency) -> CalculationService:
     return CalculationService.from_environment(scope)
 
@@ -47,6 +62,10 @@ CalculationServiceDependency = Annotated[
     Depends(get_calculation_service),
 ]
 router = APIRouter(prefix="/api/v1/medical-events", tags=["coverage decisions"])
+structuring_job_router = APIRouter(
+    prefix="/api/v1/medical-event-structuring-jobs",
+    tags=["medical event structuring"],
+)
 
 _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": DecisionErrorResponse, "description": "Authentication required"},
@@ -150,6 +169,38 @@ def analyze_medical_event(
 ) -> CoverageDecisionResponse:
     _no_store(response)
     return CoverageDecisionResponse.from_value(service.analyze_medical_event(event_id))
+
+
+@router.post(
+    "/{event_id}/structure",
+    response_model=StructureAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=_COMMON_ERRORS,
+)
+def structure_medical_event(
+    event_id: UUID,
+    request: ExpectedVersionRequest,
+    response: Response,
+    service: StructuringServiceDependency,
+) -> StructureAcceptedResponse:
+    _no_store(response)
+    return StructureAcceptedResponse.from_value(
+        service.enqueue(event_id, expected_version=request.expected_version)
+    )
+
+
+@structuring_job_router.get(
+    "/{job_id}",
+    response_model=StructuringJobResponse,
+    responses=_COMMON_ERRORS,
+)
+def get_structuring_job(
+    job_id: UUID,
+    response: Response,
+    service: StructuringServiceDependency,
+) -> StructuringJobResponse:
+    _no_store(response)
+    return StructuringJobResponse.from_value(service.get_job(job_id))
 
 
 @router.get(
@@ -258,4 +309,10 @@ def get_benefit_calculations(
     )
 
 
-__all__ = ["get_calculation_service", "get_decision_service", "router"]
+__all__ = [
+    "get_calculation_service",
+    "get_decision_service",
+    "get_event_structuring_service",
+    "router",
+    "structuring_job_router",
+]

@@ -18,7 +18,7 @@ export default defineConfig({
       process.env.FAMILYCARE_CAPTURE_VISUALS === "true"
         ? "on"
         : "only-on-failure",
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
   },
   projects: [
     {

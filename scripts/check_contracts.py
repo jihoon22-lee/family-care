@@ -145,6 +145,77 @@ BENEFIT_FORBIDDEN_FIELDS = {
 }
 BENEFIT_CALCULATION_KINDS = ["fixed", "indemnity"]
 BENEFIT_CALCULATION_STATUSES = ["computed", "partial", "unknown"]
+STRUCTURING_SCHEMA_PATH = (
+    ROOT / "packages/contracts/schemas/medical-event-structuring.v1.schema.json"
+)
+STRUCTURING_EXAMPLE_PATH = ROOT / "packages/contracts/examples/medical-event-structuring.v1.json"
+STRUCTURING_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "amount",
+    "archive_key",
+    "api_key",
+    "cookie",
+    "decision",
+    "document",
+    "document_id",
+    "document_path",
+    "document_text",
+    "eligible",
+    "extraction_text",
+    "file",
+    "file_id",
+    "file_path",
+    "full_text",
+    "household_space_id",
+    "member_id",
+    "ocr_text",
+    "payment",
+    "password",
+    "path",
+    "pdf_path",
+    "provider_payload",
+    "provider_response",
+    "raw_payload",
+    "raw_pdf",
+    "raw_provider_response",
+    "raw_text",
+    "result",
+    "source_key",
+    "source_path",
+    "tri_state",
+    "url",
+    "user_id",
+}
+STRUCTURING_FACT_FIELD_IDS = [
+    "event_date",
+    "visit_date",
+    "condition_class",
+    "diagnosis_label",
+    "treatment_kind",
+    "admission",
+    "outpatient",
+    "pharmacy",
+]
+STRUCTURING_FACT_SOURCES = ["user", "ai", "system"]
+STRUCTURING_FACT_STATES = ["confirmed", "ambiguous", "missing", "conflict"]
+STRUCTURING_FACT_ISSUE_CODES = [
+    "INVENTED_FIELD",
+    "INVALID_VALUE",
+    "INVALID_STATE",
+    "DUPLICATE_FIELD",
+    "INVENTED_QUESTION",
+    "INVENTED_EVIDENCE",
+    "UNSUPPORTED_SOURCE",
+    "INVALID_CONFIDENCE",
+]
+STRUCTURING_JOB_STATES = [
+    "queued",
+    "running",
+    "succeeded",
+    "retryable_failed",
+    "permanently_failed",
+    "cancelled",
+]
 
 
 def _load_document_contract_checker() -> Any:
@@ -244,6 +315,7 @@ def validate_openapi() -> list[str]:
         "/health/live",
         "/health/ready",
         "/api/v1/documents/analysis",
+        "/api/v1/evidence/{evidence_id}",
         "/api/v1/analysis-jobs/{job_id}",
         "/api/v1/family-members",
         "/api/v1/family-members/trash",
@@ -273,11 +345,13 @@ def validate_openapi() -> list[str]:
         "/api/v1/medical-events/trash",
         "/api/v1/medical-events/{event_id}",
         "/api/v1/medical-events/{event_id}/analyze",
+        "/api/v1/medical-events/{event_id}/structure",
         "/api/v1/medical-events/{event_id}/calculations",
         "/api/v1/medical-events/{event_id}/receipt-lines",
         "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
         "/api/v1/medical-events/{event_id}/restore",
         "/api/v1/medical-events/{event_id}/results/{version}",
+        "/api/v1/medical-event-structuring-jobs/{job_id}",
     }
     if set(paths) != expected_paths:
         errors.append(
@@ -408,6 +482,7 @@ def validate_openapi() -> list[str]:
     if set(event_request.get("properties", {})) != {
         "family_member_id",
         "mode",
+        "situation",
         "event_date",
         "visit_date",
         "facts",
@@ -1198,6 +1273,116 @@ def validate_benefit_calculation_contract() -> list[str]:
     return errors
 
 
+def _forbidden_structuring_keys(value: Any, path: str = "$") -> list[str]:
+    """Return event-structuring paths crossing the non-authoritative boundary."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in STRUCTURING_FORBIDDEN_FIELDS
+    ]
+
+
+def _validate_structuring_example_ids(value: Any, path: str, errors: list[str]) -> None:
+    """Require all event-structuring IDs in the example to be synthetic UUIDv4 values."""
+
+    if isinstance(value, dict):
+        for key, child in value.items():
+            child_path = f"{path}.{key}"
+            if key in {"fact_id", "job_id"} and child is not None:
+                if not valid_uuid4(child):
+                    errors.append(f"medical-event-structuring {child_path} must be a UUIDv4")
+                elif not str(child).startswith("00000000-0000-4000-8000-"):
+                    errors.append(
+                        f"medical-event-structuring {child_path} must use a synthetic UUID"
+                    )
+            elif key == "evidence_ids" and isinstance(child, list):
+                for index, evidence_id in enumerate(child):
+                    evidence_path = f"{child_path}[{index}]"
+                    if not valid_uuid4(evidence_id):
+                        errors.append(f"medical-event-structuring {evidence_path} must be a UUIDv4")
+                    elif not str(evidence_id).startswith("00000000-0000-4000-8000-"):
+                        errors.append(
+                            f"medical-event-structuring {evidence_path} must use a synthetic UUID"
+                        )
+            _validate_structuring_example_ids(child, child_path, errors)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            _validate_structuring_example_ids(child, f"{path}[{index}]", errors)
+
+
+def validate_event_structuring_contract() -> list[str]:
+    """Validate strict provider-neutral event structuring request/result/job shapes."""
+
+    try:
+        schema = load_json(STRUCTURING_SCHEMA_PATH)
+        example = load_json(STRUCTURING_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("medical-event-structuring schema must use JSON Schema draft 2020-12")
+    if schema.get("title") != "MedicalEventStructuringEnvelope":
+        errors.append("medical-event-structuring schema title changed")
+    if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
+        errors.append("medical-event-structuring root must be a strict object")
+    if schema.get("required") != ["schema_version", "request", "response", "job"]:
+        errors.append("medical-event-structuring root required fields changed")
+
+    object_schemas = _object_schemas(schema)
+    if not object_schemas or any(
+        item.get("additionalProperties") is not False for item in object_schemas
+    ):
+        errors.append("medical-event-structuring nested objects must reject additional properties")
+    if _forbidden_structuring_keys(schema):
+        errors.append("medical-event-structuring schema contains a forbidden field")
+    if _forbidden_structuring_keys(example):
+        errors.append("medical-event-structuring example contains a forbidden field")
+    errors.extend(
+        f"medical-event-structuring example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+
+    definitions = schema.get("$defs", {})
+    if definitions.get("FactFieldId", {}).get("enum") != STRUCTURING_FACT_FIELD_IDS:
+        errors.append("medical-event-structuring fact field enum changed")
+    if definitions.get("FactSource", {}).get("enum") != STRUCTURING_FACT_SOURCES:
+        errors.append("medical-event-structuring fact source enum changed")
+    if definitions.get("FactState", {}).get("enum") != STRUCTURING_FACT_STATES:
+        errors.append("medical-event-structuring fact state enum changed")
+    if definitions.get("StructuringJobState", {}).get("enum") != STRUCTURING_JOB_STATES:
+        errors.append("medical-event-structuring job state enum changed")
+    if definitions.get("FactIssueCode", {}).get("enum") != STRUCTURING_FACT_ISSUE_CODES:
+        errors.append("medical-event-structuring issue-code enum changed")
+
+    request = definitions.get("StructuringRequest", {})
+    if request.get("required") != [
+        "schema_version",
+        "mode",
+        "situation",
+        "event_date",
+        "visit_date",
+    ]:
+        errors.append("medical-event-structuring request fields changed")
+    if request.get("properties", {}).get("situation", {}).get("maxLength") != 2000:
+        errors.append("medical-event-structuring situation must be bounded at 2000")
+
+    result = definitions.get("StructuringResult", {})
+    if result.get("properties", {}).get("facts", {}).get("maxItems") != 32:
+        errors.append("medical-event-structuring fact candidates must be bounded at 32")
+    if result.get("properties", {}).get("questions", {}).get("maxItems") != 16:
+        errors.append("medical-event-structuring questions must be bounded at 16")
+    if result.get("properties", {}).get("issues", {}).get("maxItems") != 16:
+        errors.append("medical-event-structuring issues must be bounded at 16")
+    job = definitions.get("StructuringJob", {})
+    if job.get("properties", {}).get("attempts", {}).get("maximum") != 10:
+        errors.append("medical-event-structuring attempts must be bounded at 10")
+
+    _validate_structuring_example_ids(example, "$", errors)
+    return errors
+
+
 def validate_web_generated_outputs() -> list[str]:
     """Regenerate the Web consumer in a temporary directory and compare bytes."""
 
@@ -1291,6 +1476,7 @@ def main() -> int:
         *validate_rider_clause_rules_contract(),
         *validate_decision_contract(),
         *validate_benefit_calculation_contract(),
+        *validate_event_structuring_contract(),
         *validate_web_generated_outputs(),
     ]
     if errors:
@@ -1300,7 +1486,7 @@ def main() -> int:
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
-        "and generated Web contracts)"
+        "medical-event-structuring.v1, and generated Web contracts)"
     )
     return 0
 

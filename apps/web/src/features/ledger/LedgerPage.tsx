@@ -73,6 +73,12 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
             <div>
               <span>현재 대상</span>
               <strong>{data.selectedMember.display_name}</strong>
+              <a
+                className="event-start-link"
+                href={`/app/events/new?member=${encodeURIComponent(data.selectedMember.id)}`}
+              >
+                사건 기록 시작
+              </a>
             </div>
             <div
               className="review-count"

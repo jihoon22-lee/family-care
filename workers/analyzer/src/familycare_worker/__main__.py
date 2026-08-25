@@ -12,16 +12,43 @@ from threading import Event
 from types import FrameType
 from typing import Protocol
 
+from familycare_worker.ai.event_structurer import (
+    EVENT_STRUCTURER_SCHEMA_NAME,
+    event_structurer_schema,
+)
+from familycare_worker.ai.provider import (
+    DEFAULT_STRUCTURER_MODEL,
+    OpenAiResponsesAdapter,
+)
+from familycare_worker.event_jobs import EventStructuringJobQueue
 from familycare_worker.health import DatabaseProbe, database_is_ready, health_payload
 from familycare_worker.jobs import JobQueue
 from familycare_worker.repository import ExtractionRepository
-from familycare_worker.runner import AnalysisJobRunner
+from familycare_worker.runner import AnalysisJobRunner, EventStructuringJobRunner
 
 LOGGER = logging.getLogger("familycare.worker")
 
 
 class JobRunner(Protocol):
     def run_once(self, worker_id: str) -> bool: ...
+
+
+class FairJobRunner:
+    """Alternate queue priority while processing at most one job per iteration."""
+
+    def __init__(self, *, events: JobRunner, documents: JobRunner) -> None:
+        self.events = events
+        self.documents = documents
+        self._events_first = True
+
+    def run_once(self, worker_id: str) -> bool:
+        first, second = (
+            (self.events, self.documents) if self._events_first else (self.documents, self.events)
+        )
+        self._events_first = not self._events_first
+        if first.run_once(worker_id):
+            return True
+        return second.run_once(worker_id)
 
 
 def run_idle(stop_event: Event, *, interval_seconds: float = 30.0) -> int:
@@ -59,21 +86,35 @@ def run_worker_loop(
     return 0
 
 
-def _runner_from_environment(stop_event: Event) -> AnalysisJobRunner | None:
+def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     database_url = os.getenv("FAMILYCARE_DATABASE_URL")
+    if not database_url:
+        return None
+    provider = OpenAiResponsesAdapter({EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema()})
+    event_runner = EventStructuringJobRunner(
+        queue=EventStructuringJobQueue(database_url),
+        provider=provider,
+        structurer_model=os.getenv(
+            "FAMILYCARE_AI_STRUCTURER_MODEL",
+            DEFAULT_STRUCTURER_MODEL,
+        ),
+    )
     document_root = os.getenv("FAMILYCARE_DOCUMENT_ROOT")
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
-    if not database_url or not document_root or not work_root:
-        return None
+    if not document_root or not work_root:
+        if bool(document_root) != bool(work_root):
+            LOGGER.error("document_runner_configuration_incomplete")
+        return event_runner
     queue = JobQueue(database_url)
     repository = ExtractionRepository(database_url)
-    return AnalysisJobRunner(
+    document_runner = AnalysisJobRunner(
         queue,
         repository,
         document_root=Path(document_root),
         work_root=Path(work_root),
         stop_requested=stop_event.is_set,
     )
+    return FairJobRunner(events=event_runner, documents=document_runner)
 
 
 def install_signal_handlers(stop_event: Event) -> None:

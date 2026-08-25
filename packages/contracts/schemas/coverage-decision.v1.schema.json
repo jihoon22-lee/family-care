@@ -84,11 +84,7 @@
       "type": "string"
     },
     "TriState": {
-      "enum": [
-        "MATCH",
-        "NO_MATCH",
-        "UNKNOWN"
-      ],
+      "enum": ["MATCH", "NO_MATCH", "UNKNOWN"],
       "title": "TriState",
       "type": "string"
     },
@@ -150,11 +146,7 @@
           ]
         },
         "review_state": {
-          "enum": [
-            "AI_VERIFIED",
-            "NEEDS_REVIEW",
-            "USER_CONFIRMED"
-          ],
+          "enum": ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"],
           "type": "string"
         }
       },
@@ -179,10 +171,7 @@
           "$ref": "#/$defs/ReasonCode"
         }
       },
-      "required": [
-        "field_path",
-        "reason_code"
-      ],
+      "required": ["field_path", "reason_code"],
       "title": "Question",
       "type": "object"
     },
@@ -268,11 +257,13 @@
         "rider_id": {
           "$ref": "#/$defs/Uuid"
         },
+        "rider_label": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
         "rider_type": {
-          "enum": [
-            "fixed",
-            "indemnity"
-          ],
+          "enum": ["fixed", "indemnity"],
           "type": "string"
         },
         "aggregate_result": {
@@ -312,6 +303,7 @@
       "required": [
         "candidate_id",
         "rider_id",
+        "rider_label",
         "rider_type",
         "aggregate_result",
         "required_match_count",

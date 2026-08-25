@@ -608,11 +608,27 @@ button:focus-visible {
 
 .ledger-toolbar > div {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
   gap: 24px;
   min-width: 0;
   padding: 15px 18px;
+}
+
+.event-start-link {
+  padding: 8px 12px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.event-start-link:hover {
+  background: var(--ink);
+  color: white;
 }
 
 .ledger-toolbar > div + div {

@@ -11,6 +11,8 @@ from uuid import UUID
 import psycopg
 import pytest
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.decisions.errors import EvidenceNotFound
+from familycare_api.decisions.evidence_repository import EvidenceRepository
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -715,6 +717,7 @@ def _create_event(service: Any, member_id: UUID) -> Any:
     return service.create_medical_event(
         family_member_id=member_id,
         mode="post_treatment",
+        situation="Synthetic Member received outpatient treatment.",
         event_date=date(2025, 6, 15),
         visit_date=date(2025, 6, 16),
         facts={"MedicalEvent.classification": "injury"},
@@ -785,6 +788,7 @@ def test_decision_analysis_selects_insured_riders_and_persists_immutable_runs(
     }
     candidates = {candidate.rider_id: candidate for candidate in first.candidates}
     assert candidates[seed.good_rider_id].aggregate_result == "MATCH"
+    assert candidates[seed.good_rider_id].rider_label == "Synthetic Good Rider"
     assert candidates[seed.bad_rider_id].aggregate_result == "UNKNOWN"
     assert {evaluation.rider_id for evaluation in first.evaluations} == {
         seed.good_rider_id,
@@ -795,6 +799,8 @@ def test_decision_analysis_selects_insured_riders_and_persists_immutable_runs(
     fetched = service.get_decision_result(event.id, first.event_version)
     assert fetched.event_version == first.event_version
     assert fetched.run_id == first.run_id
+    fetched_candidates = {candidate.rider_id: candidate for candidate in fetched.candidates}
+    assert fetched_candidates[seed.good_rider_id].rider_label == "Synthetic Good Rider"
     fetched_good = next(
         evaluation
         for evaluation in fetched.evaluations
@@ -892,3 +898,55 @@ def test_decision_service_denies_cross_scope_reads_and_preserves_soft_deleted_ev
     restored = service_a.restore_medical_event(event.id, expected_version=deleted.version)
     assert restored.deleted_at is None
     assert service_a.get_medical_event(event.id).version == restored.version
+
+
+def test_evidence_disclosure_rejects_content_hash_mismatch(
+    database_url: str,
+    seed: DecisionSeed,
+) -> None:
+    repository = EvidenceRepository(database_url)
+    detail = repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)
+    assert detail.clause_label == "Article good"
+    assert detail.bounded_excerpt == "Synthetic coverage condition"
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "UPDATE evidence SET content_sha256 = %s WHERE id = %s",
+            ("e" * 64, seed.good_terms_evidence_id),
+        )
+
+    with pytest.raises(EvidenceNotFound):
+        repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)
+
+
+@pytest.mark.parametrize("invalid_source", ["failed_extraction", "out_of_page_bbox"])
+def test_evidence_disclosure_rejects_invalid_extraction_source(
+    database_url: str,
+    seed: DecisionSeed,
+    invalid_source: str,
+) -> None:
+    repository = EvidenceRepository(database_url)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        if invalid_source == "failed_extraction":
+            connection.execute(
+                """
+                UPDATE extractions
+                SET status = 'failed', succeeded_at = NULL
+                WHERE id = (
+                  SELECT extraction_id FROM evidence WHERE id = %s
+                )
+                """,
+                (seed.good_terms_evidence_id,),
+            )
+        else:
+            connection.execute(
+                """
+                UPDATE evidence
+                SET x0 = 0, y0 = 0, x1 = 700, y1 = 800
+                WHERE id = %s
+                """,
+                (seed.good_terms_evidence_id,),
+            )
+
+    with pytest.raises(EvidenceNotFound):
+        repository.get_evidence(seed.scope_a, seed.good_terms_evidence_id)

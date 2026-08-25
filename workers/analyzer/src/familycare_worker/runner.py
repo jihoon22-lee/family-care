@@ -7,9 +7,11 @@ import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
+from uuid import UUID
 
 import psycopg
 
+from familycare_worker.ai.event_structurer import EventStructuringRequest, structure_event
 from familycare_worker.ai.policy_pipeline import run_policy_pipeline
 from familycare_worker.ai.provider import (
     DEFAULT_STRUCTURER_MODEL,
@@ -18,6 +20,13 @@ from familycare_worker.ai.provider import (
     EvidenceSlice,
 )
 from familycare_worker.ai.schemas import CandidatePipelineResult
+from familycare_worker.event_jobs import (
+    EventStructuringQueue,
+    StructuringErrorCode,
+    StructuringJobNotFound,
+    StructuringJobStateConflict,
+    map_structuring_error,
+)
 from familycare_worker.jobs import (
     AnalysisJobRecord,
     JobNotFound,
@@ -97,6 +106,72 @@ class PolicyCandidatePipelineRunner:
         if result.candidates:
             self.publisher.publish(result, bounded_evidence)
         return result
+
+
+class EventStructuringJobRunner:
+    """Claim one event job and persist only the validated structuring result."""
+
+    def __init__(
+        self,
+        *,
+        queue: EventStructuringQueue,
+        provider: AiProvider,
+        structurer_model: str = DEFAULT_STRUCTURER_MODEL,
+        lease_seconds: int = 180,
+    ) -> None:
+        if not isinstance(structurer_model, str) or not 1 <= len(structurer_model) <= 128:
+            raise ValueError("invalid event structurer model")
+        if (
+            isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or lease_seconds <= 0
+        ):
+            raise ValueError("invalid lease duration")
+        self.queue = queue
+        self.provider = provider
+        self.structurer_model = structurer_model
+        self.lease_seconds = lease_seconds
+
+    def run_once(self, worker_id: str) -> bool:
+        """Process one due event job and return whether a claim was obtained."""
+
+        job = self.queue.claim_next_job(worker_id, lease_seconds=self.lease_seconds)
+        if job is None:
+            return False
+        try:
+            if self.queue.cancel_if_event_version_changed(job, worker_id):
+                return True
+            result = structure_event(
+                request=EventStructuringRequest(
+                    situation=job.situation,
+                    mode=job.mode,
+                    event_date=job.event_date,
+                    visit_date=job.visit_date,
+                ),
+                provider=self.provider,
+                model=self.structurer_model,
+            )
+            if not self.queue.heartbeat(job.id, worker_id):
+                return True
+            self.queue.complete_job(job, worker_id, result)
+        except StructuringJobNotFound, StructuringJobStateConflict:
+            return True
+        except psycopg.Error:
+            return True
+        except Exception as error:
+            self._safe_fail(job.id, worker_id, map_structuring_error(error))
+        return True
+
+    def _safe_fail(
+        self,
+        job_id: UUID,
+        worker_id: str,
+        error_code: StructuringErrorCode,
+    ) -> None:
+        try:
+            self.queue.fail_job(job_id, worker_id, error_code)
+        except StructuringJobNotFound, StructuringJobStateConflict, psycopg.Error:
+            return
 
 
 def _default_workspace_factory(root: Path) -> Workspace:
@@ -291,6 +366,7 @@ class AnalysisJobRunner:
 __all__ = [
     "AnalysisJobRunner",
     "CandidateBatchPublisher",
+    "EventStructuringJobRunner",
     "ParserRunner",
     "PolicyCandidatePipelineRunner",
     "WorkspaceFactory",

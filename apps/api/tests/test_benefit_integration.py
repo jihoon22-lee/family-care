@@ -717,6 +717,7 @@ def _create_event(database_url: str, seed: BenefitSeed) -> Any:
     return _decision_service(database_url, seed.scope_a).create_medical_event(
         family_member_id=seed.member_a,
         mode="post_treatment",
+        situation="Synthetic Member received outpatient treatment.",
         event_date=date(2025, 6, 15),
         visit_date=date(2025, 6, 16),
         facts={"MedicalEvent.classification": "injury"},

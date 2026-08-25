@@ -11,6 +11,7 @@
     {
       "candidate_id": "00000000-0000-4000-8000-000000000803",
       "rider_id": "00000000-0000-4000-8000-000000000804",
+      "rider_label": "Sample Rider A",
       "rider_type": "fixed",
       "aggregate_result": "UNKNOWN",
       "required_match_count": 0,
@@ -22,22 +23,19 @@
           "reason_code": "MISSING_CLASSIFICATION"
         }
       ],
-      "hold_reason_codes": [
-        "MISSING_REQUIRED_FACT"
-      ]
+      "hold_reason_codes": ["MISSING_REQUIRED_FACT"]
     },
     {
       "candidate_id": "00000000-0000-4000-8000-000000000805",
       "rider_id": "00000000-0000-4000-8000-000000000806",
+      "rider_label": "Sample Rider B",
       "rider_type": "indemnity",
       "aggregate_result": "NO_MATCH",
       "required_match_count": 0,
       "required_unknown_count": 0,
       "required_no_match_count": 1,
       "questions": [],
-      "hold_reason_codes": [
-        "DETERMINISTIC_EXCLUSION"
-      ]
+      "hold_reason_codes": ["DETERMINISTIC_EXCLUSION"]
     }
   ],
   "evaluations": [
@@ -48,12 +46,8 @@
       "result": "UNKNOWN",
       "required": true,
       "reason_code": "MISSING_REQUIRED_FACT",
-      "fact_paths": [
-        "MedicalEvent.classification"
-      ],
-      "missing_fields": [
-        "MedicalEvent.classification"
-      ],
+      "fact_paths": ["MedicalEvent.classification"],
+      "missing_fields": ["MedicalEvent.classification"],
       "conflicting_fields": [],
       "evidence": [
         {
@@ -75,9 +69,7 @@
       "result": "NO_MATCH",
       "required": true,
       "reason_code": "DETERMINISTIC_EXCLUSION",
-      "fact_paths": [
-        "MedicalEvent.classification"
-      ],
+      "fact_paths": ["MedicalEvent.classification"],
       "missing_fields": [],
       "conflicting_fields": [],
       "evidence": [
@@ -87,12 +79,7 @@
           "extraction_id": "00000000-0000-4000-8000-000000000816",
           "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
           "physical_page": 2,
-          "bbox": [
-            72,
-            120,
-            480,
-            180
-          ],
+          "bbox": [72, 120, 480, 180],
           "review_state": "AI_VERIFIED"
         }
       ],

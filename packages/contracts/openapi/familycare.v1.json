@@ -800,6 +800,12 @@
             "title": "Rider Id",
             "type": "string"
           },
+          "rider_label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Rider Label",
+            "type": "string"
+          },
           "rider_type": {
             "enum": [
               "fixed",
@@ -812,6 +818,7 @@
         "required": [
           "candidate_id",
           "rider_id",
+          "rider_label",
           "rider_type",
           "aggregate_result",
           "required_match_count",
@@ -1555,6 +1562,104 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvidenceDetailResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "bounded_excerpt": {
+            "maxLength": 480,
+            "minLength": 1,
+            "title": "Bounded Excerpt",
+            "type": "string"
+          },
+          "clause_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clause Label"
+          },
+          "document_label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Document Label",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "physical_page": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "document_label",
+          "physical_page",
+          "bounded_excerpt",
+          "bbox",
+          "review_state"
+        ],
+        "title": "EvidenceDetailResponse",
+        "type": "object"
+      },
       "ExpectedVersionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1678,6 +1783,30 @@
           "confirmation"
         ],
         "title": "FactInput",
+        "type": "object"
+      },
+      "FactIssueResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "enum": [
+              "INVENTED_FIELD",
+              "INVALID_VALUE",
+              "INVALID_STATE",
+              "DUPLICATE_FIELD",
+              "INVENTED_QUESTION",
+              "INVENTED_EVIDENCE",
+              "UNSUPPORTED_SOURCE",
+              "INVALID_CONFIDENCE"
+            ],
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "FactIssueResponse",
         "type": "object"
       },
       "FactResponse": {
@@ -1891,6 +2020,12 @@
             "title": "Mode",
             "type": "string"
           },
+          "situation": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Situation",
+            "type": "string"
+          },
           "visit_date": {
             "anyOf": [
               {
@@ -1906,7 +2041,8 @@
         },
         "required": [
           "family_member_id",
-          "mode"
+          "mode",
+          "situation"
         ],
         "title": "MedicalEventCreateRequest",
         "type": "object"
@@ -1955,6 +2091,24 @@
             "title": "Mode",
             "type": "string"
           },
+          "optional_questions": {
+            "items": {
+              "$ref": "#/components/schemas/OptionalQuestionResponse"
+            },
+            "title": "Optional Questions",
+            "type": "array"
+          },
+          "situation": {
+            "title": "Situation",
+            "type": "string"
+          },
+          "structured_facts": {
+            "items": {
+              "$ref": "#/components/schemas/StructuredFactResponse"
+            },
+            "title": "Structured Facts",
+            "type": "array"
+          },
           "version": {
             "title": "Version",
             "type": "integer"
@@ -1976,6 +2130,7 @@
           "id",
           "family_member_id",
           "mode",
+          "situation",
           "event_date",
           "visit_date",
           "facts",
@@ -2035,6 +2190,34 @@
             ],
             "title": "Mode"
           },
+          "situation": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Situation"
+          },
+          "structured_facts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/StructuredFactInput"
+                },
+                "maxItems": 32,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structured Facts"
+          },
           "visit_date": {
             "anyOf": [
               {
@@ -2077,6 +2260,45 @@
           "currency"
         ],
         "title": "MoneyResponse",
+        "type": "object"
+      },
+      "OptionalQuestionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "field_id": {
+            "enum": [
+              "event_date",
+              "visit_date",
+              "condition_class",
+              "diagnosis_label",
+              "treatment_kind",
+              "admission",
+              "outpatient",
+              "pharmacy"
+            ],
+            "title": "Field Id",
+            "type": "string"
+          },
+          "question_code": {
+            "enum": [
+              "event_date",
+              "visit_date",
+              "condition_class",
+              "diagnosis_label",
+              "treatment_kind",
+              "admission",
+              "outpatient",
+              "pharmacy"
+            ],
+            "title": "Question Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_code",
+          "field_id"
+        ],
+        "title": "OptionalQuestionResponse",
         "type": "object"
       },
       "PolicyCreateRequest": {
@@ -3369,6 +3591,255 @@
         "title": "RuleEvaluationResponse",
         "type": "object"
       },
+      "StructureAcceptedResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "const": "queued",
+            "title": "State",
+            "type": "string"
+          },
+          "status_url": {
+            "pattern": "^/api/v1/medical-event-structuring-jobs/[0-9a-f-]{36}$",
+            "title": "Status Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "state",
+          "status_url"
+        ],
+        "title": "StructureAcceptedResponse",
+        "type": "object"
+      },
+      "StructuredFactInput": {
+        "additionalProperties": false,
+        "properties": {
+          "field_id": {
+            "enum": [
+              "event_date",
+              "visit_date",
+              "condition_class",
+              "diagnosis_label",
+              "treatment_kind",
+              "admission",
+              "outpatient",
+              "pharmacy"
+            ],
+            "title": "Field Id",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "field_id",
+          "value"
+        ],
+        "title": "StructuredFactInput",
+        "type": "object"
+      },
+      "StructuredFactResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ],
+            "title": "Confidence",
+            "type": "string"
+          },
+          "evidence_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "field_id": {
+            "enum": [
+              "event_date",
+              "visit_date",
+              "condition_class",
+              "diagnosis_label",
+              "treatment_kind",
+              "admission",
+              "outpatient",
+              "pharmacy"
+            ],
+            "title": "Field Id",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "user",
+              "ai",
+              "system"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "confirmed",
+              "ambiguous",
+              "missing",
+              "conflict"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "fact_id",
+          "field_id",
+          "value",
+          "source",
+          "state",
+          "confidence",
+          "evidence_ids"
+        ],
+        "title": "StructuredFactResponse",
+        "type": "object"
+      },
+      "StructuringJobResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "maximum": 10.0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STRUCTURING_AUTHENTICATION_FAILED",
+                  "STRUCTURING_INVALID_RESPONSE",
+                  "STRUCTURING_PROVIDER_TIMEOUT",
+                  "STRUCTURING_RATE_LIMITED",
+                  "STRUCTURING_UNAVAILABLE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/StructuredFactResponse"
+            },
+            "maxItems": 32,
+            "title": "Facts",
+            "type": "array"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/FactIssueResponse"
+            },
+            "maxItems": 16,
+            "title": "Issues",
+            "type": "array"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/OptionalQuestionResponse"
+            },
+            "maxItems": 16,
+            "title": "Questions",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "retryable_failed",
+              "permanently_failed",
+              "cancelled"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "state",
+          "attempts",
+          "facts",
+          "questions",
+          "issues",
+          "error_code"
+        ],
+        "title": "StructuringJobResponse",
+        "type": "object"
+      },
       "TermsEditionResponse": {
         "additionalProperties": false,
         "description": "Terms metadata that can be shown without exposing household scope.",
@@ -3995,6 +4466,79 @@
         ]
       }
     },
+    "/api/v1/evidence/{evidence_id}": {
+      "get": {
+        "operationId": "get_evidence_api_v1_evidence__evidence_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evidence_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Evidence Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Get Evidence",
+        "tags": [
+          "evidence"
+        ]
+      }
+    },
     "/api/v1/family-members": {
       "get": {
         "operationId": "list_family_members_api_v1_family_members_get",
@@ -4572,6 +5116,89 @@
         "summary": "Restore Family Member",
         "tags": [
           "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/medical-event-structuring-jobs/{job_id}": {
+      "get": {
+        "operationId": "get_structuring_job_api_v1_medical_event_structuring_jobs__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuringJobResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Get Structuring Job",
+        "tags": [
+          "medical event structuring"
         ]
       }
     },
@@ -5708,6 +6335,99 @@
           }
         },
         "summary": "Get Decision Result",
+        "tags": [
+          "coverage decisions"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/structure": {
+      "post": {
+        "operationId": "structure_medical_event_api_v1_medical_events__event_id__structure_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructureAcceptedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "summary": "Structure Medical Event",
         "tags": [
           "coverage decisions"
         ]
