@@ -385,7 +385,7 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - Create: apps/api/src/familycare_api/documents/import_sources.py
 - Create: workers/analyzer/src/familycare_worker/imports/batch.py
 - Create: workers/analyzer/src/familycare_worker/imports/cleanup.py
-- Modify: workers/analyzer/src/familycare_worker/runner.py
+- Modify: workers/analyzer/src/familycare_worker/__main__.py
 - Modify: workers/analyzer/src/familycare_worker/repository.py
 - Modify: apps/api/src/familycare_api/main.py
 - Test: apps/api/tests/test_document_batch_api.py
@@ -393,6 +393,9 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - Test: workers/analyzer/tests/test_batch_runner.py
 - Test: workers/analyzer/tests/test_batch_cleanup.py
 - Test: workers/analyzer/tests/test_private_import_contract.py
+- Test: apps/api/tests/test_document_batch_repository.py
+- Test: workers/analyzer/tests/test_batch_database.py
+- Test: workers/analyzer/tests/test_batch_secret_runtime.py
 
 **Interfaces:**
 
@@ -404,7 +407,7 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - BatchRunner.run_item(item_id) -> ItemResult uses PasswordScope, creates a workspace, decrypts an encrypted PDF to a mode-0600 temporary file, runs the existing extraction pipeline, archives the decrypted bytes, commits item success, and executes cleanup in finally.
 - Password failure changes only that item to password_required; successful sibling items continue. A wrong password never triggers automatic retries.
 
-- [ ] **Step 1: Write failing HTTP, scope, partial-failure, and cleanup tests**
+- [x] **Step 1: Write failing HTTP, scope, partial-failure, and cleanup tests**
 
 ~~~python
 def test_batch_rejects_mixed_family_members(authenticated_client) -> None:
@@ -433,7 +436,7 @@ def test_password_is_not_in_status_or_item_payload(authenticated_client, fake_so
     assert "password" not in persisted_batch_item_json()
 ~~~
 
-- [ ] **Step 2: Run the RED batch tests**
+- [x] **Step 2: Run the RED batch tests**
 
 Run:
 
@@ -448,7 +451,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the private batch routes and per-file runner are absent.
 
-- [ ] **Step 3: Implement the scoped API and item state machine**
+- [x] **Step 3: Implement the scoped API and item state machine**
 
 Use strict request models and server scope:
 
@@ -469,7 +472,7 @@ def create_batch(
 
 The source-list route is authenticated, no-store, and emits only entries from the exact configured inbox; it never accepts a directory query parameter. The password route validates a non-empty bounded string, sends it once to the Worker socket, and responds with only batch_id, state, and an item status projection. Do not add the password to a Pydantic response model, job settings JSON, SQL parameters, logs, or error details. The runner must preserve Phase 1 PASSWORD_REQUIRED for the password-free synthetic route while using a separate runtime password path for private batches.
 
-- [ ] **Step 4: Run the GREEN batch tests and integration checks**
+- [x] **Step 4: Run the GREEN batch tests and integration checks**
 
 Run:
 
@@ -487,7 +490,7 @@ TMPDIR=/tmp uv run pytest -m integration \
 
 Expected: batch creation, server scope, one-time password handoff, partial success, re-prompt, archive-before-ready, cancellation, and cleanup tests pass without changing the Phase 1 route behavior.
 
-- [ ] **Step 5: Commit the batch lifecycle slice**
+- [x] **Step 5: Commit the batch lifecycle slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/documents/batch_repository.py \

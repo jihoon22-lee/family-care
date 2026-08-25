@@ -8,12 +8,15 @@ import os
 import socket
 import stat
 import struct
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock, Thread
 from typing import Any
 from uuid import UUID
+
+from familycare_worker.imports.password_scope import PasswordScope
 
 MAX_FRAME_BYTES = 64 * 1024
 MAX_PASSWORD_BYTES = 8 * 1024
@@ -34,6 +37,82 @@ class _Entry:
     handoff_id: UUID
     password: str = field(repr=False)
     expires_at: datetime
+
+
+@dataclass(frozen=True)
+class _RegistryEntry:
+    handoff_id: UUID
+    scope: PasswordScope
+    expires_at: datetime
+
+
+class BatchPasswordRegistry:
+    """Own expiring batch-local password scopes without durable projections."""
+
+    def __init__(self) -> None:
+        self._entries: dict[UUID, _RegistryEntry] = {}
+        self._lock = Lock()
+        self._disposed = False
+
+    def __repr__(self) -> str:
+        state = "disposed" if self._disposed else "active"
+        return f"BatchPasswordRegistry(state={state!r})"
+
+    def _purge(self, now: datetime) -> None:
+        expired = [batch_id for batch_id, entry in self._entries.items() if entry.expires_at <= now]
+        for batch_id in expired:
+            self._entries.pop(batch_id).scope.dispose()
+
+    def replace(
+        self,
+        batch_id: UUID,
+        handoff_id: UUID,
+        password: str,
+        expires_at: datetime,
+    ) -> None:
+        if expires_at.tzinfo is None or expires_at.utcoffset() is None:
+            raise ValueError("invalid registry expiry")
+        replacement = PasswordScope(
+            batch_id=batch_id,
+            password=password,
+            expires_at=expires_at,
+        )
+        with self._lock:
+            if self._disposed:
+                replacement.dispose()
+                raise ValueError("password registry is disposed")
+            now = datetime.now(UTC)
+            self._purge(now)
+            old = self._entries.pop(batch_id, None)
+            if old is not None:
+                old.scope.dispose()
+            self._entries[batch_id] = _RegistryEntry(
+                handoff_id=handoff_id,
+                scope=replacement,
+                expires_at=expires_at.astimezone(UTC),
+            )
+
+    def password_for(self, batch_id: UUID, item_id: UUID) -> str | None:
+        with self._lock:
+            if self._disposed:
+                return None
+            self._purge(datetime.now(UTC))
+            entry = self._entries.get(batch_id)
+            return entry.scope.password_for(item_id) if entry is not None else None
+
+    def discard(self, batch_id: UUID) -> None:
+        with self._lock:
+            entry = self._entries.pop(batch_id, None)
+            if entry is not None:
+                entry.scope.dispose()
+
+    def dispose(self) -> None:
+        with self._lock:
+            entries = tuple(self._entries.values())
+            self._entries.clear()
+            self._disposed = True
+        for entry in entries:
+            entry.scope.dispose()
 
 
 def _read_exact(connection: socket.socket, count: int) -> bytes:
@@ -86,6 +165,7 @@ class BatchSecretSocketServer:
         *,
         active_batches: set[UUID] | None = None,
         receive_timeout_seconds: float = 3.0,
+        on_handoff: Callable[[UUID, UUID, str, datetime], None] | None = None,
     ) -> None:
         path = Path(socket_path)
         if not path.is_absolute() or receive_timeout_seconds <= 0:
@@ -97,6 +177,7 @@ class BatchSecretSocketServer:
         self._lock = Lock()
         self._socket: socket.socket | None = None
         self._receive_timeout_seconds = receive_timeout_seconds
+        self._on_handoff = on_handoff
 
     def __repr__(self) -> str:
         return "BatchSecretSocketServer(state='active')"
@@ -117,6 +198,7 @@ class BatchSecretSocketServer:
             listener.bind(str(self._socket_path))
             os.chmod(self._socket_path, 0o660)
             listener.listen(8)
+            listener.settimeout(0.5)
         except OSError:
             listener.close()
             raise SecretChannelError("SECRET_CHANNEL_UNAVAILABLE") from None
@@ -176,6 +258,21 @@ class BatchSecretSocketServer:
                 ):
                     raise SecretChannelError("HANDOFF_REPLAYED")
                 self._entries[entry.batch_id] = entry
+            if self._on_handoff is not None:
+                try:
+                    self._on_handoff(
+                        entry.batch_id,
+                        entry.handoff_id,
+                        entry.password,
+                        entry.expires_at,
+                    )
+                except Exception:
+                    with self._lock:
+                        self._entries.pop(entry.batch_id, None)
+                    raise SecretChannelError("SECRET_CHANNEL_REJECTED") from None
+                with self._lock:
+                    self._entries.pop(entry.batch_id, None)
+                    self._used[entry.handoff_id] = entry.expires_at
             connection.sendall(_ACK)
             return entry.batch_id, entry.handoff_id, entry.password, entry.expires_at
 
@@ -216,9 +313,43 @@ class BatchSecretSocketServer:
             self._socket_path.unlink()
 
 
+class BatchSecretReceiver:
+    """Bounded background accept loop owned by the Worker process."""
+
+    def __init__(self, server: BatchSecretSocketServer) -> None:
+        self._server = server
+        self._stop = Event()
+        self._thread: Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None:
+            return
+        self._server.start()
+        thread = Thread(target=self._run, name="familycare-secret-receiver", daemon=True)
+        self._thread = thread
+        thread.start()
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self._server.receive_once()
+            except OSError, TimeoutError, SecretChannelError:
+                continue
+
+    def close(self) -> None:
+        self._stop.set()
+        self._server.close()
+        thread = self._thread
+        self._thread = None
+        if thread is not None:
+            thread.join(timeout=3)
+
+
 __all__ = [
     "MAX_FRAME_BYTES",
     "MAX_PASSWORD_BYTES",
+    "BatchPasswordRegistry",
+    "BatchSecretReceiver",
     "BatchSecretSocketServer",
     "SecretChannelError",
 ]

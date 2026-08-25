@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -13,6 +16,7 @@ from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from familycare_worker.archive.crypto import ArchiveMetadata
 from familycare_worker.generated_contracts import ExtractionResult
 from familycare_worker.jobs import (
     AnalysisJobRecord,
@@ -23,6 +27,9 @@ from familycare_worker.jobs import (
 from familycare_worker.pdf.intake import ValidatedPdf
 
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_BATCH_EXTRACTOR_CONFIG_HASH = hashlib.sha256(
+    b'{"profile":"quality-v1","quality_rule_version":"quality-v1","table_strategy":"auto"}'
+).hexdigest()
 _REVIEW_STATES = frozenset({"candidate", "confirmed", "rejected"})
 _TOP_LEVEL_KEYS = frozenset(
     {
@@ -50,6 +57,22 @@ class InvalidExtractionResult(RepositoryError):
 class DocumentStateConflict(RepositoryError):
     def __init__(self) -> None:
         super().__init__("DOCUMENT_STATE_CONFLICT")
+
+
+@dataclass(frozen=True)
+class BatchItemRecord:
+    id: UUID
+    batch_id: UUID
+    source_id: str
+    source_key: str
+    document_id: UUID
+    document_version_id: UUID
+    state: str
+    attempts: int
+    max_attempts: int
+    lease_owner: str | None
+    lease_expires_at: datetime | None
+    error_code: str | None
 
 
 def _exact_mapping(value: object, keys: set[str] | frozenset[str]) -> Mapping[str, Any]:
@@ -610,7 +633,435 @@ class ExtractionRepository:
             raise JobStateConflict
 
 
+_BATCH_WORKER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
+
+
+def _lock_owned_batch_item(
+    connection: Connection[dict[str, Any]],
+    item_id: UUID,
+    worker_id: str,
+) -> dict[str, Any]:
+    row = connection.execute(
+        """
+        SELECT item.*, item.lease_expires_at > clock_timestamp() AS lease_valid
+        FROM document_batch_items AS item
+        WHERE item.id = %s
+        FOR UPDATE
+        """,
+        (item_id,),
+    ).fetchone()
+    if (
+        row is None
+        or row["state"] != "running"
+        or row["lease_owner"] != worker_id
+        or not row["lease_valid"]
+    ):
+        raise DocumentStateConflict
+    return row
+
+
+def _refresh_batch_state(
+    connection: Connection[dict[str, Any]],
+    batch_id: UUID,
+) -> None:
+    batch = connection.execute(
+        "SELECT state FROM document_batches WHERE id = %s FOR UPDATE",
+        (batch_id,),
+    ).fetchone()
+    if batch is None:
+        raise DocumentStateConflict
+    if batch["state"] == "cancelled":
+        return
+    counts = connection.execute(
+        """
+        SELECT
+            count(*) AS total,
+            count(*) FILTER (WHERE state = 'succeeded') AS succeeded,
+            count(*) FILTER (WHERE state = 'permanently_failed') AS failed,
+            count(*) FILTER (
+                WHERE state IN ('queued', 'running', 'retryable_failed')
+            ) AS active
+        FROM document_batch_items
+        WHERE batch_id = %s
+        """,
+        (batch_id,),
+    ).fetchone()
+    if counts is None or counts["total"] < 1:
+        raise DocumentStateConflict
+    terminal = False
+    if counts["succeeded"] == counts["total"]:
+        state = "succeeded"
+        terminal = True
+    elif counts["active"] > 0:
+        state = "running"
+    elif counts["failed"] == counts["total"]:
+        state = "failed"
+        terminal = True
+    else:
+        state = "partial"
+    connection.execute(
+        """
+        UPDATE document_batches
+        SET state = %s,
+            completed_at = CASE WHEN %s THEN clock_timestamp() ELSE NULL END,
+            updated_at = clock_timestamp()
+        WHERE id = %s
+        """,
+        (state, terminal, batch_id),
+    )
+
+
+class BatchRepository:
+    """Lease-safe Worker queue and atomic extraction/archive persistence."""
+
+    def __init__(self, database_url: str) -> None:
+        self.database_url = psycopg_database_url(database_url)
+
+    def claim_next_item(
+        self,
+        worker_id: str,
+        *,
+        lease_seconds: int = 180,
+    ) -> BatchItemRecord | None:
+        if _BATCH_WORKER_PATTERN.fullmatch(worker_id) is None:
+            raise ValueError("invalid worker identity")
+        if isinstance(lease_seconds, bool) or not 1 <= lease_seconds <= 3600:
+            raise ValueError("invalid lease duration")
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            expired = connection.execute(
+                """
+                UPDATE document_batch_items
+                SET state = CASE
+                        WHEN attempts >= max_attempts THEN 'permanently_failed'
+                        ELSE 'retryable_failed'
+                    END,
+                    error_code = 'EXTRACTION_TIMEOUT',
+                    available_at = clock_timestamp(), lease_owner = NULL,
+                    lease_expires_at = NULL, heartbeat_at = NULL,
+                    completed_at = CASE WHEN attempts >= max_attempts
+                        THEN clock_timestamp() ELSE NULL END,
+                    updated_at = clock_timestamp()
+                WHERE state = 'running' AND lease_expires_at <= clock_timestamp()
+                RETURNING batch_id
+                """
+            ).fetchall()
+            for batch_id in {cast(UUID, row["batch_id"]) for row in expired}:
+                _refresh_batch_state(connection, batch_id)
+            row = connection.execute(
+                """
+                WITH candidate AS (
+                    SELECT item.id
+                    FROM document_batch_items AS item
+                    JOIN document_batches AS batch ON batch.id = item.batch_id
+                    WHERE item.state IN ('queued', 'retryable_failed')
+                      AND item.available_at <= clock_timestamp()
+                      AND item.attempts < item.max_attempts
+                      AND batch.state IN ('created', 'running', 'partial')
+                    ORDER BY item.available_at, item.created_at, item.id
+                    FOR UPDATE OF item SKIP LOCKED
+                    LIMIT 1
+                )
+                UPDATE document_batch_items AS item
+                SET state = 'running', attempts = item.attempts + 1,
+                    lease_owner = %s,
+                    lease_expires_at = clock_timestamp() + (%s * interval '1 second'),
+                    heartbeat_at = clock_timestamp(), error_code = NULL,
+                    updated_at = clock_timestamp()
+                FROM candidate
+                WHERE item.id = candidate.id
+                RETURNING item.*
+                """,
+                (worker_id, lease_seconds),
+            ).fetchone()
+            if row is None:
+                return None
+            document_id = row["document_id"]
+            if document_id is None:
+                document = connection.execute(
+                    """
+                    INSERT INTO documents (source_key, document_kind, status)
+                    VALUES (%s, 'supporting', 'pending')
+                    RETURNING id
+                    """,
+                    (f"private-import/{row['batch_id'].hex}/{row['source_id']}",),
+                ).fetchone()
+                if document is None:
+                    raise DocumentStateConflict
+                document_id = document["id"]
+                connection.execute(
+                    "UPDATE document_batch_items SET document_id = %s WHERE id = %s",
+                    (document_id, row["id"]),
+                )
+            _refresh_batch_state(connection, cast(UUID, row["batch_id"]))
+            return BatchItemRecord(
+                id=cast(UUID, row["id"]),
+                batch_id=cast(UUID, row["batch_id"]),
+                source_id=cast(str, row["source_id"]),
+                source_key=cast(str, row["source_key"]),
+                document_id=cast(UUID, document_id),
+                document_version_id=UUID(int=cast(UUID, row["id"]).int),
+                state="running",
+                attempts=cast(int, row["attempts"]),
+                max_attempts=cast(int, row["max_attempts"]),
+                lease_owner=worker_id,
+                lease_expires_at=cast(datetime, row["lease_expires_at"]),
+                error_code=None,
+            )
+
+    def heartbeat(self, item_id: UUID, worker_id: str, *, lease_seconds: int = 180) -> bool:
+        if _BATCH_WORKER_PATTERN.fullmatch(worker_id) is None or not 1 <= lease_seconds <= 3600:
+            raise ValueError("invalid batch heartbeat")
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            row = connection.execute(
+                """
+                UPDATE document_batch_items
+                SET heartbeat_at = clock_timestamp(),
+                    lease_expires_at = clock_timestamp() + (%s * interval '1 second'),
+                    updated_at = clock_timestamp()
+                WHERE id = %s AND state = 'running' AND lease_owner = %s
+                  AND lease_expires_at > clock_timestamp()
+                RETURNING id
+                """,
+                (lease_seconds, item_id, worker_id),
+            ).fetchone()
+        return row is not None
+
+    def mark_password_required(self, item_id: UUID, worker_id: str, **_: object) -> None:
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            item = _lock_owned_batch_item(connection, item_id, worker_id)
+            connection.execute(
+                """
+                UPDATE document_batch_items
+                SET state = 'password_required', error_code = 'PASSWORD_REQUIRED',
+                    lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                    updated_at = clock_timestamp()
+                WHERE id = %s
+                """,
+                (item_id,),
+            )
+            _refresh_batch_state(connection, cast(UUID, item["batch_id"]))
+
+    def mark_failed(
+        self,
+        item_id: UUID,
+        worker_id: str,
+        error_code: str,
+        **_: object,
+    ) -> None:
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,63}", error_code):
+            error_code = "RESOURCE_LIMIT_EXCEEDED"
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            item = _lock_owned_batch_item(connection, item_id, worker_id)
+            retryable = (
+                error_code in _BATCH_RETRYABLE_CODES and item["attempts"] < item["max_attempts"]
+            )
+            connection.execute(
+                """
+                UPDATE document_batch_items
+                SET state = %s, error_code = %s,
+                    available_at = CASE WHEN %s
+                        THEN clock_timestamp() + interval '5 seconds' ELSE available_at END,
+                    lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                    completed_at = CASE WHEN %s THEN NULL ELSE clock_timestamp() END,
+                    updated_at = clock_timestamp()
+                WHERE id = %s
+                """,
+                (
+                    "retryable_failed" if retryable else "permanently_failed",
+                    error_code,
+                    retryable,
+                    retryable,
+                    item_id,
+                ),
+            )
+            _refresh_batch_state(connection, cast(UUID, item["batch_id"]))
+
+    def mark_succeeded(
+        self,
+        item_id: UUID,
+        worker_id: str,
+        *args: object,
+        archive: ArchiveMetadata | None = None,
+        extraction: object = None,
+        validated: ValidatedPdf | None = None,
+        **_: object,
+    ) -> None:
+        del args
+        if archive is None or validated is None:
+            raise DocumentStateConflict
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            item = _lock_owned_batch_item(connection, item_id, worker_id)
+            document_id = item["document_id"]
+            if not isinstance(document_id, UUID):
+                raise DocumentStateConflict
+            result = _validate_result(
+                extraction,
+                document_version_id=archive.document_version_id,
+                expected_content_sha256=validated.content_sha256,
+                expected_config_hash=_BATCH_EXTRACTOR_CONFIG_HASH,
+            )
+            connection.execute(
+                """
+                INSERT INTO document_versions (
+                    id, document_id, version_number, content_sha256, byte_size, page_count
+                )
+                VALUES (%s, %s, 1, %s, %s, %s)
+                """,
+                (
+                    archive.document_version_id,
+                    document_id,
+                    validated.content_sha256,
+                    validated.byte_size,
+                    validated.page_count,
+                ),
+            )
+            extraction_row = connection.execute(
+                """
+                INSERT INTO extractions (
+                    document_version_id, extractor_name, extractor_version,
+                    extractor_config_hash, quality_rule_version, status, succeeded_at
+                )
+                VALUES (%s, %s, %s, %s, %s, 'succeeded', clock_timestamp())
+                RETURNING id
+                """,
+                (
+                    archive.document_version_id,
+                    result["extractor_name"],
+                    result["extractor_version"],
+                    result["extractor_config_hash"],
+                    result["quality_rule_version"],
+                ),
+            ).fetchone()
+            if extraction_row is None:
+                raise DocumentStateConflict
+            extraction_id = cast(UUID, extraction_row["id"])
+            for page in result["pages"]:
+                quality = page["quality"]
+                page_row = connection.execute(
+                    """
+                    INSERT INTO extraction_pages (
+                        extraction_id, page_number, width_points, height_points,
+                        non_whitespace_chars, alphanumeric_ratio,
+                        replacement_character_ratio, maximum_repeated_character_run,
+                        classification, warning_codes
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        extraction_id,
+                        page["page_number"],
+                        page["width_points"],
+                        page["height_points"],
+                        quality["non_whitespace_chars"],
+                        quality["alphanumeric_ratio"],
+                        quality["replacement_character_ratio"],
+                        quality["maximum_repeated_character_run"],
+                        quality["classification"],
+                        Jsonb(page["warning_codes"]),
+                    ),
+                ).fetchone()
+                if page_row is None:
+                    raise DocumentStateConflict
+                page_id = cast(UUID, page_row["id"])
+                for block in page["blocks"]:
+                    connection.execute(
+                        """
+                        INSERT INTO extraction_blocks (page_id, text, bbox, reading_order)
+                        VALUES (%s, %s, %s, %s)
+                        """,
+                        (page_id, block["text"], Jsonb(block["bbox"]), block["reading_order"]),
+                    )
+                for table in page["tables"]:
+                    table_row = connection.execute(
+                        """
+                        INSERT INTO extraction_tables (page_id, bbox, metadata_json, review_state)
+                        VALUES (%s, %s, %s, %s)
+                        RETURNING id
+                        """,
+                        (page_id, Jsonb(table["bbox"]), Jsonb({}), table["review_state"]),
+                    ).fetchone()
+                    if table_row is None:
+                        raise DocumentStateConflict
+                    for cell in table["cells"]:
+                        connection.execute(
+                            """
+                            INSERT INTO extraction_cells (
+                                table_id, row_index, column_index, text, bbox, review_state
+                            )
+                            VALUES (%s, %s, %s, %s, %s, %s)
+                            """,
+                            (
+                                table_row["id"],
+                                cell["row_index"],
+                                cell["column_index"],
+                                cell["text"],
+                                Jsonb(cell["bbox"]),
+                                cell["review_state"],
+                            ),
+                        )
+            connection.execute(
+                """
+                INSERT INTO managed_archives (
+                    id, document_version_id, object_key, scheme, key_version,
+                    nonce, wrapped_data_key, ciphertext_size, auth_tag
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    archive.archive_id,
+                    archive.document_version_id,
+                    archive.object_key,
+                    archive.scheme,
+                    archive.key_version,
+                    archive.nonce,
+                    archive.wrapped_data_key,
+                    archive.ciphertext_size,
+                    archive.auth_tag,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE documents
+                SET media_type = %s, byte_size = %s, page_count = %s,
+                    status = 'ready', updated_at = clock_timestamp()
+                WHERE id = %s
+                """,
+                (
+                    validated.media_type,
+                    validated.byte_size,
+                    validated.page_count,
+                    document_id,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE document_batch_items
+                SET state = 'succeeded', error_code = NULL,
+                    lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
+                    completed_at = clock_timestamp(), updated_at = clock_timestamp()
+                WHERE id = %s
+                """,
+                (item_id,),
+            )
+            _refresh_batch_state(connection, cast(UUID, item["batch_id"]))
+
+    def active_password_batches(self) -> set[UUID]:
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            rows = connection.execute(
+                """
+                SELECT DISTINCT batch_id
+                FROM document_batch_items
+                WHERE state = 'password_required'
+                """
+            ).fetchall()
+        return {cast(UUID, row["batch_id"]) for row in rows}
+
+
 __all__ = [
+    "BatchItemRecord",
+    "BatchRepository",
     "DocumentStateConflict",
     "ExtractionRepository",
     "InvalidExtractionResult",

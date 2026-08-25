@@ -257,6 +257,158 @@
         "title": "AuthUserResponse",
         "type": "object"
       },
+      "BatchCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Source Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "family_member_id",
+          "source_ids"
+        ],
+        "title": "BatchCreateRequest",
+        "type": "object"
+      },
+      "BatchItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "maximum": 20.0,
+            "minimum": 0.0,
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "display_label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Label",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ARCHIVE_INTEGRITY_ERROR",
+                  "ARCHIVE_KEY_UNAVAILABLE",
+                  "ARCHIVE_WRITE_FAILED",
+                  "DOCUMENT_NOT_FOUND",
+                  "DOCUMENT_PATH_ESCAPE",
+                  "DOCUMENT_TOO_LARGE",
+                  "EXTRACTION_TIMEOUT",
+                  "INVALID_REQUEST",
+                  "PAGE_LIMIT_EXCEEDED",
+                  "PASSWORD_INVALID",
+                  "PASSWORD_REQUIRED",
+                  "PDF_CORRUPT",
+                  "RESOURCE_LIMIT_EXCEEDED",
+                  "SOURCE_CHANGED",
+                  "TEMP_CLEANUP_FAILED",
+                  "UNSUPPORTED_FILE_TYPE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "source_id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "cancelled",
+              "password_required",
+              "permanently_failed",
+              "queued",
+              "retryable_failed",
+              "running",
+              "succeeded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "display_label",
+          "state",
+          "error_code",
+          "attempts"
+        ],
+        "title": "BatchItemResponse",
+        "type": "object"
+      },
+      "BatchResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "format": "uuid",
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItemResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "cancelled",
+              "created",
+              "failed",
+              "partial",
+              "running",
+              "succeeded"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "batch_id",
+          "family_member_id",
+          "state",
+          "items"
+        ],
+        "title": "BatchResponse",
+        "type": "object"
+      },
       "BenefitCalculationResponse": {
         "additionalProperties": false,
         "description": "Calculation result projection with conditional amounts and trace reasons.",
@@ -2815,6 +2967,19 @@
         "title": "FamilyMemberUpdateRequest",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "HealthResponse": {
         "description": "Stable public health response.",
         "properties": {
@@ -2843,6 +3008,40 @@
           "status"
         ],
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "ImportSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_label": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Display Label",
+            "type": "string"
+          },
+          "encrypted": {
+            "title": "Encrypted",
+            "type": "boolean"
+          },
+          "size_bytes": {
+            "maximum": 26214400.0,
+            "minimum": 0.0,
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "source_id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "display_label",
+          "size_bytes",
+          "encrypted"
+        ],
+        "title": "ImportSourceResponse",
         "type": "object"
       },
       "LoginRequest": {
@@ -3214,6 +3413,22 @@
           "field_id"
         ],
         "title": "OptionalQuestionResponse",
+        "type": "object"
+      },
+      "PasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "PasswordRequest",
         "type": "object"
       },
       "PolicyCreateRequest": {
@@ -4940,6 +5155,46 @@
           "version"
         ],
         "title": "TermsEditionResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
         "type": "object"
       },
       "familycare_api__claims__schemas__ExpectedVersionRequest": {
@@ -7022,6 +7277,256 @@
         "summary": "List Coverage Rule Versions",
         "tags": [
           "clause search"
+        ]
+      }
+    },
+    "/api/v1/document-batches": {
+      "post": {
+        "operationId": "create_batch_api_v1_document_batches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Batch",
+        "tags": [
+          "private document import"
+        ]
+      }
+    },
+    "/api/v1/document-batches/{batch_id}": {
+      "get": {
+        "operationId": "get_batch_api_v1_document_batches__batch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Get Batch",
+        "tags": [
+          "private document import"
+        ]
+      }
+    },
+    "/api/v1/document-batches/{batch_id}/cancel": {
+      "post": {
+        "operationId": "cancel_batch_api_v1_document_batches__batch_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Cancel Batch",
+        "tags": [
+          "private document import"
+        ]
+      }
+    },
+    "/api/v1/document-batches/{batch_id}/password": {
+      "post": {
+        "operationId": "handoff_password_api_v1_document_batches__batch_id__password_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Handoff Password",
+        "tags": [
+          "private document import"
+        ]
+      }
+    },
+    "/api/v1/document-import-sources": {
+      "get": {
+        "operationId": "list_import_sources_api_v1_document_import_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ImportSourceResponse"
+                  },
+                  "title": "Response List Import Sources Api V1 Document Import Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "List Import Sources",
+        "tags": [
+          "private document import"
         ]
       }
     },

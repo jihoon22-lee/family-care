@@ -20,6 +20,11 @@ export const API_PATHS = [
   "/api/v1/clauses/search",
   "/api/v1/coverage-rules/{rule_id}/publish",
   "/api/v1/coverage-rules/{rule_id}/versions",
+  "/api/v1/document-batches",
+  "/api/v1/document-batches/{batch_id}",
+  "/api/v1/document-batches/{batch_id}/cancel",
+  "/api/v1/document-batches/{batch_id}/password",
+  "/api/v1/document-import-sources",
   "/api/v1/documents/analysis",
   "/api/v1/evidence/{evidence_id}",
   "/api/v1/family-members",
@@ -165,6 +170,32 @@ export const API_OPERATIONS = [
     path: "/api/v1/coverage-rules/{rule_id}/versions",
     operationId:
       "list_coverage_rule_versions_api_v1_coverage_rules__rule_id__versions_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/document-batches",
+    operationId: "create_batch_api_v1_document_batches_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/document-batches/{batch_id}",
+    operationId: "get_batch_api_v1_document_batches__batch_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/document-batches/{batch_id}/cancel",
+    operationId: "cancel_batch_api_v1_document_batches__batch_id__cancel_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/document-batches/{batch_id}/password",
+    operationId:
+      "handoff_password_api_v1_document_batches__batch_id__password_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/document-import-sources",
+    operationId: "list_import_sources_api_v1_document_import_sources_get",
   },
   {
     method: "POST",
@@ -555,6 +586,53 @@ export interface AuthUserResponse {
   needs_reauthentication: boolean;
   user_id: string;
   username: string;
+}
+
+export interface BatchCreateRequest {
+  family_member_id: string;
+  schema_version: "1";
+  source_ids: Array<string>;
+}
+
+export interface BatchItemResponse {
+  attempts: number;
+  display_label: string;
+  error_code:
+    | "ARCHIVE_INTEGRITY_ERROR"
+    | "ARCHIVE_KEY_UNAVAILABLE"
+    | "ARCHIVE_WRITE_FAILED"
+    | "DOCUMENT_NOT_FOUND"
+    | "DOCUMENT_PATH_ESCAPE"
+    | "DOCUMENT_TOO_LARGE"
+    | "EXTRACTION_TIMEOUT"
+    | "INVALID_REQUEST"
+    | "PAGE_LIMIT_EXCEEDED"
+    | "PASSWORD_INVALID"
+    | "PASSWORD_REQUIRED"
+    | "PDF_CORRUPT"
+    | "RESOURCE_LIMIT_EXCEEDED"
+    | "SOURCE_CHANGED"
+    | "TEMP_CLEANUP_FAILED"
+    | "UNSUPPORTED_FILE_TYPE"
+    | null;
+  source_id: string;
+  state:
+    | "cancelled"
+    | "password_required"
+    | "permanently_failed"
+    | "queued"
+    | "retryable_failed"
+    | "running"
+    | "succeeded";
+}
+
+export interface BatchResponse {
+  batch_id: string;
+  family_member_id: string;
+  items: Array<BatchItemResponse>;
+  schema_version: "1";
+  state:
+    "cancelled" | "created" | "failed" | "partial" | "running" | "succeeded";
 }
 
 export interface BenefitCalculationResponse {
@@ -1117,10 +1195,21 @@ export interface FamilyMemberUpdateRequest {
   internal_alias?: string | null;
 }
 
+export interface HTTPValidationError {
+  detail?: Array<ValidationError>;
+}
+
 export interface HealthResponse {
   service?: "api";
   status: "ok" | "ready" | "unavailable";
   version?: string;
+}
+
+export interface ImportSourceResponse {
+  display_label: string;
+  encrypted: boolean;
+  size_bytes: number;
+  source_id: string;
 }
 
 export interface LoginRequest {
@@ -1192,6 +1281,10 @@ export interface OptionalQuestionResponse {
     | "admission"
     | "outpatient"
     | "pharmacy";
+}
+
+export interface PasswordRequest {
+  password: string;
 }
 
 export interface PolicyCandidate {
@@ -1560,6 +1653,14 @@ export interface TermsEditionResponse {
   product_display: string;
   product_key: string;
   version: number;
+}
+
+export interface ValidationError {
+  ctx?: Record<string, unknown>;
+  input?: unknown;
+  loc: Array<string | number>;
+  msg: string;
+  type: string;
 }
 
 export interface familycare_api__claims__schemas__ExpectedVersionRequest {
