@@ -116,6 +116,56 @@ describe("hybrid medical event input", () => {
     );
   });
 
+  it("keeps the manual editor mounted when optional structuring fails", async () => {
+    const user = userEvent.setup();
+    const baseEvent = {
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000202",
+      id: "00000000-0000-4000-8000-000000000201",
+      mode: "pre_visit",
+      optional_questions: [],
+      situation: "Synthetic pre-visit situation",
+      structured_facts: [],
+      visit_date: null,
+    };
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ ...baseEvent, version: 1 }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ...baseEvent, version: 2 }))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error_code: "STRUCTURING_UNAVAILABLE",
+            message: "structuring unavailable",
+          },
+          503,
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewEventPage memberId="00000000-0000-4000-8000-000000000202" />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      "Synthetic pre-visit situation",
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    await user.click(
+      await screen.findByRole("button", { name: "선택적으로 자동 구조화" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "직접 입력한 내용으로 계속할 수 있습니다",
+    );
+    expect(screen.getByRole("button", { name: "결과 확인" })).toBeEnabled();
+  });
+
   it("requires a situation but does not persist an unsaved draft", async () => {
     const user = userEvent.setup();
     const storageWrite = vi.spyOn(Storage.prototype, "setItem");

@@ -116,14 +116,17 @@ async function waitForStructuring(statusUrl: string) {
 function EventEditor({
   memberId,
   initialEvent,
+  initialMode,
   initialReceiptLines = [],
 }: {
   memberId: string;
   initialEvent?: MedicalEvent;
+  initialMode?: EventDraftView["mode"];
   initialReceiptLines?: ReceiptLineView[];
 }) {
   const [medicalEvent, setMedicalEvent] = useState(initialEvent);
   const [receiptLines, setReceiptLines] = useState(initialReceiptLines);
+  const [editorRevision, setEditorRevision] = useState(0);
 
   async function persistDraft(draft: EventDraftView): Promise<MedicalEvent> {
     if (!medicalEvent) {
@@ -165,6 +168,7 @@ function EventEditor({
     await waitForStructuring(accepted.status_url);
     const structured = await getMedicalEvent(saved.id);
     setMedicalEvent(structured);
+    setEditorRevision((current) => current + 1);
   }
 
   async function analyze(draft: EventDraftView): Promise<void> {
@@ -177,10 +181,11 @@ function EventEditor({
 
   return (
     <EventComposer
-      key={medicalEvent ? `${medicalEvent.id}:${medicalEvent.version}` : "new"}
+      key={medicalEvent ? `${medicalEvent.id}:${editorRevision}` : "new"}
       memberId={memberId}
       initialEvent={medicalEvent}
       initialReceiptLines={receiptLines}
+      mode={initialMode}
       onAnalyze={analyze}
       onStructure={structure}
       onSubmit={async (draft) => {
@@ -206,10 +211,12 @@ function MissingMemberContext() {
 }
 
 export function NewEventPage({ memberId }: { memberId?: string }) {
-  const selectedMemberId =
-    memberId ?? new URLSearchParams(window.location.search).get("member") ?? "";
+  const search = new URLSearchParams(window.location.search);
+  const selectedMemberId = memberId ?? search.get("member") ?? "";
+  const initialMode =
+    search.get("mode") === "post_treatment" ? "post_treatment" : "pre_visit";
   if (!selectedMemberId) return <MissingMemberContext />;
-  return <EventEditor memberId={selectedMemberId} />;
+  return <EventEditor initialMode={initialMode} memberId={selectedMemberId} />;
 }
 
 export function ExistingEventPage({ eventId }: { eventId: string }) {
