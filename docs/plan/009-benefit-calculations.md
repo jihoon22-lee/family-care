@@ -144,6 +144,8 @@ class ReceiptLine:
     coverage_category: Literal["covered", "possible_excluded", "excluded", "unknown"]
     amount: Money
     confirmation_level: Literal["user", "ai_structured", "unconfirmed"]
+    note_code: str | None
+    version: int
 
 
 @dataclass(frozen=True)
@@ -189,13 +191,13 @@ def detect_multiple_indemnity_contracts(
 ) -> MultipleIndemnityResult: ...
 ```
 
-Fixed formula example, evaluated only after rule validation:
+Fixed formula example, evaluated only after rule and Evidence validation:
 
 ```python
-base = rider_insured_amount
-fixed = fixed_amount if fixed_amount is not None else base * payment_rate
-reduced = fixed * reduction_rate
-final = round_money(reduced * eligible_days, rounding_rule, currency)
+calculation = validate_and_compile_rule(rule.rule_document)
+currency = confirmed_fact("Rider.currency")
+intermediate = evaluate_decimal(calculation, confirmed_facts)
+final = require_explicit_rounding(intermediate, calculation, currency)
 ```
 
 Every intermediate value is recorded as a `CalculationStep`. Indemnity formula is similarly explicit:
@@ -203,8 +205,9 @@ Every intermediate value is recorded as a `CalculationStep`. Indemnity formula i
 ```python
 confirmed = sum_money(confirmed_lines)
 eligible = max_money(Money(Decimal("0"), currency), confirmed - deductible)
-reimbursed = round_money(eligible * applied_rate, rounding_rule, currency)
-final = min_money(reimbursed, applied_limit) if applied_limit else reimbursed
+reimbursed = eligible * applied_rate
+limited = min_money(reimbursed, applied_limit)
+final = round_money(limited, rounding_rule, currency)
 ```
 
 If a line or condition is not confirmed, preserve it in `additional` or `excluded` rather than inventing a value. If more than one independent indemnity candidate exists, return `status="unknown"` for allocation and do not add per-contract estimates.
@@ -218,11 +221,15 @@ DELETE /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
 GET    /api/v1/medical-events/{event_id}/calculations
 ```
 
-Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amounts, three-letter uppercase currency, explicit category/confirmation, and expected version for update/delete. A client cannot submit `confirmed_amount`, `applied_rate`, or a rule version as authoritative calculation output. Responses include bounded calculation steps and reason codes, not receipt notes/full medical text.
+Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amounts, three-letter uppercase currency, explicit category/confirmation, bounded `note_code`, and expected version for update/delete. A client cannot submit `confirmed_amount`, `applied_rate`, or a rule version as authoritative calculation output. `GET .../calculations` returns a `BenefitCalculationsResponse` envelope with Decimal-string Money objects, calculation IDs/version/created time, rule/evidence IDs, bounded calculation steps, hold/exclusion reason codes, and `Cache-Control: no-store`; it does not return receipt notes/full medical text.
 
 ### JSON Schema contract
 
-`benefit-calculation.v1.schema.json` requires `schema_version: "1"`, `kind`, `status`, currency/amount objects, steps, and hold reasons with `additionalProperties: false`. Amounts are decimal strings matching a fixed numeric pattern; negative values are rejected. `status` is exactly `computed`, `partial`, or `unknown`. The synthetic example includes one fixed calculation with intermediate steps and one partial indemnity calculation with confirmed/additional/excluded amounts; it does not contain a file or diagnosis.
+`benefit-calculation.v1.schema.json` is a strict `schema_version: "1"` envelope whose bounded `calculations` entries require `kind`, `status`, currency/amount objects, rule/evidence lineage, steps, and hold reasons with `additionalProperties: false`. Amounts and rates are Decimal strings matching fixed non-negative patterns; negative values, exponents, and numeric JSON amounts are rejected. `status` is exactly `computed`, `partial`, or `unknown`. The synthetic example includes one fixed calculation with intermediate steps and one partial indemnity calculation with confirmed/additional/excluded amounts; it does not contain a file, path, diagnosis, or raw note.
+
+## Implementation status in this worktree
+
+Tasks 1–6 are implemented and locally verified in the current branch: migration `0008`, Decimal primitives and validators, fixed/indemnity calculators, household-scoped PostgreSQL persistence, receipt-line/calculation HTTP routes, OpenAPI registration, the strict transport contract, synthetic PostgreSQL integration, and privacy assertions. The Focused Post-Merge Verification section remains intentionally unchecked; no PR, CI, merge, release, or real-data/device verification is implied here.
 
 ## Tasks
 
@@ -237,9 +244,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Consumes: `0007_coverage_decision_engine`, claim candidates, executable rule versions, and migration-spy conventions.
 - Produces: `revision = "0008_benefit_calculations"`, `down_revision = "0007_coverage_decision_engine"`, three tables, Decimal columns/checks, immutable step uniqueness, and reverse-order downgrade.
 
-- [ ] **Step 1: Write failing migration tests.** Assert exact tables, FKs, numeric precision/scale, category/status checks, soft-delete/version fields, step uniqueness, no file/path/text columns, and preservation of Phase 1/decision tables.
+- [x] **Step 1: Write failing migration tests.** Assert exact tables, FKs, numeric precision/scale, category/status checks, soft-delete/version fields, step uniqueness, no file/path/text columns, and preservation of Phase 1/decision tables.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations_migration.py -q
@@ -247,9 +254,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL because `0008_benefit_calculations.py` is absent.
 
-- [ ] **Step 3: Implement the additive Alembic migration.** Use PostgreSQL `NUMERIC(18,2)`/`NUMERIC(18,6)`, named constraints, no binary/path columns, and a unique `(benefit_calculation_id, step_number)` constraint.
+- [x] **Step 3: Implement the additive Alembic migration.** Use PostgreSQL `NUMERIC(18,2)`/`NUMERIC(18,6)`, named constraints, no binary/path columns, and a unique `(benefit_calculation_id, step_number)` constraint.
 
-- [ ] **Step 4: Run migration tests and upgrade.**
+- [x] **Step 4: Run migration tests and upgrade.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations_migration.py -q
@@ -258,7 +265,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: shape tests pass and synthetic PostgreSQL reaches `0008_benefit_calculations`.
 
-- [ ] **Step 5: Commit the migration.**
+- [x] **Step 5: Commit the migration.**
 
   ```bash
   git add apps/api/migrations/versions/0008_benefit_calculations.py apps/api/tests/test_benefit_calculations_migration.py
@@ -277,9 +284,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Consumes: decision `ClaimCandidate`/`FactContext` types and rule units from `familycare_api.clauses.dsl`.
 - Produces: `Money`, `ReceiptLine`, `CalculationStep`, `BenefitCalculationResult`, `validate_receipt_line`, `round_money`, and safe Decimal conversion.
 
-- [ ] **Step 1: Write failing Decimal/validation tests.** Cover string-to-Decimal conversion, precision/scale, negative/overflow, zero, currency case, mismatch, invalid category/confirmation, and explicit `ROUND_HALF_UP`/rule-selected rounding.
+- [x] **Step 1: Write failing Decimal/validation tests.** Cover string-to-Decimal conversion, precision/scale, negative/overflow, zero, currency case, mismatch, invalid category/confirmation, and explicit `ROUND_HALF_UP`/rule-selected rounding.
 
-- [ ] **Step 2: Run the focused RED command.**
+- [x] **Step 2: Run the focused RED command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -q
@@ -287,7 +294,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL because calculation types and Decimal validation functions are absent.
 
-- [ ] **Step 3: Implement Decimal-only primitives.** Reject float input, quantize only at the explicitly requested rounding boundary, preserve currency on every Money value, and raise stable validation codes.
+- [x] **Step 3: Implement Decimal-only primitives.** Reject float input, quantize only at the explicitly requested rounding boundary, preserve currency on every Money value, and raise stable validation codes.
 
   ```python
   def decimal_from_wire(value: str) -> Decimal:
@@ -299,7 +306,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
       return parsed
   ```
 
-- [ ] **Step 4: Run calculation unit tests and static checks.**
+- [x] **Step 4: Run calculation unit tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -q
@@ -310,7 +317,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: every Decimal/validation boundary passes without float arithmetic.
 
-- [ ] **Step 5: Commit the monetary primitives.**
+- [x] **Step 5: Commit the monetary primitives.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/calculations.py apps/api/src/familycare_api/decisions/calculation_validation.py apps/api/tests/test_benefit_calculations.py
@@ -325,12 +332,12 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Test: `apps/api/tests/test_benefit_calculations.py`
 
 **Interfaces:**
-- Consumes: validated Decimal money, executable fixed/rate rule, Rider insured amount, reduction/days/frequency facts, and ClaimCandidate.
-- Produces: `calculate_fixed_benefit` with insured amount, fixed/rate amount, reduction, days/count, rounding, intermediate steps, and final conditional estimate.
+- Consumes: validated Decimal money, an executable fixed/rate rule, confirmed Rider facts, and a `MATCH` ClaimCandidate.
+- Produces: `calculate_fixed_benefit` with validated DSL arithmetic, explicit rounding, ordered intermediate steps, and a final conditional estimate or value-free `UNKNOWN` reason.
 
-- [ ] **Step 1: Add failing fixed decision-table tests.** Cover fixed amount, insured amount × rate, reduction, eligible day count, first-payment/history hold, currency, rounding boundary, missing formula, unsupported unit, and overflow.
+- [x] **Step 1: Add failing fixed decision-table tests.** Cover nested rate and fixed-literal DSL formulas, `MATCH`/rule/fact guards, currency validation, explicit rounding, unsupported/overflow values, and complete ordered traces.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -k fixed -q
@@ -338,22 +345,18 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL because `calculate_fixed_benefit` is not implemented.
 
-- [ ] **Step 3: Implement the fixed calculator.** Require an executable rule and confirmed required facts; preserve every operation as an ordered `CalculationStep`; return `unknown` with a reason when a required unit/formula/history value is missing.
+- [x] **Step 3: Implement the fixed calculator.** Require a `MATCH` candidate, published executable approved rule/evidence, and confirmed required facts; evaluate only the allowlisted Decimal DSL and preserve every operation as an ordered `CalculationStep`; return value-free `UNKNOWN` for missing or unsafe inputs.
 
   ```python
   def calculate_fixed_benefit(candidate, rule, facts):
-      if not rule.executable:
-          return BenefitCalculationResult.unknown("RULE_NOT_EXECUTABLE")
-      if facts.missing_required:
-          return BenefitCalculationResult.unknown("MISSING_FIXED_INPUT")
-      base = candidate.rider_insured_amount
-      amount = rule.fixed_amount or base * rule.payment_rate
-      amount = amount * rule.reduction_rate
-      final = round_money(amount * facts.eligible_days, rule.rounding_rule, base.currency)
-      return BenefitCalculationResult.computed_with_steps(...)
+      if candidate.aggregate_result != "MATCH":
+          return BenefitCalculationResult.unknown("CANDIDATE_NOT_MATCHED")
+      calculation = validate_and_compile_rule(rule.rule_document)
+      amount = evaluate_decimal(calculation, confirmed_facts=facts)
+      return BenefitCalculationResult.computed_with_steps(amount)
   ```
 
-- [ ] **Step 4: Run fixed tests and static checks.**
+- [x] **Step 4: Run fixed tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -k fixed -q
@@ -364,7 +367,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: fixed formulas, missing facts, and trace rows pass.
 
-- [ ] **Step 5: Commit fixed-benefit behavior.**
+- [x] **Step 5: Commit fixed-benefit behavior.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/calculations.py apps/api/tests/test_benefit_calculations.py
@@ -383,9 +386,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Consumes: validated `ReceiptLine`, indemnity eligibility/deductible/rate/limit rule, and multiple ClaimCandidates.
 - Produces: `calculate_indemnity`, `split_confirmed_additional_excluded`, and `detect_multiple_indemnity_contracts` with partial/unknown results.
 
-- [ ] **Step 1: Add failing indemnity tests.** Cover no lines, one confirmed covered line, possible excluded line, excluded reason, deductible/rate/limit, currency mismatch, partial data, negative value, and two independent indemnity contracts without summing.
+- [x] **Step 1: Add failing indemnity tests.** Cover no lines, confirmed covered lines, possible/unknown/unconfirmed additional amounts, excluded amounts, deductible/rate/limit, currency mismatch, partial data, validation errors, and two independent indemnity contracts without summing.
 
-- [ ] **Step 2: Run the focused RED test.**
+- [x] **Step 2: Run the focused RED test.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -k indemnity -q
@@ -393,17 +396,24 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL because indemnity and multiple-contract functions are incomplete.
 
-- [ ] **Step 3: Implement the minimum partial calculator.** Separate line categories first, calculate only confirmed eligible amounts, preserve additional/excluded values and reasons, and return `unknown` allocation when independent contracts coexist.
+- [x] **Step 3: Implement the minimum partial calculator.** Separate line categories first, calculate only confirmed eligible amounts, preserve additional/excluded values, apply the explicit deductible/rate/limit/round sequence, and return `UNKNOWN` allocation when independent contracts coexist.
 
   ```python
   def detect_multiple_indemnity_contracts(candidates):
-      indemnity = tuple(item for item in candidates if item.rider_type == "indemnity")
+      indemnity = tuple(
+          item
+          for item in candidates
+          if item.rider_type == "indemnity" and item.aggregate_result != "NO_MATCH"
+      )
       if len(indemnity) > 1:
-          return MultipleIndemnityResult(allocation="UNKNOWN", candidates=indemnity)
-      return MultipleIndemnityResult(allocation="SINGLE", candidates=indemnity)
+          return MultipleIndemnityResult(allocation="UNKNOWN", candidate_ids=tuple(item.id for item in indemnity))
+      return MultipleIndemnityResult(
+          allocation="SINGLE" if indemnity else "NONE",
+          candidate_ids=tuple(item.id for item in indemnity),
+      )
   ```
 
-- [ ] **Step 4: Run indemnity tests and static checks.**
+- [x] **Step 4: Run indemnity tests and static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations.py -k indemnity -q
@@ -414,7 +424,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: partial confirmed/additional/excluded outputs pass and no contract amounts are summed across independent indemnity Riders.
 
-- [ ] **Step 5: Commit indemnity behavior.**
+- [x] **Step 5: Commit indemnity behavior.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/calculations.py apps/api/src/familycare_api/decisions/calculation_validation.py apps/api/tests/test_benefit_calculations.py
@@ -442,9 +452,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Consumes: pure calculators, `medical_events`, `claim_candidates`, and `0008` tables.
 - Produces: receipt-line CRUD, calculation retrieval, strict schemas, and the four HTTP routes in this plan.
 
-- [ ] **Step 1: Write failing HTTP/contract tests.** Assert extra fields are rejected, client cannot submit authoritative result fields, expected-version conflict is sanitized, Decimal wire values round-trip, response includes steps/hold reasons, and no file/path/raw note appears.
+- [x] **Step 1: Write failing HTTP/contract tests.** Assert extra fields are rejected, client cannot submit authoritative result fields, expected-version conflict is sanitized, Decimal wire values round-trip, response includes steps/hold reasons, and no file/path/raw note appears.
 
-- [ ] **Step 2: Run the focused RED tests.**
+- [x] **Step 2: Run the focused RED tests.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_receipt_lines_api.py apps/api/tests/test_benefit_contracts.py -q
@@ -452,9 +462,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL because calculation repository/service/schemas/routes and contract artifacts are absent.
 
-- [ ] **Step 3: Implement scoped persistence and strict adapters.** Use `SELECT ... FOR UPDATE` for receipt updates, create immutable calculation/step rows per run, and accept only manual receipt metadata. Return `unknown` calculation state rather than silently calculating from incomplete data.
+- [x] **Step 3: Implement scoped persistence and strict adapters.** Use `SELECT ... FOR UPDATE` for receipt updates, create immutable calculation/step rows per run, and accept only manual receipt metadata. Return `unknown` calculation state rather than silently calculating from incomplete data.
 
-- [ ] **Step 4: Run HTTP, contract, and API static checks.**
+- [x] **Step 4: Run HTTP, contract, and API static checks.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_receipt_lines_api.py apps/api/tests/test_benefit_contracts.py -q
@@ -467,7 +477,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: strict API/schema tests and static checks pass; OpenAPI has no calculation route drift.
 
-- [ ] **Step 5: Commit the calculation boundary.**
+- [x] **Step 5: Commit the calculation boundary.**
 
   ```bash
   git add apps/api/src/familycare_api/decisions/calculation_repository.py apps/api/src/familycare_api/decisions/calculation_service.py apps/api/src/familycare_api/decisions/calculation_schemas.py apps/api/src/familycare_api/decisions/router.py packages/contracts/schemas/benefit-calculation.v1.schema.json packages/contracts/examples/benefit-calculation.v1.json apps/api/tests/test_receipt_lines_api.py apps/api/tests/test_benefit_contracts.py
@@ -487,9 +497,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 - Consumes: all calculation primitives, repositories, HTTP contract, and `0008` migration.
 - Produces: PostgreSQL proof of immutable steps, partial confirmed/additional/excluded results, multiple-indemnity unknown allocation, scope/version isolation, and no medical-document/log/cache leakage.
 
-- [ ] **Step 1: Write failing integration/privacy assertions.** Insert synthetic event/candidates/rules/receipt lines, calculate fixed and partial indemnity results, re-run with a changed rule, and assert the old trace remains immutable and multi-contract allocation is `UNKNOWN`.
+- [x] **Step 1: Write failing integration/privacy assertions.** Insert synthetic event/candidates/rules/receipt lines, calculate fixed and partial indemnity results, re-run with a changed rule, and assert the old trace remains immutable and multi-contract allocation is `UNKNOWN`.
 
-- [ ] **Step 2: Run the focused RED integration command.**
+- [x] **Step 2: Run the focused RED integration command.**
 
   ```bash
   TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_benefit_integration.py -q
@@ -497,9 +507,9 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: FAIL until real PostgreSQL transactions, immutable step storage, and calculation result persistence are complete.
 
-- [ ] **Step 3: Implement only missing transaction/redaction paths.** Keep receipt update/delete scoped and versioned; write calculation header and all steps in one transaction; omit raw notes/diagnoses/files from logs and response exceptions.
+- [x] **Step 3: Implement only missing transaction/redaction paths.** Keep receipt update/delete scoped and versioned; write calculation header and all steps in one transaction; omit raw notes/diagnoses/files from logs and response exceptions.
 
-- [ ] **Step 4: Run the complete focused feature suite.**
+- [x] **Step 4: Run the complete focused feature suite.**
 
   ```bash
   TMPDIR=/tmp uv run pytest apps/api/tests/test_benefit_calculations_migration.py apps/api/tests/test_benefit_calculations.py apps/api/tests/test_receipt_lines_api.py apps/api/tests/test_benefit_contracts.py apps/api/tests/test_benefit_privacy.py -q
@@ -512,7 +522,7 @@ Request models use `ConfigDict(extra="forbid", frozen=True)`, Decimal string amo
 
   Expected: all Decimal, fixed, indemnity, partial, multiple-contract, PostgreSQL, contract, privacy, and static checks pass without external providers.
 
-- [ ] **Step 5: Commit the complete calculation acceptance.**
+- [x] **Step 5: Commit the complete calculation acceptance.**
 
   ```bash
   git add apps/api/tests/test_benefit_integration.py apps/api/tests/test_benefit_privacy.py apps/api/tests/test_benefit_calculations.py

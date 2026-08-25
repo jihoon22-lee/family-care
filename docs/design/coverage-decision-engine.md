@@ -1,6 +1,6 @@
 # Coverage decision engine design
 
-- 상태: v0.1 대화 설계 승인 완료, Phase 5 rule publication boundary 반영; deterministic execution 문서
+- 상태: v0.1 대화 설계 승인 완료, Phase 5 rule publication boundary와 PR7 benefit-calculation boundary 반영; deterministic execution 문서
 - 적용 단계: Phase 6 — Coverage Decision Engine
 - 상위 기준: `docs/design/v0.1-product.md`
 
@@ -10,7 +10,7 @@ MedicalEvent와 실제 가입 Rider, 계약 상태, 약관 CoverageRule을 결�
 
 Phase 5의 선행 boundary는 이 문서가 소비할 입력을 준비합니다. 즉, 검증된 Rider-Clause 연결과 immutable CoverageRule version을 만들고, data-only DSL이 지원되는지 확인합니다. Phase 5 validator는 규칙을 실행하지 않으며 이 문서의 `MATCH`·`NO_MATCH`·`UNKNOWN` evaluation은 별도 구현 범위입니다.
 
-## PR6 implementation status
+## PR6/PR7 implementation status
 
 PR6는 이 설계의 결정론적 실행 경계를 구현했습니다. `0007_coverage_decision_engine`은 구조화된 MedicalEvent, immutable decision run, RuleEvaluation, Evidence 연결, Rider 후보를 저장하며, 각 평가에는 당시 Evidence의 ID·문서/추출 ID·페이지·좌표·검토 상태·content hash를 담은 `evidence_snapshot_json`도 함께 저장합니다. 결과를 다시 읽을 때 이 snapshot을 우선 사용하므로 이후 Evidence 원본 행이 바뀌어도 이미 성공한 결과의 근거가 조용히 바뀌지 않습니다.
 
@@ -23,7 +23,9 @@ PR6는 이 설계의 결정론적 실행 경계를 구현했습니다. `0007_cov
 - immutable run/evaluation/candidate의 transactional PostgreSQL persistence
 - strict `coverage-decision.v1` JSON Schema와 no-store HTTP response
 
-ClaimHistory projection은 아직 연결되지 않았으며 현재 repository port는 빈 history를 반환합니다. 따라서 history가 필요한 규칙은 0회로 추정하지 않고 `UNKNOWN`으로 남습니다. PR6 결과에는 금액·지급 보장 문구가 없고 정액형/실손형 계산은 다음 benefit-calculation 단계의 handoff로만 남아 있습니다. 또한 기본 `HouseholdScope` resolver는 Phase 7 인증 전까지 fail-closed이므로, 실제 로그인 없이 운영 route를 사용한다고 해석하면 안 됩니다.
+PR7은 PR6의 `ClaimCandidate`와 published executable CoverageRule을 입력으로 받아 계산 경계를 추가했습니다. `0008_benefit_calculations`는 `0007_coverage_decision_engine` 뒤에 수동 `ReceiptLine`, 계산 header, immutable step row를 추가하고, direct `psycopg` repository가 server-derived `HouseholdScope`로 조회·저장합니다. 계산은 `Decimal`/통화/반올림 규칙을 사용하며, rule version과 Evidence ID를 결과에 보존합니다. 하나의 유효한 rule/evidence chain을 선택할 수 있는 후보만 계산 projection으로 저장하고, 같은 입력·규칙·engine cutoff의 trace는 재사용하며, 계산에 영향을 주는 변경은 새 version row와 step 집합으로 남깁니다.
+
+ClaimHistory projection은 아직 연결되지 않았으며 현재 repository port는 빈 history를 반환합니다. 따라서 history가 필요한 결정 규칙은 0회로 추정하지 않고 `UNKNOWN`으로 남습니다. 기본 `HouseholdScope` resolver는 Phase 7 인증 전까지 fail-closed이므로, 실제 로그인 없이 운영 route를 사용한다고 해석하면 안 됩니다. PR7의 계산 결과도 지급 확정이나 보험사 지급 보장이 아니라 조건부 청구 검토 자료입니다.
 
 ## Inputs
 
@@ -34,6 +36,7 @@ ClaimHistory projection은 아직 연결되지 않았으며 현재 repository po
 - 버전이 있는 CoverageRule
 - 과거 ClaimHistory
 - 정액형 가입금액 또는 실손 계산에 필요한 비용 자료
+- 사용자가 입력한 통원·입원·약제비 `ReceiptLine`과 확인 수준
 - `AI_VERIFIED` 또는 `USER_CONFIRMED` 상태의 실행 가능한 CoverageRule
 
 CoverageRule은 저장된 `coverage_rule_versions`의 published executable version만 사용합니다. review queue에서 아직 검토 중인 candidate, unsupported DSL, stale/missing Evidence는 입력으로 사용하지 않고 관련 결과를 `UNKNOWN`으로 남깁니다.
@@ -49,7 +52,10 @@ Rider별 ClaimCandidate:
 - 현재 충족 사실
 - 부족하거나 충돌한 정보
 - 선택형 추가 질문
-- 정액형 계산 내역 또는 실손형 계산 보류 이유
+- 정액형 `BenefitCalculationResult`와 순서가 있는 `CalculationStep` trace
+- 실손형의 `computed`/`partial`/`unknown` 상태, confirmed/additional/excluded 금액
+- deductible, applied rate/limit, rounding rule과 hold/exclusion reason code
+- 복수 실손 Rider의 독립 후보와 비례분담 `UNKNOWN`
 - 증권과 약관 Evidence
 - 판정 엔진·규칙 버전
 - 보험금 지급을 보장하지 않는 설명
@@ -110,26 +116,40 @@ Rule publication 단계는 다음 불변식을 보장해야 합니다.
 
 ## Fixed-benefit calculation
 
-정액형 계산은 다음 항목을 모두 기록합니다.
+`calculate_fixed_benefit`는 ClaimCandidate가 `MATCH`이고, 규칙이 published·executable이며 `AI_VERIFIED` 또는 `USER_CONFIRMED`이고 모든 Evidence가 승인된 경우에만 실행합니다. 검증된 data-only DSL의 `add`/`subtract`/`multiply`/`min`/`max`/`round` 연산을 `Decimal`로 평가하고 다음 항목을 모두 기록합니다.
 
 - 계약 통화
 - Rider 가입금액
-- 규칙 지급 비율 또는 고정 금액
-- 감액 비율
-- 횟수·일수
+- 규칙의 고정 금액 또는 비율 계산 입력
+- 계산에 사용한 확인된 Rider 통화·가입금액 fact
 - 중간 계산값
 - 반올림 규칙
 - 최종 추정값
 
-입력 단위가 불명확하거나 규칙 수식이 검수되지 않았으면 금액을 계산하지 않고 `UNKNOWN`을 반환합니다.
+계산 결과의 각 DSL 연산은 `CalculationStep(step_number, operation, input_amount, output_amount, rounding_rule, reason_code)`로 보존합니다. 결과가 소수 단위인데 명시적 `round` 경계가 없거나, fact/Evidence/rule이 없거나 stale하거나, overflow·지원하지 않는 식이면 금액을 0으로 대체하지 않고 `status="unknown"`과 안정적인 hold reason code를 반환합니다.
 
 ## Indemnity handling
 
-실손형은 사용자가 수동 입력한 통원·입원·약제비 영수증 항목, 급여 본인부담금, 비급여, 실제 지출액, 한도, 자기부담, 중복 계약 자료로 계산합니다. 일부 자료만 있어도 확인된 청구 검토 금액, 추가 확인 금액, 제외 금액과 이유를 분리해 반환합니다. 자료가 없으면 관련 Rider 후보와 필요한 서류를 반환하되 금액을 확정하지 않습니다.
+실손형은 사용자가 수동 입력한 통원·입원·약제비 `ReceiptLine`만 입력으로 받습니다. `covered`이면서 `user` 또는 `ai_structured`로 확인된 항목만 confirmed에 합산하고, `possible_excluded`·`unknown`·미확인 항목은 additional로 보존하며, `excluded` 항목은 excluded와 bounded reason code로 보존합니다. 모든 항목은 하나의 uppercase ISO 통화를 사용해야 하며 통화가 다르면 계산하지 않고 `UNKNOWN`을 반환합니다.
 
-복수 실손 Rider가 발견되면 계약별 독립 예상액을 더하지 않습니다. 공통 청구 검토 항목과 각 계약의 조건을 보여주고 최종 비례분담은 `UNKNOWN`입니다.
+승인된 indemnity 식은 `max(0, confirmed - deductible) × applied_rate`, `applied_limit` 상한, 명시적 반올림 순서로 계산하고 각 중간값을 trace에 남깁니다. additional 금액이 남으면 계산된 confirmed 금액을 숨기지 않고 `status="partial"`과 `ADDITIONAL_RECEIPT_REVIEW_REQUIRED` hold reason을 함께 반환합니다. 영수증·규칙·통화가 없거나 formula shape가 지원되지 않으면 0원으로 추정하지 않고 `UNKNOWN`입니다.
 
-## HTTP lifecycle implemented in PR6
+복수 실손 Rider가 발견되면 `detect_multiple_indemnity_contracts`가 후보 ID만 보존하고 `allocation="UNKNOWN"`을 반환합니다. repository도 독립 계약의 금액을 합산하지 않고 각 계산을 `MULTIPLE_INDEMNITY_ALLOCATION_UNKNOWN` hold 상태로 남깁니다. 최종 비례분담은 별도 근거가 확인될 때까지 `UNKNOWN`입니다.
+
+## Receipt and calculation HTTP boundary
+
+PR7은 다음 네 개의 household-scoped operation을 `MedicalEvent` router에 추가했습니다.
+
+```text
+POST   /api/v1/medical-events/{event_id}/receipt-lines
+PATCH  /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
+DELETE /api/v1/medical-events/{event_id}/receipt-lines/{line_id}
+GET    /api/v1/medical-events/{event_id}/calculations
+```
+
+create/update는 category, coverage category, Decimal 문자열 amount, uppercase currency, confirmation level과 bounded `note_code`만 받습니다. update/delete는 `expected_version`을 요구하고 stale write는 value-free `409 VERSION_CONFLICT`로 반환합니다. receipt line 삭제는 soft delete이며 기본 계산 조회에서 제외됩니다. 계산 결과는 `BenefitCalculationsResponse` envelope와 bounded steps/hold/exclusion reason 및 `evidence_ids`를 반환하고, 모든 네 route는 `Cache-Control: no-store`를 사용합니다. client는 confirmed amount, applied rate, rule version, household scope, 파일/path/raw note를 authoritative input으로 제출할 수 없습니다.
+
+## HTTP lifecycle implemented in PR6/PR7
 
 The service exposes the following versioned operations under
 `/api/v1/medical-events`:
@@ -157,6 +177,11 @@ atomically. A missing fact or unavailable current Evidence is a normal result
 with `UNKNOWN`, not an HTTP failure. A result is selected by MedicalEvent
 version, and all decision responses carry `Cache-Control: no-store`.
 
+After a successful decision run, the calculation read route uses the latest
+household-scoped run and manual receipt lines. It returns only normalized
+Decimal-string amounts and immutable trace metadata; it does not open or
+accept receipt documents.
+
 ## Evidence contract
 
 각 RuleEvaluation은 다음을 추적합니다.
@@ -168,6 +193,7 @@ MedicalEvent fact
   -> Clause Evidence
   -> Policy/Rider Evidence
   -> tri-state result and reason code
+  -> BenefitCalculation header and immutable CalculationStep rows
 ```
 
 근거 문서를 열 수 없거나 해시가 바뀌면 이전 결과를 stale로 표시하고 다시 확인합니다.
@@ -180,6 +206,9 @@ MedicalEvent fact
 4. Evidence가 없거나 stale이면 지급 조건을 확정하지 않습니다.
 5. AI 설명은 구조화 판정과 근거를 변경하지 않습니다.
 6. 정액형과 실손형 금액 경로를 혼합하지 않습니다.
+7. ReceiptLine은 수동 구조화 metadata와 bounded reason code만 가지며 문서 binary/text/path를 가지지 않습니다.
+8. 계산 trace는 같은 행을 수정하지 않고 새 calculation/version과 step 집합으로 재분석을 보존합니다.
+9. 복수 indemnity의 독립 예상액은 합산하지 않고 allocation을 `UNKNOWN`으로 남깁니다.
 
 ## Explanation boundary
 
@@ -193,6 +222,7 @@ MedicalEvent fact
 - 증권과 최신 상태가 충돌하면 둘 중 하나를 임의 선택하지 않습니다.
 - 조항 연결이 검수되지 않았으면 조건 판정을 확정하지 않습니다.
 - 계산 overflow, 단위 불일치, 음수 비용은 안정적인 validation 오류입니다.
+- Decimal wire amount가 아니거나 scale/precision/currency/category/confirmation 범위를 벗어나면 요청을 거부합니다.
 - 하나의 Rider 평가 실패가 다른 Rider 결과를 제거하지 않습니다.
 - AI verifier 실패, 지원하지 않는 DSL, Evidence 상충은 종속 규칙을 `UNKNOWN`으로 남깁니다.
 - 계산 예외를 0원 또는 `NO_MATCH`로 변환하지 않습니다.
@@ -222,7 +252,12 @@ MedicalEvent fact
 - AI 계층 없이 동일한 판정 재현
 - `NEEDS_REVIEW` 규칙의 실행 거부와 verifier 실패의 `UNKNOWN`
 - Phase 5 boundary의 stored-version selection, expected-version conflict, unsupported DSL non-execution
+- `0008_benefit_calculations`의 exact table/FK/check/precision과 reverse downgrade
+- Decimal money/receipt validation, fixed trace, partial indemnity, deductible/rate/limit/rounding
+- household-scoped receipt CRUD, expected-version conflict, soft delete, calculation response contract
+- strict `benefit-calculation.v1` schema/example와 file/path/diagnosis/raw-note privacy boundary
+- synthetic PostgreSQL calculation persistence와 immutable step/result reanalysis
 
 ## Deferred decisions
 
-CoverageRule DSL validation은 `docs/design/ai-document-analysis.md`의 data-only allowlist를 사용하며 Phase 5에서 실행 없이 경계만 구현합니다. KCD·수술분류 사전의 확대와 복수 실손 비례분담 자동 계산은 v0.1 이후로 미룹니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.
+CoverageRule DSL validation은 `docs/design/ai-document-analysis.md`의 data-only allowlist를 사용합니다. KCD·수술분류 사전의 확대, ClaimHistory 연결, receipt document intake, 복수 실손 비례분담 자동 계산은 아직 이 경계에 포함하지 않습니다. 확률 점수는 사용자 연구와 보정 데이터 없이 도입하지 않습니다.

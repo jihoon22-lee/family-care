@@ -47,6 +47,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Exact `MATCH`/`NO_MATCH`/`UNKNOWN` aggregation for actually subscribed Riders and published executable CoverageRules, with bounded follow-up questions and Evidence lineage.
 - Transactional decision runs, RuleEvaluations, and Rider candidates with immutable Evidence metadata/content-hash snapshots for reproducible result reads.
 - Strict `coverage-decision.v1` contract and no-store MedicalEvent create/update/analyze/result HTTP boundary, including synthetic PostgreSQL integration and privacy tests.
+- PR7 benefit-calculation boundary: PostgreSQL `0008_benefit_calculations`, Decimal fixed/indemnity traces, manual household-scoped receipt lines, partial results, multiple-indemnity allocation `UNKNOWN`, strict `benefit-calculation.v1`, and no-store calculation HTTP routes.
 
 ### Changed
 
