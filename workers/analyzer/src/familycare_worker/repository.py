@@ -558,6 +558,8 @@ class ExtractionRepository:
         self,
         document_version_id: UUID,
         extractor_config_hash: str,
+        *,
+        require_ocr: bool = False,
     ) -> UUID | None:
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             row = connection.execute(
@@ -567,7 +569,7 @@ class ExtractionRepository:
                 WHERE document_version_id = %s
                   AND extractor_config_hash = %s
                   AND status = 'succeeded'
-                  AND (
+                  AND (%s = FALSE OR (
                     NOT EXISTS (
                       SELECT 1
                       FROM extraction_pages AS page
@@ -580,9 +582,9 @@ class ExtractionRepository:
                       WHERE layer.extraction_id = extractions.id
                         AND layer.status = 'succeeded'
                     )
-                  )
+                  ))
                 """,
-                (document_version_id, extractor_config_hash),
+                (document_version_id, extractor_config_hash, require_ocr),
             ).fetchone()
         return cast(UUID, row["id"]) if row is not None else None
 

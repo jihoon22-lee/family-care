@@ -291,6 +291,75 @@ def test_duplicate_content_and_config_reuses_succeeded_extraction(tmp_path: Path
     }
 
 
+def test_duplicate_native_only_result_reuses_when_ocr_is_disabled(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-native-only.pdf")
+    document_id, _ = _seed_job("synthetic-native-only.pdf")
+    first_runner = _runner(document_root, work_root)
+    assert first_runner.run_once("worker-a") is True
+    _, second_job_id = _seed_job(
+        "synthetic-native-only.pdf",
+        document_id=document_id,
+    )
+
+    def parser_must_not_run(source_fd: int, settings_json: str, **kwargs: object) -> ParseOutcome:
+        del source_fd, settings_json, kwargs
+        raise AssertionError("native-only reuse must skip the parser when OCR is disabled")
+
+    second_runner = _runner(
+        document_root,
+        work_root,
+        parser_runner=parser_must_not_run,
+    )
+    assert second_runner.run_once("worker-b") is True
+
+    job = second_runner.queue.get_job(second_job_id)
+    assert job is not None and job.state == "succeeded"
+    assert _counts()["extractions"] == 1
+
+
+def test_existing_native_only_result_is_backfilled_when_ocr_is_enabled(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-ocr-backfill.pdf")
+    document_id, _ = _seed_job("synthetic-ocr-backfill.pdf")
+    first_runner = _runner(document_root, work_root)
+    assert first_runner.run_once("worker-a") is True
+    _, second_job_id = _seed_job(
+        "synthetic-ocr-backfill.pdf",
+        document_id=document_id,
+    )
+    second_runner = _runner(
+        document_root,
+        work_root,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            _SyntheticOcrEngine,
+        ),
+    )
+
+    assert second_runner.run_once("worker-b") is True
+
+    job = second_runner.queue.get_job(second_job_id)
+    assert job is not None and job.state == "succeeded"
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        counts = connection.execute(
+            """
+            SELECT count(DISTINCT extraction.id) AS extractions,
+                   count(DISTINCT ocr_layer.id) AS ocr_layers
+            FROM extractions AS extraction
+            LEFT JOIN ocr_layers AS ocr_layer
+              ON ocr_layer.extraction_id = extraction.id
+            """
+        ).fetchone()
+    assert counts == {"extractions": 1, "ocr_layers": 1}
+
+
 def test_runner_persists_table_cells_and_candidate_coordinates(tmp_path: Path) -> None:
     document_root = tmp_path / "documents"
     work_root = tmp_path / "work"

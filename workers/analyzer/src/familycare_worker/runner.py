@@ -259,6 +259,7 @@ class AnalysisJobRunner:
                 existing = self.repository.find_succeeded_extraction(
                     document_version_id,
                     job.extractor_config_hash,
+                    require_ocr=self.ocr_processor is not None,
                 )
                 if existing is not None:
                     self.repository.complete_with_existing(job, worker_id, existing)
