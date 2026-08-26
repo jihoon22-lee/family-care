@@ -1,6 +1,6 @@
 [project]
 name = "familycare-worker"
-version = "0.0.0"
+version = "0.1.0"
 description = "FamilyCare document analyzer worker"
 requires-python = ">=3.14,<3.15"
 dependencies = [

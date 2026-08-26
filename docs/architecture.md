@@ -1,6 +1,6 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Foundation, synthetic PDF ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정과 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·selective local OCR·private import reliability는 `main`에 구현되어 있다. 현재 feature branch는 private local Compose와 read-only Tailscale inspection을 구현하며 PR/CI/merge와 실제 환경 acceptance 완료를 아직 주장하지 않는다. 이 기능들과 release는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Foundation, synthetic PDF ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정과 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·selective local OCR·private import reliability·private local Compose·bounded read-only Tailscale inspection은 `main`에 구현되어 있다. PR #27과 PR #28의 merge 및 CI/post-merge 검증은 완료되었다. WSL Compose, Tailscale HTTPS, 인증 브라우저의 login/navigation/logout, synthetic OpenAI pipeline도 확인되었지만 실제 보험 PDF, Windows/mobile, 다른 기기 acceptance는 아직 검증하지 않았다. 이 기능들과 release는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
 
 ## Architectural goals
 
@@ -231,4 +231,4 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
 
 ## Verification boundaries
 
-PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. OCR contract/renderer/engine/cleanup tests use synthetic inputs only, and the Worker image workflow contains a synthetic `tesseract --list-langs` smoke requiring `eng` and `kor`; these are not private-document acceptance. 로컬 acceptance는 사용자가 지정한 저장소 밖 source만 사용한다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Private Compose의 합성 permission smoke는 실제 Windows browser, mobile PWA, 보험 format, provider, Tailscale device 확인을 대체하지 않으며 실행 증거와 미검증 범위를 각각 보고한다.
+PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. OCR contract/renderer/engine/cleanup tests use synthetic inputs only, and the Worker image workflow contains a synthetic `tesseract --list-langs` smoke requiring `eng` and `kor`; these are not private-document acceptance. 로컬 private-runtime acceptance에서는 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline을 확인했으며, 실제 보험 PDF·Windows/mobile·다른 기기는 미검증으로 남긴다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Private Compose의 합성 permission smoke와 위 acceptance는 실제 보험 format·OCR·운영 배포를 대체하지 않으며 실행 증거와 미검증 범위를 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 각각 기록한다.

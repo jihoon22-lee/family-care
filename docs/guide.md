@@ -98,7 +98,7 @@ POST  /api/v1/coverage-rules/{id}/publish
 
 Rule version GET은 `expected_version`을 반환합니다. publish 요청은 새 DSL 본문이나 household ID를 받지 않고 `expected_version`과 이미 저장된 `version_id`만 받습니다. typed correction은 후보 원본을 수정하지 않고 child version을 만들며, optimistic conflict가 발생하면 현재 입력을 버리지 않고 화면에 유지합니다. `AI_VERIFIED`·`USER_CONFIRMED`와 exact Evidence를 만족한 stored version만 executable로 게시할 수 있습니다. 게시되었다고 해서 아직 `MATCH`, `NO_MATCH`, `UNKNOWN`을 계산하거나 보험금 지급을 확정하는 것은 아닙니다.
 
-Evidence drawer는 bounded excerpt와 1-based physical page만 보여줍니다. 화면에는 raw DSL textarea, 문서 전체 text, provider payload, private path를 표시하지 않으며 query/cache는 no-store와 memory-only 경계를 유지합니다. 합성 Web 시나리오는 320px viewport에서도 연결·규칙 dialog focus, Evidence disclosure, stored-version publish body, browser storage 미사용을 확인합니다. 이 단계의 검증은 합성 데이터에 한정되며 실제 보험 자료·실제 기기·Tailscale 환경을 검증하지 않습니다.
+Evidence drawer는 bounded excerpt와 1-based physical page만 보여줍니다. 화면에는 raw DSL textarea, 문서 전체 text, provider payload, private path를 표시하지 않으며 query/cache는 no-store와 memory-only 경계를 유지합니다. 합성 Web 시나리오는 320px viewport에서도 연결·규칙 dialog focus, Evidence disclosure, stored-version publish body, browser storage 미사용을 확인합니다. 이 단계 자체의 검증은 합성 데이터에 한정되며 실제 보험 자료·실제 기기는 검증하지 않습니다. 별도 private-runtime acceptance에서 Tailscale HTTPS와 인증 브라우저 흐름을 확인합니다.
 
 ### Phase 6 coverage decision engine boundary
 
@@ -157,7 +157,7 @@ Web은 `/app/events/new`와 `/app/events/{event_id}`에서 병원 방문 전 짧
 
 버전별 결과 경로 `/app/events/{event_id}/result/{version}`은 현재 사건, 지금 할 일, 청구 검토, 추가 확인 필요, 조건 불일치 순서를 고정합니다. 서버가 계산한 decimal string만 보여주며 브라우저에서 보험금 산술을 다시 수행하지 않습니다. Evidence dialog는 bounded 문서 label·physical page·Clause·excerpt만 표시하고, 키보드 focus trap·Escape 닫기·호출 버튼 focus 복원을 제공합니다.
 
-Web query cache는 메모리에만 있고 API 요청은 `credentials: include`와 `cache: no-store`를 사용합니다. service worker는 hashed app shell만 precache하며 API, 사건, 결과, Evidence, 청구 데이터는 runtime cache나 Web Storage·IndexedDB에 저장하지 않습니다. 이 흐름은 합성 데이터와 Chromium 320px viewport로 검증했으며 Windows 실제 브라우저, 모바일 PWA 설치, Tailscale, 실제 보험 자료는 아직 검증하지 않았습니다.
+Web query cache는 메모리에만 있고 API 요청은 `credentials: include`와 `cache: no-store`를 사용합니다. service worker는 hashed app shell만 precache하며 API, 사건, 결과, Evidence, 청구 데이터는 runtime cache나 Web Storage·IndexedDB에 저장하지 않습니다. 이 흐름 자체는 합성 데이터와 Chromium 320px viewport로 검증했으며 Windows 실제 브라우저, 모바일 PWA 설치, 실제 보험 자료는 아직 검증하지 않습니다. private-runtime acceptance에서는 Tailscale HTTPS와 인증 브라우저 login/navigation/logout을 별도로 확인했습니다.
 
 ### Claim workflow boundary
 
@@ -186,7 +186,7 @@ POST   /api/v1/claims/{claim_id}/restore
 
 Checklist는 `document_kind`, requirement/prepared 상태, bounded `note_code`, source rule/Evidence ID만 기록하는 metadata-only 목록입니다. 파일 업로드, 문서 경로, OCR·원문, 외부 파일 ID는 제공하지 않습니다. `submitted`도 사용자가 보험사 channel에서 접수했다고 수동 기록하는 상태일 뿐 FamilyCare가 보험사 API·email·fax로 제출하는 기능은 없습니다. Claim API 응답은 `no-store`이며 청구 금액·사유·receipt metadata를 Web Storage나 IndexedDB에 보존하지 않습니다.
 
-이 경계의 테스트와 예시는 처음부터 만든 합성 값만 사용합니다. 실제 보험 문서·개인정보, 보험사 제출, Windows·모바일 기기, Tailscale 접속은 아직 검증하지 않았습니다.
+이 경계의 테스트와 예시는 처음부터 만든 합성 값만 사용합니다. 실제 보험 문서·개인정보, 보험사 제출, Windows·모바일 기기와 다른 실제 기기의 접근은 아직 검증하지 않았습니다. private-runtime에서는 Tailscale HTTPS를 통한 인증 브라우저 흐름을 확인했습니다.
 
 ### Private local Docker runtime
 
@@ -299,7 +299,7 @@ POST /api/v1/auth/sessions/{session_id}/revoke
 
 Tailscale은 private network 접근 경로일 뿐 app login을 대체하지 않습니다. Tailscale에 연결된 기기도 FamilyCare 로그인과 유효한 session cookie, state-changing 요청의 CSRF 검사를 통과해야 합니다.
 
-이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 실제 Tailscale 기기/네트워크, 실제 private document acceptance는 아직 검증하지 않았습니다. 이 문서는 PR·merge·release·운영 배포 완료를 주장하지 않습니다.
+이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS 브라우저 흐름으로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 다른 실제 기기, 실제 private document acceptance는 아직 검증하지 않았습니다. PR #27과 #28의 merge 및 CI/post-merge 검증은 완료되었지만, `v0.1.0` tag/GHCR publish와 운영 배포는 별도 단계로 남아 있습니다.
 
 ### Use the local synthetic document-analysis API
 
@@ -348,7 +348,7 @@ native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택�
 
 각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 테스트는 선택 page, provenance separation, cleanup, atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF acceptance를 대신하지 않습니다.
 
-encrypted batch와 selective OCR은 `main`에 병합되었습니다. 현재 private-runtime 변경은 Compose 정책과 합성 mount/permission smoke까지 검증했지만 PR·CI·merge, 실제 private data, mobile, Windows, Tailscale, provider, private OCR acceptance는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다.
+encrypted batch와 selective OCR은 `main`에 병합되었습니다. private-runtime PR #27과 Tailscale inspection 보완 PR #28도 merge되었고, WSL Compose·Tailscale HTTPS·인증 브라우저 login/navigation/logout·synthetic OpenAI pipeline acceptance가 통과했습니다. 실제 private data와 OCR, mobile, Windows, 다른 기기, tag/GHCR publish는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다. 자세한 상태는 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 기록합니다.
 
 종료:
 

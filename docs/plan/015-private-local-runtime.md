@@ -8,7 +8,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 이 branch에 구현되어 있다. 합성 image·permission smoke는 통과했지만 PR·CI·merge와 실제 자료, mobile, Windows, Tailscale device, provider, private OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 PR #27과 PR #28로 `main`에 merge되었다. 두 PR의 CI/post-merge 검증과 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline acceptance는 통과했다. 실제 보험 PDF·파생 데이터·OCR, Windows/mobile, 다른 실제 기기, `v0.1.0` tag/GHCR publish는 아직 pending이며 완료로 주장하지 않는다.
 
 **Architecture**
 
@@ -21,7 +21,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only root로 유지하며 private batch source로 사용하지 않는다.
 - archive master key는 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유하고 API는 HTTP 인증·계약·작업 생성과 secret socket client만 수행한다.
 - import source와 Google Drive 원본은 어떤 성공·실패·취소 경로에서도 수정하거나 삭제하지 않는다.
-- 자동화된 검사와 PR/CI는 Tailscale 상태를 읽기 전용으로만 확인한다. PR merge 뒤 root acceptance에서만 기존 Serve 구성을 snapshot으로 보존하고 충돌 없는 전용 HTTPS endpoint를 추가할 수 있다. 기존 endpoint 교체, Funnel, route, SSH, key, up/down, logout 변경은 금지한다.
+- 자동화된 검사와 PR/CI는 Tailscale 상태를 읽기 전용으로만 확인한다. PR merge 뒤 root acceptance에서도 기존 Serve 구성을 snapshot으로 보존하며, 필요한 경우에만 충돌 없는 전용 HTTPS endpoint를 추가할 수 있다. 이번 acceptance는 기존 mapping을 재사용했으며 기존 endpoint 교체, Funnel, route, SSH, key, up/down, logout 변경은 금지한다.
 - 애플리케이션 인증은 012의 두 관리자·Argon2id·hashed server session 계약을 사용한다. Tailscale 네트워크에 연결된 것만으로 인증된 것으로 취급하지 않는다.
 
 **Tech Stack**
@@ -31,7 +31,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - API Python 3.14.7, Uvicorn, PostgreSQL 18.6-alpine
 - Worker Python 3.14.7, UID 10002:10002, existing PostgreSQL job queue
 - pytest, pytest-cov가 아니라 기존 pytest invocation, Python TOML/YAML structural checks
-- Tailscale CLI의 read-only JSON/status output을 policy 검사에 사용하고, post-merge acceptance에만 별도 승인된 additive HTTPS Serve endpoint를 사용한다. Tailscale acceptance 자체는 pending이다.
+- Tailscale CLI의 read-only JSON/status output을 policy 검사와 post-merge acceptance에 사용한다. 기존 HTTPS Serve mapping을 보존한 채 Tailscale HTTPS acceptance를 통과했으며, 추가 mutation이나 Funnel은 사용하지 않았다.
 - GitHub Actions는 synthetic fixtures와 repository policy만 실행하며 실제 문서·비밀값·외부 AI는 사용하지 않는다.
 
 **Spec**
@@ -234,10 +234,10 @@ worker:
       TMPDIR=/tmp uv run python scripts/private_acceptance.py --help
   Expected result: policy and acceptance tests pass and help output contains no environment value.
 - [x] 2–5 min: Modify docs/guide.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
-- [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json --peers=false` and `tailscale serve status --json` through the redacting inspector, supplying the configured loopback Web port only as `--expected-gateway-port`. Verify that the gateway is bound only to loopback and check the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Keep the foreign-configuration fingerprint in process memory only and do not print node, account, tailnet, IP, port, raw JSON, or fingerprint values into the task report.
-- [ ] 2–5 min: If an existing Serve mapping already reaches the FamilyCare loopback gateway over HTTPS, reuse it without mutation. Otherwise, the user's approval to complete Phase 8 authorizes only an additive dedicated mapping. After verifying the current installed CLI syntax against official Tailscale documentation, run the equivalent of `tailscale serve --bg --https=<unused-approved-port> http://127.0.0.1:<familycare-web-port>`, then compare the before/after Serve status and abort if any pre-existing mapping changed. Never use `tailscale funnel`.
-- [ ] 2–5 min: From an authenticated HTTPS browser, verify login cookie delivery, `/api/` reverse proxy, no-store headers, ledger/event/result/claim navigation, and logout. A device that root cannot access remains explicitly unverified; CI or localhost HTTP does not substitute for Secure-cookie HTTPS acceptance.
-- [ ] 2–5 min: Run one explicitly marked local-provider smoke inside the Worker with wholly synthetic Evidence and event text. Verify both approved model IDs, strict structured output, independent verifier, deterministic validator, retry classification, and absence of prompt/response/key material in logs. This smoke may use the existing WSL `OPENAI_API_KEY`; never print, copy, export, or pass it to Web/API. A missing or rejected key is reported as an external acceptance failure, not replaced by the fake provider.
+- [x] 2–5 min: After the PR is merged, root captures `tailscale status --json --peers=false` and `tailscale serve status --json` through the redacting inspector, supplying the configured loopback Web port only as `--expected-gateway-port`. The gateway is bound only to loopback and the existing HTTPS Serve configuration is inspected without emitting node, account, tailnet, IP, port, raw JSON, or fingerprint values into the task report.
+- [x] 2–5 min: The existing Serve mapping that reaches the FamilyCare loopback gateway over HTTPS was reused without replacing existing configuration. No Funnel mapping was created.
+- [x] 2–5 min: From an authenticated HTTPS browser, login cookie delivery, `/api/` reverse proxy, no-store headers, ledger/event/result/claim navigation, and logout passed. Windows, mobile, and other-device access remain explicitly unverified; CI or localhost HTTP is not used as a substitute for Secure-cookie HTTPS acceptance.
+- [x] 2–5 min: An explicitly marked local-provider smoke inside the Worker with wholly synthetic Evidence and event text passed the approved model IDs, strict structured output, independent verifier, deterministic validator, retry classification, and log-boundary checks. The existing WSL `OPENAI_API_KEY` was not printed, copied, exported, or passed to Web/API. Real-document/OCR acceptance remains unverified.
 - [ ] 2–5 min: Only after synthetic private-runtime acceptance passes, process user-selected real PDFs from exact external paths supplied for acceptance. Do not enumerate adjacent directories. Record only format/error categories and aggregate counts; never copy source files or derived text/images into the repository or report. Sanitized failures become new from-scratch synthetic regression fixtures before implementation changes.
 - [ ] 2–5 min: Run focused final checks:
       python3 scripts/check_documentation.py
@@ -260,7 +260,7 @@ Before the root agent opens the PR for this plan, root must review the complete 
 - Phase 1 routes, schemas, job lease, error semantics, and UNKNOWN behavior remain intact.
 - CI uses only synthetic fixtures and no actual private material.
 - A fresh migrated database can be initialized exactly once through the stdin-password `familycare-admin init` transaction and can then authenticate through the Web gateway.
-- Any unverified Compose/private-data runtime, Docker daemon, actual private data, Windows, mobile, existing Tailscale state, provider, or OCR acceptance is reported as unverified.
+- Any unverified actual private data, Windows, mobile, other-device, real-document/OCR, or future release-publication acceptance is reported as unverified.
 
 The PR title should follow Conventional Commits, for example:
 
