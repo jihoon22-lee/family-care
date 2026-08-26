@@ -186,7 +186,15 @@ class BatchRunner:
             return self.password_scope.password_for(self._batch_id(item), item.id)
         return None
 
+    def _discard_password_for(self, item: BatchItem) -> None:
+        if isinstance(self.password_scope, BatchPasswordRegistry):
+            self.password_scope.discard(self._batch_id(item))
+        elif isinstance(self.password_scope, PasswordScope):
+            self.password_scope.dispose()
+
     def run_once(self, worker_id: str) -> bool:
+        if isinstance(self.password_scope, BatchPasswordRegistry):
+            self.password_scope.purge_expired()
         item = self.repository.claim_next_item(worker_id, lease_seconds=self.lease_seconds)
         if item is None:
             return False
@@ -252,8 +260,7 @@ class BatchRunner:
                         progress_interval_seconds=self.heartbeat_interval_seconds,
                     )
                     if outcome.metadata.get("cancelled") is True:
-                        if self.password_scope is not None:
-                            self.password_scope.dispose()
+                        self._discard_password_for(item)
                         return
                     if not outcome.success:
                         self.repository.mark_failed(

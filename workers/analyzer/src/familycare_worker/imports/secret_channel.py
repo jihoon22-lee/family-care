@@ -100,6 +100,13 @@ class BatchPasswordRegistry:
             entry = self._entries.get(batch_id)
             return entry.scope.password_for(item_id) if entry is not None else None
 
+    def purge_expired(self) -> None:
+        """Dispose expired scopes even when no batch currently requests a password."""
+
+        with self._lock:
+            if not self._disposed:
+                self._purge(datetime.now(UTC))
+
     def discard(self, batch_id: UUID) -> None:
         with self._lock:
             entry = self._entries.pop(batch_id, None)

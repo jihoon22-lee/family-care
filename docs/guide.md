@@ -204,7 +204,7 @@ v0.1 목표는 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 
 - `FAMILYCARE_ARCHIVE_ROOT`와 `FAMILYCARE_WORK_ROOT`는 저장소 밖 absolute directory인 Worker 전용 root입니다. API와 Web에는 archive/work mount가 없습니다.
 - `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`은 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 합니다.
 - Worker가 Unix-domain secret socket server를 소유하고 API가 client로 한 번 연결합니다. socket 외 secret handoff는 사용하지 않습니다.
-- encrypted PDF password는 family-scoped batch process memory에서만 사용하며, expiry·replacement·cancellation·shutdown 경계에서 scope를 폐기합니다. terminal process memory disposal은 검증하지 않습니다.
+- encrypted PDF password는 family-scoped batch process memory에서만 사용합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기하며, 실행 중인 batch 취소는 그 batch만 폐기하고 shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 별도 control frame을 보내지 않으므로 최대 5분 expiry에서 정리됩니다.
 - import source와 Google Drive 원본은 수정하거나 삭제하지 않습니다. Gemini와 Google Drive API는 사용하지 않습니다.
 - existing WSL `OPENAI_API_KEY`는 Worker container에만 주입하는 것이 목표이며 provider acceptance는 pending입니다.
 - managed archive key는 저장소 밖 file secret으로 제공합니다. LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
@@ -291,7 +291,7 @@ POST /api/v1/document-batches/{batch_id}/cancel
 
 batch request는 정확히 한 `FamilyMember`와 bounded 64-character lowercase-hex source IDs를 가집니다. 서버가 로그인 session의 HouseholdScope를 사용하므로 클라이언트가 household를 넓히거나 source path를 지정할 수 없습니다. API는 password를 response·DB·job payload·log에 넣지 않고 Worker 소유 Unix-domain secret socket client로 한 번 전달합니다. Worker는 socket server와 batch password scope를 소유합니다.
 
-password scope는 batch 안에서 재사용할 수 있지만 expiry되며, 실패 파일을 재입력할 때 이전 scope를 교체·폐기하고, cancellation·Worker shutdown에서 `dispose()`를 호출합니다. 테스트가 확인하는 것은 in-process buffer 정리와 호출 경계이며, terminal process memory disposal은 확인하거나 주장하지 않습니다.
+password scope는 batch 안에서 재사용할 수 있지만 Worker 반복에서 expiry되며, 실패 파일을 재입력할 때 이전 scope를 교체·폐기합니다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch를 API에서 취소하면 별도 control frame 없이 최대 5분 expiry에서 정리됩니다. 성공·실패 직후의 즉시 scope 폐기나 프로세스 종료 뒤 terminal memory disposal은 확인하거나 주장하지 않습니다.
 
 성공한 평문은 Worker 전용 archive root에 document별 AES-GCM data key와 AES-KW wrapped key로 저장한 뒤에만 ready가 됩니다. archive master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600` 조건을 만족해야 합니다. 복호화 PDF와 중간 산출물은 Worker work root의 mode `0700`/`0600` 작업 공간에만 존재하며 import source와 Google Drive 원본은 성공·실패·취소 어느 경로에서도 수정·삭제하지 않습니다.
 

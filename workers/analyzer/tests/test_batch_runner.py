@@ -23,6 +23,7 @@ from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.imports.batch import BatchRunner
 from familycare_worker.imports.password_scope import PasswordScope
+from familycare_worker.imports.secret_channel import BatchPasswordRegistry
 from familycare_worker.pdf.isolation import ParseOutcome
 
 from workers.analyzer.tests.synthetic_pdf_factory import (
@@ -47,6 +48,7 @@ class SyntheticItem:
     source_id: str
     source_key: str
     document_version_id: UUID
+    batch_id: UUID = SYNTHETIC_BATCH_ID
     state: str = "queued"
     attempts: int = 0
     max_attempts: int = 3
@@ -231,7 +233,7 @@ def _runner(
     document_root: Path,
     work_root: Path,
     archive_store: ArchiveStore,
-    password_scope: PasswordScope,
+    password_scope: PasswordScope | BatchPasswordRegistry,
     parser: Callable[..., ParseOutcome],
     **kwargs: object,
 ) -> BatchRunner:

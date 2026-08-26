@@ -19,7 +19,7 @@ Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-
 2. private batch source는 `FAMILYCARE_IMPORT_ROOT` 아래에서 API와 Worker가 read-only로 공유합니다. API는 opaque source ID를 목록화·해석하고 Worker는 descriptor-safe intake를 수행합니다. Phase 1의 `FAMILYCARE_DOCUMENT_ROOT`는 checkout 밖 합성 PDF만을 위한 synthetic-only root입니다.
 3. password는 인증된 request에서 Worker의 batch runtime으로 one-time Unix-domain socket을 통해 전달하고 process memory에서 동일 batch file에 재사용합니다. socket server는 Worker가 소유하고 API는 client로 연결합니다.
 4. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
-5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. scope는 expiry되고, replacement 때 이전 값이 폐기되며, cancellation과 Worker shutdown에서 `dispose()`를 호출합니다. terminal process memory disposal은 검증하지 않습니다.
+5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기합니다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
 6. native extraction 뒤 `OCR_REQUIRED` page만 local Korean/English OCR을 실행한다는 것이 목표 계약이지만, OCR 실행과 acceptance는 아직 pending입니다.
 7. 성공 source는 document별 data key로 암호화해 Worker 전용 managed archive에 저장하고 key는 Worker 전용 runtime master key로 wrap합니다. master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600`입니다.
 8. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
@@ -52,7 +52,7 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 | `POST` | `/api/v1/document-batches` | 한 FamilyMember에 대한 batch를 만들고 item을 queue합니다. |
 | `GET` | `/api/v1/document-batches/{batch_id}` | batch/item state와 sanitized error code를 반환합니다. |
 | `POST` | `/api/v1/document-batches/{batch_id}/password` | password를 Worker secret socket으로 한 번 전달하고 password 자체는 response·DB·job·log에 남기지 않습니다. |
-| `POST` | `/api/v1/document-batches/{batch_id}/cancel` | batch를 취소하고 Worker가 보유한 scope disposal 경계를 적용합니다. |
+| `POST` | `/api/v1/document-batches/{batch_id}/cancel` | batch를 취소합니다. 실행 중 scope는 해당 batch만 폐기하고, 대기 scope는 최대 5분 expiry에서 정리합니다. |
 
 ## Inputs
 
@@ -240,7 +240,7 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 3. 모든 extraction block과 table/cell candidate는 DocumentVersion, 1-based page, PDF-point coordinates를 가집니다.
 4. coordinates는 top-left origin과 소수 셋째 자리 반올림을 사용하고, reading order는 0부터 시작합니다.
 5. `document_versions(document_id, content_sha256)`가 content identity를 유일하게 표현하고, `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`가 성공 extraction을 하나만 허용합니다. DocumentVersion이 hash를 대표하므로 Extraction에는 content hash를 중복 저장하지 않습니다.
-6. password는 DB, job payload, log에 들어가지 않습니다. batch scope는 expiry·replacement·cancellation·Worker shutdown 경계를 가지며 terminal process memory disposal은 검증하지 않습니다.
+6. password는 DB, job payload, log에 들어가지 않습니다. Worker 반복 expiry·replacement·실행 중 batch cancellation·Worker shutdown 경계를 가지며, 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
 7. 임시 평문과 page cache는 page 처리 후 또는 job 종료 후 남지 않습니다.
 8. Phase 1 API에는 인증 provider가 없으며 production-safe endpoint로 표시하지 않습니다.
 9. Synthetic API route는 두 환경변수 gate가 모두 opt-in일 때만 등록되고, disabled runtime은 두 문서 path에 `404`를 반환합니다.
@@ -268,7 +268,7 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 v0.1 extension tests:
 
 - 한 FamilyMember batch와 cross-member file 혼합 거부
-- 한 번 입력한 in-memory password 재사용과 실패 file만 재입력, expiry·replacement·cancellation·shutdown disposal
+- 한 번 입력한 in-memory password 재사용과 실패 file만 재입력, 반복 expiry·replacement·item-local cancellation·shutdown disposal
 - password가 DB, persisted job, response, log에 없는지 검사
 - encrypted archive round-trip, tamper, wrong/missing master key
 - `OCR_REQUIRED` page만 local Korean/English OCR 실행

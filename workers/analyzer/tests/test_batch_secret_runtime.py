@@ -62,3 +62,19 @@ def test_registry_expiry_and_replacement_dispose_old_secret() -> None:
     assert registry.password_for(batch_id, item_id) == "synthetic-new-password"
     registry.dispose()
     assert registry.password_for(batch_id, item_id) is None
+
+
+def test_registry_purges_expired_passwords_while_the_worker_is_idle() -> None:
+    batch_id = uuid4()
+    item_id = uuid4()
+    registry = BatchPasswordRegistry()
+    registry.replace(
+        batch_id,
+        uuid4(),
+        "synthetic-expired-password",
+        datetime.now(UTC) - timedelta(seconds=1),
+    )
+
+    registry.purge_expired()
+
+    assert registry.password_for(batch_id, item_id) is None

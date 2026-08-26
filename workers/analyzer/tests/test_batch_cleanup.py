@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from familycare_worker.archive.store import ArchiveStore, ArchiveStoreError
 from familycare_worker.imports.batch import BatchRunner as _BatchRunner
+from familycare_worker.imports.secret_channel import BatchPasswordRegistry
 from familycare_worker.pdf.isolation import ParseOutcome
 
 from workers.analyzer.tests.synthetic_pdf_factory import make_text_pdf
 from workers.analyzer.tests.test_batch_runner import (
+    SYNTHETIC_BATCH_ID,
     SYNTHETIC_ITEM_ID_A,
     SYNTHETIC_PASSWORD_A,
     SYNTHETIC_VERSION_ID_A,
@@ -128,6 +131,49 @@ def test_cancellation_cleans_workspace_without_persisting_item(tmp_path: Path) -
     assert repository.items[SYNTHETIC_ITEM_ID_A].state != "succeeded"
     assert list(work_root.iterdir()) == []
     assert scope.password_for(SYNTHETIC_ITEM_ID_A) is None
+
+
+def test_cancellation_discards_only_the_current_batch_password(tmp_path: Path) -> None:
+    document_root, work_root, archive_root, repository = _setup(tmp_path)
+    other_batch_id = SYNTHETIC_ITEM_ID_A
+    other_item_id = SYNTHETIC_VERSION_ID_A
+    registry = BatchPasswordRegistry()
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    registry.replace(
+        SYNTHETIC_BATCH_ID,
+        SYNTHETIC_ITEM_ID_A,
+        SYNTHETIC_PASSWORD_A,
+        expires_at,
+    )
+    registry.replace(
+        other_batch_id,
+        SYNTHETIC_VERSION_ID_A,
+        "synthetic-other-batch-password",
+        expires_at,
+    )
+
+    def cancelling_parser(
+        source_fd: int,
+        settings_json: str,
+        **kwargs: object,
+    ) -> ParseOutcome:
+        del source_fd, settings_json, kwargs
+        return ParseOutcome(success=False, metadata={"cancelled": True})
+
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        registry,
+        cancelling_parser,
+    )
+
+    assert runner.run_once("worker-a") is True
+    assert registry.password_for(SYNTHETIC_BATCH_ID, SYNTHETIC_ITEM_ID_A) is None
+    assert registry.password_for(other_batch_id, other_item_id) == (
+        "synthetic-other-batch-password"
+    )
 
 
 def test_shutdown_disposes_password_scope_and_is_idempotent(tmp_path: Path) -> None:

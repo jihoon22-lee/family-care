@@ -61,8 +61,8 @@ Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만�
 - 사용자 입력 password는 process memory에만 있고 API response, DB, job payload, log에 없다.
 - 동일 batch의 암호 문서에 우선 재사용하되 실패 파일만 새 password를 요청한다.
 - password 값으로 문서 소유자나 가족 관계를 추론하지 않는다.
-- scope는 expiry 시 만료되고, 재입력 시 이전 scope를 교체·폐기한다. cancellation과 Worker shutdown 경로는 `dispose()`를 호출한다.
-- 이 계약은 in-process buffer의 best-effort 정리와 확인된 호출 경로만 검증한다. batch 성공·실패 직후의 즉시 scope 폐기나 프로세스 종료 뒤 terminal memory disposal은 아직 확인하거나 주장하지 않는다.
+- Worker 반복은 scope expiry를 정리하고 재입력은 이전 scope를 교체·폐기한다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기한다.
+- Worker가 아직 잡지 않은 대기 batch를 API에서 취소하면 별도 control frame을 보내지 않으므로 최대 5분 expiry에서 정리된다. batch 성공·실패 직후의 즉시 scope 폐기나 프로세스 종료 뒤 terminal memory disposal은 아직 확인하거나 주장하지 않는다.
 - 재분석은 관리 archive를 사용하므로 정상 import 후 원본 PDF password를 매번 요구하지 않는다.
 
 ## Archive key

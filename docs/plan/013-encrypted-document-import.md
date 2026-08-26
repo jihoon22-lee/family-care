@@ -283,7 +283,7 @@ git commit -m "feat(documents): define encrypted batch contracts"
 - Consumes: Task 1 batch IDs and archive metadata plus a shared socket at /run/familycare/secret.sock.
 - Produces: one-use handoff frames, memory-only PasswordScope, MasterKey.from_file, encrypt_document, decrypt_document, ArchiveStore.put/open, and rewrap_all.
 - MasterKey.from_file(path) requires an absolute external path, regular file, mode 0600, and exactly 32 bytes; errors are stable and never include the path or key bytes.
-- PasswordScope.dispose() removes all string references it owns and is called on success, failure, cancellation, worker shutdown, and socket error.
+- `PasswordScope.dispose()` best-effort wipes its mutable buffer. Registry scopes are discarded on replacement, Worker-loop expiry, cancellation observed by the running item, and Worker shutdown; success/failure immediate disposal and a separate API-cancel control frame are not claimed.
 - Archive writes use an opaque UUID object key and a temporary mode-0600 file followed by an atomic rename; a database row is inserted only after the ciphertext is durable.
 
 - [x] **Step 1: Write failing IPC, key, round-trip, tamper, and rotation tests**
@@ -629,7 +629,7 @@ TMPDIR=/tmp uv run pytest \
   scripts/tests/test_repository_safety.py -q
 ~~~
 
-Expected: FAIL until every runner exit path disposes the password scope and removes decrypted PDFs, rendered images, and temporary archive files.
+Expected: FAIL until runner exit paths remove decrypted PDFs, rendered images, and temporary archive files, cancellation affects only its batch scope, and the idle Worker sweep enforces expiry.
 
 - [x] **Step 3: Add the operator guide and narrow safety rules**
 
