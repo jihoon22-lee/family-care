@@ -163,5 +163,12 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
+          load: true
           push: false
           tags: familycare-${{ matrix.name }}:ci
+      - name: Smoke local OCR languages
+        if: matrix.name == 'worker'
+        run: |
+          available_languages="$(docker run --rm familycare-worker:ci tesseract --list-langs)"
+          grep -Fxq 'eng' <<<"${available_languages}"
+          grep -Fxq 'kor' <<<"${available_languages}"

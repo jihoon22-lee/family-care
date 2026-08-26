@@ -369,9 +369,11 @@ dependencies = [
     { name = "cryptography" },
     { name = "openai" },
     { name = "pdfplumber" },
+    { name = "pillow" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pypdf" },
+    { name = "pypdfium2" },
 ]
 
 [package.metadata]
@@ -379,9 +381,11 @@ requires-dist = [
     { name = "cryptography", specifier = "==50.0.0" },
     { name = "openai", specifier = "==3.3.1" },
     { name = "pdfplumber", specifier = "==0.11.10" },
+    { name = "pillow", specifier = "==12.3.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.4" },
     { name = "pydantic", specifier = "==2.13.4" },
     { name = "pypdf", specifier = "==6.16.2" },
+    { name = "pypdfium2", specifier = "==5.13.0" },
 ]
 
 [[package]]

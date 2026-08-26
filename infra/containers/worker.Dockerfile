@@ -15,7 +15,15 @@ RUN uv sync --frozen --no-dev --package familycare-worker --no-editable
 
 FROM python:3.14.7-slim AS runtime
 
-RUN groupadd --system --gid 10002 familycare \
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-kor \
+    && tesseract --list-langs | grep -Fx 'eng' \
+    && tesseract --list-langs | grep -Fx 'kor' \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10002 familycare \
     && useradd --system --uid 10002 --gid 10002 --no-create-home familycare
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
