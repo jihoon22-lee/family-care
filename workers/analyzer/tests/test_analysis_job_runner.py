@@ -157,6 +157,9 @@ class _SyntheticOcrRenderer:
 class _SyntheticOcrEngine:
     engine_version = "synthetic-engine-1"
 
+    def __init__(self, *, confidence: float = 96.0) -> None:
+        self.confidence = confidence
+
     def recognize(
         self,
         image_path: Path,
@@ -175,7 +178,7 @@ class _SyntheticOcrEngine:
                     text="Synthetic OCR Evidence",
                     pixel_bbox=(122, 158, 612, 316),
                     reading_order=0,
-                    confidence=96.0,
+                    confidence=self.confidence,
                 ),
             ),
             warning_codes=(),
@@ -251,6 +254,35 @@ def test_runner_persists_ocr_required_page_as_separate_layer(tmp_path: Path) -> 
         "ocr_pages": 1,
         "ocr_blocks": 1,
     }
+    assert list(work_root.iterdir()) == []
+
+
+def test_invalid_ocr_provenance_rolls_back_native_and_ocr_rows(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-invalid-ocr.pdf")
+    _, job_id = _seed_job("synthetic-invalid-ocr.pdf")
+    runner = _runner(
+        document_root,
+        work_root,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            lambda: _SyntheticOcrEngine(confidence=101.0),
+        ),
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    job = runner.queue.get_job(job_id)
+    assert job is not None
+    assert job.state == "permanently_failed"
+    assert job.error_code == IntakeErrorCode.PDF_CORRUPT
+    assert _counts()["extractions"] == 0
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        ocr_layers = connection.execute("SELECT count(*) AS count FROM ocr_layers").fetchone()
+    assert ocr_layers == {"count": 0}
     assert list(work_root.iterdir()) == []
 
 
