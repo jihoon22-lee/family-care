@@ -30,6 +30,11 @@ EXPECTED_ACTIONS = {
     "gitleaks/gitleaks-action": ("e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e", "v3.0.0"),
     "pnpm/action-setup": ("0977fd99725f1db4007ccb2928dbb4e90d06cc86", "v6.0.10"),
 }
+EXPECTED_RELEASE_MATRIX = (
+    ("web", "infra/containers/web.Dockerfile"),
+    ("api", "infra/containers/api.Dockerfile"),
+    ("worker", "infra/containers/worker.Dockerfile"),
+)
 PINNED_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)\s+#\s+(v[0-9][0-9A-Za-z.-]*)\s*$")
 ALL_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)")
 
@@ -143,6 +148,25 @@ def validate_dependabot(content: str) -> list[str]:
     return errors
 
 
+def _job_block(content: str, name: str) -> str:
+    match = re.search(
+        rf"(?ms)^  {re.escape(name)}:\s*$\n(?P<body>.*?)(?=^  [a-z][a-z0-9-]+:\s*$|\Z)",
+        content,
+    )
+    return match.group("body") if match is not None else ""
+
+
+def _release_matrix(publish: str) -> tuple[tuple[str, str], ...]:
+    return tuple(
+        (match.group("name"), match.group("dockerfile"))
+        for match in re.finditer(
+            r"(?m)^          - name: (?P<name>[a-z][a-z0-9-]*)\s*$\n"
+            r"^            dockerfile: (?P<dockerfile>[^\s#]+)\s*$",
+            publish,
+        )
+    )
+
+
 def validate_release(content: str) -> list[str]:
     """Validate the semantic-tag-only GHCR publishing boundary."""
 
@@ -152,6 +176,7 @@ def validate_release(content: str) -> list[str]:
         "semantic-version tags": '      - "v[0-9]+.[0-9]+.[0-9]+"',
         "read-only top-level permissions": "permissions:\n  contents: read",
         "package write permission": "packages: write",
+        "package read permission": "packages: read",
         "validation dependency": "needs: [validate-tag, validate-foundation]",
         "Web image": "- name: web",
         "API image": "- name: api",
@@ -162,13 +187,36 @@ def validate_release(content: str) -> list[str]:
         "12-character SHA tag": 'DOCKER_METADATA_SHORT_SHA_LENGTH: "12"',
         "no automatic latest tag": "latest=false",
         "container publication": "push: true",
+        "release identity audit": "scripts/release_audit.py",
+        "published digest verification": "scripts/verify_release_images.py",
     }
     for label, fragment in required_fragments.items():
         if fragment not in content:
             errors.append(f"{relative}: missing {label}")
 
-    if content.count("packages: write") != 1:
+    publish = _job_block(content, "publish")
+    verify = _job_block(content, "verify-publication")
+    validate = _job_block(content, "validate-foundation")
+
+    if content.count("packages: write") != 1 or "packages: write" not in publish:
         errors.append(f"{relative}: packages: write must appear only on the publish job")
+    if content.count("packages: read") != 1 or "packages: read" not in verify:
+        errors.append(f"{relative}: verification job requires packages: read")
+    if _release_matrix(publish) != EXPECTED_RELEASE_MATRIX:
+        errors.append(f"{relative}: exact release image matrix is required")
+    if content.count("latest=false") != 1 or re.search(
+        r"(?i)(latest\s*=\s*(?!false\b)|value\s*=\s*latest\b|type\s*=\s*raw[^\n]*latest)",
+        content,
+    ):
+        errors.append(f"{relative}: latest tag is forbidden")
+    if "scripts/release_audit.py" not in validate:
+        errors.append(f"{relative}: release identity audit must run before publication")
+    if "scripts/verify_release_images.py" not in verify:
+        errors.append(f"{relative}: published digest verification is required")
+    if not re.search(r"(?m)^    needs: publish\s*$", verify):
+        errors.append(f"{relative}: verification must depend on publish")
+    if "GHCR_TOKEN: ${{ github.token }}" not in verify:
+        errors.append(f"{relative}: verification must use the automatic GitHub token")
     if "pull_request" in content or re.search(r"(?m)^\s+branches:\s*$", content):
         errors.append(f"{relative}: release must trigger only from semantic-version tags")
     if re.search(r"\$\{\{\s*secrets\.", content):
@@ -178,12 +226,13 @@ def validate_release(content: str) -> list[str]:
 
     validate_index = content.find("  validate-foundation:")
     publish_index = content.find("  publish:")
+    verify_index = content.find("  verify-publication:")
     login_index = content.find("docker/login-action@")
     push_index = content.find("push: true")
-    if min(validate_index, publish_index, login_index, push_index) < 0 or not (
-        validate_index < publish_index < login_index < push_index
+    if min(validate_index, publish_index, verify_index, login_index, push_index) < 0 or not (
+        validate_index < publish_index < login_index < push_index < verify_index
     ):
-        errors.append(f"{relative}: validation must complete before registry login and publish")
+        errors.append(f"{relative}: validation, publish, and verification jobs must remain ordered")
     return errors
 
 

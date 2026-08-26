@@ -85,6 +85,14 @@ jobs:
           uv run python scripts/check_workflows.py
           uv run python scripts/check_contracts.py --write-openapi
           git diff --exit-code
+      - name: Audit release identity
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          uv run python scripts/release_audit.py \
+            --version "$RELEASE_VERSION" \
+            --commit-sha "$GITHUB_SHA"
       - name: Validate Python and database integration
         run: |
           uv run ruff format --check .
@@ -153,3 +161,32 @@ jobs:
           push: true
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
+
+  verify-publication:
+    name: Verify published image digests
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.14.7"
+          enable-cache: false
+      - name: Compare version and commit image tags
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          uv run --no-sync python scripts/verify_release_images.py \
+            --registry ghcr.io \
+            --repository "${RELEASE_REPOSITORY,,}" \
+            --version "$RELEASE_VERSION" \
+            --commit-sha "$GITHUB_SHA"
