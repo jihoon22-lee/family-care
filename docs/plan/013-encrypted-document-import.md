@@ -520,9 +520,11 @@ git commit -m "feat(documents): import encrypted family batches"
 - Create: `apps/web/src/features/documents/BatchProgress.tsx`
 - Create: `apps/web/src/features/documents/document-import.test.tsx`
 - Create: `apps/web/e2e/document-import.spec.ts`
+- Modify: `.gitignore`
 - Modify: `apps/web/src/app/AppRoutes.tsx`
+- Modify: `apps/web/src/app/AppShell.tsx`
 - Modify: `apps/web/src/styles.css`
-- Modify: `apps/web/playwright.config.ts`
+- Verify unchanged: `apps/web/playwright.config.ts`
 
 **Interfaces:**
 
@@ -530,7 +532,7 @@ git commit -m "feat(documents): import encrypted family batches"
 - Produces: `/app/documents/import`, a one-FamilyMember source picker, batch creation, password prompt, per-item status, failed-only retry, cancel, and ledger navigation after completion.
 - The Web never accepts a directory path, never uploads a PDF, and never stores source labels, passwords, batches, document state, or errors in Web Storage, IndexedDB, URLs, service-worker caches, console output, or analytics.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Test one-member selection, checked opaque source IDs, no `<input type="file">`, no path textbox, create/poll progress, password prompt only for `password_required`, clearing password after the request, keeping successful items completed, retrying only failed items, cancellation, 401 cleanup, and no persistent browser writes.
 
@@ -541,7 +543,7 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the generated import client and document components do not exist.
 
-- [ ] **Step 2: Implement the generated no-store client and accessible import screens**
+- [x] **Step 2: Implement the generated no-store client and accessible import screens**
 
 All calls go through the authenticated no-store wrapper. Keep the password in the dialog component only, submit it once, then clear the state in `finally` and again on close/unmount. Poll a bounded status endpoint while the page is mounted; abort on navigation/logout. Display only safe source labels and stable error codes. Use a real dialog with focus trap/return, `aria-live="polite"` for progress, text in addition to color, and no horizontal overflow at 320 CSS px.
 
@@ -563,7 +565,7 @@ export async function handoffBatchPassword(
 
 The local reassignment is defense-in-depth only; the component must also clear its controlled state immediately because JavaScript strings cannot be securely zeroized.
 
-- [ ] **Step 3: Run GREEN and add the synthetic browser flow**
+- [x] **Step 3: Run GREEN and add the synthetic browser flow**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -575,7 +577,7 @@ corepack pnpm@11.22.0 web:check
 
 The Playwright route stubs use synthetic source labels and exercise select → create → password-required → partial success → retry failed only → completed. Assert no PDF upload request, password persistence, Web Storage write, API/service-worker cache entry, raw response logging, or source path in the URL.
 
-- [ ] **Step 4: Commit the Web import slice**
+- [x] **Step 4: Commit the Web import slice**
 
 ```bash
 git add apps/web/src/api/document-imports.ts \

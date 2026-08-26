@@ -7,6 +7,7 @@ import {
 import { LedgerPage } from "../features/ledger/LedgerPage";
 import { ClaimCasePage } from "../features/claims/ClaimCasePage";
 import { ClaimListPage } from "../features/claims/ClaimListPage";
+import { ImportPage } from "../features/documents/ImportPage";
 import { EventResultPage } from "../features/results/EventResultPage";
 
 function routeMemberId(): string | undefined {
@@ -38,6 +39,9 @@ function routeClaimId(): string | undefined {
 }
 
 export function AppRoutes() {
+  if (/^\/app\/documents\/import\/?$/.test(window.location.pathname)) {
+    return <ImportPage />;
+  }
   const eventResult = routeEventResult();
   if (eventResult) {
     return (
