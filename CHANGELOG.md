@@ -12,6 +12,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Local two-admin authentication, encrypted family-scoped PDF batches, managed encrypted archive, selective Korean/English OCR, and claim metadata/checklists in the v0.1 design.
 - Feature-branch selective OCR implementation: `OCR_REQUIRED`-only selection, separate `ocr_layers`/`ocr_pages`/`ocr_blocks` provenance, bounded descriptor-derived PDFium rendering, direct no-shell `/usr/bin/tesseract` stdout TSV with fixed `kor+eng` at 300 DPI, per-page and outer-workspace cleanup, bounded batch progress, and synthetic Worker image language checks. PR/CI/merge and private-runtime acceptance remain pending.
 - Local authentication implementation with exactly two equal administrators, safe `familycare-admin` TTY/stdin provisioning, hash-only server sessions, and the authenticated Web login/session boundary.
+- Private encrypted-import reliability implementation: decrypted plaintext is bounded to 25 MiB and encrypted PDFs over 500 pages are rejected before cloning; cancellation, stop, and lease-loss paths dispose batch passwords and deactivate the secret-server identity; archive writes are bracketed by owned heartbeats with definite-orphan cleanup; ambiguous success commits retain ciphertext and emit only `batch_archive_commit_uncertain`; source labels are normalized to printable, path-free 1–160 character values with aligned API/OpenAPI/JSON Schema constraints.
 
 - 프로젝트 기반 설계와 전체 단계별 로드맵
 - 공개 저장소 개인정보 경계와 개발 지침
@@ -80,6 +81,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - CoverageRule version reads expose `expected_version`; publication accepts only the expected version and a stored version ID, while deterministic rule evaluation remains deferred to the next phase.
 - Claim workflow records user-entered receipt/payment metadata and expected-version manual transitions; it does not send submissions to insurers or store medical/claim files. Historical snapshots remain immutable when later results are reanalyzed.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
+- This private-import reliability branch has focused synthetic Worker/API coverage, but the complete PostgreSQL whole-gate, root review, PR/CI, merge, and private runtime acceptance remain pending.
 
 ### Deprecated
 

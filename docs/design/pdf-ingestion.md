@@ -1,6 +1,6 @@
 # PDF ingestion design
 
-- 상태: Phase 1 native ingestion 완료 기준, encrypted import·selective OCR 계약과 구현 문서화, private acceptance 대기
+- 상태: Phase 1 native ingestion 완료 기준, encrypted import·selective OCR·private import reliability 구현 문서화, private runtime acceptance 대기
 - 적용 단계: Phase 1 baseline과 Phase 8 encrypted private import
 - 구현 계획: `docs/plan/002-synthetic-pdf-ingestion.md`
 - 기술 결정: `docs/adr/0006-permissive-pdf-parser-stack.md`
@@ -19,7 +19,7 @@ Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-
 2. private batch source는 `FAMILYCARE_IMPORT_ROOT` 아래에서 API와 Worker가 read-only로 공유합니다. API는 opaque source ID를 목록화·해석하고 Worker는 descriptor-safe intake를 수행합니다. Phase 1의 `FAMILYCARE_DOCUMENT_ROOT`는 checkout 밖 합성 PDF만을 위한 synthetic-only root입니다.
 3. password는 인증된 request에서 Worker의 batch runtime으로 one-time Unix-domain socket을 통해 전달하고 process memory에서 동일 batch file에 재사용합니다. socket server는 Worker가 소유하고 API는 client로 연결합니다.
 4. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
-5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기합니다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
+5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기합니다. 실행 중인 batch의 cancellation·stop·lease loss는 해당 batch registry scope를 폐기하고 secret-server identity를 deactivate하며, Worker shutdown은 전체 registry를 폐기합니다. 정상 성공한 sibling을 위해 scope를 바로 폐기하지 않습니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
 6. native extraction 뒤 품질 규칙이 `OCR_REQUIRED`로 분류한 page만 local Korean/English OCR을 실행합니다. 이 branch에는 separate OCR layer persistence, descriptor-derived PDFium renderer, direct no-shell Tesseract adapter, cleanup, and synthetic acceptance가 있습니다. 실제 private PDF와 private runtime acceptance는 아직 pending입니다.
 7. 성공 source는 document별 data key로 암호화해 Worker 전용 managed archive에 저장하고 key는 Worker 전용 runtime master key로 wrap합니다. master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600`입니다.
 8. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
@@ -70,6 +70,7 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 | 제한 | 정확한 값 | 적용 위치 |
 |---|---:|---|
 | 입력 파일 | 25 MiB 이하 | child 실행 전 intake |
+| 복호화 평문 extent | 25 MiB 이하 | 암호 해제 writer의 clone/write 경계 |
 | PDF 페이지 | 500 이하 | `pypdf` structural validation |
 | parent wall timeout | 120초 | parser supervisor |
 | child CPU limit | 90초 | parser child `RLIMIT_CPU` |
@@ -80,6 +81,16 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 
 작업 디렉터리는 mode `0700`, 그 안의 파일은 mode `0600`으로 생성합니다. 임시 평문과 페이지 산출물은 성공·실패·취소·강제 종료 경로에서 삭제를 시도하고, 삭제 실패는 성공으로 숨기지 않습니다.
 
+## Implemented private-import reliability corrections
+
+이 보강은 private batch 경계의 합성 fixture와 fake repository에서 구현·검증되었으며, 실제 private PDF나 Compose runtime acceptance를 의미하지 않습니다.
+
+- 암호 해제 성공 뒤 `len(reader.pages)`를 확인하고, 500페이지를 넘으면 `PdfWriter.clone_document_from_reader()` 전에 `PAGE_LIMIT_EXCEEDED`로 종료합니다. mode `0600` 평문 handle을 감싸는 seek-aware writer는 현재 extent를 25 MiB(`MAX_INPUT_BYTES`)보다 크게 만드는 write를 거부합니다. 이 경계에서 parser·archive·persistence는 호출되지 않고 mode `0700` workspace cleanup이 계속 적용됩니다.
+- `BatchPasswordRegistry`는 cancellation, stop request, parser/OCR cancellation, heartbeat에 의한 lease loss에서 현재 batch scope를 폐기합니다. `BatchRunner`의 sanitized `on_password_discarded` callback은 production에서 `BatchSecretSocketServer.deactivate`로 연결됩니다. 정상 sibling 성공에서는 password를 재사용할 수 있도록 폐기하지 않으며 Worker shutdown은 registry 전체를 폐기합니다.
+- Worker는 archive 생성 직전에 stop 상태와 owned heartbeat를 확인하고, durable `ArchiveStore.put()` 직후에도 다시 확인합니다. 두 번째 확인이 실패하면 새 ciphertext는 아직 DB가 참조하지 않는 definite orphan이므로 정확한 archive object만 삭제한 뒤 password scope를 폐기합니다.
+- `mark_succeeded()` 호출 이후 예외는 DB commit 결과가 불명확할 수 있으므로 ciphertext를 삭제하지 않습니다. password scope를 폐기하고 path, object key, password, label, document content를 포함하지 않는 `batch_archive_commit_uncertain` 안정 이벤트(허용된 item ID만 포함)를 기록합니다. 남은 encrypted orphan은 향후 DB/archive reconciler가 다룰 별도 작업입니다.
+- source catalog는 slash와 backslash 뒤의 leaf만 취하고 non-printable 문자를 제거하고 trim·160자 제한을 적용하며, 정규화 후 비어 있으면 `PDF document`로 대체합니다. import-source와 batch-item Pydantic 모델, canonical OpenAPI, `document-batch-status.v1` JSON Schema는 모두 1–160 길이와 `^[^\\u0000-\\u001f\\u007f-\\u009f]+$` printable-label 패턴을 사용합니다.
+
 ## Path and content validation
 
 1. Phase 1 Worker는 `FAMILYCARE_DOCUMENT_ROOT`가 존재하는 absolute directory인지 확인합니다. CI에서는 이 변수에 private path를 지정하지 않고, 합성 fixture를 checkout 밖의 `TemporaryDirectory`에 복사해 지정합니다. private batch는 이 root를 사용하지 않습니다.
@@ -87,7 +98,7 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 3. 요청과 job은 relative `source_key`만 받습니다. absolute path, NUL byte, `..` component, root 밖으로 정규화되는 경로를 거부합니다.
 4. root directory descriptor에서 시작해 각 상대 path component를 chained `openat`/`dir_fd`, `O_NOFOLLOW`, directory-only flags로 열고, 최종 source를 `O_RDONLY | O_CLOEXEC | O_NOFOLLOW` semantics로 한 번만 엽니다. 디렉터리 descriptor는 최종 파일을 열 때까지 유지합니다. 이 열린 file identity의 duplicate handles에 대해 `fstat` regular-file, size, PDF magic, pypdf structure, and SHA-256을 수행합니다. consumer 사이에는 offset을 reset하거나 descriptor를 duplicate하며, validate-path 후 path를 다시 여는 TOCTOU 경로를 만들지 않습니다.
 5. Linux child에는 reopen 가능한 path를 전달하지 않습니다. parent가 연 read-only descriptor를 inherited 또는 duplicated descriptor로 전달하고, child는 그 descriptor를 통해서만 PDF를 읽습니다. source_key, descriptor metadata, errors와 logs는 sanitized form만 사용합니다.
-6. 파일 크기를 25 MiB와 output 64 MiB 제한에 맞춰 검사합니다.
+6. 원본과 복호화 평문 extent는 각각 25 MiB로 제한하고 parser output은 64 MiB 제한에 맞춰 검사합니다.
 7. 원본 바이트의 SHA-256은 열린 descriptor에서 1 MiB(`1_048_576`) chunk로 streaming 계산합니다. 전체 원본을 메모리에 올리지 않습니다.
 
 다음 인터페이스가 path validation과 opened-handle hash 경계를 고정합니다.

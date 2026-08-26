@@ -1,6 +1,6 @@
 # Private data and local runtime design
 
-- 상태: encrypted import·selective OCR 계약과 구현 문서화, private runtime acceptance 대기
+- 상태: encrypted import·selective OCR·private import reliability 구현 문서화, private runtime acceptance 대기
 - 적용 단계: 암호 PDF batch, selective OCR, Phase 8 private-data acceptance
 - 실행 위치: 개인 PC의 WSL Docker Compose
 
@@ -52,6 +52,8 @@ Tailscale private device
 6. data key는 runtime master key로 wrap하고 DB에는 wrapped key와 암호화 metadata만 저장한다.
 7. 복호화 평문과 OCR page image는 작업별 임시 directory에만 존재하고 모든 종료 경로에서 삭제한다.
 8. import source를 자동 삭제하거나 Google Drive 원본을 변경하지 않는다.
+9. archive를 쓰기 직전에 stop 상태와 item lease heartbeat를 확인하고, durable archive write 직후에도 다시 확인한다. 후자의 확인이 실패하면 DB metadata가 아직 archive를 참조하지 않으므로 새 ciphertext를 definite orphan으로 삭제한다.
+10. `mark_succeeded()` outcome이 불명확해진 뒤에는 ciphertext를 보존하고 password scope를 폐기한다. `batch_archive_commit_uncertain` 안정 이벤트만 남기며 archive object key나 private content를 로그에 기록하지 않는다.
 
 Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만큼 증가한다. 원본·DB·archive backup과 복구는 v0.1 운영 가이드에서 명령 단위로 분리한다.
 
@@ -61,9 +63,18 @@ Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만�
 - 사용자 입력 password는 process memory에만 있고 API response, DB, job payload, log에 없다.
 - 동일 batch의 암호 문서에 우선 재사용하되 실패 파일만 새 password를 요청한다.
 - password 값으로 문서 소유자나 가족 관계를 추론하지 않는다.
-- Worker 반복은 scope expiry를 정리하고 재입력은 이전 scope를 교체·폐기한다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기한다.
-- Worker가 아직 잡지 않은 대기 batch를 API에서 취소하면 별도 control frame을 보내지 않으므로 최대 5분 expiry에서 정리된다. batch 성공·실패 직후의 즉시 scope 폐기나 프로세스 종료 뒤 terminal memory disposal은 아직 확인하거나 주장하지 않는다.
+- Worker 반복은 scope expiry를 정리하고 재입력은 이전 scope를 교체·폐기한다. 실행 중인 batch의 cancellation·stop·parser/OCR cancellation·lease loss는 해당 batch scope를 폐기하고 secret-server batch identity를 deactivate한다. Worker shutdown은 전체 registry를 폐기한다.
+- Worker가 아직 잡지 않은 대기 batch를 API에서 취소하면 별도 control frame을 보내지 않으므로 최대 5분 expiry에서 정리된다. 정상 sibling 성공 때는 같은 batch password를 재사용할 수 있도록 즉시 폐기하지 않으며, 불명확한 archive success commit에서는 scope를 폐기한다.
 - 재분석은 관리 archive를 사용하므로 정상 import 후 원본 PDF password를 매번 요구하지 않는다.
+
+## Encrypted archive orphan boundary
+
+Archive write와 DB success transition 사이의 실패는 두 종류로 나눈다.
+
+- DB persistence가 시작되기 전에 stop 또는 owned heartbeat가 실패하면 새 object는 definite orphan이다. Worker는 object key를 다시 구성해 정확히 그 ciphertext만 삭제하고, 원본 import source와 Google Drive 파일은 건드리지 않는다.
+- `mark_succeeded()`가 시작된 뒤 예외가 발생하면 DB가 이미 commit되었는지 알 수 없다. 이 경우 ciphertext를 삭제하면 committed `managed_archives` row가 가리키는 object를 잃을 수 있으므로 보존하고, password를 폐기한 뒤 `batch_archive_commit_uncertain`만 기록한다.
+
+보존된 encrypted orphan을 DB row와 archive metadata로 대조하고 보존·격리·삭제하는 reconciler와 운영 UI는 아직 구현하지 않았다. 이는 향후 repository/archive reconciler 작업의 책임이며, 이 branch가 임의 삭제나 실제 자료 정리를 수행했다는 뜻이 아니다.
 
 ## Archive key
 
@@ -114,7 +125,7 @@ v0.1에 포함하지 않음:
 
 ## Private-data acceptance (pending)
 
-현재 실제 자료 acceptance는 수행하지 않았다. 실제 private PDF, private Compose mount, mobile, Windows, Tailscale, provider, and private OCR acceptance가 모두 별도 검증 대기 상태다. 합성 OCR regression과 Worker image `eng`/`kor` language smoke는 실제 자료 검증의 대체물이 아니다. 실제 자료 검증은 private runtime PR이 다음 단계로 완료되고 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
+현재 실제 자료 acceptance는 수행하지 않았다. 이 reliability branch의 합성 Worker/API 테스트는 실제 private PDF, private Compose mount, mobile, Windows, Tailscale device/network, provider, and private OCR acceptance를 검증하지 않는다. 해당 항목은 모두 별도 검증 대기 상태이며, 실제 자료 검증은 private runtime PR이 다음 단계로 완료되고 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
 
 1. 정확한 source와 output root를 읽기 전용으로 확인한다.
 2. `git status`와 safety scanner 기준선을 기록한다.
@@ -137,6 +148,10 @@ v0.1에 포함하지 않음:
 
 - 가족별 batch scope와 cross-member 혼합 거부
 - 한 번 입력 password 재사용, 부분 실패 재입력, DB/job/log 비저장
+- encrypted plaintext 25 MiB extent와 500-page pre-clone bound, parser/archive/persistence 미호출
+- cancellation·stop·lease loss의 registry disposal과 secret-server deactivation callback
+- archive 전후 heartbeat, definite-orphan 삭제, ambiguous commit ciphertext 보존과 안정 이벤트
+- printable path-free display-label normalization과 API/OpenAPI/JSON Schema parity
 - encrypted archive round-trip, tamper, wrong/missing key, key-wrap rotation
 - 성공·실패·취소·shutdown 임시 평문 cleanup
 - `OCR_REQUIRED` page만 한국어·영어 local OCR 실행, `TEXT_SUFFICIENT` skip, and fixed 300 DPI
