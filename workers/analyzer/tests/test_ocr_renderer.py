@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 import pytest
-from familycare_worker.ocr.models import OcrConfigurationError
+from familycare_worker.ocr.models import OcrConfigurationError, OcrRenderError
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.pdf.workspace import create_workspace
 from PIL import Image
@@ -92,6 +92,58 @@ def test_renderer_rejects_output_without_mode_0600(tmp_path: Path) -> None:
             pytest.raises(OcrConfigurationError),
         ):
             PdfiumPageRenderer().render(source_fd, 1, output, dpi=300)
+    finally:
+        os.close(output_fd)
+        os.close(source_fd)
+
+
+def test_renderer_rejects_oversized_page_before_allocating_bitmap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class OversizedPage:
+        render_called = False
+
+        def get_size(self) -> tuple[float, float]:
+            return (5_000.0, 5_000.0)
+
+        def render(self, *, scale: float) -> object:
+            del scale
+            self.render_called = True
+            raise AssertionError("bitmap allocation must not start")
+
+        def close(self) -> None:
+            return None
+
+    class SyntheticDocument:
+        page = OversizedPage()
+
+        def __len__(self) -> int:
+            return 1
+
+        def get_page(self, index: int) -> OversizedPage:
+            assert index == 0
+            return self.page
+
+        def close(self) -> None:
+            return None
+
+    document = SyntheticDocument()
+    monkeypatch.setattr(
+        "familycare_worker.ocr.renderer.pdfium.PdfDocument",
+        lambda _source: document,
+    )
+    source_path = tmp_path / "synthetic.pdf"
+    source_path.write_bytes(b"%PDF-1.7\nsynthetic")
+    source_fd = os.open(source_path, os.O_RDONLY | os.O_CLOEXEC)
+    output_fd = os.open(tmp_path / "output.png", os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+    try:
+        with (
+            os.fdopen(output_fd, "w+b", closefd=False) as output,
+            pytest.raises(OcrRenderError),
+        ):
+            PdfiumPageRenderer().render(source_fd, 1, output, dpi=300)
+        assert document.page.render_called is False
     finally:
         os.close(output_fd)
         os.close(source_fd)

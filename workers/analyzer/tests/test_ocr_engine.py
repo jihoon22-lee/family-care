@@ -6,7 +6,11 @@ import os
 from pathlib import Path
 
 import pytest
-from familycare_worker.ocr.engine import CommandOutput, TesseractOcrEngine
+from familycare_worker.ocr.engine import (
+    CommandOutput,
+    TesseractOcrEngine,
+    run_bounded_command,
+)
 from familycare_worker.ocr.models import (
     OcrConfigurationError,
     OcrExecutionError,
@@ -161,3 +165,70 @@ def test_engine_rejects_more_than_ten_thousand_blocks(tmp_path: Path) -> None:
         ).recognize(image_path, languages=("kor", "eng"))
 
     assert captured.value.code == "OCR_OUTPUT_LIMIT_EXCEEDED"
+
+
+def test_bounded_command_reaps_process_when_selector_setup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeStdout:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class FakeProcess:
+        pid = 4242
+        stdout = FakeStdout()
+        returncode: int | None = None
+        waited = False
+
+        def poll(self) -> int | None:
+            return self.returncode
+
+        def wait(self, timeout: float | None = None) -> int:
+            del timeout
+            self.waited = True
+            self.returncode = -9
+            return self.returncode
+
+        def kill(self) -> None:
+            self.returncode = -9
+
+    class FailingSelector:
+        closed = False
+
+        def register(self, fileobj: object, events: int) -> None:
+            del fileobj, events
+            raise OSError("synthetic selector failure")
+
+        def close(self) -> None:
+            self.closed = True
+
+    process = FakeProcess()
+    selector = FailingSelector()
+    killed_groups: list[tuple[int, int]] = []
+    monkeypatch.setattr(
+        "familycare_worker.ocr.engine.subprocess.Popen",
+        lambda *args, **kwargs: process,
+    )
+    monkeypatch.setattr(
+        "familycare_worker.ocr.engine.selectors.DefaultSelector",
+        lambda: selector,
+    )
+    monkeypatch.setattr(
+        "familycare_worker.ocr.engine.os.killpg",
+        lambda pid, sig: killed_groups.append((pid, sig)),
+    )
+
+    with pytest.raises(OcrExecutionError) as captured:
+        run_bounded_command(
+            ["/usr/bin/tesseract", "--version"],
+            timeout_seconds=5.0,
+            max_output_bytes=4096,
+        )
+
+    assert captured.value.code == "OCR_FAILED"
+    assert killed_groups
+    assert process.waited is True
+    assert process.stdout.closed is True
+    assert selector.closed is True

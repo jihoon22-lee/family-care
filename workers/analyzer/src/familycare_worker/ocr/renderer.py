@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fcntl
+import math
 import os
 import stat
 from typing import BinaryIO
@@ -100,6 +101,22 @@ class PdfiumPageRenderer:
             if page_number > len(document):
                 raise OcrConfigurationError
             page = document.get_page(page_number - 1)
+            page_width, page_height = page.get_size()
+            if (
+                not math.isfinite(page_width)
+                or not math.isfinite(page_height)
+                or page_width <= 0
+                or page_height <= 0
+            ):
+                raise OcrRenderError
+            expected_width = math.ceil(page_width * dpi / 72)
+            expected_height = math.ceil(page_height * dpi / 72)
+            if (
+                expected_width > MAX_RENDERED_DIMENSION
+                or expected_height > MAX_RENDERED_DIMENSION
+                or expected_width * expected_height > MAX_RENDERED_PIXELS
+            ):
+                raise OcrRenderError
             bitmap = page.render(scale=dpi / 72)
             image = bitmap.to_pil()
             width, height = image.size

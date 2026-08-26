@@ -11,6 +11,7 @@ import signal
 import stat
 import subprocess
 import time
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -116,10 +117,11 @@ def run_bounded_command(
         raise OcrExecutionError("OCR_FAILED")
 
     output = bytearray()
-    selector = selectors.DefaultSelector()
-    selector.register(process.stdout, selectors.EVENT_READ)
+    selector: selectors.BaseSelector | None = None
     deadline = time.monotonic() + timeout_seconds
     try:
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -150,8 +152,17 @@ def run_bounded_command(
         _kill_process(process)
         raise OcrExecutionError("OCR_FAILED") from None
     finally:
-        selector.close()
-        process.stdout.close()
+        try:
+            running = process.poll() is None
+        except OSError:
+            running = True
+        if running:
+            _kill_process(process)
+        if selector is not None:
+            with suppress(OSError):
+                selector.close()
+        with suppress(OSError):
+            process.stdout.close()
 
 
 def _secure_image_dimensions(image_path: Path) -> tuple[int, int]:
