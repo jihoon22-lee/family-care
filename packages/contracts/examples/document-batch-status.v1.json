@@ -6,6 +6,9 @@
       "attempts": 1,
       "display_label": "Sample policy document A.pdf",
       "error_code": null,
+      "ocr_pages_processed": 2,
+      "ocr_state": "completed",
+      "ocr_warning_codes": [],
       "source_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "state": "succeeded"
     },
@@ -13,6 +16,9 @@
       "attempts": 1,
       "display_label": "Sample policy document B.pdf",
       "error_code": "PASSWORD_REQUIRED",
+      "ocr_pages_processed": 0,
+      "ocr_state": "pending",
+      "ocr_warning_codes": [],
       "source_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "state": "password_required"
     }

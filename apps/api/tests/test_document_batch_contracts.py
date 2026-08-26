@@ -60,6 +60,13 @@ def test_batch_status_contains_only_bounded_source_projection() -> None:
     assert forbidden.isdisjoint(status)
     assert all(field not in item for item in status["items"] for field in forbidden)
     assert all(len(item["display_label"]) <= 160 for item in status["items"])
+    assert all(
+        set(item["ocr_warning_codes"]) <= {"LOW_CONFIDENCE", "NO_TEXT_DETECTED"}
+        and len(item["ocr_warning_codes"]) <= 8
+        and len(item["ocr_warning_codes"]) == len(set(item["ocr_warning_codes"]))
+        for item in status["items"]
+    )
+    assert all(0 <= item["ocr_pages_processed"] <= 500 for item in status["items"])
 
 
 def test_batch_schemas_are_strict_and_define_stable_states() -> None:
@@ -90,6 +97,46 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
         "permanently_failed",
         "cancelled",
     ]
+
+
+def test_batch_status_defines_bounded_ocr_progress_projection() -> None:
+    status_schema = json.loads(
+        (SCHEMA_ROOT / "document-batch-status.v1.schema.json").read_text(encoding="utf-8")
+    )
+    item = status_schema["$defs"]["DocumentBatchItem"]
+    definitions = status_schema["$defs"]
+
+    assert item["properties"]["ocr_state"] == {"$ref": "#/$defs/OcrState"}
+    assert item["properties"]["ocr_pages_processed"] == {
+        "minimum": 0,
+        "maximum": 500,
+        "type": "integer",
+    }
+    assert item["properties"]["ocr_warning_codes"] == {
+        "items": {"$ref": "#/$defs/OcrWarningCode"},
+        "maxItems": 8,
+        "type": "array",
+        "uniqueItems": True,
+    }
+    assert {"ocr_state", "ocr_pages_processed", "ocr_warning_codes"}.issubset(item["required"])
+    assert definitions["OcrState"]["enum"] == [
+        "pending",
+        "native_only",
+        "running",
+        "completed",
+        "warning",
+        "failed",
+    ]
+    assert definitions["OcrWarningCode"]["enum"] == [
+        "LOW_CONFIDENCE",
+        "NO_TEXT_DETECTED",
+    ]
+    assert {
+        "OCR_FAILED",
+        "OCR_TIMEOUT",
+        "OCR_UNAVAILABLE",
+        "OCR_OUTPUT_LIMIT_EXCEEDED",
+    }.issubset(set(definitions["BatchErrorCode"]["enum"]))
 
 
 def test_batch_checker_and_generated_consumers_are_current() -> None:

@@ -315,6 +315,10 @@
                   "DOCUMENT_TOO_LARGE",
                   "EXTRACTION_TIMEOUT",
                   "INVALID_REQUEST",
+                  "OCR_FAILED",
+                  "OCR_OUTPUT_LIMIT_EXCEEDED",
+                  "OCR_TIMEOUT",
+                  "OCR_UNAVAILABLE",
                   "PAGE_LIMIT_EXCEEDED",
                   "PASSWORD_INVALID",
                   "PASSWORD_REQUIRED",
@@ -331,6 +335,37 @@
               }
             ],
             "title": "Error Code"
+          },
+          "ocr_pages_processed": {
+            "maximum": 500.0,
+            "minimum": 0.0,
+            "title": "Ocr Pages Processed",
+            "type": "integer"
+          },
+          "ocr_state": {
+            "enum": [
+              "completed",
+              "failed",
+              "native_only",
+              "pending",
+              "running",
+              "warning"
+            ],
+            "title": "Ocr State",
+            "type": "string"
+          },
+          "ocr_warning_codes": {
+            "items": {
+              "enum": [
+                "LOW_CONFIDENCE",
+                "NO_TEXT_DETECTED"
+              ],
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Ocr Warning Codes",
+            "type": "array",
+            "uniqueItems": true
           },
           "source_id": {
             "pattern": "^[a-f0-9]{64}$",
@@ -356,7 +391,10 @@
           "display_label",
           "state",
           "error_code",
-          "attempts"
+          "attempts",
+          "ocr_state",
+          "ocr_pages_processed",
+          "ocr_warning_codes"
         ],
         "title": "BatchItemResponse",
         "type": "object"

@@ -46,6 +46,10 @@
         "DOCUMENT_TOO_LARGE",
         "EXTRACTION_TIMEOUT",
         "INVALID_REQUEST",
+        "OCR_FAILED",
+        "OCR_TIMEOUT",
+        "OCR_UNAVAILABLE",
+        "OCR_OUTPUT_LIMIT_EXCEEDED",
         "PAGE_LIMIT_EXCEEDED",
         "PASSWORD_INVALID",
         "PASSWORD_REQUIRED",
@@ -149,6 +153,22 @@
           ],
           "title": "BatchErrorCodeOrNull"
         },
+        "ocr_pages_processed": {
+          "maximum": 500,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ocr_state": {
+          "$ref": "#/$defs/OcrState"
+        },
+        "ocr_warning_codes": {
+          "items": {
+            "$ref": "#/$defs/OcrWarningCode"
+          },
+          "maxItems": 8,
+          "type": "array",
+          "uniqueItems": true
+        },
         "source_id": {
           "$ref": "#/$defs/SourceId"
         },
@@ -161,7 +181,10 @@
         "display_label",
         "state",
         "error_code",
-        "attempts"
+        "attempts",
+        "ocr_state",
+        "ocr_pages_processed",
+        "ocr_warning_codes"
       ],
       "title": "DocumentBatchItem",
       "type": "object"
@@ -201,6 +224,26 @@
       ],
       "title": "ImportSource",
       "type": "object"
+    },
+    "OcrState": {
+      "enum": [
+        "pending",
+        "native_only",
+        "running",
+        "completed",
+        "warning",
+        "failed"
+      ],
+      "title": "OcrState",
+      "type": "string"
+    },
+    "OcrWarningCode": {
+      "enum": [
+        "LOW_CONFIDENCE",
+        "NO_TEXT_DETECTED"
+      ],
+      "title": "OcrWarningCode",
+      "type": "string"
     },
     "SourceId": {
       "maxLength": 64,

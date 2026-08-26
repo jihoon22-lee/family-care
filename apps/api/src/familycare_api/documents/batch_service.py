@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -43,7 +42,19 @@ def _projection(batch: BatchRecord) -> dict[str, Any]:
         "batch_id": str(batch.batch_id),
         "family_member_id": str(batch.family_member_id),
         "state": batch.state,
-        "items": [asdict(item) for item in batch.items],
+        "items": [
+            {
+                "source_id": item.source_id,
+                "display_label": item.display_label,
+                "state": item.state,
+                "error_code": item.error_code,
+                "attempts": item.attempts,
+                "ocr_state": item.ocr_state,
+                "ocr_pages_processed": item.ocr_pages_processed,
+                "ocr_warning_codes": list(item.ocr_warning_codes),
+            }
+            for item in batch.items
+        ],
     }
 
 

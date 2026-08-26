@@ -14,6 +14,8 @@ from familycare_api.documents.generated_batch_contracts import (
     BatchErrorCode,
     BatchItemState,
     BatchState,
+    OcrState,
+    OcrWarningCode,
 )
 from familycare_api.documents.import_sources import ImportSourceCatalog
 from familycare_api.errors import ErrorResponse
@@ -62,6 +64,19 @@ class BatchItemResponse(BaseModel):
     state: BatchItemState
     error_code: BatchErrorCode | None
     attempts: int = Field(ge=0, le=20)
+    ocr_state: OcrState
+    ocr_pages_processed: int = Field(ge=0, le=500)
+    ocr_warning_codes: list[OcrWarningCode] = Field(
+        max_length=8,
+        json_schema_extra={"uniqueItems": True},
+    )
+
+    @field_validator("ocr_warning_codes")
+    @classmethod
+    def validate_ocr_warning_codes(cls, value: list[OcrWarningCode]) -> list[OcrWarningCode]:
+        if len(value) != len(set(value)):
+            raise ValueError("duplicate OCR warning code")
+        return value
 
 
 class BatchResponse(BaseModel):

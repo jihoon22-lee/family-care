@@ -10,6 +10,18 @@ const ITEM_LABELS: Record<BatchResponse["items"][number]["state"], string> = {
   succeeded: "완료",
 };
 
+const OCR_STATE_LABELS: Record<
+  BatchResponse["items"][number]["ocr_state"],
+  string
+> = {
+  completed: "OCR 완료",
+  failed: "OCR 실패",
+  native_only: "OCR 불필요 (원문 사용)",
+  pending: "OCR 대기 중",
+  running: "OCR 처리 중",
+  warning: "OCR 확인 필요",
+};
+
 export function BatchProgress({
   batch,
   busy = false,
@@ -48,6 +60,8 @@ export function BatchProgress({
             <span>
               <strong>{item.display_label}</strong>
               <small>시도 {item.attempts}회</small>
+              <small>OCR 상태: {OCR_STATE_LABELS[item.ocr_state]}</small>
+              <small>OCR 처리 페이지 {item.ocr_pages_processed}</small>
             </span>
             <span className={`import-state import-state-${item.state}`}>
               {ITEM_LABELS[item.state]}

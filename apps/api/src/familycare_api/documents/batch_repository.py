@@ -28,6 +28,9 @@ class BatchItemRecord:
     state: str
     error_code: str | None
     attempts: int
+    ocr_state: str
+    ocr_pages_processed: int
+    ocr_warning_codes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -71,6 +74,9 @@ def _batch(row: dict[str, Any], items: list[dict[str, Any]]) -> BatchRecord:
                 state=cast(str, item["state"]),
                 error_code=cast(str | None, item["error_code"]),
                 attempts=cast(int, item["attempts"]),
+                ocr_state=cast(str, item["ocr_state"]),
+                ocr_pages_processed=cast(int, item["ocr_pages_processed"]),
+                ocr_warning_codes=tuple(cast(list[str], item["ocr_warning_codes"])),
             )
             for item in items
         ),
@@ -135,7 +141,8 @@ class BatchRepository:
                             batch_id, source_id, source_key, display_label
                         )
                         VALUES (%s, %s, %s, %s)
-                        RETURNING source_id, display_label, state, error_code, attempts
+                        RETURNING source_id, display_label, state, error_code, attempts,
+                                  ocr_state, ocr_pages_processed, ocr_warning_codes
                         """,
                         (
                             row["id"],
@@ -168,7 +175,8 @@ class BatchRepository:
                     return None
                 items = connection.execute(
                     """
-                    SELECT source_id, display_label, state, error_code, attempts
+                    SELECT source_id, display_label, state, error_code, attempts,
+                           ocr_state, ocr_pages_processed, ocr_warning_codes
                     FROM document_batch_items
                     WHERE batch_id = %s
                     ORDER BY created_at, id

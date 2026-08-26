@@ -606,6 +606,10 @@ export interface BatchItemResponse {
     | "DOCUMENT_TOO_LARGE"
     | "EXTRACTION_TIMEOUT"
     | "INVALID_REQUEST"
+    | "OCR_FAILED"
+    | "OCR_OUTPUT_LIMIT_EXCEEDED"
+    | "OCR_TIMEOUT"
+    | "OCR_UNAVAILABLE"
     | "PAGE_LIMIT_EXCEEDED"
     | "PASSWORD_INVALID"
     | "PASSWORD_REQUIRED"
@@ -615,6 +619,10 @@ export interface BatchItemResponse {
     | "TEMP_CLEANUP_FAILED"
     | "UNSUPPORTED_FILE_TYPE"
     | null;
+  ocr_pages_processed: number;
+  ocr_state:
+    "completed" | "failed" | "native_only" | "pending" | "running" | "warning";
+  ocr_warning_codes: Array<"LOW_CONFIDENCE" | "NO_TEXT_DETECTED">;
   source_id: string;
   state:
     | "cancelled"

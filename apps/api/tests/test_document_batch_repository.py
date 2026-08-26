@@ -21,9 +21,15 @@ SOURCE_ID_C = "c" * 64
 FORBIDDEN_PROJECTION_KEYS = {
     "absolute_path",
     "archive_master_key",
+    "bbox",
+    "coordinates",
+    "image_path",
+    "ocr_text",
     "password",
+    "raw_error",
     "raw_pdf",
     "source_key",
+    "stderr",
 }
 
 
@@ -284,7 +290,13 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
         "state",
         "error_code",
         "attempts",
+        "ocr_state",
+        "ocr_pages_processed",
+        "ocr_warning_codes",
     }
+    assert all(item.ocr_state == "pending" for item in scoped.items)
+    assert all(item.ocr_pages_processed == 0 for item in scoped.items)
+    assert all(item.ocr_warning_codes == () for item in scoped.items)
     with psycopg.connect(_psycopg_url(database_url)) as connection:
         rows = connection.execute(
             """
@@ -370,6 +382,33 @@ def test_item_aggregate_transitions_from_partial_to_succeeded(
     assert succeeded is not None
     assert succeeded.state == "succeeded"
     assert all(item.state == "succeeded" for item in succeeded.items)
+
+
+def test_lookup_projects_ocr_progress_and_stable_warnings(
+    synthetic_database: tuple[str, _Seed],
+) -> None:
+    database_url, seed = synthetic_database
+    repository = BatchRepository(database_url)
+    created = _create_batch(repository, seed)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        updated = connection.execute(
+            """
+            UPDATE document_batch_items
+            SET ocr_state = 'warning', ocr_pages_processed = 2,
+                ocr_warning_codes = '["NO_TEXT_DETECTED"]'::jsonb
+            WHERE batch_id = %s AND source_id = %s
+            """,
+            (created.batch_id, SOURCE_ID_A),
+        )
+        assert updated.rowcount == 1
+
+    status = repository.get(household_space_id=seed.household_a, batch_id=created.batch_id)
+
+    assert status is not None
+    item = _items_by_source(status)[SOURCE_ID_A]
+    assert item.ocr_state == "warning"
+    assert item.ocr_pages_processed == 2
+    assert item.ocr_warning_codes == ("NO_TEXT_DETECTED",)
 
 
 def test_cancel_is_household_scoped_and_preserves_completed_items(

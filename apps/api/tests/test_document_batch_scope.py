@@ -99,6 +99,9 @@ class _ScopedBatchService:
                     "state": "queued",
                     "error_code": None,
                     "attempts": 0,
+                    "ocr_state": "pending",
+                    "ocr_pages_processed": 0,
+                    "ocr_warning_codes": [],
                 }
             ],
         }
@@ -122,6 +125,9 @@ class _ScopedBatchService:
                     "state": "running",
                     "error_code": None,
                     "attempts": 1,
+                    "ocr_state": "running",
+                    "ocr_pages_processed": 1,
+                    "ocr_warning_codes": [],
                 }
             ],
         }
