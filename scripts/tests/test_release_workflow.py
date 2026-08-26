@@ -14,6 +14,7 @@ def test_release_workflow_has_a_post_publish_verification_gate() -> None:
 
     assert "  verify-publication:" in content
     assert "scripts/release_audit.py" in content
+    assert "scripts/release_compose_smoke.py" in content
     assert "scripts/verify_release_images.py" in content
     assert validate_release(content) == []
 

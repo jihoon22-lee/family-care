@@ -188,6 +188,7 @@ def validate_release(content: str) -> list[str]:
         "no automatic latest tag": "latest=false",
         "container publication": "push: true",
         "release identity audit": "scripts/release_audit.py",
+        "release Compose smoke": "scripts/release_compose_smoke.py",
         "published digest verification": "scripts/verify_release_images.py",
     }
     for label, fragment in required_fragments.items():
@@ -211,6 +212,8 @@ def validate_release(content: str) -> list[str]:
         errors.append(f"{relative}: latest tag is forbidden")
     if "scripts/release_audit.py" not in validate:
         errors.append(f"{relative}: release identity audit must run before publication")
+    if "scripts/release_compose_smoke.py" not in validate:
+        errors.append(f"{relative}: release Compose smoke must run before publication")
     if "scripts/verify_release_images.py" not in verify:
         errors.append(f"{relative}: published digest verification is required")
     if not re.search(r"(?m)^    needs: publish\s*$", verify):

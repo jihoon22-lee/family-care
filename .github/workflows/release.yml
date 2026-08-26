@@ -93,6 +93,17 @@ jobs:
           uv run python scripts/release_audit.py \
             --version "$RELEASE_VERSION" \
             --commit-sha "$GITHUB_SHA"
+      - name: Validate digest-pinned release Compose boundary
+        env:
+          SYNTHETIC_WEB_DIGEST: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          SYNTHETIC_API_DIGEST: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          SYNTHETIC_WORKER_DIGEST: sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+        run: |
+          uv run python scripts/release_compose_smoke.py \
+            --web-image "ghcr.io/synthetic/familycare-web@${SYNTHETIC_WEB_DIGEST}" \
+            --api-image "ghcr.io/synthetic/familycare-api@${SYNTHETIC_API_DIGEST}" \
+            --worker-image "ghcr.io/synthetic/familycare-worker@${SYNTHETIC_WORKER_DIGEST}" \
+            --config-check
       - name: Validate Python and database integration
         run: |
           uv run ruff format --check .
