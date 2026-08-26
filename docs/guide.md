@@ -48,16 +48,9 @@ WSL 메모리 압력을 피하기 위해 Web, Python, 컨테이너 검사를 직
 
 ### Start services
 
-```bash
-make up
-```
+Compose 실행에는 저장소 밖 import root와 master-key file이 필요합니다. 아래의 **Private local Docker runtime** 절차에서 `.env.private`, migration, 미사용 Web port를 먼저 준비한 뒤 `ENV_FILE=.env.private make up`을 실행합니다.
 
-Foundation 서비스:
-
-- Web: `http://127.0.0.1:8080`
-- API liveness: `http://127.0.0.1:8000/health/live`
-- API readiness: `http://127.0.0.1:8000/health/ready`
-- PostgreSQL: 로컬 개발 포트 5432
+host에는 `http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}` Web gateway만 열립니다. API의 8000과 PostgreSQL의 5432는 Compose network 내부 port이며 host에 publish하지 않습니다. 업무 API는 같은 Web origin의 `/api/`를 통해서만 사용합니다.
 
 Phase 1의 문서 endpoint와 analyzer는 인증이 없는 local synthetic-only 개발 기능입니다. production-safe endpoint가 아닙니다. 업무 API와 Web PWA는 외부 provider가 아니라 `docs/design/authentication.md`의 두 로컬 관리자와 server-side session으로 보호됩니다.
 
@@ -132,13 +125,13 @@ GET    /api/v1/evidence/{evidence_id}
 인증된 local session에서 동일 API에 보낼 최소 요청 모양은 다음과 같습니다. 아래 UUID와 값은 저장소 안에서만 쓰는 합성 예시이며, 실제 요청에는 로그인으로 발급된 host-only cookie와 state-changing 요청용 CSRF header가 필요합니다.
 
 ```bash
-curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events \
+curl -i -X POST http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}/api/v1/medical-events \
   -H 'content-type: application/json' \
   --data '{"family_member_id":"00000000-0000-4000-8000-000000000101","mode":"pre_visit","situation":"진료 전에 확인할 합성 상황입니다.","event_date":"2026-08-25","facts":{"MedicalEvent.classification":{"value":"injury","confirmation":"user"}}}'
 
-curl -i -X POST http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-000000000102/analyze
+curl -i -X POST http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}/api/v1/medical-events/00000000-0000-4000-8000-000000000102/analyze
 
-curl -i http://127.0.0.1:8000/api/v1/medical-events/00000000-0000-4000-8000-000000000102/results/1
+curl -i http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}/api/v1/medical-events/00000000-0000-4000-8000-000000000102/results/1
 ```
 
 분석은 repeatable-read transaction 안에서 하나의 run, RuleEvaluation, Evidence join/snapshot, Rider candidate를 원자적으로 저장합니다. 결과에는 run·event·engine·rule-set version, 후보별 tri-state, 부족/충돌 field, reason code, bounded Evidence가 포함되며 모든 decision response는 `Cache-Control: no-store`입니다. Evidence snapshot에는 당시 문서/추출 ID, 페이지, 좌표, review state, content hash가 있어 나중에 Evidence 원본 행이 바뀌어도 이미 저장된 결과의 근거가 조용히 바뀌지 않습니다. 이후 새 분석에서는 현재 Evidence를 다시 검증하므로 stale이면 `UNKNOWN`이 됩니다.
@@ -195,39 +188,87 @@ Checklist는 `document_kind`, requirement/prepared 상태, bounded `note_code`, 
 
 이 경계의 테스트와 예시는 처음부터 만든 합성 값만 사용합니다. 실제 보험 문서·개인정보, 보험사 제출, Windows·모바일 기기, Tailscale 접속은 아직 검증하지 않았습니다.
 
-### Planned v0.1 local runtime (acceptance pending)
+### Private local Docker runtime
 
-v0.1 목표는 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 두는 것입니다. Tailscale private access와 app login을 함께 사용하는 것도 목표이지만, 현재 Compose/private-data, mobile, Windows, Tailscale device, provider, OCR acceptance는 아직 수행하지 않았습니다.
+v0.1 Compose는 Web gateway 하나만 loopback에 publish하고 API, Worker, PostgreSQL은 internal network에 둡니다. API와 Worker는 저장소 밖 `FAMILYCARE_IMPORT_ROOT`를 동일한 read-only bind로 사용합니다. application-encrypted archive와 임시 work area는 Worker 전용 named volume이고, API는 고정 GID `10003`의 Unix socket volume만 공유합니다. master key와 `OPENAI_API_KEY`도 Worker만 받습니다.
 
-- `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only 개발 route의 외부 합성 root입니다. private batch에 실제 자료를 넣는 root가 아닙니다.
-- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory이며 API와 Worker가 함께 read-only로 bind mount하는 private batch source root입니다. API는 source catalog/opaque ID 해석, Worker는 intake를 담당합니다.
-- `FAMILYCARE_ARCHIVE_ROOT`와 `FAMILYCARE_WORK_ROOT`는 저장소 밖 absolute directory인 Worker 전용 root입니다. API와 Web에는 archive/work mount가 없습니다.
-- `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`은 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 합니다.
-- Worker가 Unix-domain secret socket server를 소유하고 API가 client로 한 번 연결합니다. socket 외 secret handoff는 사용하지 않습니다.
-- encrypted PDF password는 family-scoped batch process memory에서만 사용합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기하며, 실행 중인 batch 취소는 그 batch만 폐기하고 shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 별도 control frame을 보내지 않으므로 최대 5분 expiry에서 정리됩니다.
-- import source와 Google Drive 원본은 수정하거나 삭제하지 않습니다. Gemini와 Google Drive API는 사용하지 않습니다.
-- existing WSL `OPENAI_API_KEY`는 Worker container에만 주입하는 것이 목표이며 provider acceptance는 pending입니다.
-- managed archive key는 저장소 밖 file secret으로 제공합니다. LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
+#### Configure the private environment
+
+```bash
+cp .env.example .env.private
+chmod 0600 .env.private
+```
+
+`.env.private`에는 실제 값을 공개 문서나 shell history에 복사하지 말고 로컬 editor로 설정합니다.
+
+- `FAMILYCARE_IMPORT_ROOT`: 저장소 밖 absolute directory. API/Worker 모두 read-only이며 원본을 삭제하지 않습니다.
+- `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`: 저장소 밖 absolute regular file. 정확히 32 bytes, mode `0600`, numeric owner UID `10002`여야 합니다.
+- `FAMILYCARE_WEB_PORT`: 다른 프로젝트와 충돌하지 않는 미사용 loopback port.
+- database password: 개발 placeholder 대신 이 runtime 전용 값.
+
+기존 WSL shell의 `OPENAI_API_KEY`는 값을 출력하거나 파일로 복사하지 않고 그대로 Compose interpolation에 재사용합니다. shell 환경값은 `.env.private`의 합성 placeholder보다 우선합니다.
+
+```bash
+test -n "${OPENAI_API_KEY:-}"
+docker compose --env-file .env.private -f infra/compose/compose.yaml config --quiet
+```
+
+master-key metadata를 읽기 전용으로 확인했을 때 numeric owner, mode, size는 `10002:10002 600 32`여야 합니다. 이 조건을 맞추기 위해 필요한 경우 사용자가 정확히 선택한 key file 하나에만 `chown 10002:10002`와 `chmod 0600`을 적용합니다. key의 recovery copy는 Git·DB·container image와 분리해 보관하며, 실행 중인 앱이 recovery 저장소를 자동으로 읽거나 동기화하지 않습니다.
+
+처음 시작하거나 migration이 추가된 뒤에는 DB를 먼저 띄우고 migration을 적용합니다.
+
+```bash
+docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --wait db
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api \
+  alembic -c apps/api/alembic.ini upgrade head
+docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --wait
+```
+
+정상 상태에서는 네 서비스가 healthy이고 host publisher는 Web 하나뿐입니다. 외부 liveness는 Web 자체의 `/healthz`이고 API의 `/health/live`·`/health/ready`는 internal network에만 있습니다. Worker readiness는 DB와 import/archive/work, master-key mode, secret socket을 함께 검사하므로 key 또는 mount가 없으면 fail closed합니다. `FAMILYCARE_DOCUMENT_ROOT`는 별도 Phase 1 합성 개발 route 전용이며 private batch 입력으로 사용하지 않습니다.
+
+#### Read-only Tailscale inspection
+
+다음 inspector는 정확히 세 가지 read-only 명령만 허용하고 원본 stdout, node name, IP, tailnet 식별자를 보고서에 남기지 않습니다.
+
+```bash
+TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale status --json
+TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale ip -1
+TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale serve status
+```
+
+`serve`, `funnel`, `up`, `down`, `set`, `logout`과 추가 인자는 실행 전에 거부됩니다. inspector는 Serve 구성을 변경하지 않습니다. 실제 device access는 기존 mapping을 우선 재사용하고, 없을 때만 현재 상태와 CLI 문서를 별도로 확인한 뒤 충돌 없는 FamilyCare HTTPS endpoint 하나를 추가합니다. Funnel은 사용하지 않습니다. Tailscale 연결은 앱 인증을 대체하지 않으며, remote browser는 HTTPS에서 FamilyCare login과 Secure/HttpOnly session cookie, CSRF 검사를 모두 통과해야 합니다.
+
+#### Stop, backup, and restore ownership
+
+```bash
+docker compose --env-file .env.private -f infra/compose/compose.yaml down
+```
+
+기본 종료는 named volume을 삭제하지 않습니다. 일관된 backup 단위는 PostgreSQL volume, encrypted archive volume, 그리고 동일한 master key recovery copy입니다. Worker work와 secret-socket volume은 임시 상태이므로 backup 대상이 아닙니다. restore는 원본과 동일한 key를 먼저 복구하고 DB와 archive를 한 세트로 검증한 뒤 서비스를 시작해야 합니다. 이 가이드는 `down --volumes`, archive 삭제, key rotation을 자동 명령으로 제공하지 않습니다.
 
 ### Local authentication
 
-업무 API와 Web PWA는 하나의 `HouseholdSpace`에 연결된 동일 권한의 활성 로컬 관리자 두 계정으로 보호됩니다. v0.1에서는 활성 관리자를 정확히 두 개까지 둘 수 있고, 두 계정은 역할 차등 없이 같은 가족 원장과 계약을 관리합니다. 세 번째 활성 계정 생성은 `ADMIN_LIMIT_REACHED`로 거부됩니다.
+업무 API와 Web PWA는 하나의 `HouseholdSpace`에 연결된 동일 권한의 로컬 관리자 계정으로 보호됩니다. v0.1은 활성 관리자를 최대 두 개까지 지원하며 초기에는 한 계정만 생성해 사용할 수 있습니다. 두 번째 계정을 추가해도 역할 차등 없이 같은 가족 원장과 계약을 관리하며, 세 번째 활성 계정 생성은 `ADMIN_LIMIT_REACHED`로 거부됩니다.
 
 관리자 수명주기는 API container의 `familycare-admin` 명령으로만 관리합니다. 아래 계정명과 표시명은 합성 예시이며, 각 명령은 독립적으로 실행합니다.
 
 ```bash
-docker compose run --rm api familycare-admin create \
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api familycare-admin create \
   --username admin-a \
   --display-name "Admin A"
 
-docker compose run --rm api familycare-admin create \
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api familycare-admin create \
   --username admin-b \
   --display-name "Admin B"
 
-docker compose run --rm api familycare-admin set-password --username admin-a
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api \
+  familycare-admin set-password --username admin-a
 
-docker compose run --rm api familycare-admin disable --username admin-b
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api \
+  familycare-admin disable --username admin-b
 ```
+
+`admin-b` 생성은 두 번째 로그인 수단이 필요할 때만 수행합니다.
 
 `create`와 `set-password`는 TTY에서 비밀번호와 확인을 두 번 묻고, 비대화형 실행에서는 stdin의 두 줄을 읽습니다. 비밀번호는 명령 옵션·argv·환경변수·shell history·로그에 넣지 않습니다. CLI에는 `--password` 옵션이 없으며, 위 예시에도 비밀번호 값을 적지 않았습니다. `set-password`는 해당 관리자의 기존 session을 폐기하고, `disable`은 계정과 session만 비활성화하며 가족·계약·청구 기록을 삭제하지 않습니다. 복구용 자격 증명은 사용자가 관리하는 외부 password vault에 보관할 수 있지만 앱이 자동 동기화하지 않습니다.
 
@@ -261,16 +302,16 @@ FAMILYCARE_ENV=development
 FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true
 ```
 
-두 변수 중 하나라도 다르거나 없으면 router가 등록되지 않아 `POST /api/v1/documents/analysis`와 `GET /api/v1/analysis-jobs/{job_id}`가 모두 `404`입니다. 이 gate는 local synthetic-only 개발용이며 authentication·authorization이 없고 production-safe endpoint가 아닙니다. `/health/live`와 `/health/ready`는 gate와 무관하게 유지됩니다.
+두 변수 중 하나라도 다르거나 없으면 router가 등록되지 않아 `POST /api/v1/documents/analysis`와 `GET /api/v1/analysis-jobs/{job_id}`가 모두 `404`입니다. 이 gate는 local synthetic-only 개발용이며 authentication·authorization이 없고 production-safe endpoint가 아닙니다. internal API의 `/health/live`와 `/health/ready`는 gate와 무관하게 유지되지만 Web gateway가 host에 proxy하지 않습니다.
 
 유효한 요청은 source key와 canonical extraction 설정만 보내고, 응답의 `status_url`을 polling합니다.
 
 ```bash
-curl -i -X POST http://127.0.0.1:8000/api/v1/documents/analysis \
+curl -i -X POST http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}/api/v1/documents/analysis \
   -H 'content-type: application/json' \
   --data '{"schema_version":"1","source_key":"synthetic/policy-001.pdf","document_kind":"policy","extractor_config":{"profile":"quality-v1","quality_rule_version":"quality-v1","table_strategy":"auto"}}'
 
-curl -i http://127.0.0.1:8000/api/v1/analysis-jobs/00000000-0000-4000-8000-000000000001
+curl -i http://127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}/api/v1/analysis-jobs/00000000-0000-4000-8000-000000000001
 ```
 
 성공적인 POST는 파일을 열지 않고 항상 `202 Accepted`로 job UUID, queued state, 상대 `status_url`을 반환합니다. Worker가 `POST → Worker → GET` 순서로 intake·isolated extraction·persistence를 수행한 뒤 status GET은 `succeeded`와 sanitized extraction summary를 보여줍니다. 파일이 없거나 손상되었거나 암호화되어도 POST는 동기 오류로 바뀌지 않으며, Worker 결과에서 encrypted input은 `PASSWORD_REQUIRED`가 됩니다. 요청 body가 잘못되거나 absolute/parent-traversal source key, `password`, `absolute_path`, `raw_pdf`, `url` 같은 추가 필드를 보내면 HTTP `422`와 `error_code: "INVALID_REQUEST"`가 반환됩니다. 알 수 없는 job UUID는 `404`와 `ANALYSIS_JOB_NOT_FOUND`입니다. 오류 응답은 raw value, password, absolute path, document body를 echo하지 않습니다.
@@ -297,9 +338,9 @@ password scope는 batch 안에서 재사용할 수 있지만 Worker 반복에서
 
 native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택적 OCR 대상이 됩니다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않습니다. Worker는 read-only source descriptor에서 bounded bytes를 PDFium으로 읽어 fixed 300 DPI PNG를 mode `0600` handle에 만들고, `/usr/bin/tesseract`를 fixed `kor+eng` argv와 `shell=False`로 실행해 bounded TSV를 stdout에서 파싱합니다. `pytesseract` dependency와 TSV artifact는 없으며 OCR 결과는 `ocr_layers`/`ocr_pages`/`ocr_blocks`의 별도 provenance layer에 저장됩니다. native blocks와 Evidence는 덮어쓰지 않습니다.
 
-각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 branch tests는 선택 page, provenance separation, cleanup, and atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF나 private Compose runtime acceptance를 대신하지 않습니다.
+각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 테스트는 선택 page, provenance separation, cleanup, atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF acceptance를 대신하지 않습니다.
 
-이 batch 계약과 selective OCR의 합성 테스트·계약 검사는 branch 구현 범위에 속하지만, private Compose mount, 실제 private data, mobile, Windows, Tailscale, provider, private OCR acceptance는 아직 pending입니다. private runtime PR이 다음 단계이며, 이 상태를 로컬 합성 테스트 통과나 PR CI 통과로 대체하지 않습니다.
+encrypted batch와 selective OCR은 `main`에 병합되었습니다. 현재 private-runtime 변경은 Compose 정책과 합성 mount/permission smoke까지 검증했지만 PR·CI·merge, 실제 private data, mobile, Windows, Tailscale, provider, private OCR acceptance는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다.
 
 종료:
 
@@ -350,14 +391,12 @@ Phase 1 구현과 CI에서는 실제 자료 또는 private external root를 열�
 FAMILYCARE_DOCUMENT_ROOT=/absolute/path/outside/repository
 FAMILYCARE_WORK_ROOT=/absolute/path/outside/repository/work
 FAMILYCARE_IMPORT_ROOT=/absolute/path/outside/repository/import
-FAMILYCARE_ARCHIVE_ROOT=/absolute/path/outside/repository/archive
 FAMILYCARE_ARCHIVE_MASTER_KEY_FILE=/absolute/path/outside/repository/master-key
-FAMILYCARE_SECRET_SOCKET=/absolute/path/outside/repository/run/familycare.sock
 ```
 
 위 문자열은 경로 형식 예시이며 실제 경로가 아닙니다. 실제 값을 문서, 이슈, PR, 로그에 복사하지 않습니다.
 
-`FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유하고, archive/work/master-key는 Worker에만 mount해야 합니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`이어야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. Worker image의 `eng`/`kor` language package smoke는 synthetic CI boundary이고, 현재 Compose/private-data mount와 실제 자료 연결은 별도 acceptance가 완료되지 않아 pending입니다.
+`FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유합니다. Compose의 archive/work는 Worker-only named volume이며 container 내부 `FAMILYCARE_ARCHIVE_ROOT`와 `FAMILYCARE_WORK_ROOT`를 가리킵니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`, UID `10002`여야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. `FAMILYCARE_SECRET_SOCKET`은 API/Worker가 공유하는 named volume 내부 socket path이며 host path가 아닙니다. Worker image의 `eng`/`kor` language package smoke와 합성 Compose permission smoke는 실제 자료·Windows·mobile·Tailscale·provider acceptance를 대신하지 않습니다.
 
 Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
 
@@ -388,7 +427,7 @@ git status --short
 
 ## Database migrations
 
-로컬 PostgreSQL이 실행 중이고 `.env`의 연결정보가 설정된 경우:
+다음은 host에서 직접 실행하는 합성 local/test PostgreSQL 전용 절차입니다. private Compose runtime은 위의 `docker compose ... run --rm api alembic ... upgrade head`를 사용합니다.
 
 ```bash
 TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini upgrade head

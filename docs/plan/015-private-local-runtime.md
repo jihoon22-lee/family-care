@@ -8,7 +8,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약과 private runtime policy checker는 구현되어 있다. Compose/private-data, 실제 자료, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 이 branch에 구현되어 있다. 합성 image·permission smoke는 통과했지만 PR·CI·merge와 실제 자료, mobile, Windows, Tailscale device, provider, private OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
 
 **Architecture**
 
@@ -17,7 +17,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - db, api, worker, web은 기본 Compose network에서 이름으로 통신한다. 외부 reverse proxy, public ingress, Cloud Run, 별도 검색 서비스는 이 PR에서 추가하지 않는다.
 - db volume은 PostgreSQL 데이터만, archive volume은 Worker가 쓰는 애플리케이션 암호화 문서만, worker-work volume은 Worker가 처리 중인 합성·사용자 승인 입력의 임시 파일만 담는다.
 - secret-socket volume은 API와 Worker가 Unix-domain one-time secret handoff에만 사용한다. socket server는 Worker가 소유하고 API는 client로 연결한다. TCP socket, in-memory broker, 데이터베이스 job payload로 secret을 전달하지 않는다.
-- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. 저장소 밖 absolute archive·work root와 archive master key는 Worker에만 mount한다.
+- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. archive와 work는 Worker-only named volume의 container path이며, 저장소 밖 archive master-key file만 Worker에 read-only bind mount한다.
 - `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only root로 유지하며 private batch source로 사용하지 않는다.
 - archive master key는 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유하고 API는 HTTP 인증·계약·작업 생성과 secret socket client만 수행한다.
 - import source와 Google Drive 원본은 어떤 성공·실패·취소 경로에서도 수정하거나 삭제하지 않는다.
@@ -88,6 +88,8 @@ def validate_private_roots(
     """Require absolute, distinct, non-repository roots."""
 ~~~
 
+`validate_private_roots`는 direct synthetic run 또는 향후 explicit bind-root 구성을 위한 fail-closed helper다. 현재 Compose의 archive/work는 named volume이고 이 helper의 host path 입력으로 사용하지 않는다.
+
 The checker may report service names, mount classes, and policy categories. It must never print environment values, mount contents, source filenames, key bytes, or command output containing node metadata.
 
 The Compose contract is:
@@ -111,7 +113,7 @@ volumes:
   familycare-secret-socket:
 ~~~
 
-The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_DOCUMENT_ROOT, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, FAMILYCARE_SECRET_SOCKET, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. `FAMILYCARE_DOCUMENT_ROOT` is Phase 1 synthetic-only; `FAMILYCARE_IMPORT_ROOT` is the shared read-only API/Worker private source root. The archive, work, and master-key paths are Worker-only. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. Values are supplied outside Git; no secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
+The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_DOCUMENT_ROOT, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, FAMILYCARE_SECRET_SOCKET, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. `FAMILYCARE_DOCUMENT_ROOT` is Phase 1 synthetic-only; `FAMILYCARE_IMPORT_ROOT` is the shared read-only API/Worker private source root. Compose declares archive, work, and socket as container paths over named volumes; the master-key host path and API key are supplied outside Git to Worker only. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. No secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
 
 ### Task 1: Define the private Compose policy checker
 
@@ -204,7 +206,7 @@ worker:
 ~~~
 
   The implementation must use a real Compose secret or an equivalent read-only bind with a pre-created 0600 key file containing exactly 32 bytes; it must not put the key into environment, DB, job payload, log, HTTP response, or image layer. Import source files remain read-only and are never deleted by the import flow.
-- [x] 2–5 min: Add a Worker health probe that checks database reachability, archive root availability, socket directory permissions, and key file mode without returning key content. A missing key fails closed and prevents archive import.
+- [x] 2–5 min: Add a Worker health probe that checks database reachability, import/archive/work availability, master-key validity, and the Unix-socket type without returning path or key content. Fixed GID `10003` and mode `2770` are enforced by image/Compose policy and the synthetic runtime permission smoke. A missing key fails closed and prevents archive import.
 - [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
       TMPDIR=/tmp uv run python scripts/check_containers.py
@@ -220,18 +222,18 @@ worker:
 
 ### Task 4: Add read-only Tailscale and private acceptance checks
 
-- [ ] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, and every unknown argument.
-- [ ] 2–5 min: Create scripts/tests/test_private_acceptance.py. Feed synthetic status JSON with a node category and assert that the report excludes node names, IP addresses, tailnet identifiers, and command stdout. Assert mutation forms are rejected before subprocess creation.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, and every unknown argument.
+- [x] 2–5 min: Create scripts/tests/test_private_acceptance.py. Feed synthetic status JSON with a node category and assert that the report excludes node names, IP addresses, tailnet identifiers, and command stdout. Assert mutation forms are rejected before subprocess creation.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py -q
   Expected failure: the module is missing or the current implementation accepts mutation commands.
-- [ ] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, gateway-unreachable, and app-auth-required. Never copy, delete, upload, print, or alter Tailscale state.
-- [ ] 2–5 min: Add tests for private roots. The caller supplies absolute roots outside the repository for import, archive, and worker work; tests use a temporary directory outside the repository test fixture tree and synthetic files only. Assert that a source root and output root cannot be the same directory.
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, gateway-unreachable, and app-auth-required. Never copy, delete, upload, print, or alter Tailscale state.
+- [x] 2–5 min: Add tests for private roots. The caller supplies absolute roots outside the repository for import, archive, and worker work; tests use a temporary directory outside the repository test fixture tree and synthetic files only. Assert that a source root and output root cannot be the same directory.
+- [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py scripts/tests/test_private_runtime_policy.py -q
       TMPDIR=/tmp uv run python scripts/private_acceptance.py --help
   Expected result: policy and acceptance tests pass and help output contains no environment value.
-- [ ] 2–5 min: Modify docs/guide/private-runtime.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
+- [x] 2–5 min: Modify docs/guide.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
 - [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json` and `tailscale serve status` through the redacting inspector, verifies that the gateway is bound only to loopback, and checks the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Do not print node, account, tailnet, or IP values into the task report.
 - [ ] 2–5 min: If an existing Serve mapping already reaches the FamilyCare loopback gateway over HTTPS, reuse it without mutation. Otherwise, the user's approval to complete Phase 8 authorizes only an additive dedicated mapping. After verifying the current installed CLI syntax against official Tailscale documentation, run the equivalent of `tailscale serve --bg --https=<unused-approved-port> http://127.0.0.1:<familycare-web-port>`, then compare the before/after Serve status and abort if any pre-existing mapping changed. Never use `tailscale funnel`.
 - [ ] 2–5 min: From an authenticated HTTPS browser, verify login cookie delivery, `/api/` reverse proxy, no-store headers, ledger/event/result/claim navigation, and logout. A device that root cannot access remains explicitly unverified; CI or localhost HTTP does not substitute for Secure-cookie HTTPS acceptance.
