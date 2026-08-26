@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.14, pdfplumber 0.11.10, pypdf 6.16.2, pypdfium2==5.13.0, Pillow==12.3.0, the fixed `/usr/bin/tesseract` command with Debian English and Korean language packages, PostgreSQL 18, Alembic 1.19.1, and the existing Worker workspace/cleanup boundary. The Worker does not depend on `pytesseract` and does not create a Tesseract artifact file: it requests TSV on stdout through a no-shell subprocess boundary.
 
-**Branch status:** The contract, migration, local adapters, selective processor, provenance persistence, bounded batch progress, and synthetic Worker language smoke checks are implemented on this branch. The complete PR gate, CI/merge evidence, private Compose runtime, and private-document acceptance remain pending.
+**Branch status:** The contract, migration, local adapters, selective processor, provenance persistence, bounded batch progress, synthetic Worker language smoke checks, full Root PR gate, and concentrated pre-PR review are complete on this branch. PR CI/merge evidence, private Compose runtime, and private-document acceptance remain pending.
 
 **Spec:** docs/design/pdf-ingestion.md, docs/design/private-data-runtime.md, docs/design/security-privacy.md, docs/design/test-strategy.md, docs/design/v0.1-product.md, docs/plan/003-v0.1-implementation-index.md
 
@@ -345,7 +345,7 @@ def recognize(self, image_path: Path, *, languages: tuple[str, ...]) -> EnginePa
     return parse_tsv(output.stdout)
 ~~~
 
-The renderer fixes DPI at 300, bounds rendered dimensions/pixels, and validates the source descriptor as regular/read-only with the existing 25 MiB limit. The engine fixes the executable to `/usr/bin/tesseract`, passes an argv list with `shell=False`, discards stderr, captures bounded UTF-8 TSV from stdout, rejects malformed rows, and bounds block count. It validates the mode-0600 PNG before invoking Tesseract; no `.tsv` artifact is created.
+The renderer fixes DPI at 300, rejects oversized PDF page dimensions before bitmap allocation, rechecks actual rendered dimensions/pixels, and validates the source descriptor as regular/read-only with the existing 25 MiB limit. The engine fixes the executable to `/usr/bin/tesseract`, passes an argv list with `shell=False`, discards stderr, captures bounded UTF-8 TSV from stdout, rejects malformed rows, and bounds block count. It validates the mode-0600 PNG before invoking Tesseract, and every selector/setup/error exit reaps the process group; no `.tsv` artifact is created.
 
 - [x] **Step 4: Run the GREEN unit, lock, and image dependency checks**
 
@@ -556,7 +556,7 @@ Expected: FAIL because the current scanner and .gitignore reject the source pack
 
 Add a precise predicate for the exact Worker package path and Python suffixes. Add matching .gitignore negations for the source package only. Do not allow files under any runtime OCR directory, generated output path, image suffix, PDF suffix, or log suffix. Keep the existing public PDF/image allow roots unchanged.
 
-- [ ] **Step 4: Run the complete OCR-focused gate**
+- [x] **Step 4: Run the complete OCR-focused gate**
 
 Run serially:
 
@@ -578,7 +578,7 @@ git diff --check
 
 Expected: every required check passes; no OCR image, extracted text, actual PDF, or language-pack output is tracked. The branch still needs this complete gate after the documentation and bounded batch-projection changes are assembled.
 
-- [ ] **Step 5: Commit safety/documentation and invoke the Root PR gate**
+- [x] **Step 5: Commit safety/documentation and invoke the Root PR gate**
 
 ~~~bash
 git add .gitignore scripts/check_repository_safety.py \
