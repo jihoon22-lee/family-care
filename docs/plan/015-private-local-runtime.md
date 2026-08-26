@@ -76,7 +76,7 @@ def validate_runtime_config(
 
 
 def validate_tailscale_inspection_command(argv: Sequence[str]) -> None:
-    """Accept status/ip/serve-status read-only forms; reject mutations."""
+    """Accept status/ip/serve-status-json read-only forms; reject mutations."""
 
 
 def validate_private_roots(
@@ -222,19 +222,19 @@ worker:
 
 ### Task 4: Add read-only Tailscale and private acceptance checks
 
-- [x] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, and every unknown argument.
+- [x] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status --json forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, the non-JSON Serve status form, and every unknown argument.
 - [x] 2–5 min: Create scripts/tests/test_private_acceptance.py. Feed synthetic status JSON with a node category and assert that the report excludes node names, IP addresses, tailnet identifiers, and command stdout. Assert mutation forms are rejected before subprocess creation.
 - [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py -q
   Expected failure: the module is missing or the current implementation accepts mutation commands.
-- [x] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, gateway-unreachable, and app-auth-required. Never copy, delete, upload, print, or alter Tailscale state.
+- [x] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, tailscale-serve-empty, tailscale-serve-configured, tailscale-serve-gateway-match, gateway-unreachable, and app-auth-required. Parse Serve JSON only in memory; exclude the exact expected FamilyCare loopback target before computing a non-rendered foreign-configuration fingerprint so before/after preservation can be compared without emitting node, IP, tailnet, raw configuration, or port values. Inspection failures return non-zero. Never copy, delete, upload, print, or alter Tailscale state.
 - [x] 2–5 min: Add tests for private roots. The caller supplies absolute roots outside the repository for import, archive, and worker work; tests use a temporary directory outside the repository test fixture tree and synthetic files only. Assert that a source root and output root cannot be the same directory.
 - [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py scripts/tests/test_private_runtime_policy.py -q
       TMPDIR=/tmp uv run python scripts/private_acceptance.py --help
   Expected result: policy and acceptance tests pass and help output contains no environment value.
 - [x] 2–5 min: Modify docs/guide.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
-- [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json` and `tailscale serve status` through the redacting inspector, verifies that the gateway is bound only to loopback, and checks the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Do not print node, account, tailnet, or IP values into the task report.
+- [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json` and `tailscale serve status --json` through the redacting inspector, supplying the configured loopback Web port only as `--expected-gateway-port`. Verify that the gateway is bound only to loopback and check the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Keep the foreign-configuration fingerprint in process memory only and do not print node, account, tailnet, IP, port, raw JSON, or fingerprint values into the task report.
 - [ ] 2–5 min: If an existing Serve mapping already reaches the FamilyCare loopback gateway over HTTPS, reuse it without mutation. Otherwise, the user's approval to complete Phase 8 authorizes only an additive dedicated mapping. After verifying the current installed CLI syntax against official Tailscale documentation, run the equivalent of `tailscale serve --bg --https=<unused-approved-port> http://127.0.0.1:<familycare-web-port>`, then compare the before/after Serve status and abort if any pre-existing mapping changed. Never use `tailscale funnel`.
 - [ ] 2–5 min: From an authenticated HTTPS browser, verify login cookie delivery, `/api/` reverse proxy, no-store headers, ledger/event/result/claim navigation, and logout. A device that root cannot access remains explicitly unverified; CI or localhost HTTP does not substitute for Secure-cookie HTTPS acceptance.
 - [ ] 2–5 min: Run one explicitly marked local-provider smoke inside the Worker with wholly synthetic Evidence and event text. Verify both approved model IDs, strict structured output, independent verifier, deterministic validator, retry classification, and absence of prompt/response/key material in logs. This smoke may use the existing WSL `OPENAI_API_KEY`; never print, copy, export, or pass it to Web/API. A missing or rejected key is reported as an external acceptance failure, not replaced by the fake provider.

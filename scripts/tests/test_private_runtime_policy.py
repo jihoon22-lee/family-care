@@ -149,7 +149,7 @@ def test_private_roots_are_absolute_distinct_and_outside_repository(tmp_path: Pa
     [
         ["tailscale", "status", "--json"],
         ["tailscale", "ip", "-1"],
-        ["tailscale", "serve", "status"],
+        ["tailscale", "serve", "status", "--json"],
     ],
 )
 def test_read_only_tailscale_inspection_commands_are_allowed(argv: list[str]) -> None:
@@ -162,6 +162,7 @@ def test_read_only_tailscale_inspection_commands_are_allowed(argv: list[str]) ->
         ["tailscale", "serve", "--bg", "http://127.0.0.1:8080"],
         ["tailscale", "funnel", "8080"],
         ["tailscale", "up"],
+        ["tailscale", "serve", "status"],
         ["tailscale", "status", "--json", "--peers=false"],
     ],
 )

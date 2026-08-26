@@ -241,10 +241,13 @@ docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --wai
 ```bash
 TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale status --json
 TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale ip -1
-TMPDIR=/tmp uv run python scripts/private_acceptance.py tailscale serve status
+TMPDIR=/tmp uv run python scripts/private_acceptance.py \
+  --expected-gateway-port 18080 tailscale serve status --json
 ```
 
-`serve`, `funnel`, `up`, `down`, `set`, `logout`과 추가 인자는 실행 전에 거부됩니다. inspector는 Serve 구성을 변경하지 않습니다. 실제 device access는 기존 mapping을 우선 재사용하고, 없을 때만 현재 상태와 CLI 문서를 별도로 확인한 뒤 충돌 없는 FamilyCare HTTPS endpoint 하나를 추가합니다. Funnel은 사용하지 않습니다. Tailscale 연결은 앱 인증을 대체하지 않으며, remote browser는 HTTPS에서 FamilyCare login과 Secure/HttpOnly session cookie, CSRF 검사를 모두 통과해야 합니다.
+예시 `18080`은 실제 `.env.private`의 `FAMILYCARE_WEB_PORT`와 같은 숫자로 바꿉니다. `serve status --json`은 `tailscale-serve-empty`, `tailscale-serve-configured`, `tailscale-serve-gateway-match` 중 하나만 출력하고 node·IP·tailnet·raw JSON·target port는 출력하지 않습니다. 비교용 foreign-configuration fingerprint도 process memory에만 두고 `repr`와 CLI 출력에서 제외하므로, 추가 mapping 전후에 FamilyCare target을 뺀 기존 구성이 동일한지 확인할 수 있습니다. 연결 안 됨, timeout, malformed output, command failure는 non-zero로 종료합니다.
+
+`serve`, `funnel`, `up`, `down`, `set`, `logout`과 추가 인자는 실행 전에 거부됩니다. inspector는 Serve 구성을 변경하지 않습니다. 실제 device access는 기존 mapping을 우선 재사용하고, 없을 때만 현재 상태와 공식 CLI 문서를 별도로 확인한 뒤 충돌 없는 FamilyCare HTTPS endpoint 하나를 추가합니다. Funnel은 사용하지 않습니다. Tailscale 연결은 앱 인증을 대체하지 않으며, remote browser는 HTTPS에서 FamilyCare login과 Secure/HttpOnly session cookie, CSRF 검사를 모두 통과해야 합니다.
 
 #### Stop, backup, and restore ownership
 

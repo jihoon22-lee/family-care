@@ -14,8 +14,12 @@ from scripts.private_acceptance import (
     COMMAND_TIMEOUT_SECONDS,
     MAX_OUTPUT_BYTES,
     AcceptanceCategory,
+    AcceptanceReport,
     classify_gateway_status,
     inspect_tailscale,
+    main,
+    parse_args,
+    same_foreign_serve_configuration,
 )
 from scripts.private_runtime_policy import validate_private_roots
 
@@ -24,6 +28,7 @@ SYNTHETIC_IP = "100.64.0.42"
 SYNTHETIC_TAILNET = "synthetic-tailnet.example"
 SYNTHETIC_STDOUT = "raw synthetic output must never be copied"
 STATUS_COMMAND = ["tailscale", "status", "--json"]
+SERVE_COMMAND = ["tailscale", "serve", "status", "--json"]
 
 
 def _completed(
@@ -82,6 +87,7 @@ def _assert_mutation_commands_are_rejected_before_runner_invocation(
     "argv",
     [
         ["tailscale", "serve", "--bg", "http://127.0.0.1:8080"],
+        ["tailscale", "serve", "status"],
         ["tailscale", "funnel", "8080"],
         ["tailscale", "route", "approve", "10.0.0.0/8"],
         ["tailscale", "ssh", "root@synthetic-node-a"],
@@ -120,6 +126,46 @@ def test_runner_receives_argv_list_without_shell_and_fixed_timeout() -> None:
     }
 
 
+def test_cli_parser_preserves_json_flags_inside_the_allowlisted_command() -> None:
+    parsed = parse_args(STATUS_COMMAND)
+    serve = parse_args(["--expected-gateway-port", "18080", *SERVE_COMMAND])
+
+    assert parsed.command == STATUS_COMMAND
+    assert parsed.expected_gateway_port is None
+    assert serve.command == SERVE_COMMAND
+    assert serve.expected_gateway_port == 18080
+
+
+def test_cli_returns_nonzero_for_failed_inspection(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        private_acceptance,
+        "inspect_tailscale",
+        lambda *_args, **_kwargs: AcceptanceReport(AcceptanceCategory.TAILSCALE_NOT_CONNECTED),
+    )
+
+    assert main(STATUS_COMMAND) == 1
+    assert capsys.readouterr().out.strip() == "tailscale-not-connected"
+
+
+def test_cli_returns_zero_for_a_successful_redacted_serve_inspection(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        private_acceptance,
+        "inspect_tailscale",
+        lambda *_args, **_kwargs: AcceptanceReport(
+            AcceptanceCategory.TAILSCALE_SERVE_GATEWAY_MATCH
+        ),
+    )
+
+    assert main(["--expected-gateway-port", "18080", *SERVE_COMMAND]) == 0
+    assert capsys.readouterr().out.strip() == "tailscale-serve-gateway-match"
+
+
 def test_default_runner_stops_reading_after_the_output_limit() -> None:
     command = [
         sys.executable,
@@ -140,7 +186,7 @@ def test_default_runner_terminates_after_the_fixed_timeout() -> None:
 
 @pytest.mark.parametrize(
     "command",
-    [["tailscale", "ip", "-1"], ["tailscale", "serve", "status"]],
+    [["tailscale", "ip", "-1"]],
 )
 def test_other_read_only_commands_discard_their_output(command: list[str]) -> None:
     def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
@@ -151,6 +197,105 @@ def test_other_read_only_commands_discard_their_output(command: list[str]) -> No
     assert report.category is AcceptanceCategory.TAILSCALE_CONNECTED
     assert SYNTHETIC_STDOUT not in repr(report)
     assert SYNTHETIC_NODE not in repr(report)
+
+
+def _serve_payload(*, include_familycare: bool, foreign_port: int = 8002) -> dict[str, object]:
+    tcp: dict[str, object] = {"8443": {"HTTPS": True}}
+    web: dict[str, object] = {
+        f"{SYNTHETIC_NODE}.{SYNTHETIC_TAILNET}:8443": {
+            "Handlers": {"/": {"Proxy": f"http://127.0.0.1:{foreign_port}"}}
+        }
+    }
+    if include_familycare:
+        tcp["10000"] = {"HTTPS": True}
+        web[f"familycare.{SYNTHETIC_TAILNET}:10000"] = {
+            "Handlers": {"/": {"Proxy": "http://127.0.0.1:18080"}}
+        }
+    return {"TCP": tcp, "Web": web}
+
+
+def test_serve_status_distinguishes_empty_config_without_exposing_output() -> None:
+    def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+        return _completed(argv, stdout="{}")
+
+    report = inspect_tailscale(SERVE_COMMAND, runner=runner, expected_gateway_port=18080)
+
+    assert report.category is AcceptanceCategory.TAILSCALE_SERVE_EMPTY
+    assert report.foreign_configuration_fingerprint is not None
+    assert report.foreign_configuration_fingerprint not in repr(report)
+
+
+def test_serve_status_detects_expected_gateway_and_redacts_private_metadata() -> None:
+    payload = json.dumps(_serve_payload(include_familycare=True))
+
+    def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+        return _completed(argv, stdout=payload)
+
+    report = inspect_tailscale(SERVE_COMMAND, runner=runner, expected_gateway_port=18080)
+
+    assert report.category is AcceptanceCategory.TAILSCALE_SERVE_GATEWAY_MATCH
+    rendered = repr(report)
+    assert SYNTHETIC_NODE not in rendered
+    assert SYNTHETIC_TAILNET not in rendered
+    assert SYNTHETIC_IP not in rendered
+    assert "18080" not in rendered
+    assert payload not in rendered
+
+
+def test_serve_fingerprint_proves_foreign_routes_survive_expected_addition() -> None:
+    before_payload = json.dumps(_serve_payload(include_familycare=False))
+    after_payload = json.dumps(_serve_payload(include_familycare=True))
+
+    def before_runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+        return _completed(argv, stdout=before_payload)
+
+    def after_runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+        return _completed(argv, stdout=after_payload)
+
+    before = inspect_tailscale(
+        SERVE_COMMAND,
+        runner=before_runner,
+        expected_gateway_port=18080,
+    )
+    after = inspect_tailscale(
+        SERVE_COMMAND,
+        runner=after_runner,
+        expected_gateway_port=18080,
+    )
+
+    assert before.category is AcceptanceCategory.TAILSCALE_SERVE_CONFIGURED
+    assert after.category is AcceptanceCategory.TAILSCALE_SERVE_GATEWAY_MATCH
+    assert same_foreign_serve_configuration(before, after) is True
+
+
+def test_serve_fingerprint_detects_a_foreign_route_change() -> None:
+    def runner_for(payload: dict[str, object]):
+        def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+            return _completed(argv, stdout=json.dumps(payload))
+
+        return runner
+
+    before = inspect_tailscale(
+        SERVE_COMMAND,
+        runner=runner_for(_serve_payload(include_familycare=False)),
+        expected_gateway_port=18080,
+    )
+    after = inspect_tailscale(
+        SERVE_COMMAND,
+        runner=runner_for(_serve_payload(include_familycare=True, foreign_port=9000)),
+        expected_gateway_port=18080,
+    )
+
+    assert same_foreign_serve_configuration(before, after) is False
+
+
+def test_serve_status_rejects_non_object_json() -> None:
+    def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
+        return _completed(argv, stdout="[]")
+
+    report = inspect_tailscale(SERVE_COMMAND, runner=runner, expected_gateway_port=18080)
+
+    assert report.category is AcceptanceCategory.TAILSCALE_OUTPUT_MALFORMED
 
 
 def test_unavailable_runner_error_is_redacted() -> None:
