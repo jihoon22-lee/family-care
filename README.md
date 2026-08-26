@@ -8,9 +8,9 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가 `main`에 순차 merge되었습니다.
 
-Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. 목표 릴리스는 `v0.1.0`이며 남은 후속 범위는 private-runtime PR·Tailscale/실기기 acceptance와 릴리스입니다.
+Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. private-runtime은 PR #27과 PR #28로 `main`에 merge되었고, 현재 목표 릴리스는 `v0.1.0`입니다.
 
-현재 private-runtime branch에는 Web 단일 gateway, API/Worker read-only import, Worker-only archive/work/key/AI, shared Unix socket, fail-closed Worker readiness, read-only Tailscale inspector가 구현되어 있습니다. 합성 Compose permission smoke는 통과했지만 이 branch의 PR·CI·merge와 실제 private PDF, Windows/mobile, Tailscale, provider acceptance는 아직 별도로 검증합니다.
+WSL Docker Compose private runtime, Tailscale HTTPS, 인증된 브라우저 login·주요 화면 navigation·logout, synthetic OpenAI pipeline은 확인되었습니다. 실제 보험 PDF와 파생 데이터, Windows 브라우저, 모바일 PWA, 다른 실제 기기는 아직 검증하지 않았습니다. 릴리스 전후 증거와 pending 필드는 [`docs/release/v0.1.0-verification.md`](docs/release/v0.1.0-verification.md)에 기록합니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 

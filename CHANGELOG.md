@@ -4,6 +4,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-26
+
 ### Added
 
 - Approved v0.1 product design for Phases 2 through 8, targeting a usable private WSL/Tailscale release.
@@ -13,7 +15,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Selective OCR implementation: `OCR_REQUIRED`-only selection, separate `ocr_layers`/`ocr_pages`/`ocr_blocks` provenance, bounded descriptor-derived PDFium rendering, direct no-shell `/usr/bin/tesseract` stdout TSV with fixed `kor+eng` at 300 DPI, per-page and outer-workspace cleanup, bounded batch progress, and synthetic Worker image language checks.
 - Local authentication implementation with exactly two equal administrators, safe `familycare-admin` TTY/stdin provisioning, hash-only server sessions, and the authenticated Web login/session boundary.
 - Private encrypted-import reliability implementation: decrypted plaintext is bounded to 25 MiB and encrypted PDFs over 500 pages are rejected before cloning; cancellation, stop, and lease-loss paths dispose batch passwords and deactivate the secret-server identity; archive writes are bracketed by owned heartbeats with definite-orphan cleanup; ambiguous success commits retain ciphertext and emit only `batch_archive_commit_uncertain`; source labels are normalized to printable, path-free 1–160 character values with aligned API/OpenAPI/JSON Schema constraints.
-- Private local Compose implementation with one loopback Web gateway, internal API/PostgreSQL/Worker, read-only API/Worker import binds, Worker-only archive/work/key/AI scope, a fixed-group secret socket, fail-closed Worker readiness, and a bounded read-only Tailscale inspector. Synthetic Compose permission smoke passed; PR/CI/merge and actual private-data, Windows/mobile, Tailscale, provider, and private OCR acceptance remain pending.
+- Private local Compose implementation with one loopback Web gateway, internal API/PostgreSQL/Worker, read-only API/Worker import binds, Worker-only archive/work/key/AI scope, a fixed-group secret socket, fail-closed Worker readiness, and a bounded read-only Tailscale inspector. PR #27 and PR #28 are merged with their required CI and post-merge checks. WSL Compose, Tailscale HTTPS, authenticated browser login/navigation/logout, and the synthetic OpenAI pipeline passed; real private documents, Windows/mobile, and other-device acceptance remain unverified.
 - One-time `familycare-admin init` provisioning that atomically creates the unseeded sole HouseholdSpace and first administrator while keeping the password on TTY/stdin and rejecting repeat or concurrent initialization.
 
 - 프로젝트 기반 설계와 전체 단계별 로드맵
@@ -84,6 +86,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Claim workflow records user-entered receipt/payment metadata and expected-version manual transitions; it does not send submissions to insurers or store medical/claim files. Historical snapshots remain immutable when later results are reanalyzed.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
 - Selective OCR merged in PR #25 and private-import reliability merged in PR #26 after their serial local gates, required PR checks, post-merge `main` CI, and focused post-merge verification passed. Private runtime and actual private-data acceptance remain separate.
+- Private runtime merged in PR #27 at `cdbd36309398a05efac73d39632fff997f03c3d2` and Tailscale inspection bounds merged in PR #28 at `a1aba7f9543113c6c4e37daf0df3ef4e6a1d8ede`; the current release evidence keeps tag workflow IDs and GHCR digests pending until the separate `v0.1.0` tag workflow completes.
 
 ### Deprecated
 
