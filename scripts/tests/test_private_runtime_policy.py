@@ -147,7 +147,7 @@ def test_private_roots_are_absolute_distinct_and_outside_repository(tmp_path: Pa
 @pytest.mark.parametrize(
     "argv",
     [
-        ["tailscale", "status", "--json"],
+        ["tailscale", "status", "--json", "--peers=false"],
         ["tailscale", "ip", "-1"],
         ["tailscale", "serve", "status", "--json"],
     ],
@@ -163,7 +163,7 @@ def test_read_only_tailscale_inspection_commands_are_allowed(argv: list[str]) ->
         ["tailscale", "funnel", "8080"],
         ["tailscale", "up"],
         ["tailscale", "serve", "status"],
-        ["tailscale", "status", "--json", "--peers=false"],
+        ["tailscale", "status", "--json"],
     ],
 )
 def test_tailscale_mutation_and_unknown_forms_are_rejected(argv: list[str]) -> None:

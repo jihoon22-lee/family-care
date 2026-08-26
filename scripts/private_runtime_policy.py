@@ -41,7 +41,7 @@ _READ_ONLY_TAILSCALE_COMMANDS = frozenset(
     {
         ("tailscale", "ip", "-1"),
         ("tailscale", "serve", "status", "--json"),
-        ("tailscale", "status", "--json"),
+        ("tailscale", "status", "--json", "--peers=false"),
     }
 )
 
