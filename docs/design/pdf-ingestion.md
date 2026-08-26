@@ -1,6 +1,6 @@
 # PDF ingestion design
 
-- 상태: Phase 1 완료 기준, v0.1 확장 승인 및 문서 검토 대기
+- 상태: Phase 1 완료 기준, encrypted import 계약 구현·문서화, private acceptance 대기
 - 적용 단계: Phase 1 baseline과 Phase 8 encrypted private import
 - 구현 계획: `docs/plan/002-synthetic-pdf-ingestion.md`
 - 기술 결정: `docs/adr/0006-permissive-pdf-parser-stack.md`
@@ -13,22 +13,23 @@ Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-
 
 ## v0.1 encrypted batch extension
 
-`docs/design/private-data-runtime.md`가 Phase 8의 권위 있는 runtime 설계입니다. v0.1 extension은 다음 경계를 사용합니다.
+`docs/design/private-data-runtime.md`가 Phase 8의 권위 있는 runtime 설계입니다. v0.1 extension은 다음 경계를 사용합니다. 아래 private runtime과 실제 자료·Compose·mobile·Windows·Tailscale·provider·OCR acceptance는 아직 완료로 주장하지 않습니다.
 
 1. 한 batch는 정확히 한 `FamilyMember`를 가집니다.
-2. password는 인증된 request에서 batch runtime으로만 전달하고 process memory에서 동일 batch file에 재사용합니다.
-3. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
-4. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다.
-5. native extraction 뒤 `OCR_REQUIRED` page만 local Korean/English OCR을 실행합니다.
-6. 성공 source는 document별 data key로 암호화해 managed archive에 저장하고 key는 runtime master key로 wrap합니다.
-7. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
-8. Google Drive source를 수정·삭제하거나 Drive API를 호출하지 않습니다.
+2. private batch source는 `FAMILYCARE_IMPORT_ROOT` 아래에서 API와 Worker가 read-only로 공유합니다. API는 opaque source ID를 목록화·해석하고 Worker는 descriptor-safe intake를 수행합니다. Phase 1의 `FAMILYCARE_DOCUMENT_ROOT`는 checkout 밖 합성 PDF만을 위한 synthetic-only root입니다.
+3. password는 인증된 request에서 Worker의 batch runtime으로 one-time Unix-domain socket을 통해 전달하고 process memory에서 동일 batch file에 재사용합니다. socket server는 Worker가 소유하고 API는 client로 연결합니다.
+4. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
+5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. scope는 expiry되고, replacement 때 이전 값이 폐기되며, cancellation과 Worker shutdown에서 `dispose()`를 호출합니다. terminal process memory disposal은 검증하지 않습니다.
+6. native extraction 뒤 `OCR_REQUIRED` page만 local Korean/English OCR을 실행한다는 것이 목표 계약이지만, OCR 실행과 acceptance는 아직 pending입니다.
+7. 성공 source는 document별 data key로 암호화해 Worker 전용 managed archive에 저장하고 key는 Worker 전용 runtime master key로 wrap합니다. master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600`입니다.
+8. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
+9. import source와 Google Drive 원본은 수정·삭제하지 않으며 Drive API를 호출하지 않습니다.
 
 Phase 1의 `PASSWORD_REQUIRED`는 기존 password-free synthetic endpoint의 정확한 결과로 유지합니다. v0.1 encrypted batch API는 이 endpoint에 password field를 추가하는 방식이 아니라 인증·batch 수명주기와 in-memory secret channel을 가진 별도 use case입니다.
 
 ## Local asynchronous API boundary
 
-Task 5의 API는 합성 fixture를 사용하는 로컬 개발 경계입니다. 런타임에서 문서 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 맞을 때만 등록합니다. `.env.example`의 기본값은 `false`이며 두 변수 중 하나라도 조건을 만족하지 않으면 문서 route를 등록하지 않고 POST와 status GET 모두 `404`를 반환합니다. `create_app(enable_synthetic_ingestion=True)`는 테스트와 canonical OpenAPI 생성처럼 명시적으로 opt-in하는 경우에만 사용하며, module-level runtime app의 기본 gate와 `/health/live`, `/health/ready` 계약은 바꾸지 않습니다.
+Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입니다. 런타임에서 문서 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 맞을 때만 등록합니다. `.env.example`의 기본값은 `false`이며 두 변수 중 하나라도 조건을 만족하지 않으면 문서 route를 등록하지 않고 POST와 status GET 모두 `404`를 반환합니다. `create_app(enable_synthetic_ingestion=True)`는 테스트와 canonical OpenAPI 생성처럼 명시적으로 opt-in하는 경우에만 사용하며, module-level runtime app의 기본 gate와 `/health/live`, `/health/ready` 계약은 바꾸지 않습니다.
 
 | Method | Path | 성공 응답 | 의미 |
 |---|---|---|---|
@@ -41,15 +42,28 @@ Task 5의 API는 합성 fixture를 사용하는 로컬 개발 경계입니다. �
 
 이 API에는 authentication·authorization이 없고 production-safe endpoint라고 주장하지 않습니다. Authentication provider는 Phase 7이며, Policy Ledger·OCR 실행·external URL·external AI·보험 판정은 이 ingestion boundary 밖입니다.
 
+## Authenticated encrypted batch boundary
+
+구현된 private batch API는 Phase 1 synthetic route와 별도 use case입니다. source catalog와 batch route는 인증된 HouseholdScope에서만 사용하며, request에는 one `FamilyMember`와 opaque 64-character lowercase-hex source IDs만 들어갑니다. PDF upload나 source absolute path를 받지 않습니다.
+
+| Method | Path | 의미 |
+|---|---|---|
+| `GET` | `/api/v1/document-import-sources` | `FAMILYCARE_IMPORT_ROOT` 아래의 bounded source ID·label·size·encryption projection을 반환합니다. |
+| `POST` | `/api/v1/document-batches` | 한 FamilyMember에 대한 batch를 만들고 item을 queue합니다. |
+| `GET` | `/api/v1/document-batches/{batch_id}` | batch/item state와 sanitized error code를 반환합니다. |
+| `POST` | `/api/v1/document-batches/{batch_id}/password` | password를 Worker secret socket으로 한 번 전달하고 password 자체는 response·DB·job·log에 남기지 않습니다. |
+| `POST` | `/api/v1/document-batches/{batch_id}/cancel` | batch를 취소하고 Worker가 보유한 scope disposal 경계를 적용합니다. |
+
 ## Inputs
 
-- 절대경로인 `FAMILYCARE_DOCUMENT_ROOT` 환경변수
+- Phase 1 synthetic route에만 사용하는 외부 absolute `FAMILYCARE_DOCUMENT_ROOT`
+- API와 Worker가 read-only로 공유하는 외부 absolute `FAMILYCARE_IMPORT_ROOT` (private batch)
 - request와 job payload에만 있는 상대 `source_key`
 - 문서 종류 후보와 canonical JSON extraction settings
 - 작업 ID와 멱등 키
 - 아래의 고정된 파일·페이지·프로세스 자원 제한
 
-`source_key`는 외부 파일명이나 절대경로를 대신하는 상대 식별자입니다. password는 Phase 1 API 입력·DB·job payload·로그에 존재하지 않습니다.
+`source_key`는 외부 파일명이나 절대경로를 대신하는 상대 식별자입니다. private batch의 source는 API·Worker가 공유하는 import root에만 속하고, import source를 자동 삭제하지 않습니다. password는 Phase 1 API 입력·DB·job payload·로그에 존재하지 않습니다.
 
 ## Safety limits
 
@@ -68,12 +82,13 @@ Task 5의 API는 합성 fixture를 사용하는 로컬 개발 경계입니다. �
 
 ## Path and content validation
 
-1. Worker는 `FAMILYCARE_DOCUMENT_ROOT`가 존재하는 absolute directory인지 확인합니다. Phase 1 CI에서는 이 변수에 private path를 지정하지 않고, 합성 fixture를 checkout 밖의 `TemporaryDirectory`에 복사해 지정합니다.
-2. 요청과 job은 relative `source_key`만 받습니다. absolute path, NUL byte, `..` component, root 밖으로 정규화되는 경로를 거부합니다.
-3. root directory descriptor에서 시작해 각 상대 path component를 chained `openat`/`dir_fd`, `O_NOFOLLOW`, directory-only flags로 열고, 최종 source를 `O_RDONLY | O_CLOEXEC | O_NOFOLLOW` semantics로 한 번만 엽니다. 디렉터리 descriptor는 최종 파일을 열 때까지 유지합니다. 이 열린 file identity의 duplicate handles에 대해 `fstat` regular-file, size, PDF magic, pypdf structure, and SHA-256을 수행합니다. consumer 사이에는 offset을 reset하거나 descriptor를 duplicate하며, validate-path 후 path를 다시 여는 TOCTOU 경로를 만들지 않습니다.
-4. Linux child에는 reopen 가능한 path를 전달하지 않습니다. parent가 연 read-only descriptor를 inherited 또는 duplicated descriptor로 전달하고, child는 그 descriptor를 통해서만 PDF를 읽습니다. source_key, descriptor metadata, errors와 logs는 sanitized form만 사용합니다.
-5. 파일 크기를 25 MiB와 output 64 MiB 제한에 맞춰 검사합니다.
-6. 원본 바이트의 SHA-256은 열린 descriptor에서 1 MiB(`1_048_576`) chunk로 streaming 계산합니다. 전체 원본을 메모리에 올리지 않습니다.
+1. Phase 1 Worker는 `FAMILYCARE_DOCUMENT_ROOT`가 존재하는 absolute directory인지 확인합니다. CI에서는 이 변수에 private path를 지정하지 않고, 합성 fixture를 checkout 밖의 `TemporaryDirectory`에 복사해 지정합니다. private batch는 이 root를 사용하지 않습니다.
+2. API와 Worker는 `FAMILYCARE_IMPORT_ROOT`를 각각 read-only로 열어 API source catalog와 Worker intake를 수행합니다. 이 root의 source와 Google Drive 원본은 어떤 import 경로에서도 삭제하지 않습니다.
+3. 요청과 job은 relative `source_key`만 받습니다. absolute path, NUL byte, `..` component, root 밖으로 정규화되는 경로를 거부합니다.
+4. root directory descriptor에서 시작해 각 상대 path component를 chained `openat`/`dir_fd`, `O_NOFOLLOW`, directory-only flags로 열고, 최종 source를 `O_RDONLY | O_CLOEXEC | O_NOFOLLOW` semantics로 한 번만 엽니다. 디렉터리 descriptor는 최종 파일을 열 때까지 유지합니다. 이 열린 file identity의 duplicate handles에 대해 `fstat` regular-file, size, PDF magic, pypdf structure, and SHA-256을 수행합니다. consumer 사이에는 offset을 reset하거나 descriptor를 duplicate하며, validate-path 후 path를 다시 여는 TOCTOU 경로를 만들지 않습니다.
+5. Linux child에는 reopen 가능한 path를 전달하지 않습니다. parent가 연 read-only descriptor를 inherited 또는 duplicated descriptor로 전달하고, child는 그 descriptor를 통해서만 PDF를 읽습니다. source_key, descriptor metadata, errors와 logs는 sanitized form만 사용합니다.
+6. 파일 크기를 25 MiB와 output 64 MiB 제한에 맞춰 검사합니다.
+7. 원본 바이트의 SHA-256은 열린 descriptor에서 1 MiB(`1_048_576`) chunk로 streaming 계산합니다. 전체 원본을 메모리에 올리지 않습니다.
 
 다음 인터페이스가 path validation과 opened-handle hash 경계를 고정합니다.
 
@@ -221,11 +236,11 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 ## Invariants
 
 1. Phase 1 implementation과 CI는 실제 PDF와 private external root를 열지 않습니다.
-2. 모든 resolved source는 absolute `FAMILYCARE_DOCUMENT_ROOT` 아래 regular file이며 symlink traversal이 없습니다.
+2. Phase 1 resolved source는 absolute `FAMILYCARE_DOCUMENT_ROOT` 아래 regular file이며 symlink traversal이 없습니다. private batch resolved source는 API·Worker가 read-only로 공유하는 `FAMILYCARE_IMPORT_ROOT` 아래에만 있습니다.
 3. 모든 extraction block과 table/cell candidate는 DocumentVersion, 1-based page, PDF-point coordinates를 가집니다.
 4. coordinates는 top-left origin과 소수 셋째 자리 반올림을 사용하고, reading order는 0부터 시작합니다.
 5. `document_versions(document_id, content_sha256)`가 content identity를 유일하게 표현하고, `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`가 성공 extraction을 하나만 허용합니다. DocumentVersion이 hash를 대표하므로 Extraction에는 content hash를 중복 저장하지 않습니다.
-6. password는 DB, job payload, log에 들어가지 않습니다.
+6. password는 DB, job payload, log에 들어가지 않습니다. batch scope는 expiry·replacement·cancellation·Worker shutdown 경계를 가지며 terminal process memory disposal은 검증하지 않습니다.
 7. 임시 평문과 page cache는 page 처리 후 또는 job 종료 후 남지 않습니다.
 8. Phase 1 API에는 인증 provider가 없으며 production-safe endpoint로 표시하지 않습니다.
 9. Synthetic API route는 두 환경변수 gate가 모두 opt-in일 때만 등록되고, disabled runtime은 두 문서 path에 `404`를 반환합니다.
@@ -253,7 +268,7 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 v0.1 extension tests:
 
 - 한 FamilyMember batch와 cross-member file 혼합 거부
-- 한 번 입력한 in-memory password 재사용과 실패 file만 재입력
+- 한 번 입력한 in-memory password 재사용과 실패 file만 재입력, expiry·replacement·cancellation·shutdown disposal
 - password가 DB, persisted job, response, log에 없는지 검사
 - encrypted archive round-trip, tamper, wrong/missing master key
 - `OCR_REQUIRED` page만 local Korean/English OCR 실행
@@ -273,4 +288,4 @@ v0.1 extension tests:
 
 ## Deferred decisions
 
-Phase 1은 OCR 실행, encrypted batch, authentication, private-data acceptance를 구현하거나 실제 자료로 확인하지 않았습니다. 이 항목의 v0.1 계약은 `docs/design/private-data-runtime.md`와 `docs/design/authentication.md`에서 승인되었습니다. OS-level egress enforcement, Google Drive 자동 연결, Windows descriptor behavior와 public production sandbox는 v0.1 이후로 남깁니다.
+Phase 1은 OCR 실행, authentication, private-data acceptance를 구현하거나 실제 자료로 확인하지 않았습니다. encrypted batch 계약과 구현은 추가되었지만 Compose/private-data, actual private document, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending입니다. 이 항목의 v0.1 계약은 `docs/design/private-data-runtime.md`와 `docs/design/authentication.md`를 따릅니다. OS-level egress enforcement, Google Drive 자동 연결, Windows descriptor behavior와 public production sandbox는 별도 승인 전까지 남깁니다.

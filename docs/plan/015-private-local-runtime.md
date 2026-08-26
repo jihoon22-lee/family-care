@@ -6,15 +6,21 @@
 
 FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 외부에 게시되는 포트는 Web gateway 하나뿐이고, API·Worker·PostgreSQL은 Compose 내부 네트워크에서만 통신한다. 원본 import, 암호화 archive, Worker 작업 디렉터리, Unix-domain secret socket은 명시된 volume 경계로 분리한다. OpenAI API key는 Worker만 읽을 수 있으며, Web과 API에는 전달하지 않는다. 기존 Phase 1 API·DB·문서 분석 계약은 유지한다.
 
+**Current status**
+
+암호화 document-import의 API·Worker 계약은 구현되어 있지만 이 문서는 목표 Compose/private runtime을 정의한다. Compose/private-data, 실제 자료, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
+
 **Architecture**
 
 - Compose 서비스 집합은 정확히 db, api, worker, web 네 개다.
 - web만 host port를 publish하며 nginx가 /api/를 내부 api:8000으로 전달한다. API 및 PostgreSQL의 host port mapping은 존재하지 않는다.
 - db, api, worker, web은 기본 Compose network에서 이름으로 통신한다. 외부 reverse proxy, public ingress, Cloud Run, 별도 검색 서비스는 이 PR에서 추가하지 않는다.
-- db volume은 PostgreSQL 데이터만, archive volume은 애플리케이션이 암호화한 문서만, worker-work volume은 처리 중인 합성·사용자 승인 입력의 임시 파일만 담는다.
-- secret-socket volume은 API와 Worker가 Unix-domain one-time secret handoff에만 사용한다. TCP socket, in-memory broker, 데이터베이스 job payload로 secret을 전달하지 않는다.
-- import directory는 API가 아닌 Worker에 read-only로 bind mount한다. archive master key는 Worker에 read-only로 0600 파일을 mount하며, API와 Web에는 mount하지 않는다.
-- Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유한다. API는 HTTP 인증·계약·작업 생성만 수행한다.
+- db volume은 PostgreSQL 데이터만, archive volume은 Worker가 쓰는 애플리케이션 암호화 문서만, worker-work volume은 Worker가 처리 중인 합성·사용자 승인 입력의 임시 파일만 담는다.
+- secret-socket volume은 API와 Worker가 Unix-domain one-time secret handoff에만 사용한다. socket server는 Worker가 소유하고 API는 client로 연결한다. TCP socket, in-memory broker, 데이터베이스 job payload로 secret을 전달하지 않는다.
+- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. 저장소 밖 absolute archive·work root와 archive master key는 Worker에만 mount한다.
+- `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only root로 유지하며 private batch source로 사용하지 않는다.
+- archive master key는 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유하고 API는 HTTP 인증·계약·작업 생성과 secret socket client만 수행한다.
+- import source와 Google Drive 원본은 어떤 성공·실패·취소 경로에서도 수정하거나 삭제하지 않는다.
 - 자동화된 검사와 PR/CI는 Tailscale 상태를 읽기 전용으로만 확인한다. PR merge 뒤 root acceptance에서만 기존 Serve 구성을 snapshot으로 보존하고 충돌 없는 전용 HTTPS endpoint를 추가할 수 있다. 기존 endpoint 교체, Funnel, route, SSH, key, up/down, logout 변경은 금지한다.
 - 애플리케이션 인증은 012의 두 관리자·Argon2id·hashed server session 계약을 사용한다. Tailscale 네트워크에 연결된 것만으로 인증된 것으로 취급하지 않는다.
 
@@ -25,7 +31,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - API Python 3.14.7, Uvicorn, PostgreSQL 18.6-alpine
 - Worker Python 3.14.7, UID 10002:10002, existing PostgreSQL job queue
 - pytest, pytest-cov가 아니라 기존 pytest invocation, Python TOML/YAML structural checks
-- Tailscale CLI의 read-only JSON/status output을 policy 검사에 사용하고, post-merge acceptance에만 별도 승인된 additive HTTPS Serve endpoint를 사용
+- Tailscale CLI의 read-only JSON/status output을 policy 검사에 사용하고, post-merge acceptance에만 별도 승인된 additive HTTPS Serve endpoint를 사용한다. Tailscale acceptance 자체는 pending이다.
 - GitHub Actions는 synthetic fixtures와 repository policy만 실행하며 실제 문서·비밀값·외부 AI는 사용하지 않는다.
 
 **Spec**
@@ -105,7 +111,7 @@ volumes:
   familycare-secret-socket:
 ~~~
 
-The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. Values are supplied outside Git; no secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
+The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_DOCUMENT_ROOT, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, FAMILYCARE_SECRET_SOCKET, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. `FAMILYCARE_DOCUMENT_ROOT` is Phase 1 synthetic-only; `FAMILYCARE_IMPORT_ROOT` is the shared read-only API/Worker private source root. The archive, work, and master-key paths are Worker-only. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. Values are supplied outside Git; no secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
 
 ### Task 1: Define the private Compose policy checker
 
@@ -162,7 +168,7 @@ location /api/ {
 
 ### Task 3: Isolate archive, import, socket, and Worker-only AI access
 
-- [ ] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, familycare-archive-data to API/Worker archive paths as required by the archive contract, familycare-worker-work to Worker work paths, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only this socket volume; it must not receive the archive key.
+- [ ] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, the same read-only `FAMILYCARE_IMPORT_ROOT` bind mount to API and Worker, familycare-archive-data to the Worker archive path, familycare-worker-work to the Worker work path, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only the import read-only mount and socket volume; it must not receive the archive, work, or key mount.
 - [ ] 2–5 min: Modify infra/containers/worker.Dockerfile to install the approved OCR/runtime system packages in the Worker image only, retain USER 10002:10002, and create mount points without changing ownership to root at runtime. Modify infra/containers/api.Dockerfile only if the API needs the non-secret socket directory and keep its non-root UID.
 - [ ] 2–5 min: Create scripts/tests/test_private_mounts.py. Assert read-only import and key mounts, archive writes owned by Worker, socket permissions limited to API/Worker group, API/Web environment absence of OPENAI_API_KEY, and absence of key material in image COPY instructions.
 - [ ] 2–5 min: Run the RED command:
@@ -171,6 +177,14 @@ location /api/ {
 - [ ] 2–5 min: Add the minimum Compose environment and mount declarations. Use long syntax to make read-only intent machine-checkable:
 
 ~~~yaml
+api:
+  volumes:
+    - type: bind
+      source: ${FAMILYCARE_IMPORT_ROOT:?set outside Git}
+      target: /var/lib/familycare/import
+      read_only: true
+    - familycare-secret-socket:/run/familycare
+  # no archive, work, or master-key mount
 worker:
   environment:
     OPENAI_API_KEY: ${OPENAI_API_KEY:?set outside Git}
@@ -187,12 +201,9 @@ worker:
       source: ${FAMILYCARE_ARCHIVE_MASTER_KEY_FILE:?set outside Git}
       target: /run/secrets/familycare_archive_master_key
       read_only: true
-api:
-  volumes:
-    - familycare-secret-socket:/run/familycare
 ~~~
 
-  The implementation must use a real Compose secret or an equivalent read-only bind with a pre-created 0600 key file; it must not put the key into environment, DB, job payload, log, HTTP response, or image layer.
+  The implementation must use a real Compose secret or an equivalent read-only bind with a pre-created 0600 key file containing exactly 32 bytes; it must not put the key into environment, DB, job payload, log, HTTP response, or image layer. Import source files remain read-only and are never deleted by the import flow.
 - [ ] 2–5 min: Add a Worker health probe that checks database reachability, archive root availability, socket directory permissions, and key file mode without returning key content. A missing key fails closed and prevents archive import.
 - [ ] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
@@ -242,11 +253,11 @@ Before the root agent opens the PR for this plan, root must review the complete 
 - Compose has exactly db, api, worker, web and only Web has a host port.
 - /api/ is reachable only through Web gateway and is never cached.
 - Worker alone can read OPENAI_API_KEY and archive master key.
-- Import, archive, work, and secret socket roots have distinct permissions and no repository path.
+- The shared `FAMILYCARE_IMPORT_ROOT` mount is read-only for API and Worker; archive/work/master-key are Worker-only with no repository path, and the secret socket is served by Worker and consumed by API.
 - Automated Tailscale inspection is read-only; any post-merge mutation is one additive, collision-free FamilyCare HTTPS Serve endpoint with before/after evidence and no change to existing mappings.
 - Phase 1 routes, schemas, job lease, error semantics, and UNKNOWN behavior remain intact.
 - CI uses only synthetic fixtures and no actual private material.
-- Any unverified Docker daemon, Windows, mobile, or existing Tailscale state is reported as unverified.
+- Any unverified Compose/private-data runtime, Docker daemon, actual private data, Windows, mobile, existing Tailscale state, provider, or OCR acceptance is reported as unverified.
 
 The PR title should follow Conventional Commits, for example:
 

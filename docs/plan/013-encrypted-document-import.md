@@ -594,6 +594,7 @@ git commit -m "feat(web): add encrypted document import flow"
 - Modify: docs/guide.md
 - Modify: docs/design/private-data-runtime.md
 - Modify: docs/design/pdf-ingestion.md
+- Modify: docs/plan/015-private-local-runtime.md
 - Modify: .gitignore only for runtime socket/output exclusions that are narrowly required
 - Modify: scripts/check_repository_safety.py only for synthetic source-module exceptions
 - Test: scripts/tests/test_repository_safety.py
@@ -606,7 +607,7 @@ git commit -m "feat(web): add encrypted document import flow"
 - Produces: an operator guide that names only external path shapes, explains the mode-0600 master-key requirement, and states that Google Drive originals are never modified or deleted.
 - The guide must distinguish CI synthetic checks from user-approved private-data acceptance and must state that missing mobile, Windows, provider, and document-format checks remain unverified until performed.
 
-- [ ] **Step 1: Add failure-path cleanup and safety regression tests**
+- [x] **Step 1: Add failure-path cleanup and safety regression tests**
 
 ~~~python
 def test_decrypted_workspace_is_removed_after_archive_failure(tmp_path, archive_store) -> None:
@@ -618,7 +619,7 @@ def test_decrypted_workspace_is_removed_after_archive_failure(tmp_path, archive_
     assert no_password_or_key_in_captured_logs()
 ~~~
 
-- [ ] **Step 2: Run the RED cleanup/safety tests**
+- [x] **Step 2: Run the RED cleanup/safety tests**
 
 Run:
 
@@ -630,11 +631,11 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL until every runner exit path disposes the password scope and removes decrypted PDFs, rendered images, and temporary archive files.
 
-- [ ] **Step 3: Add the operator guide and narrow safety rules**
+- [x] **Step 3: Add the operator guide and narrow safety rules**
 
 Document the external path form /absolute/path/outside/repository only as a non-value example. Explain that a master-key file is created and permission-checked outside the checkout, that password input is prompted per batch, and that no import command deletes the manually downloaded source or Google Drive original. Keep any ocr or archive source-code exception limited to tracked Python modules; never allow generated output directories.
 
-- [ ] **Step 4: Run the complete import-focused gate**
+- [x] **Step 4: Run the complete import-focused gate**
 
 Run serially:
 
@@ -658,7 +659,7 @@ git diff --check
 
 Expected: all checks pass and no secret, plaintext, absolute path, or private-derived fixture is visible to the repository safety scanner.
 
-- [ ] **Step 5: Commit documentation and invoke the Root PR gate**
+- [x] **Step 5: Commit documentation and invoke the Root PR gate**
 
 ~~~bash
 git add docs/guide.md docs/design/private-data-runtime.md \

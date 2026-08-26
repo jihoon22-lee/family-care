@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow까지 현재 구현된 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow, 그리고 구현된 encrypted document batch 계약까지 현재 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -195,15 +195,19 @@ Checklist는 `document_kind`, requirement/prepared 상태, bounded `note_code`, 
 
 이 경계의 테스트와 예시는 처음부터 만든 합성 값만 사용합니다. 실제 보험 문서·개인정보, 보험사 제출, Windows·모바일 기기, Tailscale 접속은 아직 검증하지 않았습니다.
 
-### Planned v0.1 local runtime
+### Planned v0.1 local runtime (acceptance pending)
 
-v0.1은 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 둡니다. 부부 기기는 Tailscale private access와 app login을 함께 사용합니다. 로컬 인증 구현과 합성 검증은 이 가이드에 기록하지만, 운영 migration 적용과 외부 acceptance는 별도 승인 뒤에 확인합니다.
+v0.1 목표는 개인 WSL의 Docker Compose에서 Web gateway 하나만 host에 노출하고 API, Worker, PostgreSQL은 internal network에 두는 것입니다. Tailscale private access와 app login을 함께 사용하는 것도 목표이지만, 현재 Compose/private-data, mobile, Windows, Tailscale device, provider, OCR acceptance는 아직 수행하지 않았습니다.
 
-- existing WSL `OPENAI_API_KEY`는 Worker container에만 주입합니다.
-- Gemini와 Google Drive API는 사용하지 않습니다.
-- encrypted PDF password는 family-scoped batch process memory에서만 사용합니다.
-- managed archive key는 저장소 밖 file secret으로 제공합니다.
-- LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
+- `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only 개발 route의 외부 합성 root입니다. private batch에 실제 자료를 넣는 root가 아닙니다.
+- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory이며 API와 Worker가 함께 read-only로 bind mount하는 private batch source root입니다. API는 source catalog/opaque ID 해석, Worker는 intake를 담당합니다.
+- `FAMILYCARE_ARCHIVE_ROOT`와 `FAMILYCARE_WORK_ROOT`는 저장소 밖 absolute directory인 Worker 전용 root입니다. API와 Web에는 archive/work mount가 없습니다.
+- `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`은 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 합니다.
+- Worker가 Unix-domain secret socket server를 소유하고 API가 client로 한 번 연결합니다. socket 외 secret handoff는 사용하지 않습니다.
+- encrypted PDF password는 family-scoped batch process memory에서만 사용하며, expiry·replacement·cancellation·shutdown 경계에서 scope를 폐기합니다. terminal process memory disposal은 검증하지 않습니다.
+- import source와 Google Drive 원본은 수정하거나 삭제하지 않습니다. Gemini와 Google Drive API는 사용하지 않습니다.
+- existing WSL `OPENAI_API_KEY`는 Worker container에만 주입하는 것이 목표이며 provider acceptance는 pending입니다.
+- managed archive key는 저장소 밖 file secret으로 제공합니다. LUKS, BitLocker와 WSL swap은 변경하지 않습니다.
 
 ### Local authentication
 
@@ -273,6 +277,26 @@ curl -i http://127.0.0.1:8000/api/v1/analysis-jobs/00000000-0000-4000-8000-00000
 
 API는 `FAMILYCARE_DOCUMENT_ROOT`를 직접 열지 않습니다. 실제 Worker 실행은 아래의 합성 전용 Analyzer 절차와 migration `0002_document_ingestion`을 사용하며, 문서·work root에는 실제 자료를 넣지 않습니다.
 
+### Use the authenticated encrypted document batch
+
+Encrypted import는 Phase 1 synthetic analysis route와 분리된 인증된 batch use case입니다. source catalog는 `FAMILYCARE_IMPORT_ROOT` 아래에서 opaque source ID만 목록화하며, API와 Worker가 같은 root를 read-only로 사용합니다. 브라우저 upload, absolute source path, raw PDF response는 없습니다.
+
+```text
+GET  /api/v1/document-import-sources
+POST /api/v1/document-batches
+GET  /api/v1/document-batches/{batch_id}
+POST /api/v1/document-batches/{batch_id}/password
+POST /api/v1/document-batches/{batch_id}/cancel
+```
+
+batch request는 정확히 한 `FamilyMember`와 bounded 64-character lowercase-hex source IDs를 가집니다. 서버가 로그인 session의 HouseholdScope를 사용하므로 클라이언트가 household를 넓히거나 source path를 지정할 수 없습니다. API는 password를 response·DB·job payload·log에 넣지 않고 Worker 소유 Unix-domain secret socket client로 한 번 전달합니다. Worker는 socket server와 batch password scope를 소유합니다.
+
+password scope는 batch 안에서 재사용할 수 있지만 expiry되며, 실패 파일을 재입력할 때 이전 scope를 교체·폐기하고, cancellation·Worker shutdown에서 `dispose()`를 호출합니다. 테스트가 확인하는 것은 in-process buffer 정리와 호출 경계이며, terminal process memory disposal은 확인하거나 주장하지 않습니다.
+
+성공한 평문은 Worker 전용 archive root에 document별 AES-GCM data key와 AES-KW wrapped key로 저장한 뒤에만 ready가 됩니다. archive master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600` 조건을 만족해야 합니다. 복호화 PDF와 중간 산출물은 Worker work root의 mode `0700`/`0600` 작업 공간에만 존재하며 import source와 Google Drive 원본은 성공·실패·취소 어느 경로에서도 수정·삭제하지 않습니다.
+
+이 batch 계약의 합성 테스트·계약 검사는 구현 범위에 속하지만, private Compose mount, 실제 private data, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending입니다. 이 상태를 로컬 합성 테스트 통과나 PR CI 통과로 대체하지 않습니다.
+
 종료:
 
 ```bash
@@ -316,16 +340,20 @@ GitHub의 활성 `Protect main` ruleset은 PR을 요구하고 다음 exact displ
 
 ### External local paths
 
-Phase 1 구현과 CI에서는 실제 자료 또는 private external root를 열지 않습니다. 테스트는 처음부터 만든 합성 PDF를 checkout 밖 임시 디렉터리에 복사해 `FAMILYCARE_DOCUMENT_ROOT`로 지정합니다. 실제 자료 사용 단계가 별도 승인된 뒤에만 저장소 밖 경로를 지정할 수 있습니다.
+Phase 1 구현과 CI에서는 실제 자료 또는 private external root를 열지 않습니다. 테스트는 처음부터 만든 합성 PDF를 checkout 밖 임시 디렉터리에 복사해 `FAMILYCARE_DOCUMENT_ROOT`로 지정합니다. 이 변수는 Phase 1 synthetic-only root이며 private batch source root로 재사용하지 않습니다.
 
 ```dotenv
 FAMILYCARE_DOCUMENT_ROOT=/absolute/path/outside/repository
 FAMILYCARE_WORK_ROOT=/absolute/path/outside/repository/work
+FAMILYCARE_IMPORT_ROOT=/absolute/path/outside/repository/import
+FAMILYCARE_ARCHIVE_ROOT=/absolute/path/outside/repository/archive
+FAMILYCARE_ARCHIVE_MASTER_KEY_FILE=/absolute/path/outside/repository/master-key
+FAMILYCARE_SECRET_SOCKET=/absolute/path/outside/repository/run/familycare.sock
 ```
 
 위 문자열은 경로 형식 예시이며 실제 경로가 아닙니다. 실제 값을 문서, 이슈, PR, 로그에 복사하지 않습니다.
 
-현재 Compose에는 문서 경로 mount가 없습니다. 실제 자료 연결은 Phase 8 구현과 사용자가 지정한 source path의 별도 acceptance가 완료된 뒤에만 사용합니다.
+`FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유하고, archive/work/master-key는 Worker에만 mount해야 합니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`이어야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. 현재 Compose/private-data mount와 실제 자료 연결은 별도 acceptance가 완료되지 않아 pending입니다.
 
 Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
 
