@@ -8,7 +8,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약은 구현되어 있지만 이 문서는 목표 Compose/private runtime을 정의한다. Compose/private-data, 실제 자료, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약과 private runtime policy checker는 구현되어 있다. Compose/private-data, 실제 자료, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
 
 **Architecture**
 
@@ -115,21 +115,21 @@ The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DA
 
 ### Task 1: Define the private Compose policy checker
 
-- [ ] 2–5 min: Create scripts/private_runtime_policy.py with RuntimePolicy, stable category errors, and validators shown above. Keep filesystem checks read-only and reject import, archive, and work roots that are relative, overlapping, inside the repository, or equal to one another.
-- [ ] 2–5 min: Create scripts/tests/test_private_runtime_policy.py with synthetic mappings for four services. Assert that an API or db ports key, an API OPENAI_API_KEY, a Web OPENAI_API_KEY, a writable import mount, a missing 0600 key-file declaration, or a fifth service is rejected.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Create scripts/private_runtime_policy.py with RuntimePolicy, stable category errors, and validators shown above. Keep filesystem checks read-only and reject import, archive, and work roots that are relative, overlapping, inside the repository, or equal to one another.
+- [x] 2–5 min: Create scripts/tests/test_private_runtime_policy.py with synthetic mappings for four services. Assert that an API or db ports key, an API OPENAI_API_KEY, a Web OPENAI_API_KEY, a writable import mount, a missing read-only key-file declaration, or a fifth service is rejected.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_runtime_policy.py -q
   Expected failure: the test import fails with ModuleNotFoundError for scripts/private_runtime_policy.py or the first policy assertion fails because no private checker exists.
-- [ ] 2–5 min: Implement the smallest checker that parses an already-loaded Compose mapping and never invokes Docker, Tailscale, or network calls. Keep error strings limited to categories such as host-port, worker-secret-scope, read-only-mount, service-set, and root-boundary.
-- [ ] 2–5 min: Run the GREEN command:
+- [x] 2–5 min: Implement the smallest checker that parses an already-loaded Compose mapping and never invokes Docker, Tailscale, or network calls. Keep error strings limited to categories such as host-port, worker-secret-scope, read-only-mount, service-set, and root-boundary.
+- [x] 2–5 min: Run the GREEN command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_runtime_policy.py -q
   Expected result: all policy unit tests pass and no test output contains a synthetic key value or source path.
-- [ ] 2–5 min: Run focused static checks:
+- [x] 2–5 min: Run focused static checks:
       TMPDIR=/tmp uv run ruff check scripts/private_runtime_policy.py scripts/tests/test_private_runtime_policy.py
       TMPDIR=/tmp uv run mypy scripts/private_runtime_policy.py
   Then run the repository safety checker in read-only mode:
       TMPDIR=/tmp uv run python scripts/check_repository_safety.py
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): define private compose policy
 
 ### Task 2: Make Web the only host gateway
