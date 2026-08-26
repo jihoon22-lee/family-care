@@ -44,7 +44,13 @@ class SameHostRedirectHandler(HTTPRedirectHandler):
         headers: Any,
         newurl: str,
     ) -> Request | None:
-        if urlsplit(req.full_url).netloc != urlsplit(newurl).netloc:
+        source = urlsplit(req.full_url)
+        destination = urlsplit(newurl)
+        if (
+            source.scheme != "https"
+            or destination.scheme != "https"
+            or source.netloc != destination.netloc
+        ):
             raise HTTPError(newurl, code, "redirect host rejected", headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 

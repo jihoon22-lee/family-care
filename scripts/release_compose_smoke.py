@@ -29,8 +29,9 @@ COMPOSE_PATH: Final[Path] = ROOT / "infra/compose/compose.yaml"
 COMPONENTS: Final[tuple[str, str, str]] = ("web", "api", "worker")
 IMAGE_COMPONENTS: Final[tuple[str, str, str]] = COMPONENTS
 SERVICES: Final[frozenset[str]] = frozenset({"db", *COMPONENTS})
+_IMAGE_SEGMENT = r"[a-z0-9](?:[a-z0-9._-]{0,98}[a-z0-9])?"
 _DIGEST_REFERENCE: Final[re.Pattern[str]] = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._:/-]*@sha256:[0-9a-f]{64}$"
+    rf"^ghcr\.io/{_IMAGE_SEGMENT}/{_IMAGE_SEGMENT}@sha256:[0-9a-f]{{64}}$"
 )
 _PROJECT_NAME: Final[re.Pattern[str]] = re.compile(r"^familycare-release-smoke-[0-9a-f]{12}$")
 _LOOPBACK_NAMES: Final[frozenset[str]] = frozenset({"localhost", "ip6-localhost"})
@@ -230,6 +231,9 @@ def validate_compose_model(
         _add(findings, "service-set")
 
     service_maps = {name: _mapping(services.get(name)) for name in SERVICES}
+
+    if any(service.get("network_mode") == "host" for service in service_maps.values()):
+        _add(findings, "host-network")
 
     for component in COMPONENTS:
         service = service_maps[component]

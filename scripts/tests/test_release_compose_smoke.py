@@ -57,6 +57,15 @@ def test_rejects_tag_pinned_release_references() -> None:
     assert {finding.code for finding in findings} == {"digest-reference"}
 
 
+def test_rejects_digest_reference_from_another_registry() -> None:
+    references = _image_references()
+    references["web"] = f"registry.invalid/synthetic/familycare-web@{_digest('a')}"
+
+    findings = validate_image_references(references)
+
+    assert {finding.code for finding in findings} == {"digest-reference"}
+
+
 @pytest.mark.parametrize(
     "reference",
     [
@@ -104,6 +113,16 @@ def test_rejects_exposed_internal_service(service: str) -> None:
     findings = validate_compose_model(model, _image_references())
 
     assert {finding.code for finding in findings} == {"internal-host-port"}
+
+
+@pytest.mark.parametrize("service", ["api", "worker", "db", "web"])
+def test_rejects_host_network_mode(service: str) -> None:
+    model = _compose_model()
+    model["services"][service]["network_mode"] = "host"
+
+    findings = validate_compose_model(model, _image_references())
+
+    assert {finding.code for finding in findings} == {"host-network"}
 
 
 def test_rejects_provider_key_on_non_worker_service() -> None:

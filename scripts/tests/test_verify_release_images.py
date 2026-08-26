@@ -135,6 +135,21 @@ def test_redirect_handler_rejects_cross_host_redirect() -> None:
         )
 
 
+def test_redirect_handler_rejects_https_downgrade() -> None:
+    handler = SameHostRedirectHandler()
+    request = Request("https://ghcr.io/v2/synthetic/manifests/0.1.0")
+
+    with pytest.raises(HTTPError, match="redirect host rejected"):
+        handler.redirect_request(
+            request,
+            None,
+            302,
+            "Found",
+            {},
+            "http://ghcr.io/manifest",
+        )
+
+
 class _Response:
     def __init__(self, status: int, headers: Mapping[str, str], body: bytes) -> None:
         self.status = status
