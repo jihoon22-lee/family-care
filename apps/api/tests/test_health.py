@@ -10,7 +10,7 @@ def test_liveness_reports_api_identity() -> None:
     response = client.get("/health/live")
 
     assert response.status_code == 200
-    assert response.json() == {"service": "api", "status": "ok", "version": "0.0.0"}
+    assert response.json() == {"service": "api", "status": "ok", "version": "0.1.0"}
 
 
 def test_readiness_reports_process_ready() -> None:
@@ -19,7 +19,7 @@ def test_readiness_reports_process_ready() -> None:
     response = client.get("/health/ready")
 
     assert response.status_code == 200
-    assert response.json() == {"service": "api", "status": "ready", "version": "0.0.0"}
+    assert response.json() == {"service": "api", "status": "ready", "version": "0.1.0"}
 
 
 def test_readiness_reports_database_unavailable() -> None:
@@ -31,7 +31,7 @@ def test_readiness_reports_database_unavailable() -> None:
     assert response.json() == {
         "service": "api",
         "status": "unavailable",
-        "version": "0.0.0",
+        "version": "0.1.0",
     }
 
 

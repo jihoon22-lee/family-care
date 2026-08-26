@@ -5,6 +5,7 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response, status
 
+from familycare_api import __version__
 from familycare_api.claims.router import medical_event_claim_router
 from familycare_api.claims.router import router as claim_router
 from familycare_api.clauses.router import router as clause_search_router
@@ -47,7 +48,7 @@ def create_app(
     probe = readiness_probe or database_is_ready
     app = FastAPI(
         title="FamilyCare API",
-        version="0.0.0",
+        version=__version__,
         description="Evidence-first family insurance guidance API",
     )
     install_error_handlers(app)

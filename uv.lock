@@ -338,7 +338,7 @@ wheels = [
 
 [[package]]
 name = "familycare-api"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
     { name = "alembic" },
@@ -363,7 +363,7 @@ requires-dist = [
 
 [[package]]
 name = "familycare-worker"
-version = "0.0.0"
+version = "0.1.0"
 source = { editable = "workers/analyzer" }
 dependencies = [
     { name = "cryptography" },

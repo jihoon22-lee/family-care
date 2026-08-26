@@ -51,7 +51,7 @@ def test_health_payload_reports_analyzer_identity() -> None:
     assert health_payload() == {
         "service": "analyzer",
         "status": "ok",
-        "version": "0.0.0",
+        "version": "0.1.0",
     }
 
 
@@ -62,14 +62,14 @@ def test_main_prints_health_payload(capsys: CaptureFixture[str]) -> None:
     assert main([], stop_event=stop_event) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ok", "version": "0.0.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ok", "version": "0.1.0"}\n'
 
 
 def test_health_command_reports_database_ready(capsys: CaptureFixture[str]) -> None:
     assert main(["--health"], database_probe=lambda: True) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.0.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.1.0"}\n'
 
 
 def test_health_command_fails_when_database_is_unavailable(
@@ -79,7 +79,7 @@ def test_health_command_fails_when_database_is_unavailable(
 
     captured = capsys.readouterr()
     assert captured.out == (
-        '{"service": "analyzer", "status": "unavailable", "version": "0.0.0"}\n'
+        '{"service": "analyzer", "status": "unavailable", "version": "0.1.0"}\n'
     )
 
 
@@ -209,7 +209,7 @@ def test_health_command_combines_database_and_private_runtime_readiness(
 
     captured = capsys.readouterr()
     assert captured.out == (
-        '{"service": "analyzer", "status": "unavailable", "version": "0.0.0"}\n'
+        '{"service": "analyzer", "status": "unavailable", "version": "0.1.0"}\n'
     )
     assert os.getcwd() not in captured.out
 
@@ -345,4 +345,4 @@ def test_console_entrypoint_reads_process_arguments(
     assert main(database_probe=lambda: True, stop_event=stop_event) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.0.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.1.0"}\n'
