@@ -177,9 +177,8 @@ class _ChallengeOpener:
 
 
 def test_registry_client_follows_distribution_bearer_challenge() -> None:
-    client = RegistryHttpClient(actor="synthetic-actor", token="synthetic-token")
     opener = _ChallengeOpener()
-    client._opener = opener  # noqa: SLF001 - deterministic transport boundary test
+    client = RegistryHttpClient(actor="synthetic-actor", token="synthetic-token", opener=opener)
 
     status, headers, _body = client.get(
         "https://ghcr.io/v2/synthetic-owner/synthetic-repo-web/manifests/0.1.0",
@@ -192,9 +191,10 @@ def test_registry_client_follows_distribution_bearer_challenge() -> None:
 
 
 def test_registry_client_rejects_unapproved_token_realm() -> None:
-    client = RegistryHttpClient(actor="synthetic-actor", token="synthetic-token")
-    client._opener = _ChallengeOpener(  # noqa: SLF001 - deterministic transport boundary test
-        realm="https://unexpected.invalid/token"
+    client = RegistryHttpClient(
+        actor="synthetic-actor",
+        token="synthetic-token",
+        opener=_ChallengeOpener(realm="https://unexpected.invalid/token"),
     )
 
     with pytest.raises(ValueError, match="authentication challenge rejected"):

@@ -142,7 +142,7 @@ def test_override_replaces_all_release_builds_with_digest_images() -> None:
 def test_setup_failure_removes_already_created_temporary_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    directories: list[object] = []
+    directories: list[Path] = []
 
     def fail_after_directory(
         _references: dict[str, str],

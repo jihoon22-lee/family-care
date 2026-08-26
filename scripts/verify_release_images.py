@@ -52,10 +52,16 @@ class SameHostRedirectHandler(HTTPRedirectHandler):
 class RegistryHttpClient:
     """Small GET-only registry client with a fixed timeout and redacted failures."""
 
-    def __init__(self, *, actor: str | None = None, token: str | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        actor: str | None = None,
+        token: str | None = None,
+        opener: Any | None = None,
+    ) -> None:
         self._actor = actor
         self._token = token
-        self._opener = build_opener(SameHostRedirectHandler())
+        self._opener: Any = opener or build_opener(SameHostRedirectHandler())
 
     def _open(self, request: Request, *, limit: int) -> tuple[int, Mapping[str, str], bytes]:
         with self._opener.open(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
