@@ -8,7 +8,7 @@
 
 **Scope:** This is an independent corrective PR between selective OCR and private local runtime. The approved v0.1 runtime is one household with one shared import root. Multi-household source-root partitioning, archive orphan reconciliation UI, Cloud Run, Google Drive API, Tailscale mutation, and actual private documents remain out of scope.
 
-**Implementation status:** Tasks 1–4 are implemented with focused synthetic Worker/API coverage. Task 5 documentation is complete in this branch. The complete PostgreSQL whole-gate, root review, PR/CI, merge, and private runtime acceptance remain pending.
+**Implementation status:** Tasks 1–4 and Task 5 documentation are implemented. The complete serial local gate, task-owned PostgreSQL integration suite, and concentrated root review passed. PR/CI, merge, and private runtime acceptance remain pending.
 
 **Primary files:**
 
@@ -65,8 +65,8 @@
 ## Task 5: Documentation, whole-PR review, and merge
 
 - [x] Update `CHANGELOG.md`, `docs/design/pdf-ingestion.md`, `docs/design/private-data-runtime.md`, and this plan with implemented behavior and honest unverified boundaries.
-- [ ] Run the complete serial Root PR gate from `docs/plan/003-v0.1-implementation-index.md`, followed by task-owned PostgreSQL integration tests. Build no image unless runtime code or container definitions require it.
-- [ ] Root reviews the complete `origin/main...HEAD` diff once, tracing password disposal, archive deletion decisions, DB state transitions, error/log fields, generated contracts, and actual failure-path tests.
+- [x] Run the complete serial Root PR gate from `docs/plan/003-v0.1-implementation-index.md`, followed by task-owned PostgreSQL integration tests. Build no image unless runtime code or container definitions require it.
+- [x] Root reviews the complete `origin/main...HEAD` diff once, tracing password disposal, archive deletion decisions, DB state transitions, error/log fields, generated contracts, and actual failure-path tests.
 - [ ] Push `fix/private-import-reliability`, open one PR, wait for all required checks, merge with a merge commit, verify main, and remove the branch/worktree.
 
 ## Completion boundary

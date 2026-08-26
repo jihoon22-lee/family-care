@@ -81,7 +81,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - CoverageRule version reads expose `expected_version`; publication accepts only the expected version and a stored version ID, while deterministic rule evaluation remains deferred to the next phase.
 - Claim workflow records user-entered receipt/payment metadata and expected-version manual transitions; it does not send submissions to insurers or store medical/claim files. Historical snapshots remain immutable when later results are reanalyzed.
 - Phase 1 final verification passed Web/PWA checks, 178 non-integration tests, 27 PostgreSQL integration tests, 59 focused PDF-boundary tests, 19 focused API tests, three focused API-to-Worker E2E tests, all contract/policy checks, and serial local Web/API/Worker image builds. No release tag, image push, Cloud Run, production deployment, or real/private-data verification was performed.
-- This private-import reliability branch has focused synthetic Worker/API coverage, but the complete PostgreSQL whole-gate, root review, PR/CI, merge, and private runtime acceptance remain pending.
+- This private-import reliability branch passed the serial local gate: Web 99 tests and production PWA build, 1,007 non-integration tests, 103 task-owned PostgreSQL integration tests, contract/container/workflow policies, repository safety, and concentrated root review. PR/CI, merge, and private runtime acceptance remain pending.
 
 ### Deprecated
 
