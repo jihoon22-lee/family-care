@@ -11,6 +11,7 @@ import pytest
 from familycare_worker.archive.store import ArchiveStore, ArchiveStoreError
 from familycare_worker.imports.batch import BatchRunner as _BatchRunner
 from familycare_worker.imports.secret_channel import BatchPasswordRegistry
+from familycare_worker.ocr.models import OcrCancelled
 from familycare_worker.pdf.isolation import ParseOutcome
 
 from workers.analyzer.tests.synthetic_pdf_factory import make_text_pdf
@@ -250,6 +251,34 @@ def test_stop_after_parser_return_discards_registry_without_progress_callback(
         registry,
         _successful_parser,
         stop_requested=lambda: True,
+        on_password_discarded=deactivated.append,
+    )
+
+    assert runner.run_once("worker-a") is True
+    assert registry.password_for(SYNTHETIC_BATCH_ID, SYNTHETIC_ITEM_ID_A) is None
+    assert deactivated == [SYNTHETIC_BATCH_ID]
+    assert repository.persisted == []
+    assert list(archive_root.iterdir()) == []
+
+
+def test_ocr_cancellation_discards_registry_and_deactivates_batch(tmp_path: Path) -> None:
+    document_root, work_root, archive_root, repository = _setup(tmp_path)
+    registry = _registry()
+    deactivated: list[object] = []
+
+    class CancellingOcrProcessor:
+        def process(self, *args: object, **kwargs: object) -> object:
+            del args, kwargs
+            raise OcrCancelled
+
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        registry,
+        _successful_parser,
+        ocr_processor=CancellingOcrProcessor(),
         on_password_discarded=deactivated.append,
     )
 
