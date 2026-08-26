@@ -11,6 +11,8 @@ v0.1은 하나의 공동 HouseholdSpace에 동일 권한을 가진 로컬 관리
 ## Account provisioning
 
 - 관리자 계정은 서버 측 관리 명령으로만 생성·비활성화한다.
+- fresh migration 뒤에는 one-time `familycare-admin init`이 sole HouseholdSpace와 첫 관리자를 한 transaction에서 생성한다. PostgreSQL transaction advisory lock으로 concurrent init을 직렬화하고 기존 또는 soft-deleted HouseholdSpace가 하나라도 있으면 `HOUSEHOLD_ALREADY_INITIALIZED`로 거부한다.
+- `familycare-admin create`는 초기화가 끝난 sole active HouseholdSpace의 선택적 두 번째 관리자만 생성한다. migration seed나 일반 Web bootstrap으로 HouseholdSpace를 만들지 않는다.
 - 명령은 username과 password를 TTY 또는 stdin으로 받고 raw password를 argument, 환경변수, shell history, log에 넣지 않는다.
 - password는 Argon2id hash로 PostgreSQL에 저장한다.
 - 활성 관리자 계정은 최대 두 개이며 모두 같은 HouseholdSpace에 연결된다.
@@ -53,6 +55,7 @@ v0.1은 하나의 공동 HouseholdSpace에 동일 권한을 가진 로컬 관리
 - 만료·폐기 session은 동일한 unauthenticated 응답을 반환한다.
 - Argon2 parameter upgrade는 성공 login 뒤 hash를 새로 만들되 실패 시 기존 hash를 보존한다.
 - 두 계정 한도를 넘는 provisioning은 안정적인 관리 오류로 거부한다.
+- first-run household와 첫 관리자 중 하나라도 저장에 실패하면 같은 transaction 전체를 rollback한다.
 - 계정 비활성화는 FamilyMember, 계약, 청구 기록을 삭제하지 않는다.
 
 ## Tests

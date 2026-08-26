@@ -1,6 +1,6 @@
 # Private data and local runtime design
 
-- 상태: encrypted import·selective OCR·private import reliability 구현 문서화, private runtime acceptance 대기
+- 상태: encrypted import·selective OCR·private import reliability는 `main` 병합, private Compose 정책·합성 permission smoke 구현, PR·실제 환경 acceptance 대기
 - 적용 단계: 암호 PDF batch, selective OCR, Phase 8 private-data acceptance
 - 실행 위치: 개인 PC의 WSL Docker Compose
 
@@ -27,20 +27,22 @@ Tailscale private device
 - TLS와 Secure cookie가 필요한 device access는 기존 tailnet의 HTTPS proxy 방식에 맞춘다. 시스템 명령 적용 전 현재 Tailscale 구성을 읽기 전용으로 확인한다.
 - 다른 프로젝트의 container, port, Tailscale route를 중지하거나 변경하지 않는다.
 
-이 topology와 Compose mount는 목표 설계이며, 현재 Compose/private-data acceptance에서 아직 확인하지 않았다. 실제 mobile·Windows·Tailscale device, provider, OCR acceptance도 완료로 간주하지 않는다.
+이 topology와 Compose mount는 합성 설정·image·permission smoke에서 확인했다. 현재 변경의 PR·CI·merge와 실제 private data, mobile·Windows·Tailscale device, provider, OCR acceptance는 아직 완료로 간주하지 않는다.
 
 ## Runtime path and socket contract
 
-환경변수에는 실제 경로를 넣지만 저장소 문서에는 변수 이름과 외부 경로 형식만 기록한다.
+host bind 환경변수에는 실제 경로를 넣지만 저장소 문서에는 변수 이름과 외부 경로 형식만 기록한다. archive/work/socket 환경변수는 Compose named volume의 고정 container path다.
 
 | 계약 | 소유자·접근 | 경계 |
 |---|---|---|
 | `FAMILYCARE_DOCUMENT_ROOT` | Phase 1 Worker/test 전용 | 합성 PDF만 사용하는 Phase 1 synthetic root다. private batch 입력이나 실제 자료용으로 재사용하지 않는다. |
 | `FAMILYCARE_IMPORT_ROOT` | 저장소 밖 absolute directory를 API와 Worker가 함께 read-only로 bind mount | API는 source catalog와 opaque ID 해석에, Worker는 descriptor-safe intake에 사용한다. API·Worker 모두 원본을 변경·삭제하지 않는다. |
-| `FAMILYCARE_ARCHIVE_ROOT` | 저장소 밖 absolute directory, Worker 전용 | document별 application-encrypted archive를 저장한다. API와 Web에는 mount하지 않는다. |
-| `FAMILYCARE_WORK_ROOT` | 저장소 밖 absolute directory, Worker 전용 | 복호화 평문과 중간 산출물만 작업별 mode `0700` directory 및 mode `0600` file로 둔다. API와 Web에는 mount하지 않는다. |
-| `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE` | Worker 전용 read-only file | 저장소 밖의 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. key 값은 환경변수·DB·log·image에 넣지 않는다. |
-| `FAMILYCARE_SECRET_SOCKET` | Worker server, API client | API가 one-time handoff frame을 보내고 Worker가 수신·검증한다. archive/work/key mount와 분리된 Unix-domain socket만 공유한다. |
+| `FAMILYCARE_ARCHIVE_ROOT` | Worker-only named volume의 container absolute path | document별 application-encrypted archive를 저장한다. API와 Web에는 mount하지 않는다. |
+| `FAMILYCARE_WORK_ROOT` | Worker-only named volume의 container absolute path | 복호화 평문과 중간 산출물만 작업별 mode `0700` directory 및 mode `0600` file로 둔다. API와 Web에는 mount하지 않는다. |
+| `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE` | Worker 전용 read-only bind file | 저장소 밖의 absolute regular file이며 정확히 32 bytes, mode `0600`, numeric owner UID `10002`여야 한다. key 값은 환경변수·DB·log·image에 넣지 않는다. |
+| `FAMILYCARE_SECRET_SOCKET` | 고정 GID `10003`의 named volume, Worker server와 API client | API가 one-time handoff frame을 보내고 Worker가 수신·검증한다. archive/work/key mount와 분리된 Unix-domain socket만 공유한다. |
+
+API UID `10001`과 Worker UID `10002`는 supplementary GID `10003`을 공유하고 socket directory는 mode `2770`이다. Worker가 mode `0660` socket을 만들면 API는 client 연결만 수행하며 db와 Web은 volume을 받지 않는다.
 
 ## Source and archive lifecycle
 
@@ -74,20 +76,20 @@ Archive write와 DB success transition 사이의 실패는 두 종류로 나눈�
 - DB persistence가 시작되기 전에 stop 또는 owned heartbeat가 실패하면 새 object는 definite orphan이다. Worker는 object key를 다시 구성해 정확히 그 ciphertext만 삭제하고, 원본 import source와 Google Drive 파일은 건드리지 않는다.
 - `mark_succeeded()`가 시작된 뒤 예외가 발생하면 DB가 이미 commit되었는지 알 수 없다. 이 경우 ciphertext를 삭제하면 committed `managed_archives` row가 가리키는 object를 잃을 수 있으므로 보존하고, password를 폐기한 뒤 `batch_archive_commit_uncertain`만 기록한다.
 
-보존된 encrypted orphan을 DB row와 archive metadata로 대조하고 보존·격리·삭제하는 reconciler와 운영 UI는 아직 구현하지 않았다. 이는 향후 repository/archive reconciler 작업의 책임이며, 이 branch가 임의 삭제나 실제 자료 정리를 수행했다는 뜻이 아니다.
+보존된 encrypted orphan을 DB row와 archive metadata로 대조하고 보존·격리·삭제하는 reconciler와 운영 UI는 아직 구현하지 않았다. 이는 향후 repository/archive reconciler 작업의 책임이며, 현재 구현이 임의 삭제나 실제 자료 정리를 수행했다는 뜻이 아니다.
 
 ## Archive key
 
-- `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`은 저장소 밖의 absolute regular mode `0600` file이며 내용은 정확히 32 bytes다.
-- Compose는 key file을 Worker에만 read-only secret mount한다. API와 Web에는 key file 또는 key 값이 없다.
+- `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`은 저장소 밖의 absolute regular mode `0600` file이며 numeric owner UID `10002`, 내용은 정확히 32 bytes다.
+- Compose는 key file을 Worker에만 read-only bind mount한다. API와 Web에는 key file 또는 key 값이 없다.
 - key 자체는 환경변수 값, Compose YAML, image layer, DB, log에 넣지 않는다.
-- 사용자가 Google Drive에 두는 encrypted KDBX vault는 recovery copy일 뿐 앱이 직접 읽지 않는다.
+- 사용자가 별도로 보관하는 recovery copy는 앱이 직접 읽거나 동기화하지 않으며 Git·DB·container image에 들어가지 않는다.
 - master key가 없으면 archive를 새로 생성하거나 읽지 않고 fail closed한다.
 - key rotation은 old/new key를 동시에 검증하고 wrapped data key만 교체한 뒤 완료하는 별도 관리 작업이다.
 
-## Selective local OCR (synthetic acceptance present; private acceptance pending)
+## Selective local OCR (merged; private acceptance pending)
 
-선택적 OCR 계약과 Worker 구현은 이 branch에 있으며 합성 renderer/engine/processor/cleanup/atomic-persistence 테스트와 Worker 이미지 language smoke 경계가 있다. 이는 실제 private PDF나 private Compose runtime acceptance를 의미하지 않는다.
+선택적 OCR 계약과 Worker 구현은 `main`에 있으며 합성 renderer/engine/processor/cleanup/atomic-persistence 테스트와 Worker 이미지 language smoke 경계가 있다. 이는 실제 private PDF acceptance를 의미하지 않는다.
 
 - native extraction이 `OCR_REQUIRED`로 분류한 page만 OCR한다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않는다.
 - renderer는 이미 열린 read-only descriptor에서 25 MiB 이내 bounded bytes를 읽어 PDFium으로 한 page를 fixed 300 DPI로 렌더링한다. source PDF path를 OCR renderer에 전달하거나 다시 열지 않는다.
@@ -125,7 +127,7 @@ v0.1에 포함하지 않음:
 
 ## Private-data acceptance (pending)
 
-현재 실제 자료 acceptance는 수행하지 않았다. 이 reliability branch의 합성 Worker/API 테스트는 실제 private PDF, private Compose mount, mobile, Windows, Tailscale device/network, provider, and private OCR acceptance를 검증하지 않는다. 해당 항목은 모두 별도 검증 대기 상태이며, 실제 자료 검증은 private runtime PR이 다음 단계로 완료되고 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
+현재 실제 자료 acceptance는 수행하지 않았다. 합성 Worker/API 테스트와 private Compose permission smoke는 실제 private PDF, mobile, Windows, Tailscale device/network, provider, private OCR acceptance를 검증하지 않는다. 해당 항목은 모두 별도 검증 대기 상태이며, 실제 자료 검증은 private runtime PR이 병합되고 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
 
 1. 정확한 source와 output root를 읽기 전용으로 확인한다.
 2. `git status`와 safety scanner 기준선을 기록한다.

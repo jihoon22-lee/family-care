@@ -132,7 +132,7 @@ The session cookie is host-only, `Secure`, `HttpOnly`, `SameSite=Strict`, and na
 **Interfaces:**
 
 - Consumes: the existing `household_spaces` table created by the merged policy-ledger migration and the API database URL.
-- Produces: `PasswordHasher.hash`, `PasswordHasher.verify`, `AdminProvisioner.create`, `AdminProvisioner.set_password`, `AdminProvisioner.disable`, and the `familycare-admin create|set-password|disable` commands.
+- Produces: `PasswordHasher.hash`, `PasswordHasher.verify`, `AdminProvisioner.initialize`, `AdminProvisioner.create`, `AdminProvisioner.set_password`, `AdminProvisioner.disable`, and the `familycare-admin init|create|set-password|disable` commands. The post-merge first-run correction makes `init` the only CLI path that atomically creates the unseeded sole HouseholdSpace and first administrator; `create` remains the optional second-admin path.
 - Database tables: `app_users` with UUID, household FK, normalized username, display name, Argon2id hash, active flag, timestamps, and deactivated timestamp; `app_sessions` is created in this migration with its full shape for later tasks.
 - The two-admin limit is enforced by locking the single HouseholdSpace row, counting active users, and rejecting a third active account with `ADMIN_LIMIT_REACHED`.
 
@@ -198,6 +198,8 @@ def create_admin_from_tty(database_url: str, username: str) -> None:
 ~~~
 
 `set-password` uses the same double `getpass` flow, accepts only the username as a non-secret argument, replaces the hash transactionally, and revokes every existing session for that user. `disable` also revokes all sessions and never deletes HouseholdSpace business data. The migration must lock the HouseholdSpace row during the active-account count and must not create a public bootstrap endpoint. Add `[project.scripts] familycare-admin = "familycare_api.identity.cli:main"` and pin `argon2-cffi` in the API package.
+
+Fresh migrations intentionally contain no HouseholdSpace row. The private-runtime acceptance correction adds `familycare-admin init --space-key ... --household-name ... --username ... --display-name ...`; its password still comes only from TTY/stdin. A transaction-scoped PostgreSQL advisory lock protects the empty-table concurrency case, any existing row including a soft-deleted row rejects re-initialization, and household plus first-admin inserts commit or roll back together. This is administrative CLI initialization, not a public Web bootstrap endpoint.
 
 - [x] **Step 4: Run the GREEN unit tests and migration checks**
 

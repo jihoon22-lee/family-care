@@ -42,6 +42,69 @@ def identity_database() -> Iterator[str]:
 
 
 @pytest.mark.integration
+def test_first_run_initialization_creates_login_ready_household() -> None:
+    database_url = _database_url()
+    with psycopg.connect(database_url) as connection:
+        connection.execute("TRUNCATE app_sessions, app_users CASCADE")
+        connection.execute("DELETE FROM household_spaces")
+
+    try:
+        admin = AdminProvisioner(database_url).initialize(
+            space_key="primary-household",
+            household_name="FamilyCare Home",
+            username="admin-a",
+            raw_password="synthetic-auth-secret-a",
+            display_name="Admin A",
+        )
+
+        with psycopg.connect(database_url, row_factory=dict_row) as connection:
+            households = connection.execute(
+                "SELECT id, space_key, display_name FROM household_spaces"
+            ).fetchall()
+            users = connection.execute(
+                "SELECT household_space_id, username, password_hash FROM app_users"
+            ).fetchall()
+
+        assert households == [
+            {
+                "id": admin.household_space_id,
+                "space_key": "primary-household",
+                "display_name": "FamilyCare Home",
+            }
+        ]
+        assert users[0]["household_space_id"] == admin.household_space_id
+        assert users[0]["username"] == "admin-a"
+        assert users[0]["password_hash"].startswith("$argon2id$")
+        assert "synthetic-auth-secret-a" not in repr(users)
+
+        with pytest.raises(AdminProvisioningError, match="HOUSEHOLD_ALREADY_INITIALIZED"):
+            AdminProvisioner(database_url).initialize(
+                space_key="replacement-household",
+                household_name="Replacement Home",
+                username="admin-b",
+                raw_password="synthetic-auth-secret-b",
+                display_name="Admin B",
+            )
+
+        application = create_app(enable_synthetic_ingestion=False)
+        with TestClient(application, base_url="https://testserver") as client:
+            login = client.post(
+                "/api/v1/auth/login",
+                headers={"Origin": "https://testserver"},
+                json={
+                    "username": "admin-a",
+                    "password": "synthetic-auth-secret-a",
+                    "device_label": "Synthetic first-run client",
+                },
+            )
+        assert login.status_code == 200
+    finally:
+        with psycopg.connect(database_url) as connection:
+            connection.execute("TRUNCATE app_sessions, app_users CASCADE")
+            connection.execute("DELETE FROM household_spaces")
+
+
+@pytest.mark.integration
 def test_raw_password_and_session_tokens_are_absent_from_rows(identity_database: str) -> None:
     provisioner = AdminProvisioner(identity_database)
     user = provisioner.create("admin-a", "synthetic-auth-secret-a", "Admin A")

@@ -1,5 +1,8 @@
 import math
+import os
+import socket
 import sys
+from pathlib import Path
 from threading import Event
 from typing import Any
 
@@ -13,7 +16,7 @@ from familycare_worker.__main__ import (
     run_idle,
     run_worker_loop,
 )
-from familycare_worker.health import database_is_ready, health_payload
+from familycare_worker.health import database_is_ready, health_payload, private_runtime_is_ready
 from familycare_worker.ocr.engine import TesseractOcrEngine
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.runner import EventStructuringJobRunner
@@ -109,6 +112,108 @@ def test_database_probe_is_unavailable_when_analysis_jobs_table_is_missing(
     assert database_is_ready("postgresql://synthetic") is False
 
 
+def _private_environment(tmp_path: Path) -> dict[str, str]:
+    import_root = tmp_path / "import"
+    archive_root = tmp_path / "archive"
+    work_root = tmp_path / "work"
+    socket_root = tmp_path / "run"
+    import_root.mkdir()
+    archive_root.mkdir()
+    work_root.mkdir()
+    socket_root.mkdir()
+    key_path = tmp_path / "master-key"
+    key_path.write_bytes(b"k" * 32)
+    key_path.chmod(0o600)
+    socket_path = socket_root / "secret.sock"
+    listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    listener.bind(str(socket_path))
+    listener.close()
+    return {
+        "FAMILYCARE_IMPORT_ROOT": str(import_root),
+        "FAMILYCARE_ARCHIVE_ROOT": str(archive_root),
+        "FAMILYCARE_WORK_ROOT": str(work_root),
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE": str(key_path),
+        "FAMILYCARE_SECRET_SOCKET": str(socket_path),
+    }
+
+
+def test_private_runtime_probe_preserves_non_private_mode() -> None:
+    assert private_runtime_is_ready({}) is True
+
+
+def test_private_runtime_probe_accepts_available_worker_boundaries(tmp_path: Path) -> None:
+    assert private_runtime_is_ready(_private_environment(tmp_path)) is True
+
+
+@pytest.mark.parametrize(
+    "missing_name",
+    [
+        "FAMILYCARE_IMPORT_ROOT",
+        "FAMILYCARE_ARCHIVE_ROOT",
+        "FAMILYCARE_WORK_ROOT",
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+        "FAMILYCARE_SECRET_SOCKET",
+    ],
+)
+def test_private_runtime_probe_fails_closed_for_incomplete_configuration(
+    tmp_path: Path,
+    missing_name: str,
+) -> None:
+    environment = _private_environment(tmp_path)
+    del environment[missing_name]
+
+    assert private_runtime_is_ready(environment) is False
+
+
+def test_private_runtime_probe_rejects_invalid_key_and_socket(tmp_path: Path) -> None:
+    environment = _private_environment(tmp_path)
+    key_path = Path(environment["FAMILYCARE_ARCHIVE_MASTER_KEY_FILE"])
+    key_path.chmod(0o640)
+
+    assert private_runtime_is_ready(environment) is False
+
+    key_path.chmod(0o600)
+    key_path.write_bytes(b"short")
+    assert private_runtime_is_ready(environment) is False
+
+    key_path.write_bytes(b"k" * 32)
+    Path(environment["FAMILYCARE_SECRET_SOCKET"]).unlink()
+    assert private_runtime_is_ready(environment) is False
+
+
+@pytest.mark.parametrize(
+    "environment_name",
+    ["FAMILYCARE_IMPORT_ROOT", "FAMILYCARE_ARCHIVE_ROOT", "FAMILYCARE_WORK_ROOT"],
+)
+def test_private_runtime_probe_rejects_unavailable_directories(
+    tmp_path: Path,
+    environment_name: str,
+) -> None:
+    environment = _private_environment(tmp_path)
+    Path(environment[environment_name]).rmdir()
+
+    assert private_runtime_is_ready(environment) is False
+
+
+def test_health_command_combines_database_and_private_runtime_readiness(
+    capsys: CaptureFixture[str],
+) -> None:
+    assert (
+        main(
+            ["--health"],
+            database_probe=lambda: True,
+            private_runtime_probe=lambda: False,
+        )
+        == 1
+    )
+
+    captured = capsys.readouterr()
+    assert captured.out == (
+        '{"service": "analyzer", "status": "unavailable", "version": "0.0.0"}\n'
+    )
+    assert os.getcwd() not in captured.out
+
+
 def test_idle_process_stops_without_external_access() -> None:
     stop_event = Event()
     stop_event.set()
@@ -198,6 +303,28 @@ def test_environment_builds_event_runner_without_document_roots(
     runner = _runner_from_environment(Event())
 
     assert isinstance(runner, EventStructuringJobRunner)
+
+
+def test_private_work_root_alone_does_not_enable_the_document_runner(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.delenv("FAMILYCARE_DOCUMENT_ROOT", raising=False)
+    monkeypatch.setenv("FAMILYCARE_WORK_ROOT", str(tmp_path))
+    for name in (
+        "FAMILYCARE_IMPORT_ROOT",
+        "FAMILYCARE_ARCHIVE_ROOT",
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+        "FAMILYCARE_SECRET_SOCKET",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    runner = _runner_from_environment(Event())
+
+    assert isinstance(runner, EventStructuringJobRunner)
+    assert "document_runner_configuration_incomplete" not in caplog.messages
 
 
 def test_local_ocr_processor_factory_is_lazy_and_descriptor_only() -> None:

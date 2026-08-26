@@ -23,8 +23,13 @@ RUN apt-get update \
     && tesseract --list-langs | grep -Fx 'eng' \
     && tesseract --list-langs | grep -Fx 'kor' \
     && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10003 familycare-runtime \
     && groupadd --system --gid 10002 familycare \
-    && useradd --system --uid 10002 --gid 10002 --no-create-home familycare
+    && useradd --system --uid 10002 --gid 10002 --groups 10003 --no-create-home familycare \
+    && install -d -o 10002 -g 10002 -m 0700 /var/lib/familycare/archive \
+    && install -d -o 10002 -g 10002 -m 0700 /var/lib/familycare/work \
+    && install -d -o 10002 -g 10003 -m 2770 /run/familycare \
+    && install -d -o 10002 -g 10002 -m 0700 /run/secrets
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 WORKDIR /app

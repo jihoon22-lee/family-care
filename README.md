@@ -6,11 +6,11 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch가 `main`에 순차 merge되었습니다.
+Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가 `main`에 순차 merge되었습니다.
 
-Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. 목표 릴리스는 `v0.1.0`이며 이 branch의 선택적 OCR 이후 남은 후속 범위는 개인 WSL Compose/Tailscale acceptance와 릴리스입니다.
+Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. 목표 릴리스는 `v0.1.0`이며 남은 후속 범위는 private-runtime PR·Tailscale/실기기 acceptance와 릴리스입니다.
 
-현재 selective-OCR feature branch에는 `OCR_REQUIRED` page만 처리하는 local Korean/English OCR, separate native/OCR provenance, bounded cleanup/progress, and Worker image language smoke 경계가 구현되어 있습니다. 이 branch는 아직 PR·CI·merge 완료를 주장하지 않으며, 실제 private PDF, private Compose, Windows/mobile, Tailscale, provider acceptance는 private runtime PR 이후 별도로 검증합니다.
+현재 private-runtime branch에는 Web 단일 gateway, API/Worker read-only import, Worker-only archive/work/key/AI, shared Unix socket, fail-closed Worker readiness, read-only Tailscale inspector가 구현되어 있습니다. 합성 Compose permission smoke는 통과했지만 이 branch의 PR·CI·merge와 실제 private PDF, Windows/mobile, Tailscale, provider acceptance는 아직 별도로 검증합니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
@@ -71,20 +71,21 @@ Web gateway -> FastAPI modular monolith
 - uv 0.12.x
 - Docker Engine과 Docker Compose v2
 
-Foundation 구성이 완료된 뒤 다음 명령으로 시작합니다.
+개발 의존성과 검증은 다음 명령으로 시작합니다.
 
 ```bash
 cp .env.example .env
 corepack pnpm@11.22.0 install --frozen-lockfile
 uv sync --all-packages --group dev
 make check
-make up
 ```
+
+Compose 실행은 저장소 밖 import root, Worker 전용 32-byte key file, 미사용 Web port와 DB migration 준비가 필요합니다. 실제 실행 전 `docs/guide.md`의 **Private local Docker runtime** 절차를 따릅니다.
 
 종료할 때는 다음을 사용합니다. 데이터베이스 볼륨은 자동 삭제하지 않습니다.
 
 ```bash
-make down
+ENV_FILE=.env.private make down
 ```
 
 세부 절차와 안전한 외부 데이터 경로 설정은 `docs/guide.md`를 따릅니다.

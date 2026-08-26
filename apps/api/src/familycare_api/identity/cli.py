@@ -20,6 +20,8 @@ from psycopg.rows import dict_row
 from familycare_api.identity.password import PasswordHasher, PasswordHashError
 
 _USERNAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")
+_SPACE_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{2,127}$")
+_INITIALIZE_ADVISORY_LOCK = 0x46616D4361726501
 
 
 class AdminProvisioningError(RuntimeError):
@@ -65,6 +67,13 @@ def _display_name(value: str) -> str:
     normalized = value.strip()
     if not normalized or len(normalized) > 160 or any(ord(char) < 32 for char in normalized):
         raise AdminProvisioningError("INVALID_DISPLAY_NAME")
+    return normalized
+
+
+def _space_key(value: str) -> str:
+    normalized = value.strip().casefold()
+    if _SPACE_KEY_PATTERN.fullmatch(normalized) is None:
+        raise AdminProvisioningError("INVALID_SPACE_KEY")
     return normalized
 
 
@@ -121,6 +130,71 @@ class AdminProvisioner:
             raise
         except psycopg.errors.UniqueViolation:
             raise AdminProvisioningError("ADMIN_USERNAME_EXISTS") from None
+        except psycopg.Error:
+            raise AdminProvisioningError("ADMIN_STORE_UNAVAILABLE") from None
+        if row is None:
+            raise AdminProvisioningError("ADMIN_STORE_UNAVAILABLE")
+        return ProvisionedAdmin(**row)
+
+    def initialize(
+        self,
+        *,
+        space_key: str,
+        household_name: str,
+        username: str,
+        raw_password: str,
+        display_name: str,
+    ) -> ProvisionedAdmin:
+        """Atomically create the sole household and its first local administrator."""
+
+        normalized_space_key = _space_key(space_key)
+        normalized_household_name = _display_name(household_name)
+        normalized_username = _username(username)
+        normalized_display_name = _display_name(display_name)
+        encoded_hash = self.password_hasher.hash(raw_password)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.execute(
+                    "SELECT pg_advisory_xact_lock(%s)",
+                    (_INITIALIZE_ADVISORY_LOCK,),
+                )
+                existing = connection.execute(
+                    """
+                    SELECT id FROM household_spaces
+                    ORDER BY id
+                    FOR UPDATE
+                    """
+                ).fetchall()
+                if existing:
+                    raise AdminProvisioningError("HOUSEHOLD_ALREADY_INITIALIZED")
+                household = connection.execute(
+                    """
+                    INSERT INTO household_spaces (space_key, display_name)
+                    VALUES (%s, %s)
+                    RETURNING id
+                    """,
+                    (normalized_space_key, normalized_household_name),
+                ).fetchone()
+                if household is None:
+                    raise AdminProvisioningError("ADMIN_STORE_UNAVAILABLE")
+                row = connection.execute(
+                    """
+                    INSERT INTO app_users (
+                        household_space_id, username, display_name, password_hash
+                    ) VALUES (%s, %s, %s, %s)
+                    RETURNING id, household_space_id, username, display_name, is_active
+                    """,
+                    (
+                        household["id"],
+                        normalized_username,
+                        normalized_display_name,
+                        encoded_hash,
+                    ),
+                ).fetchone()
+        except AdminProvisioningError:
+            raise
+        except psycopg.errors.UniqueViolation:
+            raise AdminProvisioningError("HOUSEHOLD_ALREADY_INITIALIZED") from None
         except psycopg.Error:
             raise AdminProvisioningError("ADMIN_STORE_UNAVAILABLE") from None
         if row is None:
@@ -212,7 +286,15 @@ def build_parser() -> argparse.ArgumentParser:
         dest="command", required=True, parser_class=_SafeArgumentParser
     )
 
-    create = subparsers.add_parser("create", help="create a local administrator")
+    initialize = subparsers.add_parser(
+        "init", help="create the first household and local administrator"
+    )
+    initialize.add_argument("--space-key", required=True)
+    initialize.add_argument("--household-name", required=True)
+    initialize.add_argument("--username", required=True)
+    initialize.add_argument("--display-name")
+
+    create = subparsers.add_parser("create", help="create an additional local administrator")
     create.add_argument("--username", required=True)
     create.add_argument("--display-name")
 
@@ -228,7 +310,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         provisioner = AdminProvisioner(os.getenv("FAMILYCARE_DATABASE_URL", ""))
-        if args.command == "create":
+        if args.command == "init":
+            raw_password = read_confirmed_password()
+            try:
+                provisioner.initialize(
+                    space_key=args.space_key,
+                    household_name=args.household_name,
+                    username=args.username,
+                    raw_password=raw_password,
+                    display_name=args.display_name or args.username,
+                )
+            finally:
+                del raw_password
+        elif args.command == "create":
             raw_password = read_confirmed_password()
             try:
                 provisioner.create(

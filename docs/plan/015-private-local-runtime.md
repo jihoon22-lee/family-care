@@ -8,7 +8,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약은 구현되어 있지만 이 문서는 목표 Compose/private runtime을 정의한다. Compose/private-data, 실제 자료, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 이 branch에 구현되어 있다. 합성 image·permission smoke는 통과했지만 PR·CI·merge와 실제 자료, mobile, Windows, Tailscale device, provider, private OCR acceptance는 아직 pending이며 완료로 주장하지 않는다.
 
 **Architecture**
 
@@ -17,7 +17,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - db, api, worker, web은 기본 Compose network에서 이름으로 통신한다. 외부 reverse proxy, public ingress, Cloud Run, 별도 검색 서비스는 이 PR에서 추가하지 않는다.
 - db volume은 PostgreSQL 데이터만, archive volume은 Worker가 쓰는 애플리케이션 암호화 문서만, worker-work volume은 Worker가 처리 중인 합성·사용자 승인 입력의 임시 파일만 담는다.
 - secret-socket volume은 API와 Worker가 Unix-domain one-time secret handoff에만 사용한다. socket server는 Worker가 소유하고 API는 client로 연결한다. TCP socket, in-memory broker, 데이터베이스 job payload로 secret을 전달하지 않는다.
-- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. 저장소 밖 absolute archive·work root와 archive master key는 Worker에만 mount한다.
+- `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. archive와 work는 Worker-only named volume의 container path이며, 저장소 밖 archive master-key file만 Worker에 read-only bind mount한다.
 - `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only root로 유지하며 private batch source로 사용하지 않는다.
 - archive master key는 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유하고 API는 HTTP 인증·계약·작업 생성과 secret socket client만 수행한다.
 - import source와 Google Drive 원본은 어떤 성공·실패·취소 경로에서도 수정하거나 삭제하지 않는다.
@@ -76,7 +76,7 @@ def validate_runtime_config(
 
 
 def validate_tailscale_inspection_command(argv: Sequence[str]) -> None:
-    """Accept status/ip/serve-status read-only forms; reject mutations."""
+    """Accept status/ip/serve-status-json read-only forms; reject mutations."""
 
 
 def validate_private_roots(
@@ -87,6 +87,8 @@ def validate_private_roots(
 ) -> None:
     """Require absolute, distinct, non-repository roots."""
 ~~~
+
+`validate_private_roots`는 direct synthetic run 또는 향후 explicit bind-root 구성을 위한 fail-closed helper다. 현재 Compose의 archive/work는 named volume이고 이 helper의 host path 입력으로 사용하지 않는다.
 
 The checker may report service names, mount classes, and policy categories. It must never print environment values, mount contents, source filenames, key bytes, or command output containing node metadata.
 
@@ -111,36 +113,36 @@ volumes:
   familycare-secret-socket:
 ~~~
 
-The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_DOCUMENT_ROOT, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, FAMILYCARE_SECRET_SOCKET, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. `FAMILYCARE_DOCUMENT_ROOT` is Phase 1 synthetic-only; `FAMILYCARE_IMPORT_ROOT` is the shared read-only API/Worker private source root. The archive, work, and master-key paths are Worker-only. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. Values are supplied outside Git; no secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
+The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DATABASE_USER, FAMILYCARE_DATABASE_PASSWORD, FAMILYCARE_ENV, FAMILYCARE_DOCUMENT_ROOT, FAMILYCARE_IMPORT_ROOT, FAMILYCARE_ARCHIVE_ROOT, FAMILYCARE_WORK_ROOT, FAMILYCARE_ARCHIVE_MASTER_KEY_FILE, FAMILYCARE_SECRET_SOCKET, OPENAI_API_KEY, FAMILYCARE_AI_STRUCTURER_MODEL, and FAMILYCARE_AI_VERIFIER_MODEL. `FAMILYCARE_DOCUMENT_ROOT` is Phase 1 synthetic-only; `FAMILYCARE_IMPORT_ROOT` is the shared read-only API/Worker private source root. Compose declares archive, work, and socket as container paths over named volumes; the master-key host path and API key are supplied outside Git to Worker only. The default non-secret model values are gpt-5.6-luna and gpt-5.6-terra. No secret value belongs in this plan or in .env.example. GEMINI_API_KEY is not mounted or consumed in v0.1.
 
 ### Task 1: Define the private Compose policy checker
 
-- [ ] 2–5 min: Create scripts/private_runtime_policy.py with RuntimePolicy, stable category errors, and validators shown above. Keep filesystem checks read-only and reject import, archive, and work roots that are relative, overlapping, inside the repository, or equal to one another.
-- [ ] 2–5 min: Create scripts/tests/test_private_runtime_policy.py with synthetic mappings for four services. Assert that an API or db ports key, an API OPENAI_API_KEY, a Web OPENAI_API_KEY, a writable import mount, a missing 0600 key-file declaration, or a fifth service is rejected.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Create scripts/private_runtime_policy.py with RuntimePolicy, stable category errors, and validators shown above. Keep filesystem checks read-only and reject import, archive, and work roots that are relative, overlapping, inside the repository, or equal to one another.
+- [x] 2–5 min: Create scripts/tests/test_private_runtime_policy.py with synthetic mappings for four services. Assert that an API or db ports key, an API OPENAI_API_KEY, a Web OPENAI_API_KEY, a writable import mount, a missing read-only key-file declaration, or a fifth service is rejected.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_runtime_policy.py -q
   Expected failure: the test import fails with ModuleNotFoundError for scripts/private_runtime_policy.py or the first policy assertion fails because no private checker exists.
-- [ ] 2–5 min: Implement the smallest checker that parses an already-loaded Compose mapping and never invokes Docker, Tailscale, or network calls. Keep error strings limited to categories such as host-port, worker-secret-scope, read-only-mount, service-set, and root-boundary.
-- [ ] 2–5 min: Run the GREEN command:
+- [x] 2–5 min: Implement the smallest checker that parses an already-loaded Compose mapping and never invokes Docker, Tailscale, or network calls. Keep error strings limited to categories such as host-port, worker-secret-scope, read-only-mount, service-set, and root-boundary.
+- [x] 2–5 min: Run the GREEN command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_runtime_policy.py -q
   Expected result: all policy unit tests pass and no test output contains a synthetic key value or source path.
-- [ ] 2–5 min: Run focused static checks:
+- [x] 2–5 min: Run focused static checks:
       TMPDIR=/tmp uv run ruff check scripts/private_runtime_policy.py scripts/tests/test_private_runtime_policy.py
       TMPDIR=/tmp uv run mypy scripts/private_runtime_policy.py
   Then run the repository safety checker in read-only mode:
       TMPDIR=/tmp uv run python scripts/check_repository_safety.py
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): define private compose policy
 
 ### Task 2: Make Web the only host gateway
 
-- [ ] 2–5 min: Modify infra/containers/nginx.conf so /api/ is proxied to http://api:8000, with HTTP/1.1, forwarded request identity headers, and no-store response headers. Keep /healthz local and retain static app-shell fallback. Do not proxy PDF, archive, or raw file paths.
-- [ ] 2–5 min: Create apps/web/tests/gateway.spec.ts and scripts/tests/test_private_compose.py. The tests must assert exactly one host-published service, Web port 8080, no API or DB port, internal API target api:8000, and no cacheable /api/ response.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Modify infra/containers/nginx.conf so /api/ is proxied to http://api:8000, with HTTP/1.1, forwarded request identity headers, and no-store response headers. Keep /healthz local and retain static app-shell fallback. Do not proxy PDF, archive, or raw file paths.
+- [x] 2–5 min: Create scripts/tests/test_private_compose.py as the static gateway/Compose contract test. It asserts exactly one host-published service, Web port 8080, no API or DB port, internal API target api:8000, and no cacheable /api/ response without adding a Web runtime test for infrastructure text.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_compose.py -q
   Expected failure: the current Compose mapping reports API and db host ports, and nginx configuration contains a 404 location instead of an upstream proxy.
-- [ ] 2–5 min: Modify infra/compose/compose.yaml to remove ports from db and api, retain the four-service set, add internal health dependencies, and keep only Web mapping 127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}:8080. Add the archive, worker-work, and secret-socket named volumes without publishing them.
-- [ ] 2–5 min: Apply the minimal nginx route:
+- [x] 2–5 min: Modify infra/compose/compose.yaml to remove ports from db and api, retain the four-service set, add internal health dependencies, and keep only Web mapping 127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}:8080. Add the archive, worker-work, and secret-socket named volumes without publishing them.
+- [x] 2–5 min: Apply the minimal nginx route:
 
 ~~~nginx
 location /api/ {
@@ -154,27 +156,27 @@ location /api/ {
 }
 ~~~
 
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Run GREEN:
       docker compose --env-file .env.example -f infra/compose/compose.yaml config
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_compose.py -q
       corepack pnpm@11.22.0 web:check
   Expected result: Compose config succeeds, exactly four services are listed, only Web has a host port, and Web checks pass. A local config test may use synthetic environment values only and must not print them.
-- [ ] 2–5 min: Run:
+- [x] 2–5 min: Run:
       TMPDIR=/tmp uv run python scripts/check_containers.py
       TMPDIR=/tmp uv run python scripts/check_workflows.py
   Record any pre-existing unrelated failure separately; do not weaken a safety rule to make this task pass.
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): expose one web gateway
 
 ### Task 3: Isolate archive, import, socket, and Worker-only AI access
 
-- [ ] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, the same read-only `FAMILYCARE_IMPORT_ROOT` bind mount to API and Worker, familycare-archive-data to the Worker archive path, familycare-worker-work to the Worker work path, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only the import read-only mount and socket volume; it must not receive the archive, work, or key mount.
-- [ ] 2–5 min: Modify infra/containers/worker.Dockerfile to install the approved OCR/runtime system packages in the Worker image only, retain USER 10002:10002, and create mount points without changing ownership to root at runtime. Modify infra/containers/api.Dockerfile only if the API needs the non-secret socket directory and keep its non-root UID.
-- [ ] 2–5 min: Create scripts/tests/test_private_mounts.py. Assert read-only import and key mounts, archive writes owned by Worker, socket permissions limited to API/Worker group, API/Web environment absence of OPENAI_API_KEY, and absence of key material in image COPY instructions.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, the same read-only `FAMILYCARE_IMPORT_ROOT` bind mount to API and Worker, familycare-archive-data to the Worker archive path, familycare-worker-work to the Worker work path, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only the import read-only mount and socket volume; it must not receive the archive, work, or key mount.
+- [x] 2–5 min: Modify infra/containers/worker.Dockerfile to install the approved OCR/runtime system packages in the Worker image only, retain USER 10002:10002, and create mount points without changing ownership to root at runtime. Modify infra/containers/api.Dockerfile only if the API needs the non-secret socket directory and keep its non-root UID.
+- [x] 2–5 min: Create scripts/tests/test_private_mounts.py. Assert read-only import and key mounts, archive writes owned by Worker, socket permissions limited to API/Worker group, API/Web environment absence of OPENAI_API_KEY, and absence of key material in image COPY instructions.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
   Expected failure: current Compose has no archive, worker-work, or secret-socket volume and the Worker-only key/mount assertions fail.
-- [ ] 2–5 min: Add the minimum Compose environment and mount declarations. Use long syntax to make read-only intent machine-checkable:
+- [x] 2–5 min: Add the minimum Compose environment and mount declarations. Use long syntax to make read-only intent machine-checkable:
 
 ~~~yaml
 api:
@@ -204,35 +206,35 @@ worker:
 ~~~
 
   The implementation must use a real Compose secret or an equivalent read-only bind with a pre-created 0600 key file containing exactly 32 bytes; it must not put the key into environment, DB, job payload, log, HTTP response, or image layer. Import source files remain read-only and are never deleted by the import flow.
-- [ ] 2–5 min: Add a Worker health probe that checks database reachability, archive root availability, socket directory permissions, and key file mode without returning key content. A missing key fails closed and prevents archive import.
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Add a Worker health probe that checks database reachability, import/archive/work availability, master-key validity, and the Unix-socket type without returning path or key content. Fixed GID `10003` and mode `2770` are enforced by image/Compose policy and the synthetic runtime permission smoke. A missing key fails closed and prevents archive import.
+- [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
       TMPDIR=/tmp uv run python scripts/check_containers.py
       docker compose --env-file .env.example -f infra/compose/compose.yaml config
   Expected result: mount and service policy tests pass; Docker Compose reports the four services and no host ports except Web. If the local Docker daemon is unavailable, retain the exact failure as unverified rather than changing policy.
-- [ ] 2–5 min: Run the focused image checks one image at a time:
+- [x] 2–5 min: Run the focused image checks one image at a time:
       docker build --file infra/containers/worker.Dockerfile --tag familycare-worker:policy-check .
       docker build --file infra/containers/api.Dockerfile --tag familycare-api:policy-check .
       docker build --file infra/containers/web.Dockerfile --tag familycare-web:policy-check .
   Inspect only image configuration metadata for non-root user, exposed ports, and environment names. Do not inspect or export filesystem contents containing private data.
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): isolate private worker mounts
 
 ### Task 4: Add read-only Tailscale and private acceptance checks
 
-- [ ] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, and every unknown argument.
-- [ ] 2–5 min: Create scripts/tests/test_private_acceptance.py. Feed synthetic status JSON with a node category and assert that the report excludes node names, IP addresses, tailnet identifiers, and command stdout. Assert mutation forms are rejected before subprocess creation.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Create scripts/private_acceptance.py with an explicit command allowlist and stable report types. Accept only tailscale status --json, tailscale ip -1, and tailscale serve status --json forms; reject tailscale serve, funnel, route, ssh, set, up, down, logout, the non-JSON Serve status form, and every unknown argument.
+- [x] 2–5 min: Create scripts/tests/test_private_acceptance.py. Feed synthetic status JSON with a node category and assert that the report excludes node names, IP addresses, tailnet identifiers, and command stdout. Assert mutation forms are rejected before subprocess creation.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py -q
   Expected failure: the module is missing or the current implementation accepts mutation commands.
-- [ ] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, gateway-unreachable, and app-auth-required. Never copy, delete, upload, print, or alter Tailscale state.
-- [ ] 2–5 min: Add tests for private roots. The caller supplies absolute roots outside the repository for import, archive, and worker work; tests use a temporary directory outside the repository test fixture tree and synthetic files only. Assert that a source root and output root cannot be the same directory.
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Implement private_acceptance.py so subprocess execution uses an argv list, a fixed timeout, no shell, no output persistence, and a small output-size limit. Return categories such as tailscale-unavailable, tailscale-not-connected, tailscale-connected, tailscale-serve-empty, tailscale-serve-configured, tailscale-serve-gateway-match, gateway-unreachable, and app-auth-required. Parse Serve JSON only in memory; exclude the exact expected FamilyCare loopback target before computing a non-rendered foreign-configuration fingerprint so before/after preservation can be compared without emitting node, IP, tailnet, raw configuration, or port values. Inspection failures return non-zero. Never copy, delete, upload, print, or alter Tailscale state.
+- [x] 2–5 min: Add tests for private roots. The caller supplies absolute roots outside the repository for import, archive, and worker work; tests use a temporary directory outside the repository test fixture tree and synthetic files only. Assert that a source root and output root cannot be the same directory.
+- [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_acceptance.py scripts/tests/test_private_runtime_policy.py -q
       TMPDIR=/tmp uv run python scripts/private_acceptance.py --help
   Expected result: policy and acceptance tests pass and help output contains no environment value.
-- [ ] 2–5 min: Modify docs/guide/private-runtime.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
-- [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json` and `tailscale serve status` through the redacting inspector, verifies that the gateway is bound only to loopback, and checks the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Do not print node, account, tailnet, or IP values into the task report.
+- [x] 2–5 min: Modify docs/guide.md to describe gateway-only access, Tailscale read-only inspection, app login, backup/restore ownership, and the boundary that real Windows/mobile/Tailscale operation remains separately validated. Do not include a real host address, account, filename, or secret.
+- [ ] 2–5 min: After the PR is merged, root captures `tailscale status --json` and `tailscale serve status --json` through the redacting inspector, supplying the configured loopback Web port only as `--expected-gateway-port`. Verify that the gateway is bound only to loopback and check the fixed private HTTPS candidate ports 8443 then 10000 for an unused endpoint. Keep the foreign-configuration fingerprint in process memory only and do not print node, account, tailnet, IP, port, raw JSON, or fingerprint values into the task report.
 - [ ] 2–5 min: If an existing Serve mapping already reaches the FamilyCare loopback gateway over HTTPS, reuse it without mutation. Otherwise, the user's approval to complete Phase 8 authorizes only an additive dedicated mapping. After verifying the current installed CLI syntax against official Tailscale documentation, run the equivalent of `tailscale serve --bg --https=<unused-approved-port> http://127.0.0.1:<familycare-web-port>`, then compare the before/after Serve status and abort if any pre-existing mapping changed. Never use `tailscale funnel`.
 - [ ] 2–5 min: From an authenticated HTTPS browser, verify login cookie delivery, `/api/` reverse proxy, no-store headers, ledger/event/result/claim navigation, and logout. A device that root cannot access remains explicitly unverified; CI or localhost HTTP does not substitute for Secure-cookie HTTPS acceptance.
 - [ ] 2–5 min: Run one explicitly marked local-provider smoke inside the Worker with wholly synthetic Evidence and event text. Verify both approved model IDs, strict structured output, independent verifier, deterministic validator, retry classification, and absence of prompt/response/key material in logs. This smoke may use the existing WSL `OPENAI_API_KEY`; never print, copy, export, or pass it to Web/API. A missing or rejected key is reported as an external acceptance failure, not replaced by the fake provider.
@@ -257,6 +259,7 @@ Before the root agent opens the PR for this plan, root must review the complete 
 - Automated Tailscale inspection is read-only; any post-merge mutation is one additive, collision-free FamilyCare HTTPS Serve endpoint with before/after evidence and no change to existing mappings.
 - Phase 1 routes, schemas, job lease, error semantics, and UNKNOWN behavior remain intact.
 - CI uses only synthetic fixtures and no actual private material.
+- A fresh migrated database can be initialized exactly once through the stdin-password `familycare-admin init` transaction and can then authenticate through the Web gateway.
 - Any unverified Compose/private-data runtime, Docker daemon, actual private data, Windows, mobile, existing Tailscale state, provider, or OCR acceptance is reported as unverified.
 
 The PR title should follow Conventional Commits, for example:

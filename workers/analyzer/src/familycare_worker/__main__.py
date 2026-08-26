@@ -23,7 +23,13 @@ from familycare_worker.ai.provider import (
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.event_jobs import EventStructuringJobQueue
-from familycare_worker.health import DatabaseProbe, database_is_ready, health_payload
+from familycare_worker.health import (
+    DatabaseProbe,
+    RuntimeProbe,
+    database_is_ready,
+    health_payload,
+    private_runtime_is_ready,
+)
 from familycare_worker.imports.batch import BatchRunner
 from familycare_worker.imports.secret_channel import (
     BatchPasswordRegistry,
@@ -156,10 +162,11 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     )
     document_root = os.getenv("FAMILYCARE_DOCUMENT_ROOT")
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
-    if not document_root or not work_root:
-        if bool(document_root) != bool(work_root):
-            LOGGER.error("document_runner_configuration_incomplete")
+    if not document_root:
         base_runner: JobRunner = event_runner
+    elif not work_root:
+        LOGGER.error("document_runner_configuration_incomplete")
+        base_runner = event_runner
     else:
         queue = JobQueue(database_url)
         repository = ExtractionRepository(database_url)
@@ -232,6 +239,7 @@ def main(
     argv: Sequence[str] | None = None,
     *,
     database_probe: DatabaseProbe | None = None,
+    private_runtime_probe: RuntimeProbe | None = None,
     stop_event: Event | None = None,
     job_runner: JobRunner | None = None,
     worker_id: str | None = None,
@@ -250,7 +258,9 @@ def main(
             return run_worker_loop(event, runner, worker_id=identity)
         return run_idle(event)
     if arguments == ["--health"]:
-        payload = health_payload(database_probe or database_is_ready)
+        database_readiness = database_probe or database_is_ready
+        runtime_readiness = private_runtime_probe or private_runtime_is_ready
+        payload = health_payload(lambda: database_readiness() and runtime_readiness())
         print(json.dumps(payload, sort_keys=True))
         return 0 if payload["status"] == "ready" else 1
     return 2
