@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from subprocess import CompletedProcess
 
@@ -269,7 +269,7 @@ def test_serve_fingerprint_proves_foreign_routes_survive_expected_addition() -> 
 
 
 def test_serve_fingerprint_detects_a_foreign_route_change() -> None:
-    def runner_for(payload: dict[str, object]):
+    def runner_for(payload: dict[str, object]) -> Callable[..., CompletedProcess[str]]:
         def runner(argv: Sequence[str], **_kwargs: object) -> CompletedProcess[str]:
             return _completed(argv, stdout=json.dumps(payload))
 
