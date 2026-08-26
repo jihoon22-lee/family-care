@@ -15,8 +15,10 @@ RUN uv sync --frozen --no-dev --package familycare-api --no-editable
 
 FROM python:3.14.7-slim AS runtime
 
-RUN groupadd --system --gid 10001 familycare \
-    && useradd --system --uid 10001 --gid 10001 --no-create-home familycare
+RUN groupadd --system --gid 10003 familycare-runtime \
+    && groupadd --system --gid 10001 familycare \
+    && useradd --system --uid 10001 --gid 10001 --groups 10003 --no-create-home familycare \
+    && install -d -o 10001 -g 10003 -m 2770 /run/familycare
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 WORKDIR /app

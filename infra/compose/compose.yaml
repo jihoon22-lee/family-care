@@ -8,7 +8,9 @@ services:
       POSTGRES_USER: ${FAMILYCARE_DATABASE_USER:?set FAMILYCARE_DATABASE_USER in the env file}
       POSTGRES_PASSWORD: ${FAMILYCARE_DATABASE_PASSWORD:?set FAMILYCARE_DATABASE_PASSWORD in the env file}
     volumes:
-      - familycare-postgres-data:/var/lib/postgresql
+      - type: volume
+        source: familycare-postgres-data
+        target: /var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -25,6 +27,18 @@ services:
     environment:
       FAMILYCARE_ENV: ${FAMILYCARE_ENV:-development}
       FAMILYCARE_DATABASE_URL: postgresql+psycopg://${FAMILYCARE_DATABASE_USER}:${FAMILYCARE_DATABASE_PASSWORD}@db:5432/${FAMILYCARE_DATABASE_NAME}
+      FAMILYCARE_IMPORT_ROOT: /var/lib/familycare/import
+      FAMILYCARE_SECRET_SOCKET: /run/familycare/secret.sock
+    group_add:
+      - "10003"
+    volumes:
+      - type: bind
+        source: ${FAMILYCARE_IMPORT_ROOT:?set FAMILYCARE_IMPORT_ROOT outside Git}
+        target: /var/lib/familycare/import
+        read_only: true
+      - type: volume
+        source: familycare-secret-socket
+        target: /run/familycare
     depends_on:
       db:
         condition: service_healthy
@@ -38,6 +52,34 @@ services:
     environment:
       FAMILYCARE_ENV: ${FAMILYCARE_ENV:-development}
       FAMILYCARE_DATABASE_URL: postgresql+psycopg://${FAMILYCARE_DATABASE_USER}:${FAMILYCARE_DATABASE_PASSWORD}@db:5432/${FAMILYCARE_DATABASE_NAME}
+      FAMILYCARE_IMPORT_ROOT: /var/lib/familycare/import
+      FAMILYCARE_ARCHIVE_ROOT: /var/lib/familycare/archive
+      FAMILYCARE_WORK_ROOT: /var/lib/familycare/work
+      FAMILYCARE_ARCHIVE_MASTER_KEY_FILE: /run/secrets/familycare_archive_master_key
+      FAMILYCARE_SECRET_SOCKET: /run/familycare/secret.sock
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY outside Git}
+      FAMILYCARE_AI_STRUCTURER_MODEL: ${FAMILYCARE_AI_STRUCTURER_MODEL:-gpt-5.6-luna}
+      FAMILYCARE_AI_VERIFIER_MODEL: ${FAMILYCARE_AI_VERIFIER_MODEL:-gpt-5.6-terra}
+    group_add:
+      - "10003"
+    volumes:
+      - type: bind
+        source: ${FAMILYCARE_IMPORT_ROOT:?set FAMILYCARE_IMPORT_ROOT outside Git}
+        target: /var/lib/familycare/import
+        read_only: true
+      - type: volume
+        source: familycare-archive-data
+        target: /var/lib/familycare/archive
+      - type: volume
+        source: familycare-worker-work
+        target: /var/lib/familycare/work
+      - type: volume
+        source: familycare-secret-socket
+        target: /run/familycare
+      - type: bind
+        source: ${FAMILYCARE_ARCHIVE_MASTER_KEY_FILE:?set FAMILYCARE_ARCHIVE_MASTER_KEY_FILE outside Git}
+        target: /run/secrets/familycare_archive_master_key
+        read_only: true
     depends_on:
       db:
         condition: service_healthy

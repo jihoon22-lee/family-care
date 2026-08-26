@@ -168,13 +168,13 @@ location /api/ {
 
 ### Task 3: Isolate archive, import, socket, and Worker-only AI access
 
-- [ ] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, the same read-only `FAMILYCARE_IMPORT_ROOT` bind mount to API and Worker, familycare-archive-data to the Worker archive path, familycare-worker-work to the Worker work path, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only the import read-only mount and socket volume; it must not receive the archive, work, or key mount.
-- [ ] 2–5 min: Modify infra/containers/worker.Dockerfile to install the approved OCR/runtime system packages in the Worker image only, retain USER 10002:10002, and create mount points without changing ownership to root at runtime. Modify infra/containers/api.Dockerfile only if the API needs the non-secret socket directory and keep its non-root UID.
-- [ ] 2–5 min: Create scripts/tests/test_private_mounts.py. Assert read-only import and key mounts, archive writes owned by Worker, socket permissions limited to API/Worker group, API/Web environment absence of OPENAI_API_KEY, and absence of key material in image COPY instructions.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Modify infra/compose/compose.yaml to attach familycare-postgres-data to db, the same read-only `FAMILYCARE_IMPORT_ROOT` bind mount to API and Worker, familycare-archive-data to the Worker archive path, familycare-worker-work to the Worker work path, and familycare-secret-socket at /run/familycare with a dedicated group. The API socket client may share only the import read-only mount and socket volume; it must not receive the archive, work, or key mount.
+- [x] 2–5 min: Modify infra/containers/worker.Dockerfile to install the approved OCR/runtime system packages in the Worker image only, retain USER 10002:10002, and create mount points without changing ownership to root at runtime. Modify infra/containers/api.Dockerfile only if the API needs the non-secret socket directory and keep its non-root UID.
+- [x] 2–5 min: Create scripts/tests/test_private_mounts.py. Assert read-only import and key mounts, archive writes owned by Worker, socket permissions limited to API/Worker group, API/Web environment absence of OPENAI_API_KEY, and absence of key material in image COPY instructions.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
   Expected failure: current Compose has no archive, worker-work, or secret-socket volume and the Worker-only key/mount assertions fail.
-- [ ] 2–5 min: Add the minimum Compose environment and mount declarations. Use long syntax to make read-only intent machine-checkable:
+- [x] 2–5 min: Add the minimum Compose environment and mount declarations. Use long syntax to make read-only intent machine-checkable:
 
 ~~~yaml
 api:
@@ -204,18 +204,18 @@ worker:
 ~~~
 
   The implementation must use a real Compose secret or an equivalent read-only bind with a pre-created 0600 key file containing exactly 32 bytes; it must not put the key into environment, DB, job payload, log, HTTP response, or image layer. Import source files remain read-only and are never deleted by the import flow.
-- [ ] 2–5 min: Add a Worker health probe that checks database reachability, archive root availability, socket directory permissions, and key file mode without returning key content. A missing key fails closed and prevents archive import.
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Add a Worker health probe that checks database reachability, archive root availability, socket directory permissions, and key file mode without returning key content. A missing key fails closed and prevents archive import.
+- [x] 2–5 min: Run GREEN:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_mounts.py -q
       TMPDIR=/tmp uv run python scripts/check_containers.py
       docker compose --env-file .env.example -f infra/compose/compose.yaml config
   Expected result: mount and service policy tests pass; Docker Compose reports the four services and no host ports except Web. If the local Docker daemon is unavailable, retain the exact failure as unverified rather than changing policy.
-- [ ] 2–5 min: Run the focused image checks one image at a time:
+- [x] 2–5 min: Run the focused image checks one image at a time:
       docker build --file infra/containers/worker.Dockerfile --tag familycare-worker:policy-check .
       docker build --file infra/containers/api.Dockerfile --tag familycare-api:policy-check .
       docker build --file infra/containers/web.Dockerfile --tag familycare-web:policy-check .
   Inspect only image configuration metadata for non-root user, exposed ports, and environment names. Do not inspect or export filesystem contents containing private data.
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): isolate private worker mounts
 
 ### Task 4: Add read-only Tailscale and private acceptance checks
