@@ -18,10 +18,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import pytest
 from familycare_worker.archive.crypto import ArchiveMetadata
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
-from familycare_worker.imports.batch import BatchRunner
+from familycare_worker.imports.batch import BatchRunner, _copy_or_decrypt
 from familycare_worker.imports.password_scope import PasswordScope
 from familycare_worker.imports.secret_channel import BatchPasswordRegistry
 from familycare_worker.ocr.models import (
@@ -31,7 +32,9 @@ from familycare_worker.ocr.models import (
     RenderedPage,
 )
 from familycare_worker.ocr.processor import SelectiveOcrProcessor
+from familycare_worker.pdf.errors import DocumentTooLarge, PageLimitExceeded
 from familycare_worker.pdf.isolation import ParseOutcome
+from familycare_worker.pdf.limits import MAX_INPUT_BYTES, MAX_PDF_PAGES
 
 from workers.analyzer.tests.synthetic_pdf_factory import (
     make_encrypted_pdf,
@@ -250,6 +253,145 @@ def _scope(password: str) -> PasswordScope:
         password=password,
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
+
+
+def test_decrypt_rejects_page_limit_before_cloning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SyntheticPages:
+        def __len__(self) -> int:
+            return MAX_PDF_PAGES + 1
+
+    class SyntheticReader:
+        is_encrypted = True
+        pages = SyntheticPages()
+
+        def decrypt(self, password: str) -> int:
+            assert password == SYNTHETIC_PASSWORD_A
+            return 1
+
+    class SyntheticHandle:
+        def close(self) -> None:
+            return None
+
+    writer_created = False
+
+    class WriterMustNotRun:
+        def __init__(self) -> None:
+            nonlocal writer_created
+            writer_created = True
+
+    monkeypatch.setattr(
+        "familycare_worker.imports.batch._reader",
+        lambda _source_fd: (SyntheticReader(), SyntheticHandle()),
+    )
+    monkeypatch.setattr("familycare_worker.imports.batch.PdfWriter", WriterMustNotRun)
+
+    with (
+        (tmp_path / "synthetic-output.pdf").open("w+b") as output,
+        pytest.raises(PageLimitExceeded),
+    ):
+        _copy_or_decrypt(0, output, SYNTHETIC_PASSWORD_A)
+
+    assert writer_created is False
+
+
+def test_decrypt_rejects_plaintext_extent_over_input_limit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SyntheticPages:
+        def __len__(self) -> int:
+            return 1
+
+    class SyntheticReader:
+        is_encrypted = True
+        pages = SyntheticPages()
+
+        def decrypt(self, password: str) -> int:
+            assert password == SYNTHETIC_PASSWORD_A
+            return 1
+
+    class SyntheticHandle:
+        def close(self) -> None:
+            return None
+
+    class OversizedWriter:
+        def clone_document_from_reader(self, reader: object) -> None:
+            assert isinstance(reader, SyntheticReader)
+
+        def write(self, target: Any) -> None:
+            target.seek(MAX_INPUT_BYTES)
+            target.write(b"xx")
+
+    monkeypatch.setattr(
+        "familycare_worker.imports.batch._reader",
+        lambda _source_fd: (SyntheticReader(), SyntheticHandle()),
+    )
+    monkeypatch.setattr("familycare_worker.imports.batch.PdfWriter", OversizedWriter)
+
+    with (
+        (tmp_path / "synthetic-output.pdf").open("w+b") as output,
+        pytest.raises(DocumentTooLarge),
+    ):
+        _copy_or_decrypt(0, output, SYNTHETIC_PASSWORD_A)
+
+
+def test_decrypt_limit_failure_stops_before_parse_archive_and_persistence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    archive_root = tmp_path / "archive"
+    for directory in (document_root, work_root, archive_root):
+        directory.mkdir()
+    source = make_text_pdf(document_root / "synthetic-limit.pdf")
+    repository = FakeBatchRepository(_item(SYNTHETIC_ITEM_ID_A, SYNTHETIC_VERSION_ID_A, source))
+    parser_called = False
+
+    class OversizedPages:
+        def __len__(self) -> int:
+            return MAX_PDF_PAGES + 1
+
+    class OversizedReader:
+        is_encrypted = True
+        pages = OversizedPages()
+
+        def decrypt(self, password: str) -> int:
+            assert password == SYNTHETIC_PASSWORD_A
+            return 1
+
+    class SyntheticHandle:
+        def close(self) -> None:
+            return None
+
+    def parser(*args: object, **kwargs: object) -> ParseOutcome:
+        del args, kwargs
+        nonlocal parser_called
+        parser_called = True
+        return ParseOutcome(success=True, result={})
+
+    monkeypatch.setattr(
+        "familycare_worker.imports.batch._reader",
+        lambda _source_fd: (OversizedReader(), SyntheticHandle()),
+    )
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        _scope(SYNTHETIC_PASSWORD_A),
+        parser,
+    )
+
+    assert runner.run_once("worker-a") is True
+    assert repository.items[SYNTHETIC_ITEM_ID_A].error_code == "PAGE_LIMIT_EXCEEDED"
+    assert parser_called is False
+    assert repository.persisted == []
+    assert list(archive_root.iterdir()) == []
+    assert list(work_root.iterdir()) == []
 
 
 def _runner(

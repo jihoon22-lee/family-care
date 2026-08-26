@@ -28,7 +28,7 @@ from familycare_worker.ocr.models import (
     SelectiveOcrResult,
 )
 from familycare_worker.ocr.processor import SelectiveOcrProcessor
-from familycare_worker.pdf.errors import PdfIntakeError
+from familycare_worker.pdf.errors import DocumentTooLarge, PageLimitExceeded, PdfIntakeError
 from familycare_worker.pdf.intake import (
     OpenedSource,
     ValidatedPdf,
@@ -37,6 +37,7 @@ from familycare_worker.pdf.intake import (
     validate_pdf,
 )
 from familycare_worker.pdf.isolation import ParseOutcome, run_isolated_parser
+from familycare_worker.pdf.limits import MAX_INPUT_BYTES, MAX_PDF_PAGES
 from familycare_worker.pdf.workspace import Workspace, create_workspace
 
 LOGGER = logging.getLogger("familycare.worker")
@@ -122,10 +123,33 @@ def _reader(source_fd: int) -> tuple[PdfReader, BinaryIO]:
         raise
 
 
+class _BoundedPlaintextWriter:
+    """Expose a seekable PDF target while rejecting oversized output extents."""
+
+    def __init__(self, target: BinaryIO, *, limit: int) -> None:
+        self._target = target
+        self._limit = limit
+
+    def write(self, data: bytes) -> int:
+        if self._target.tell() + len(data) > self._limit:
+            raise DocumentTooLarge
+        return self._target.write(data)
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
+        return self._target.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._target.tell()
+
+    def flush(self) -> None:
+        self._target.flush()
+
+
 def _copy_or_decrypt(source_fd: int, target: BinaryIO, password: str | None) -> bool:
     """Write plaintext PDF bytes and return whether a password was required."""
 
     reader, reader_handle = _reader(source_fd)
+    bounded_target = _BoundedPlaintextWriter(target, limit=MAX_INPUT_BYTES)
     try:
         if reader.is_encrypted:
             if password is None:
@@ -136,13 +160,15 @@ def _copy_or_decrypt(source_fd: int, target: BinaryIO, password: str | None) -> 
                 raise PermissionError from None
             if accepted == 0:
                 raise PermissionError
+            if len(reader.pages) > MAX_PDF_PAGES:
+                raise PageLimitExceeded
             writer = PdfWriter()
             writer.clone_document_from_reader(reader)
-            writer.write(target)
+            writer.write(bounded_target)  # type: ignore[arg-type]
             return True
         offset = 0
         while chunk := os.pread(source_fd, 1024 * 1024, offset):
-            target.write(chunk)
+            bounded_target.write(chunk)
             offset += len(chunk)
         return False
     finally:
