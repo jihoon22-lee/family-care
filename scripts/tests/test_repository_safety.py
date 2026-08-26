@@ -78,6 +78,29 @@ class RepositorySafetyTest(unittest.TestCase):
         errors = inspect_path(self.root, path)
         self.assertTrue(any("directory" in error for error in errors))
 
+    def test_allows_typescript_modules_in_the_web_document_feature_only(self) -> None:
+        path = self.write(
+            "apps/web/src/features/documents/ImportPage.tsx",
+            b"export function SyntheticImportPage() { return null; }\n",
+        )
+
+        self.assertEqual(inspect_path(self.root, path), [])
+
+    def test_web_document_feature_exception_does_not_allow_data_files(self) -> None:
+        path = self.write(
+            "apps/web/src/features/documents/source.json",
+            b'{"synthetic": true}\n',
+        )
+
+        errors = inspect_path(self.root, path)
+        self.assertTrue(any("directory" in error for error in errors))
+
+    def test_web_document_feature_exception_does_not_allow_other_roots(self) -> None:
+        path = self.write("apps/web/documents/ImportPage.tsx")
+
+        errors = inspect_path(self.root, path)
+        self.assertTrue(any("directory" in error for error in errors))
+
     def test_rejects_file_larger_than_two_mib(self) -> None:
         path = self.write("oversized.bin", b"0" * (MAX_FILE_BYTES + 1))
 

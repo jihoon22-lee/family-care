@@ -158,6 +158,8 @@ The archive scheme is aes-256-gcm+aes-kw-v1. Each document gets a random 32-byte
 - Create: packages/contracts/examples/document-batch-status.v1.json
 - Create: scripts/generate_batch_contract_types.py
 - Create: scripts/check_batch_contracts.py
+- Create: apps/api/src/familycare_api/documents/generated_batch_contracts.py
+- Create: workers/analyzer/src/familycare_worker/generated_batch_contracts.py
 - Create: apps/api/tests/test_document_batch_contracts.py
 - Modify: scripts/check_contracts.py
 - Modify: packages/contracts/README.md
@@ -172,7 +174,7 @@ The archive scheme is aes-256-gcm+aes-kw-v1. Each document gets a random 32-byte
 - managed_archives contains id, document_version_id, opaque object_key, scheme, key version, nonce, wrapped data key, ciphertext size, auth tag, timestamps, and retired timestamp. It has no key or plaintext column.
 - A batch is valid only when every item resolves beneath the configured import root and all items share one FamilyMember.
 
-- [ ] **Step 1: Write schema and migration tests before creating implementation files**
+- [x] **Step 1: Write schema and migration tests before creating implementation files**
 
 ~~~python
 def test_batch_request_has_one_family_member_and_no_secret_fields() -> None:
@@ -196,7 +198,7 @@ def test_archive_table_has_wrapped_key_metadata_only(migration_sql: str) -> None
     assert "plaintext" not in migration_sql
 ~~~
 
-- [ ] **Step 2: Run the RED contract and migration tests**
+- [x] **Step 2: Run the RED contract and migration tests**
 
 Run:
 
@@ -208,7 +210,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the batch schemas, generated consumers, and migration 0012_encrypted_document_import do not exist.
 
-- [ ] **Step 3: Add schemas, generated types, and PostgreSQL constraints**
+- [x] **Step 3: Add schemas, generated types, and PostgreSQL constraints**
 
 Use strict request fields:
 
@@ -225,7 +227,7 @@ Use strict request fields:
 
 Use enum states created, running, partial, succeeded, failed, and cancelled for batches; use queued, running, succeeded, password_required, retryable_failed, permanently_failed, and cancelled for items. Enforce 64-character lowercase-hex source IDs at the public boundary and retain the Phase 1 relative source-key validation only inside the server/Worker boundary. Status responses return source ID and bounded display label, never the internal relative source key. Generate API/Worker TypedDict modules without hand edits. Add foreign keys and indexes, and keep existing eight tables and their constraints unchanged.
 
-- [ ] **Step 4: Run the GREEN contract and PostgreSQL migration checks**
+- [x] **Step 4: Run the GREEN contract and PostgreSQL migration checks**
 
 Run:
 
@@ -241,7 +243,7 @@ TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 
 Expected: all contract examples and migration assertions pass; no Phase 1 schema file or generated document type drifts.
 
-- [ ] **Step 5: Commit the contract slice**
+- [x] **Step 5: Commit the contract slice**
 
 ~~~bash
 git add apps/api/migrations/versions/0012_encrypted_document_import.py \
@@ -261,6 +263,7 @@ git commit -m "feat(documents): define encrypted batch contracts"
 **Files:**
 
 - Create: apps/api/src/familycare_api/documents/secret_channel.py
+- Create: workers/analyzer/src/familycare_worker/imports/secret_channel.py
 - Create: workers/analyzer/src/familycare_worker/imports/password_scope.py
 - Create: workers/analyzer/src/familycare_worker/archive/keys.py
 - Create: workers/analyzer/src/familycare_worker/archive/crypto.py
@@ -280,10 +283,10 @@ git commit -m "feat(documents): define encrypted batch contracts"
 - Consumes: Task 1 batch IDs and archive metadata plus a shared socket at /run/familycare/secret.sock.
 - Produces: one-use handoff frames, memory-only PasswordScope, MasterKey.from_file, encrypt_document, decrypt_document, ArchiveStore.put/open, and rewrap_all.
 - MasterKey.from_file(path) requires an absolute external path, regular file, mode 0600, and exactly 32 bytes; errors are stable and never include the path or key bytes.
-- PasswordScope.dispose() removes all string references it owns and is called on success, failure, cancellation, worker shutdown, and socket error.
+- `PasswordScope.dispose()` best-effort wipes its mutable buffer. Registry scopes are discarded on replacement, Worker-loop expiry, cancellation observed by the running item, and Worker shutdown; success/failure immediate disposal and a separate API-cancel control frame are not claimed.
 - Archive writes use an opaque UUID object key and a temporary mode-0600 file followed by an atomic rename; a database row is inserted only after the ciphertext is durable.
 
-- [ ] **Step 1: Write failing IPC, key, round-trip, tamper, and rotation tests**
+- [x] **Step 1: Write failing IPC, key, round-trip, tamper, and rotation tests**
 
 ~~~python
 def test_reused_handoff_id_is_rejected(socket_server) -> None:
@@ -312,7 +315,7 @@ def test_archive_round_trip_and_tamper_detection(tmp_path: Path) -> None:
         decrypt_document(metadata, tampered, master_key=key)
 ~~~
 
-- [ ] **Step 2: Run the RED cryptography tests**
+- [x] **Step 2: Run the RED cryptography tests**
 
 Run:
 
@@ -326,7 +329,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the socket server, password scope, master-key loader, and archive implementation do not exist.
 
-- [ ] **Step 3: Implement one-time socket framing and AES-GCM/AES-KW**
+- [x] **Step 3: Implement one-time socket framing and AES-GCM/AES-KW**
 
 Use a bounded length-prefixed JSON frame for UUIDs and expiry, then send the password bytes only in the socket frame. The Worker consumes the frame once and keeps the password only in a batch-local object:
 
@@ -340,7 +343,7 @@ def take(self, batch_id: UUID, handoff_id: UUID, now: datetime) -> str | None:
 
 Use AESGCM(data_key).encrypt(nonce, plaintext, aad) and aes_key_wrap(master_key, data_key). Split the final 16-byte GCM tag into auth_tag metadata and ciphertext bytes for the archive object. Use hmac.compare_digest for token-like frame IDs, reject frames above the fixed 64 KiB control limit, set socket mode 0660, and discard stale entries on every receive/take operation. Never use pickle, shell commands, or a path-based secret handoff.
 
-- [ ] **Step 4: Run the GREEN crypto and dependency checks**
+- [x] **Step 4: Run the GREEN crypto and dependency checks**
 
 Run:
 
@@ -357,7 +360,7 @@ TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src
 
 Expected: all tests pass for round-trip, tamper, wrong key, missing key, expiry, reuse, disposal, atomic object writes, and key rewrap; the lockfile contains the pinned direct cryptography dependency and notices name its license boundary.
 
-- [ ] **Step 5: Commit the IPC and archive slice**
+- [x] **Step 5: Commit the IPC and archive slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/documents/secret_channel.py \
@@ -382,7 +385,7 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - Create: apps/api/src/familycare_api/documents/import_sources.py
 - Create: workers/analyzer/src/familycare_worker/imports/batch.py
 - Create: workers/analyzer/src/familycare_worker/imports/cleanup.py
-- Modify: workers/analyzer/src/familycare_worker/runner.py
+- Modify: workers/analyzer/src/familycare_worker/__main__.py
 - Modify: workers/analyzer/src/familycare_worker/repository.py
 - Modify: apps/api/src/familycare_api/main.py
 - Test: apps/api/tests/test_document_batch_api.py
@@ -390,6 +393,9 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - Test: workers/analyzer/tests/test_batch_runner.py
 - Test: workers/analyzer/tests/test_batch_cleanup.py
 - Test: workers/analyzer/tests/test_private_import_contract.py
+- Test: apps/api/tests/test_document_batch_repository.py
+- Test: workers/analyzer/tests/test_batch_database.py
+- Test: workers/analyzer/tests/test_batch_secret_runtime.py
 
 **Interfaces:**
 
@@ -401,7 +407,7 @@ git commit -m "feat(archive): add ephemeral password handoff"
 - BatchRunner.run_item(item_id) -> ItemResult uses PasswordScope, creates a workspace, decrypts an encrypted PDF to a mode-0600 temporary file, runs the existing extraction pipeline, archives the decrypted bytes, commits item success, and executes cleanup in finally.
 - Password failure changes only that item to password_required; successful sibling items continue. A wrong password never triggers automatic retries.
 
-- [ ] **Step 1: Write failing HTTP, scope, partial-failure, and cleanup tests**
+- [x] **Step 1: Write failing HTTP, scope, partial-failure, and cleanup tests**
 
 ~~~python
 def test_batch_rejects_mixed_family_members(authenticated_client) -> None:
@@ -430,7 +436,7 @@ def test_password_is_not_in_status_or_item_payload(authenticated_client, fake_so
     assert "password" not in persisted_batch_item_json()
 ~~~
 
-- [ ] **Step 2: Run the RED batch tests**
+- [x] **Step 2: Run the RED batch tests**
 
 Run:
 
@@ -445,7 +451,7 @@ TMPDIR=/tmp uv run pytest \
 
 Expected: FAIL because the private batch routes and per-file runner are absent.
 
-- [ ] **Step 3: Implement the scoped API and item state machine**
+- [x] **Step 3: Implement the scoped API and item state machine**
 
 Use strict request models and server scope:
 
@@ -466,7 +472,7 @@ def create_batch(
 
 The source-list route is authenticated, no-store, and emits only entries from the exact configured inbox; it never accepts a directory query parameter. The password route validates a non-empty bounded string, sends it once to the Worker socket, and responds with only batch_id, state, and an item status projection. Do not add the password to a Pydantic response model, job settings JSON, SQL parameters, logs, or error details. The runner must preserve Phase 1 PASSWORD_REQUIRED for the password-free synthetic route while using a separate runtime password path for private batches.
 
-- [ ] **Step 4: Run the GREEN batch tests and integration checks**
+- [x] **Step 4: Run the GREEN batch tests and integration checks**
 
 Run:
 
@@ -484,7 +490,7 @@ TMPDIR=/tmp uv run pytest -m integration \
 
 Expected: batch creation, server scope, one-time password handoff, partial success, re-prompt, archive-before-ready, cancellation, and cleanup tests pass without changing the Phase 1 route behavior.
 
-- [ ] **Step 5: Commit the batch lifecycle slice**
+- [x] **Step 5: Commit the batch lifecycle slice**
 
 ~~~bash
 git add apps/api/src/familycare_api/documents/batch_repository.py \
@@ -514,9 +520,11 @@ git commit -m "feat(documents): import encrypted family batches"
 - Create: `apps/web/src/features/documents/BatchProgress.tsx`
 - Create: `apps/web/src/features/documents/document-import.test.tsx`
 - Create: `apps/web/e2e/document-import.spec.ts`
+- Modify: `.gitignore`
 - Modify: `apps/web/src/app/AppRoutes.tsx`
+- Modify: `apps/web/src/app/AppShell.tsx`
 - Modify: `apps/web/src/styles.css`
-- Modify: `apps/web/playwright.config.ts`
+- Verify unchanged: `apps/web/playwright.config.ts`
 
 **Interfaces:**
 
@@ -524,7 +532,7 @@ git commit -m "feat(documents): import encrypted family batches"
 - Produces: `/app/documents/import`, a one-FamilyMember source picker, batch creation, password prompt, per-item status, failed-only retry, cancel, and ledger navigation after completion.
 - The Web never accepts a directory path, never uploads a PDF, and never stores source labels, passwords, batches, document state, or errors in Web Storage, IndexedDB, URLs, service-worker caches, console output, or analytics.
 
-- [ ] **Step 1: Write failing component tests**
+- [x] **Step 1: Write failing component tests**
 
 Test one-member selection, checked opaque source IDs, no `<input type="file">`, no path textbox, create/poll progress, password prompt only for `password_required`, clearing password after the request, keeping successful items completed, retrying only failed items, cancellation, 401 cleanup, and no persistent browser writes.
 
@@ -535,7 +543,7 @@ corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
 
 Expected: FAIL because the generated import client and document components do not exist.
 
-- [ ] **Step 2: Implement the generated no-store client and accessible import screens**
+- [x] **Step 2: Implement the generated no-store client and accessible import screens**
 
 All calls go through the authenticated no-store wrapper. Keep the password in the dialog component only, submit it once, then clear the state in `finally` and again on close/unmount. Poll a bounded status endpoint while the page is mounted; abort on navigation/logout. Display only safe source labels and stable error codes. Use a real dialog with focus trap/return, `aria-live="polite"` for progress, text in addition to color, and no horizontal overflow at 320 CSS px.
 
@@ -557,7 +565,7 @@ export async function handoffBatchPassword(
 
 The local reassignment is defense-in-depth only; the component must also clear its controlled state immediately because JavaScript strings cannot be securely zeroized.
 
-- [ ] **Step 3: Run GREEN and add the synthetic browser flow**
+- [x] **Step 3: Run GREEN and add the synthetic browser flow**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web exec vitest run --maxWorkers=1 \
@@ -569,7 +577,7 @@ corepack pnpm@11.22.0 web:check
 
 The Playwright route stubs use synthetic source labels and exercise select → create → password-required → partial success → retry failed only → completed. Assert no PDF upload request, password persistence, Web Storage write, API/service-worker cache entry, raw response logging, or source path in the URL.
 
-- [ ] **Step 4: Commit the Web import slice**
+- [x] **Step 4: Commit the Web import slice**
 
 ```bash
 git add apps/web/src/api/document-imports.ts \
@@ -586,6 +594,7 @@ git commit -m "feat(web): add encrypted document import flow"
 - Modify: docs/guide.md
 - Modify: docs/design/private-data-runtime.md
 - Modify: docs/design/pdf-ingestion.md
+- Modify: docs/plan/015-private-local-runtime.md
 - Modify: .gitignore only for runtime socket/output exclusions that are narrowly required
 - Modify: scripts/check_repository_safety.py only for synthetic source-module exceptions
 - Test: scripts/tests/test_repository_safety.py
@@ -598,7 +607,7 @@ git commit -m "feat(web): add encrypted document import flow"
 - Produces: an operator guide that names only external path shapes, explains the mode-0600 master-key requirement, and states that Google Drive originals are never modified or deleted.
 - The guide must distinguish CI synthetic checks from user-approved private-data acceptance and must state that missing mobile, Windows, provider, and document-format checks remain unverified until performed.
 
-- [ ] **Step 1: Add failure-path cleanup and safety regression tests**
+- [x] **Step 1: Add failure-path cleanup and safety regression tests**
 
 ~~~python
 def test_decrypted_workspace_is_removed_after_archive_failure(tmp_path, archive_store) -> None:
@@ -610,7 +619,7 @@ def test_decrypted_workspace_is_removed_after_archive_failure(tmp_path, archive_
     assert no_password_or_key_in_captured_logs()
 ~~~
 
-- [ ] **Step 2: Run the RED cleanup/safety tests**
+- [x] **Step 2: Run the RED cleanup/safety tests**
 
 Run:
 
@@ -620,13 +629,13 @@ TMPDIR=/tmp uv run pytest \
   scripts/tests/test_repository_safety.py -q
 ~~~
 
-Expected: FAIL until every runner exit path disposes the password scope and removes decrypted PDFs, rendered images, and temporary archive files.
+Expected: FAIL until runner exit paths remove decrypted PDFs, rendered images, and temporary archive files, cancellation affects only its batch scope, and the idle Worker sweep enforces expiry.
 
-- [ ] **Step 3: Add the operator guide and narrow safety rules**
+- [x] **Step 3: Add the operator guide and narrow safety rules**
 
 Document the external path form /absolute/path/outside/repository only as a non-value example. Explain that a master-key file is created and permission-checked outside the checkout, that password input is prompted per batch, and that no import command deletes the manually downloaded source or Google Drive original. Keep any ocr or archive source-code exception limited to tracked Python modules; never allow generated output directories.
 
-- [ ] **Step 4: Run the complete import-focused gate**
+- [x] **Step 4: Run the complete import-focused gate**
 
 Run serially:
 
@@ -650,7 +659,7 @@ git diff --check
 
 Expected: all checks pass and no secret, plaintext, absolute path, or private-derived fixture is visible to the repository safety scanner.
 
-- [ ] **Step 5: Commit documentation and invoke the Root PR gate**
+- [x] **Step 5: Commit documentation and invoke the Root PR gate**
 
 ~~~bash
 git add docs/guide.md docs/design/private-data-runtime.md \

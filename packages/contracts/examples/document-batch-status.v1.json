@@ -1,0 +1,22 @@
+{
+  "batch_id": "00000000-0000-4000-8000-000000000005",
+  "family_member_id": "00000000-0000-4000-8000-000000000004",
+  "items": [
+    {
+      "attempts": 1,
+      "display_label": "Sample policy document A.pdf",
+      "error_code": null,
+      "source_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "state": "succeeded"
+    },
+    {
+      "attempts": 1,
+      "display_label": "Sample policy document B.pdf",
+      "error_code": "PASSWORD_REQUIRED",
+      "source_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "state": "password_required"
+    }
+  ],
+  "schema_version": "1",
+  "state": "partial"
+}

@@ -271,6 +271,19 @@ validate_schema_instance = _DOCUMENT_CONTRACT_CHECKER.validate_schema_instance
 validate_document_contracts = _DOCUMENT_CONTRACT_CHECKER.validate_document_contracts
 
 
+def _load_batch_contract_checker() -> Any:
+    """Load the encrypted batch checker from package or direct-script context."""
+
+    try:
+        return import_module("scripts.check_batch_contracts")
+    except ModuleNotFoundError:  # pragma: no cover - direct-script execution path
+        return import_module("check_batch_contracts")
+
+
+_BATCH_CONTRACT_CHECKER = _load_batch_contract_checker()
+validate_batch_contracts = _BATCH_CONTRACT_CHECKER.validate_batch_contracts
+
+
 def _load_business_generator() -> Any:
     """Load the business generator from package or direct-script context."""
 
@@ -352,6 +365,11 @@ def validate_openapi() -> list[str]:
         "/health/live",
         "/health/ready",
         "/api/v1/documents/analysis",
+        "/api/v1/document-import-sources",
+        "/api/v1/document-batches",
+        "/api/v1/document-batches/{batch_id}",
+        "/api/v1/document-batches/{batch_id}/password",
+        "/api/v1/document-batches/{batch_id}/cancel",
         "/api/v1/evidence/{evidence_id}",
         "/api/v1/analysis-jobs/{job_id}",
         "/api/v1/family-members",
@@ -1772,6 +1790,7 @@ def main() -> int:
         *validate_openapi(),
         *validate_job_contract(),
         *validate_document_contracts(),
+        *validate_batch_contracts(),
         *validate_policy_contract(),
         *validate_policy_candidate_contract(),
         *validate_clause_search_contract(),
@@ -1787,6 +1806,7 @@ def main() -> int:
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
+        "encrypted document batch, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
         "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"

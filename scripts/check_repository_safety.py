@@ -32,6 +32,7 @@ FORBIDDEN_SEGMENTS = {
     "uploads",
 }
 DOCUMENT_API_SOURCE_ROOT = Path("apps/api/src/familycare_api/documents")
+WEB_DOCUMENT_SOURCE_ROOT = Path("apps/web/src/features/documents")
 PDF_ALLOW_ROOT = Path("fixtures/synthetic")
 IMAGE_ALLOW_ROOTS = (
     Path("apps/web/public"),
@@ -75,10 +76,9 @@ def inspect_path(root: Path, path: Path) -> list[str]:
     suffix = relative_path.suffix.casefold()
     normalized_parts = {part.casefold() for part in relative_path.parts}
     forbidden_segments = sorted(normalized_parts & FORBIDDEN_SEGMENTS)
-    if (
-        "documents" in forbidden_segments
-        and suffix == ".py"
-        and is_within(relative_path, DOCUMENT_API_SOURCE_ROOT)
+    if "documents" in forbidden_segments and (
+        (suffix == ".py" and is_within(relative_path, DOCUMENT_API_SOURCE_ROOT))
+        or (suffix == ".tsx" and relative_path.parent == WEB_DOCUMENT_SOURCE_ROOT)
     ):
         forbidden_segments.remove("documents")
     if forbidden_segments:

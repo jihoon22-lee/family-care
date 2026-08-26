@@ -366,6 +366,7 @@ name = "familycare-worker"
 version = "0.0.0"
 source = { editable = "workers/analyzer" }
 dependencies = [
+    { name = "cryptography" },
     { name = "openai" },
     { name = "pdfplumber" },
     { name = "psycopg", extra = ["binary"] },
@@ -375,6 +376,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = "==50.0.0" },
     { name = "openai", specifier = "==3.3.1" },
     { name = "pdfplumber", specifier = "==0.11.10" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.4" },

@@ -15,6 +15,7 @@ from familycare_api.decisions.router import (
 from familycare_api.decisions.router import (
     structuring_job_router,
 )
+from familycare_api.documents.batch_router import router as document_batch_router
 from familycare_api.documents.router import router as document_analysis_router
 from familycare_api.errors import install_error_handlers
 from familycare_api.health import (
@@ -98,6 +99,7 @@ def create_app(
     if enabled:
         app.include_router(document_analysis_router)
     app.include_router(identity_router)
+    app.include_router(document_batch_router)
     app.include_router(policy_ledger_router)
     app.include_router(policy_candidate_router)
     app.include_router(clause_search_router)

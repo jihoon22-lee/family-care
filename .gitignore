@@ -17,6 +17,8 @@ data/
 documents/
 !apps/api/src/familycare_api/documents/
 !apps/api/src/familycare_api/documents/*.py
+!apps/web/src/features/documents/
+!apps/web/src/features/documents/*.tsx
 ocr/
 private/
 uploads/
