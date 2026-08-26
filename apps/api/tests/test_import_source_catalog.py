@@ -43,6 +43,18 @@ def test_catalog_lists_only_regular_pdfs_without_exposing_paths(tmp_path: Path) 
     assert "nested" not in repr(sources)
 
 
+def test_catalog_normalizes_control_characters_from_leaf_label(tmp_path: Path) -> None:
+    root = tmp_path / "synthetic-inbox"
+    source = root / "nested" / "Sample\r\n\t\x01 Policy.pdf"
+    _write_pdf(source)
+
+    listed = ImportSourceCatalog(root).list()
+
+    assert [item.display_label for item in listed] == ["Sample Policy.pdf"]
+    assert all(character.isprintable() for character in listed[0].display_label)
+    assert "nested" not in listed[0].display_label
+
+
 def test_catalog_resolves_opaque_id_and_detects_replacement(tmp_path: Path) -> None:
     root = tmp_path / "synthetic-inbox"
     source = root / "sample-policy.pdf"
