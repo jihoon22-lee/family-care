@@ -1,6 +1,6 @@
 # Data model design
 
-- 상태: Phase 1 완료, v0.1 확장 설계 승인, PR7 benefit-calculation·Claim workflow model 반영 및 문서 검토 대기
+- 상태: native ingestion·업무 모델·encrypted import는 main 반영, selective OCR 확장은 feature branch 구현·문서화, private runtime 검토 대기
 - 적용 단계: Phase 1 ingestion 모델과 Phase 2~8 업무 모델
 - 상위 기준: `docs/design/v0.1-product.md`
 
@@ -19,9 +19,9 @@
 
 원시 추출값은 입력 후보이며 관리자 확정값과 구분합니다.
 
-## Phase 1 minimum physical model
+## Phase 1 native minimum physical model
 
-Phase 1 migration은 다음 여덟 엔터티만 만듭니다. 원본 PDF bytes, password, absolute path, 문서 본문 전체의 비식별 복사본은 이 모델에 저장하지 않습니다. `source_key`는 `FAMILYCARE_DOCUMENT_ROOT`에 상대적인 값이며, API와 job payload에 absolute path가 들어가지 않습니다.
+Phase 1 migration은 native ingestion을 위해 다음 여덟 엔터티만 만듭니다. 원본 PDF bytes, password, absolute path, 문서 본문 전체의 비식별 복사본은 이 모델에 저장하지 않습니다. `source_key`는 `FAMILYCARE_DOCUMENT_ROOT`에 상대적인 값이며, API와 job payload에 absolute path가 들어가지 않습니다. v0.1의 selective OCR은 아래 별도 additive migration으로 native model을 확장합니다.
 
 | Entity | Physical table | Minimum responsibility and fields |
 |---|---|---|
@@ -36,6 +36,18 @@ Phase 1 migration은 다음 여덟 엔터티만 만듭니다. 원본 PDF bytes, 
 
 `AnalysisJob`에는 available-at timestamp, lease owner, lease expiry, heartbeat timestamp, attempt count, max attempts, created/updated timestamps를 둡니다. job payload에는 password, absolute path, document body, private external identifier를 두지 않습니다. `documents`는 active `source_key`를 유일하게 유지합니다. `document_versions`는 `(document_id, version_number)`와 `(document_id, content_sha256)`를 각각 unique로 유지해 버전 순서와 content identity를 표현합니다. `extractions`는 `(document_version_id, extractor_config_hash)`에 대해 `status = 'succeeded'`인 행만 partial unique constraint를 적용합니다. DocumentVersion이 content hash를 대표하므로 이 두 키가 같은 document content와 extractor config에 성공 extraction 하나를 공동으로 보장하며, `extractions`에 `content_sha256`를 중복 저장하거나 두 테이블을 가로지르는 불가능한 constraint를 만들지 않습니다. `extraction_pages(extraction_id, page_number)`, `extraction_blocks(page_id, reading_order)`, `extraction_cells(table_id, row_index, column_index)`도 각각 unique로 유지합니다. 같은 hash/config의 queued 또는 failed job은 기존 succeeded result를 재사용하는 idempotency 경로를 사용합니다.
 
+## v0.1 selective OCR physical model
+
+Alembic `0013_selective_ocr.py` (`down_revision = 0012_encrypted_document_import`)은 native extraction을 UPDATE하지 않고 다음 세 테이블을 추가합니다.
+
+| Entity | Physical table | Minimum responsibility and fields |
+|---|---|---|
+| `OcrLayer` | `ocr_layers` | native `extraction_id`, `source_layer='ocr'`, Tesseract engine/version, fixed `kor+eng` language configuration hash, `quality-v1`, succeeded status, warning codes, timestamps; one successful configuration per extraction |
+| `OcrPage` | `ocr_pages` | OCR layer and same `DocumentVersion`, content SHA-256, 1-based selected page, fixed 300 DPI, rendered image dimensions, `OCR_REQUIRED` classification, completed/warning status, warning codes |
+| `OcrBlock` | `ocr_blocks` | OCR page, normalized text, top-left PDF-point bbox, 0-based reading order, confidence, `source_layer='ocr'`, `review_state='candidate'` |
+
+The migration constrains page numbers to 1..500, DPI to 300, image dimensions to bounded positive values, block confidence to 0..100, and block order to 0..9999. OCR rows contain no PDF bytes, image path, TSV path, password, or provider payload. `document_batch_items` also carries bounded `ocr_state`, `ocr_pages_processed` (0..500), and unique allowlisted warning codes for progress only; the batch projection never includes OCR text or coordinates.
+
 Phase 1의 물리 상태는 Document `pending`/`ready`/`failed`, Extraction `running`/`succeeded`/`failed`, review `candidate`/`confirmed`/`rejected`, 그리고 아래의 여섯 AnalysisJob 상태로 고정합니다. 성공 Extraction만 `succeeded_at`을 가져야 합니다. `source_key`는 최대 512자이며 빈 값이 아니어야 하고, API/contract 경계에서 absolute·parent traversal·Windows/UNC 형태·개행을 거부합니다. AnalysisJob의 attempts는 0 이상이고 max_attempts 이하이며, error_code는 versioned contract의 허용 목록에 한정합니다.
 
 Phase 1의 API POST는 source_key 형식만 검증하고 `documents` row를 source_key로 생성·재사용한 뒤 `analysis_jobs` row를 enqueue합니다. API는 아직 파일을 열지 않으므로 DocumentVersion이나 content hash를 만들 수 없습니다. Worker intake가 열린 source descriptor에서 hash와 PDF 구조를 확인한 뒤 `document_versions`를 생성·재사용하고, `extractions`를 생성·재사용합니다. Unknown job 조회는 `ANALYSIS_JOB_NOT_FOUND`를 반환합니다.
@@ -46,7 +58,7 @@ Phase 1 API에는 인증이 없으므로 historical implementation은 local synt
 
 ## Phase 1 asynchronous API projection
 
-문서 ingestion API는 위의 여덟 테이블에 대한 얇은 enqueue/status projection입니다. 런타임 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 설정된 경우에만 등록하며, 기본-disabled app은 두 문서 경로에 `404`를 반환합니다. OpenAPI 생성과 테스트의 `enable_synthetic_ingestion=True`는 이 runtime gate를 우회하는 운영 설정이 아니라 문서·테스트를 위한 명시적 opt-in입니다.
+문서 ingestion API는 위의 여덟 native 테이블에 대한 얇은 enqueue/status projection입니다. v0.1 authenticated batch status에는 OCR progress metadata가 additive bounded projection으로 포함될 수 있지만 OCR result payload는 포함하지 않습니다. 런타임 router는 `FAMILYCARE_ENV=development`와 `FAMILYCARE_ENABLE_SYNTHETIC_INGESTION=true`가 모두 설정된 경우에만 등록하며, 기본-disabled app은 두 문서 경로에 `404`를 반환합니다. OpenAPI 생성과 테스트의 `enable_synthetic_ingestion=True`는 이 runtime gate를 우회하는 운영 설정이 아니라 문서·테스트를 위한 명시적 opt-in입니다.
 
 | Route | Projection |
 |---|---|
@@ -139,6 +151,12 @@ v0.1의 archive metadata는 encrypted object key, encryption scheme/version, non
 - 생성 상태와 관리자 검수 상태
 
 관리자 수정값은 원시 추출값을 덮어쓰지 않고 별도 확정 레코드로 보존합니다.
+
+### Selective OCR layers
+
+`OcrLayer`, `OcrPage`, `OcrBlock`은 native `Extraction`과 독립된 후보 provenance입니다. Worker는 native `quality-v1` 결과에서 `OCR_REQUIRED`인 page만 선택하고, fixed local `kor+eng` Tesseract result를 300 DPI render metadata와 함께 저장합니다. `TEXT_SUFFICIENT` page는 OCR row를 만들지 않으며, OCR text가 native `ExtractionBlock`을 덮어쓰지 않습니다. 각 OCR page Evidence는 같은 `DocumentVersion` UUID, 1-based page, content hash, and `source_layer='ocr'`를 가집니다.
+
+The source descriptor and temporary PNG are runtime-only. PDFium reads bounded bytes from the already-open read-only descriptor; Tesseract is invoked directly as `/usr/bin/tesseract` with no shell and TSV on stdout; no `pytesseract` dependency or TSV artifact is persisted. Each PNG is removed immediately after its page is recognized, and the outer Worker workspace is removed on every terminal path.
 
 ## Policy boundary
 
@@ -325,6 +343,9 @@ Evidence는 다음을 가집니다.
 18. Claim 상태·checklist·삭제·복원 변경은 expected version과 허용된 transition을 거치며 soft-deleted 행은 기본 조회에서 숨깁니다.
 19. ClaimCase snapshot과 status event는 application API뿐 아니라 database trigger에서도 update/delete가 거부됩니다.
 20. stale decision result와 decision run 이후 변경된 policy lineage는 ClaimCase를 만들 수 없습니다.
+21. `OCR_REQUIRED`만 OCR되고 `TEXT_SUFFICIENT`는 renderer/engine을 호출하지 않습니다.
+22. native extraction과 OCR layer/page/block은 별도 provenance이며 OCR은 native row를 덮어쓰지 않습니다.
+23. OCR progress는 bounded state/page count/warning codes만 노출하고 OCR text, image path, coordinates, TSV, stderr를 저장·응답하지 않습니다.
 
 ## Failure behavior
 
@@ -344,7 +365,8 @@ Evidence는 다음을 가집니다.
 
 ## Tests
 
-- Phase 1 minimum model migration creates exactly the eight ingestion entities and no Policy Ledger tables
+- Phase 1 native minimum model migration creates exactly the eight ingestion entities and no Policy Ledger tables
+- `0013_selective_ocr` adds only `ocr_layers`, `ocr_pages`, `ocr_blocks` plus bounded batch progress columns and leaves native rows unchanged
 - `document_versions(document_id, content_sha256)` unique와 `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'` partial unique
 - AnalysisJob state, lease, heartbeat, attempts, and cancellation transitions
 - relative source key and absence of password or absolute path in persisted payloads
@@ -366,10 +388,13 @@ Evidence는 다음을 가집니다.
 - status transition, paid/partial counted history, denied audit-only history
 - claim soft delete/trash/restore와 no-store/no-file/no-submission privacy boundary
 - encrypted archive metadata와 key/password 비저장
+- OCR_REQUIRED-only selection, fixed 300 DPI, native/OCR provenance separation, and OCR contract Evidence
+- descriptor-derived PDFium, direct no-shell `/usr/bin/tesseract` stdout TSV, no pytesseract/artifact dependency, and per-page/outer-workspace cleanup
+- bounded batch OCR progress with warning allowlist and Worker image `eng`/`kor` synthetic availability
 - soft delete, 휴지통, 복원, 중복 복원
 - 문서 해시 중복과 버전 교체
 - 1-based 페이지 일관성
 
 ## Deferred decisions
 
-Phase 1의 여덟 ingestion table과 성공 extraction unique rule은 완료되었습니다. v0.1 archive key metadata는 `docs/design/private-data-runtime.md`, session은 `docs/design/authentication.md`를 따릅니다. 보존 기간, 실제 증권번호 저장 필요성, 운영 backup policy는 v0.1 이후 별도 결정으로 남깁니다. 실제 보험사 제출, 실제 문서·개인정보 수용, 모바일 기기·Tailscale acceptance는 아직 이 모델의 검증 범위가 아닙니다.
+Phase 1의 여덟 native ingestion table과 성공 extraction unique rule은 완료되었습니다. v0.1 `0013_selective_ocr` OCR layer와 bounded batch progress는 합성 branch tests 기준으로 구현되었습니다. v0.1 archive key metadata는 `docs/design/private-data-runtime.md`, session은 `docs/design/authentication.md`를 따릅니다. 실제 private PDF·Compose, provider, Windows·mobile·Tailscale acceptance와 private OCR 검증은 아직 이 모델의 범위 밖이며 private runtime PR 이후 별도로 수행합니다. 보존 기간, 실제 증권번호 저장 필요성, 운영 backup policy는 v0.1 이후 별도 결정으로 남깁니다.

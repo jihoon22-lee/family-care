@@ -1,6 +1,6 @@
 # PDF ingestion design
 
-- 상태: Phase 1 완료 기준, encrypted import 계약 구현·문서화, private acceptance 대기
+- 상태: Phase 1 native ingestion 완료 기준, encrypted import·selective OCR 계약과 구현 문서화, private acceptance 대기
 - 적용 단계: Phase 1 baseline과 Phase 8 encrypted private import
 - 구현 계획: `docs/plan/002-synthetic-pdf-ingestion.md`
 - 기술 결정: `docs/adr/0006-permissive-pdf-parser-stack.md`
@@ -20,7 +20,7 @@ Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-
 3. password는 인증된 request에서 Worker의 batch runtime으로 one-time Unix-domain socket을 통해 전달하고 process memory에서 동일 batch file에 재사용합니다. socket server는 Worker가 소유하고 API는 client로 연결합니다.
 4. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
 5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기합니다. 실행 중인 batch cancellation은 해당 batch만 폐기하고 Worker shutdown은 전체 registry를 폐기합니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
-6. native extraction 뒤 `OCR_REQUIRED` page만 local Korean/English OCR을 실행한다는 것이 목표 계약이지만, OCR 실행과 acceptance는 아직 pending입니다.
+6. native extraction 뒤 품질 규칙이 `OCR_REQUIRED`로 분류한 page만 local Korean/English OCR을 실행합니다. 이 branch에는 separate OCR layer persistence, descriptor-derived PDFium renderer, direct no-shell Tesseract adapter, cleanup, and synthetic acceptance가 있습니다. 실제 private PDF와 private runtime acceptance는 아직 pending입니다.
 7. 성공 source는 document별 data key로 암호화해 Worker 전용 managed archive에 저장하고 key는 Worker 전용 runtime master key로 wrap합니다. master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600`입니다.
 8. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
 9. import source와 Google Drive 원본은 수정·삭제하지 않으며 Drive API를 호출하지 않습니다.
@@ -171,11 +171,21 @@ Phase 1 asynchronous API는 unencrypted PDF만 받습니다. `pypdf`가 encrypti
 - replacement-character ratio `> 0.05`
 - maximum repeated-character run `> 20`
 
-위 조건을 모두 통과한 페이지는 `TEXT_SUFFICIENT`입니다. Phase 1은 `OCR_REQUIRED` 분류와 경고 저장까지만 하며 OCR 실행은 하지 않습니다. 품질 분류가 낮다는 이유만으로 실제 OCR 결과가 있는 것처럼 표시하지 않습니다.
+위 조건을 모두 통과한 페이지는 `TEXT_SUFFICIENT`입니다. Phase 1 native extraction은 분류와 경고 저장을 담당하고, v0.1 Worker extension은 `OCR_REQUIRED` page만 OCR합니다. 품질 분류만으로 실제 OCR 결과가 있는 것처럼 표시하지 않으며, `TEXT_SUFFICIENT` page에는 renderer/engine 호출이 없습니다.
 
 ### 7. Persistence and cleanup
 
-`documents`, `document_versions`, `extractions`, `extraction_pages`, `extraction_blocks`, `extraction_tables`, `extraction_cells`, `analysis_jobs`의 최소 물리 모델과 Evidence coordinates를 repository transaction으로 저장합니다. 부분 추출은 succeeded 결과로 노출하지 않고 transaction을 취소합니다.
+`documents`, `document_versions`, `extractions`, `extraction_pages`, `extraction_blocks`, `extraction_tables`, `extraction_cells`, `analysis_jobs`의 native 최소 물리 모델과 Evidence coordinates를 repository transaction으로 저장합니다. 선택적 OCR은 `0013_selective_ocr.py`에서 `ocr_layers`, `ocr_pages`, `ocr_blocks`를 추가하며 native extraction rows를 변경하지 않습니다. OCR layer는 `source_layer='ocr'`, Tesseract engine/version, fixed `kor+eng` configuration hash, `quality-v1`, selected `OCR_REQUIRED` pages, rendered 300 DPI dimensions, warning codes, PDF-point boxes, and candidate review state를 보존합니다. 부분 native/OCR 결과는 succeeded 결과로 노출하지 않고 transaction을 취소합니다.
+
+## Selective local OCR boundary
+
+The selector consumes the validated native `ExtractionResult` and accepts only pages whose quality-v1 classification is `OCR_REQUIRED`. The selected 1-based page number and native page dimensions are checked again before persistence; OCR blocks are mapped from pixel coordinates to top-left PDF points and rounded to three decimals. OCR Evidence points to the same `DocumentVersion` and content hash, with `source_layer='ocr'`; native blocks and native warning codes are left unchanged.
+
+The renderer receives the already-open read-only source descriptor and a pre-created mode-0600 output handle. It validates regular-file/read-only descriptor metadata, reads bounded source bytes (the existing 25 MiB limit), opens PDFium from those bytes, renders exactly one page at fixed 300 DPI, bounds dimensions/pixels, and writes PNG to the handle. It never accepts or reopens a source PDF path.
+
+The engine invokes only `/usr/bin/tesseract` with an argv list and `shell=False`: the image path is a transient workspace path, the fixed `kor+eng` language argument and `stdout ... tsv` request produce bounded TSV on stdout, and stderr is discarded. There is no `pytesseract` dependency and no TSV artifact file. Malformed rows, invalid boxes/confidences, unavailable binaries, timeout, or output overflow become stable sanitized OCR errors.
+
+Each selected page's PNG is unlinked immediately after recognition, including renderer/engine errors. The enclosing Worker runner then removes the complete mode-0700 job workspace on success, failure, cancellation, timeout, shutdown, or cleanup failure. A cleanup failure cannot be reported as successful OCR. Authenticated batch status exposes only bounded `ocr_state`, processed-page count, and an allowlisted warning-code list; it never exposes OCR text, coordinates, image paths, filenames, or Tesseract stderr.
 
 ## Output contract
 
@@ -241,11 +251,13 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 4. coordinates는 top-left origin과 소수 셋째 자리 반올림을 사용하고, reading order는 0부터 시작합니다.
 5. `document_versions(document_id, content_sha256)`가 content identity를 유일하게 표현하고, `extractions(document_version_id, extractor_config_hash) WHERE status = 'succeeded'`가 성공 extraction을 하나만 허용합니다. DocumentVersion이 hash를 대표하므로 Extraction에는 content hash를 중복 저장하지 않습니다.
 6. password는 DB, job payload, log에 들어가지 않습니다. Worker 반복 expiry·replacement·실행 중 batch cancellation·Worker shutdown 경계를 가지며, 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
-7. 임시 평문과 page cache는 page 처리 후 또는 job 종료 후 남지 않습니다.
-8. Phase 1 API에는 인증 provider가 없으며 production-safe endpoint로 표시하지 않습니다.
-9. Synthetic API route는 두 환경변수 gate가 모두 opt-in일 때만 등록되고, disabled runtime은 두 문서 path에 `404`를 반환합니다.
-10. Valid POST는 source key와 request shape만 검사하여 `202`로 enqueue하며, 파일 상태 오류는 Worker가 비동기 job error로 projection합니다.
-11. API validation failure는 HTTP `422 INVALID_REQUEST`이고, unknown status UUID는 `404 ANALYSIS_JOB_NOT_FOUND`입니다.
+7. 임시 평문과 page cache는 page 처리 후 또는 job 종료 후 남지 않습니다. OCR PNG는 page 처리 직후에도 삭제되고 outer workspace cleanup이 다시 보장합니다.
+8. OCR은 `OCR_REQUIRED` page만 처리하며 native extraction과 `ocr_layers`/`ocr_pages`/`ocr_blocks` provenance를 덮어쓰지 않습니다.
+9. OCR progress는 `ocr_state`, 0..500 page count, unique bounded warning codes만 노출하며 OCR text/image/path/stderr는 노출하지 않습니다.
+10. Phase 1 API에는 인증 provider가 없으며 production-safe endpoint로 표시하지 않습니다.
+11. Synthetic API route는 두 환경변수 gate가 모두 opt-in일 때만 등록되고, disabled runtime은 두 문서 path에 `404`를 반환합니다.
+12. Valid POST는 source key와 request shape만 검사하여 `202`로 enqueue하며, 파일 상태 오류는 Worker가 비동기 job error로 projection합니다.
+13. API validation failure는 HTTP `422 INVALID_REQUEST`이고, unknown status UUID는 `404 ANALYSIS_JOB_NOT_FOUND`입니다.
 
 ## Tests
 
@@ -260,6 +272,9 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 - top-left coordinate, 3-decimal rounding, 1-based page, 0-based reading order
 - table/cell bounding boxes와 page cache close after each page
 - 네 가지 `quality-v1` threshold 경계와 `TEXT_SUFFICIENT`
+- separate `ocr_layers`/`ocr_pages`/`ocr_blocks` migration, OCR_REQUIRED-only selection, native/OCR Evidence separation, and atomic rollback on invalid OCR provenance
+- descriptor-derived bounded PDFium rendering, fixed 300 DPI, direct no-shell `/usr/bin/tesseract` stdout TSV with fixed `kor+eng`, and no pytesseract/artifact dependency
+- per-page PNG unlink, outer workspace cleanup, bounded OCR batch progress, and synthetic Worker image language availability (`eng`/`kor`)
 - success·failure·cancelled cleanup, concurrent `SKIP LOCKED` claim, lease recovery, owner-only heartbeat, max attempts, bounded retry backoff
 - malformed child result의 transaction 전 거부와 duplicate succeeded extraction 재사용
 - shutdown/lease-loss progress cancellation과 parser child 회수
@@ -271,9 +286,9 @@ v0.1 extension tests:
 - 한 번 입력한 in-memory password 재사용과 실패 file만 재입력, 반복 expiry·replacement·item-local cancellation·shutdown disposal
 - password가 DB, persisted job, response, log에 없는지 검사
 - encrypted archive round-trip, tamper, wrong/missing master key
-- `OCR_REQUIRED` page만 local Korean/English OCR 실행
-- native/OCR extraction provenance와 page Evidence 분리
-- 성공·실패·취소·shutdown에서 decrypted PDF와 OCR image cleanup
+- `OCR_REQUIRED` page만 local Korean/English OCR 실행과 `TEXT_SUFFICIENT` renderer/engine skip
+- native/OCR extraction provenance와 page Evidence 분리, invalid OCR provenance transaction rollback
+- 성공·실패·취소·shutdown에서 decrypted PDF와 OCR image cleanup, page별 즉시 PNG 삭제와 outer workspace 삭제
 - managed archive를 통한 password 없는 reanalysis
 
 ## Security considerations
@@ -288,4 +303,4 @@ v0.1 extension tests:
 
 ## Deferred decisions
 
-Phase 1은 OCR 실행, authentication, private-data acceptance를 구현하거나 실제 자료로 확인하지 않았습니다. encrypted batch 계약과 구현은 추가되었지만 Compose/private-data, actual private document, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending입니다. 이 항목의 v0.1 계약은 `docs/design/private-data-runtime.md`와 `docs/design/authentication.md`를 따릅니다. OS-level egress enforcement, Google Drive 자동 연결, Windows descriptor behavior와 public production sandbox는 별도 승인 전까지 남깁니다.
+Phase 1 native extraction remains complete and synthetic-only. The branch now implements and tests selective local OCR plus encrypted-batch OCR progress, but actual private PDFs, private Compose mounts, mobile, Windows, Tailscale, provider, and private OCR acceptance are still pending. The private runtime PR is the next gate before any real-data acceptance. This item follows `docs/design/private-data-runtime.md` and `docs/design/authentication.md`; OS-level egress enforcement, Google Drive automation, Windows descriptor behavior, and a public production sandbox remain separately deferred.

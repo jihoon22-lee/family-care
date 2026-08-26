@@ -1,6 +1,6 @@
 # Private data and local runtime design
 
-- 상태: encrypted import 계약 구현·문서화, private runtime acceptance 대기
+- 상태: encrypted import·selective OCR 계약과 구현 문서화, private runtime acceptance 대기
 - 적용 단계: 암호 PDF batch, selective OCR, Phase 8 private-data acceptance
 - 실행 위치: 개인 PC의 WSL Docker Compose
 
@@ -74,16 +74,17 @@ Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만�
 - master key가 없으면 archive를 새로 생성하거나 읽지 않고 fail closed한다.
 - key rotation은 old/new key를 동시에 검증하고 wrapped data key만 교체한 뒤 완료하는 별도 관리 작업이다.
 
-## Selective local OCR (acceptance pending)
+## Selective local OCR (synthetic acceptance present; private acceptance pending)
 
-다음은 목표 계약이며 현재 OCR runtime과 실제 자료 acceptance는 아직 검증하지 않았다.
+선택적 OCR 계약과 Worker 구현은 이 branch에 있으며 합성 renderer/engine/processor/cleanup/atomic-persistence 테스트와 Worker 이미지 language smoke 경계가 있다. 이는 실제 private PDF나 private Compose runtime acceptance를 의미하지 않는다.
 
-- native extraction이 `OCR_REQUIRED`로 분류한 page만 OCR한다.
-- OCR은 로컬 Worker에서 한국어와 영어 language pack으로 실행한다.
+- native extraction이 `OCR_REQUIRED`로 분류한 page만 OCR한다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않는다.
+- renderer는 이미 열린 read-only descriptor에서 25 MiB 이내 bounded bytes를 읽어 PDFium으로 한 page를 fixed 300 DPI로 렌더링한다. source PDF path를 OCR renderer에 전달하거나 다시 열지 않는다.
+- OCR engine은 `/usr/bin/tesseract`를 fixed `kor+eng` argv로 `shell=False` 실행하고 `stdout ... tsv`를 bounded bytes로 파싱한다. `pytesseract` dependency와 TSV/image artifact file은 없다.
 - page 전체 PDF나 image를 외부 OCR provider로 보내지 않는다.
-- OCR text, coordinates, engine/language/version과 quality warning을 별도 extraction layer로 저장한다.
-- native text를 덮어쓰지 않고 검토 화면에서 source layer를 구분한다.
-- page image는 성공·실패·취소 후 삭제한다.
+- OCR text, coordinates, engine/language/version과 quality warning을 `ocr_layers`/`ocr_pages`/`ocr_blocks` 별도 extraction layer로 저장한다. native extraction rows와 Evidence는 덮어쓰지 않고 source layer를 구분한다.
+- 각 selected page의 PNG는 recognition 직후 삭제하고, outer mode-0700 workspace는 성공·실패·취소·timeout·shutdown 경로에서 다시 삭제한다. cleanup failure는 성공으로 숨기지 않는다.
+- batch status에는 `ocr_state`, 0..500 `ocr_pages_processed`, unique bounded warning-code allowlist만 projection한다. OCR text, coordinates, image path, filename, stderr는 반환하지 않는다.
 
 ## OpenAI boundary (provider acceptance pending)
 
@@ -113,7 +114,7 @@ v0.1에 포함하지 않음:
 
 ## Private-data acceptance (pending)
 
-현재 실제 자료 acceptance는 수행하지 않았다. Compose/private mount, mobile, Windows, Tailscale, provider, OCR acceptance가 모두 별도 검증 대기 상태다. 실제 자료 검증은 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
+현재 실제 자료 acceptance는 수행하지 않았다. 실제 private PDF, private Compose mount, mobile, Windows, Tailscale, provider, and private OCR acceptance가 모두 별도 검증 대기 상태다. 합성 OCR regression과 Worker image `eng`/`kor` language smoke는 실제 자료 검증의 대체물이 아니다. 실제 자료 검증은 private runtime PR이 다음 단계로 완료되고 synthetic private-runtime acceptance가 끝난 뒤 사용자가 지정한 저장소 밖 path와 문서에만 수행한다.
 
 1. 정확한 source와 output root를 읽기 전용으로 확인한다.
 2. `git status`와 safety scanner 기준선을 기록한다.
@@ -138,8 +139,11 @@ v0.1에 포함하지 않음:
 - 한 번 입력 password 재사용, 부분 실패 재입력, DB/job/log 비저장
 - encrypted archive round-trip, tamper, wrong/missing key, key-wrap rotation
 - 성공·실패·취소·shutdown 임시 평문 cleanup
-- `OCR_REQUIRED` page만 한국어·영어 local OCR 실행
-- OCR layer와 native extraction의 provenance 분리
+- `OCR_REQUIRED` page만 한국어·영어 local OCR 실행, `TEXT_SUFFICIENT` skip, and fixed 300 DPI
+- OCR layer와 native extraction의 provenance 분리, `ocr_layers`/`ocr_pages`/`ocr_blocks` atomic persistence
+- descriptor-derived PDFium, direct no-shell `/usr/bin/tesseract` stdout TSV, no pytesseract/artifact dependency
+- page별 PNG 즉시 삭제와 outer workspace cleanup, bounded batch progress projection
+- Worker image build 뒤 `tesseract --list-langs`에서 synthetic `eng`/`kor` availability 확인
 - Compose에서 gateway만 host port를 가지는지 검사
 - API/Worker/PostgreSQL internal network 접근
 - restart 후 DB·archive 읽기와 running job recovery
@@ -152,6 +156,7 @@ v0.1에 포함하지 않음:
 2. PDF password와 archive master key는 DB, job, log, Git, image에 없다.
 3. import source와 Google Drive 원본은 v0.1이 수정하거나 삭제하지 않는다.
 4. imported document는 archive encryption 성공 전 ready가 아니다.
-5. OCR page image는 작업 종료 후 남지 않는다.
-6. Tailscale과 app login 중 하나를 다른 하나의 대체물로 취급하지 않는다.
-7. 호스트 암호화와 swap 변경은 v0.1 완료 조건이 아니다.
+5. OCR page image는 page 처리 직후와 outer 작업 종료 후 남지 않는다.
+6. native extraction과 OCR provenance는 각각 queryable한 별도 layer이고 OCR이 native block을 덮어쓰지 않는다.
+7. Tailscale과 app login 중 하나를 다른 하나의 대체물로 취급하지 않는다.
+8. 호스트 암호화와 swap 변경은 v0.1 완료 조건이 아니다.

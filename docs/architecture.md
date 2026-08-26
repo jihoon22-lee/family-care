@@ -1,6 +1,6 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion은 완료되었고 Phase 2 core Policy Ledger, Phase 4 Clause search, Phase 5 Rider-Clause/CoverageRule review boundary가 구현되었다. Phase 2 candidate review부터 Phase 8까지는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다. 결정론적 CoverageRule 실행은 다음 Phase의 범위다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Foundation, synthetic PDF ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정과 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch는 `main`에 구현되어 있다. selective local OCR와 encrypted batch progress 구현은 현재 feature branch에 있으며, PR/CI/merge 완료를 주장하지 않는다. 이 기능들과 private local runtime·release는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
 
 ## Architectural goals
 
@@ -54,7 +54,7 @@ API는 입력 검증, 인증·인가, use case, 결정론적 판정·계산과 �
 
 Worker는 문서 분석 작업을 격리된 임시 directory에서 수행한다. 작업은 idempotent하며 lease 만료 후 재처리할 수 있다. 복호화 평문과 OCR page image는 모든 종료 경로에서 삭제한다.
 
-Phase 1 parser isolation의 descriptor-only input, 25 MiB/500 page, parent wall 120초, child CPU 90초, address space 1536 MiB, output 64 MiB, descriptor 64개 제한은 유지한다. v0.1의 암호·OCR·AI 단계는 이 parser 결과를 후속 입력으로 사용하며 원본 path를 다시 여는 우회 경로를 만들지 않는다.
+Phase 1 parser isolation의 descriptor-only input, 25 MiB/500 page, parent wall 120초, child CPU 90초, address space 1536 MiB, output 64 MiB, descriptor 64개 제한은 유지한다. v0.1의 암호·OCR·AI 단계는 이 parser 결과를 후속 입력으로 사용하며 원본 path를 다시 여는 우회 경로를 만들지 않는다. OCR renderer는 이미 열린 read-only descriptor에서 bounded bytes를 PDFium으로 읽고, fixed 300 DPI mode-0600 PNG를 page별로 생성·삭제한다. OCR engine은 `/usr/bin/tesseract`를 `shell=False`와 fixed `kor+eng`로 호출해 TSV를 stdout에서만 읽으며 `pytesseract`와 TSV artifact를 사용하지 않는다.
 
 ### External AI boundary
 
@@ -101,7 +101,8 @@ Google Drive 자동 연동과 Gemini provider는 v0.1에 없다.
 
 - file validation, password 적용, content hash
 - native text·table·coordinate extraction
-- `OCR_REQUIRED` page의 local Korean/English OCR
+- `OCR_REQUIRED` page만 local Korean/English OCR; `TEXT_SUFFICIENT` page는 skip
+- `ocr_layers`/`ocr_pages`/`ocr_blocks` separate provenance persistence와 bounded batch OCR progress
 - policy, rider, clause, rule candidate structuring
 - independent AI verification과 deterministic schema/Evidence validation
 - encrypted archive write와 임시 file lifecycle
@@ -145,7 +146,7 @@ CoverageRule 후보는 버전이 지정된 data-only DSL allowlist로 구조·�
 family-scoped PDF batch
   -> password in process memory
   -> descriptor-safe intake and native extraction
-  -> OCR_REQUIRED pages only -> local ko/en OCR
+  -> OCR_REQUIRED pages only -> 300 DPI local ko/en OCR -> separate OCR provenance layer
   -> OpenAI structurer
   -> independent OpenAI verifier
   -> deterministic schema/unit/Evidence validation
@@ -230,4 +231,4 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
 
 ## Verification boundaries
 
-PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. 로컬 acceptance는 사용자가 지정한 저장소 밖 source만 사용한다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Windows browser, 실제 mobile PWA, 실제 보험 format, Tailscale device 확인은 실행 증거와 미검증 범위를 각각 보고한다.
+PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. OCR contract/renderer/engine/cleanup tests use synthetic inputs only, and the Worker image workflow contains a synthetic `tesseract --list-langs` smoke requiring `eng` and `kor`; these are not private-document acceptance. 로컬 acceptance는 사용자가 지정한 저장소 밖 source만 사용한다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Private Compose, Windows browser, 실제 mobile PWA, 실제 보험 format, provider, Tailscale device 확인은 실행 증거와 미검증 범위를 각각 보고하며 private runtime PR 이후에 수행한다.

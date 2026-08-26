@@ -1,6 +1,6 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow, 그리고 구현된 encrypted document batch 계약까지 현재 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow, 그리고 구현된 encrypted document batch·selective local OCR 계약까지 현재 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
 
 ## Local development
 
@@ -295,7 +295,11 @@ password scope는 batch 안에서 재사용할 수 있지만 Worker 반복에서
 
 성공한 평문은 Worker 전용 archive root에 document별 AES-GCM data key와 AES-KW wrapped key로 저장한 뒤에만 ready가 됩니다. archive master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600` 조건을 만족해야 합니다. 복호화 PDF와 중간 산출물은 Worker work root의 mode `0700`/`0600` 작업 공간에만 존재하며 import source와 Google Drive 원본은 성공·실패·취소 어느 경로에서도 수정·삭제하지 않습니다.
 
-이 batch 계약의 합성 테스트·계약 검사는 구현 범위에 속하지만, private Compose mount, 실제 private data, mobile, Windows, Tailscale, provider, OCR acceptance는 아직 pending입니다. 이 상태를 로컬 합성 테스트 통과나 PR CI 통과로 대체하지 않습니다.
+native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택적 OCR 대상이 됩니다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않습니다. Worker는 read-only source descriptor에서 bounded bytes를 PDFium으로 읽어 fixed 300 DPI PNG를 mode `0600` handle에 만들고, `/usr/bin/tesseract`를 fixed `kor+eng` argv와 `shell=False`로 실행해 bounded TSV를 stdout에서 파싱합니다. `pytesseract` dependency와 TSV artifact는 없으며 OCR 결과는 `ocr_layers`/`ocr_pages`/`ocr_blocks`의 별도 provenance layer에 저장됩니다. native blocks와 Evidence는 덮어쓰지 않습니다.
+
+각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 branch tests는 선택 page, provenance separation, cleanup, and atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF나 private Compose runtime acceptance를 대신하지 않습니다.
+
+이 batch 계약과 selective OCR의 합성 테스트·계약 검사는 branch 구현 범위에 속하지만, private Compose mount, 실제 private data, mobile, Windows, Tailscale, provider, private OCR acceptance는 아직 pending입니다. private runtime PR이 다음 단계이며, 이 상태를 로컬 합성 테스트 통과나 PR CI 통과로 대체하지 않습니다.
 
 종료:
 
@@ -353,7 +357,7 @@ FAMILYCARE_SECRET_SOCKET=/absolute/path/outside/repository/run/familycare.sock
 
 위 문자열은 경로 형식 예시이며 실제 경로가 아닙니다. 실제 값을 문서, 이슈, PR, 로그에 복사하지 않습니다.
 
-`FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유하고, archive/work/master-key는 Worker에만 mount해야 합니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`이어야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. 현재 Compose/private-data mount와 실제 자료 연결은 별도 acceptance가 완료되지 않아 pending입니다.
+`FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유하고, archive/work/master-key는 Worker에만 mount해야 합니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`이어야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. Worker image의 `eng`/`kor` language package smoke는 synthetic CI boundary이고, 현재 Compose/private-data mount와 실제 자료 연결은 별도 acceptance가 완료되지 않아 pending입니다.
 
 Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
 
