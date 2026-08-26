@@ -17,7 +17,10 @@ from familycare_api.documents.generated_batch_contracts import (
     OcrState,
     OcrWarningCode,
 )
-from familycare_api.documents.import_sources import ImportSourceCatalog
+from familycare_api.documents.import_sources import (
+    ImportSourceCatalog,
+    normalize_display_label,
+)
 from familycare_api.errors import ErrorResponse
 from familycare_api.identity.context import AuthContext, resolve_auth_context
 
@@ -26,7 +29,11 @@ class ImportSourceResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     source_id: str = Field(pattern=r"^[a-f0-9]{64}$")
-    display_label: str = Field(min_length=1, max_length=160)
+    display_label: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[^\u0000-\u001f\u007f-\u009f]+$",
+    )
     size_bytes: int = Field(ge=0, le=25 * 1024 * 1024)
     encrypted: bool
 
@@ -60,7 +67,11 @@ class BatchItemResponse(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     source_id: str = Field(pattern=r"^[a-f0-9]{64}$")
-    display_label: str = Field(min_length=1, max_length=160)
+    display_label: str = Field(
+        min_length=1,
+        max_length=160,
+        pattern=r"^[^\u0000-\u001f\u007f-\u009f]+$",
+    )
     state: BatchItemState
     error_code: BatchErrorCode | None
     attempts: int = Field(ge=0, le=20)
@@ -115,11 +126,7 @@ router = APIRouter(prefix="/api/v1", tags=["private document import"])
 
 
 def _label(value: object) -> str:
-    if not isinstance(value, str):
-        return "PDF document"
-    leaf = value.replace("\\", "/").rsplit("/", 1)[-1]
-    cleaned = "".join(character for character in leaf if character >= " " and character != "\x7f")
-    return cleaned.strip()[:160] or "PDF document"
+    return normalize_display_label(value)
 
 
 def _source_response(value: object) -> ImportSourceResponse | None:

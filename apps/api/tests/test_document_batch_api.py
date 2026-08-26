@@ -12,7 +12,7 @@ from uuid import UUID
 import pytest
 from familycare_api.documents import batch_router
 from familycare_api.documents.batch_repository import BatchItemRecord, BatchRecord
-from familycare_api.documents.batch_router import BatchItemResponse
+from familycare_api.documents.batch_router import BatchItemResponse, ImportSourceResponse
 from familycare_api.documents.batch_service import _projection
 from familycare_api.errors import ApiBoundaryError
 from familycare_api.identity.context import AuthContext, get_session_service
@@ -30,6 +30,26 @@ SOURCE_ID_B = "b" * 64
 RAW_SESSION = "synthetic-session-token-that-is-long-enough-a"
 CSRF_TOKEN = "synthetic-csrf-token-that-is-long-enough-a"
 PASSWORD = "synthetic-batch-password"
+
+
+@pytest.mark.parametrize(
+    "label", ["Sample\x00.pdf", "Sample\r.pdf", "Sample\n.pdf", "Sample\t.pdf"]
+)
+def test_display_label_models_reject_control_characters(label: str) -> None:
+    with pytest.raises(ValidationError):
+        ImportSourceResponse(
+            source_id=SOURCE_ID_A,
+            display_label=label,
+            size_bytes=128,
+            encrypted=False,
+        )
+    with pytest.raises(ValidationError):
+        BatchItemResponse.model_validate(_item(SOURCE_ID_A, label))
+
+
+def test_display_label_normalizer_removes_paths_and_falls_back() -> None:
+    assert batch_router._label("nested\\Sample\r\n\t\x01 Policy.pdf") == "Sample Policy.pdf"
+    assert batch_router._label("nested/\x00\r\n\t\x01") == "PDF document"
 
 
 class _ScopedNotFound(ApiBoundaryError):

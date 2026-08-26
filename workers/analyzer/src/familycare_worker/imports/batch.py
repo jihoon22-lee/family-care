@@ -28,7 +28,7 @@ from familycare_worker.ocr.models import (
     SelectiveOcrResult,
 )
 from familycare_worker.ocr.processor import SelectiveOcrProcessor
-from familycare_worker.pdf.errors import PdfIntakeError
+from familycare_worker.pdf.errors import DocumentTooLarge, PageLimitExceeded, PdfIntakeError
 from familycare_worker.pdf.intake import (
     OpenedSource,
     ValidatedPdf,
@@ -37,6 +37,7 @@ from familycare_worker.pdf.intake import (
     validate_pdf,
 )
 from familycare_worker.pdf.isolation import ParseOutcome, run_isolated_parser
+from familycare_worker.pdf.limits import MAX_INPUT_BYTES, MAX_PDF_PAGES
 from familycare_worker.pdf.workspace import Workspace, create_workspace
 
 LOGGER = logging.getLogger("familycare.worker")
@@ -122,10 +123,33 @@ def _reader(source_fd: int) -> tuple[PdfReader, BinaryIO]:
         raise
 
 
+class _BoundedPlaintextWriter:
+    """Expose a seekable PDF target while rejecting oversized output extents."""
+
+    def __init__(self, target: BinaryIO, *, limit: int) -> None:
+        self._target = target
+        self._limit = limit
+
+    def write(self, data: bytes) -> int:
+        if self._target.tell() + len(data) > self._limit:
+            raise DocumentTooLarge
+        return self._target.write(data)
+
+    def seek(self, offset: int, whence: int = os.SEEK_SET) -> int:
+        return self._target.seek(offset, whence)
+
+    def tell(self) -> int:
+        return self._target.tell()
+
+    def flush(self) -> None:
+        self._target.flush()
+
+
 def _copy_or_decrypt(source_fd: int, target: BinaryIO, password: str | None) -> bool:
     """Write plaintext PDF bytes and return whether a password was required."""
 
     reader, reader_handle = _reader(source_fd)
+    bounded_target = _BoundedPlaintextWriter(target, limit=MAX_INPUT_BYTES)
     try:
         if reader.is_encrypted:
             if password is None:
@@ -136,13 +160,15 @@ def _copy_or_decrypt(source_fd: int, target: BinaryIO, password: str | None) -> 
                 raise PermissionError from None
             if accepted == 0:
                 raise PermissionError
+            if len(reader.pages) > MAX_PDF_PAGES:
+                raise PageLimitExceeded
             writer = PdfWriter()
             writer.clone_document_from_reader(reader)
-            writer.write(target)
+            writer.write(bounded_target)  # type: ignore[arg-type]
             return True
         offset = 0
         while chunk := os.pread(source_fd, 1024 * 1024, offset):
-            target.write(chunk)
+            bounded_target.write(chunk)
             offset += len(chunk)
         return False
     finally:
@@ -169,6 +195,7 @@ class BatchRunner:
         logger: logging.Logger = LOGGER,
         stop_requested: Callable[[], bool] = lambda: False,
         on_password_required: Callable[[UUID], None] = lambda _batch_id: None,
+        on_password_discarded: Callable[[UUID], None] = lambda _batch_id: None,
     ) -> None:
         document_root = Path(document_root)
         work_root = Path(work_root)
@@ -192,6 +219,7 @@ class BatchRunner:
         self.logger = logger
         self.stop_requested = stop_requested
         self.on_password_required = on_password_required
+        self.on_password_discarded = on_password_discarded
 
     def _batch_id(self, item: BatchItem) -> UUID:
         value = getattr(item, "batch_id", None)
@@ -209,10 +237,15 @@ class BatchRunner:
         return None
 
     def _discard_password_for(self, item: BatchItem) -> None:
+        batch_id = self._batch_id(item)
         if isinstance(self.password_scope, BatchPasswordRegistry):
-            self.password_scope.discard(self._batch_id(item))
+            self.password_scope.discard(batch_id)
         elif isinstance(self.password_scope, PasswordScope):
             self.password_scope.dispose()
+        try:
+            self.on_password_discarded(batch_id)
+        except Exception:
+            self.logger.error("batch_password_deactivation_failed item_id=%s", item.id)
 
     def run_once(self, worker_id: str) -> bool:
         if isinstance(self.password_scope, BatchPasswordRegistry):
@@ -292,7 +325,11 @@ class BatchRunner:
                             str(outcome.error_code or "PDF_CORRUPT"),
                         )
                         return
-                    if not self.repository.heartbeat(item.id, worker_id):
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self._discard_password_for(item)
                         return
                     if self.ocr_processor is not None:
                         try:
@@ -318,6 +355,7 @@ class BatchRunner:
                                 state="native_only",
                                 pages_processed=0,
                             ):
+                                self._discard_password_for(item)
                                 return
                         except OcrCancelled:
                             self._discard_password_for(item)
@@ -338,12 +376,26 @@ class BatchRunner:
                         except Exception:
                             self.repository.mark_failed(item.id, worker_id, "OCR_FAILED")
                             return
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self._discard_password_for(item)
+                        return
                     plaintext.seek(0)
                     archive = self.archive_store.put(
                         version_id,
                         plaintext,
                         master_key=self.master_key,
                     )
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self.archive_store.delete(archive)
+                        archive = None
+                        self._discard_password_for(item)
+                        return
             if workspace is None or not cleanup_workspace(workspace):
                 if archive is not None:
                     self.archive_store.delete(archive)
@@ -360,8 +412,8 @@ class BatchRunner:
                     validated=validated,
                 )
             except Exception:
-                if archive is not None:
-                    self.archive_store.delete(archive)
+                self._discard_password_for(item)
+                self.logger.error("batch_archive_commit_uncertain item_id=%s", item.id)
                 raise
         except ArchiveStoreError as error:
             self._safe_fail(item, worker_id, error.code)

@@ -300,6 +300,7 @@
           "display_label": {
             "maxLength": 160,
             "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
             "title": "Display Label",
             "type": "string"
           },
@@ -3054,6 +3055,7 @@
           "display_label": {
             "maxLength": 160,
             "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
             "title": "Display Label",
             "type": "string"
           },

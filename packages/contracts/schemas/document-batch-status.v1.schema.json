@@ -139,7 +139,7 @@
         "display_label": {
           "maxLength": 160,
           "minLength": 1,
-          "pattern": "^[^\\u0000\\r\\n]+$",
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
           "type": "string"
         },
         "error_code": {
@@ -201,7 +201,7 @@
         "display_label": {
           "maxLength": 160,
           "minLength": 1,
-          "pattern": "^[^\\u0000\\r\\n]+$",
+          "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
           "type": "string"
         },
         "encrypted": {

@@ -14,6 +14,7 @@ MAX_SOURCE_BYTES = 25 * 1024 * 1024
 MAX_SOURCE_COUNT = 256
 _PDF_MAGIC = b"%PDF-"
 _HASH_CHUNK_BYTES = 1024 * 1024
+_FALLBACK_DISPLAY_LABEL = "PDF document"
 
 
 class ImportSourceError(RuntimeError):
@@ -138,6 +139,16 @@ def _opaque_id(source_key: str, content_sha256: str) -> str:
     return digest.hexdigest()
 
 
+def normalize_display_label(value: object) -> str:
+    """Return a printable, path-free label suitable for API and DB projection."""
+
+    if not isinstance(value, str):
+        return _FALLBACK_DISPLAY_LABEL
+    leaf = value.replace("\\", "/").rsplit("/", 1)[-1]
+    cleaned = "".join(character for character in leaf if character.isprintable())
+    return cleaned.strip()[:160] or _FALLBACK_DISPLAY_LABEL
+
+
 class ImportSourceCatalog:
     """Rescan one exact root and expose stable IDs instead of source paths."""
 
@@ -189,7 +200,7 @@ class ImportSourceCatalog:
             return ResolvedImportSource(
                 source_id=_opaque_id(source_key, content_sha256),
                 source_key=source_key,
-                display_label=source_key.rsplit("/", 1)[-1][:160],
+                display_label=normalize_display_label(source_key),
                 size_bytes=details.st_size,
                 encrypted=_is_encrypted(descriptor),
             )
@@ -238,4 +249,5 @@ __all__ = [
     "ImportSourceError",
     "ImportSourceNotFound",
     "ResolvedImportSource",
+    "normalize_display_label",
 ]

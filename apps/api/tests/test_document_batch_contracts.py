@@ -97,6 +97,15 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
         "permanently_failed",
         "cancelled",
     ]
+    label_pattern = "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    assert (
+        status_schema["$defs"]["DocumentBatchItem"]["properties"]["display_label"]["pattern"]
+        == label_pattern
+    )
+    assert (
+        status_schema["$defs"]["ImportSource"]["properties"]["display_label"]["pattern"]
+        == label_pattern
+    )
 
 
 def test_batch_status_defines_bounded_ocr_progress_projection() -> None:

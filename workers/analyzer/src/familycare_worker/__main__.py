@@ -210,6 +210,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         ocr_processor=_local_ocr_processor(),
         stop_requested=stop_event.is_set,
         on_password_required=secret_server.activate,
+        on_password_discarded=secret_server.deactivate,
     )
     receiver.start()
     combined = FairJobRunner(events=base_runner, documents=batch_runner)

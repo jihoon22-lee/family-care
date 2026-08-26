@@ -76,6 +76,9 @@ REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
         "# Encrypted Document Import Implementation Plan",
     ),
     "docs/plan/014-selective-ocr.md": ("# Selective OCR Implementation Plan",),
+    "docs/plan/014a-private-import-reliability.md": (
+        "# Private Import Reliability Implementation Plan",
+    ),
     "docs/plan/015-private-local-runtime.md": ("# Private Local Runtime Implementation Plan",),
     "docs/plan/016-v0.1-release.md": ("# FamilyCare v0.1 Release Plan",),
 }

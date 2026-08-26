@@ -150,6 +150,24 @@ def test_socket_rejects_handoff_for_batch_without_active_scope(tmp_path: Path) -
     _assert_stable_error(raised, "BATCH_NOT_ACTIVE")
 
 
+def test_deactivate_discards_pending_secret_and_rejects_future_handoff(tmp_path: Path) -> None:
+    pending = _handoff()
+    future = _handoff(
+        handoff_id=SYNTHETIC_REPLAY_HANDOFF_ID,
+        password=SYNTHETIC_REPLACEMENT_PASSWORD,
+    )
+    with _running_server(tmp_path) as (server, socket_path):
+        _receive_client(server, socket_path, pending)
+
+        server.deactivate(pending.batch_id)
+
+        assert server.take(pending.batch_id, pending.handoff_id, datetime.now(UTC)) is None
+        with pytest.raises(SecretChannelError) as raised:
+            _receive_raw(server, socket_path, _wire(_payload(future)))
+
+    _assert_stable_error(raised, "BATCH_NOT_ACTIVE")
+
+
 def test_take_is_atomic_and_replay_is_rejected(tmp_path: Path) -> None:
     frame = _handoff()
     with _running_server(tmp_path) as (server, socket_path):

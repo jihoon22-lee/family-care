@@ -139,7 +139,7 @@ class ArchiveStore:
                 os.close(descriptor)
 
     def delete(self, metadata: ArchiveMetadata) -> None:
-        """Remove one exact orphan ciphertext after a metadata transaction failure."""
+        """Remove one exact ciphertext known not to be referenced by durable metadata."""
 
         object_path = self._object_path(metadata.object_key)
         try:
