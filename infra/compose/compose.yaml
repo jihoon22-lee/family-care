@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: ${FAMILYCARE_DATABASE_NAME:?set FAMILYCARE_DATABASE_NAME in the env file}
       POSTGRES_USER: ${FAMILYCARE_DATABASE_USER:?set FAMILYCARE_DATABASE_USER in the env file}
       POSTGRES_PASSWORD: ${FAMILYCARE_DATABASE_PASSWORD:?set FAMILYCARE_DATABASE_PASSWORD in the env file}
-    ports:
-      - "127.0.0.1:${FAMILYCARE_DATABASE_PORT:-5432}:5432"
     volumes:
       - familycare-postgres-data:/var/lib/postgresql
     healthcheck:
@@ -27,8 +25,6 @@ services:
     environment:
       FAMILYCARE_ENV: ${FAMILYCARE_ENV:-development}
       FAMILYCARE_DATABASE_URL: postgresql+psycopg://${FAMILYCARE_DATABASE_USER}:${FAMILYCARE_DATABASE_PASSWORD}@db:5432/${FAMILYCARE_DATABASE_NAME}
-    ports:
-      - "127.0.0.1:${FAMILYCARE_API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -61,3 +57,6 @@ services:
 
 volumes:
   familycare-postgres-data:
+  familycare-archive-data:
+  familycare-worker-work:
+  familycare-secret-socket:

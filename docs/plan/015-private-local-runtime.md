@@ -134,13 +134,13 @@ The exact environment variable names are FAMILYCARE_DATABASE_NAME, FAMILYCARE_DA
 
 ### Task 2: Make Web the only host gateway
 
-- [ ] 2–5 min: Modify infra/containers/nginx.conf so /api/ is proxied to http://api:8000, with HTTP/1.1, forwarded request identity headers, and no-store response headers. Keep /healthz local and retain static app-shell fallback. Do not proxy PDF, archive, or raw file paths.
-- [ ] 2–5 min: Create apps/web/tests/gateway.spec.ts and scripts/tests/test_private_compose.py. The tests must assert exactly one host-published service, Web port 8080, no API or DB port, internal API target api:8000, and no cacheable /api/ response.
-- [ ] 2–5 min: Run the RED command:
+- [x] 2–5 min: Modify infra/containers/nginx.conf so /api/ is proxied to http://api:8000, with HTTP/1.1, forwarded request identity headers, and no-store response headers. Keep /healthz local and retain static app-shell fallback. Do not proxy PDF, archive, or raw file paths.
+- [x] 2–5 min: Create scripts/tests/test_private_compose.py as the static gateway/Compose contract test. It asserts exactly one host-published service, Web port 8080, no API or DB port, internal API target api:8000, and no cacheable /api/ response without adding a Web runtime test for infrastructure text.
+- [x] 2–5 min: Run the RED command:
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_compose.py -q
   Expected failure: the current Compose mapping reports API and db host ports, and nginx configuration contains a 404 location instead of an upstream proxy.
-- [ ] 2–5 min: Modify infra/compose/compose.yaml to remove ports from db and api, retain the four-service set, add internal health dependencies, and keep only Web mapping 127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}:8080. Add the archive, worker-work, and secret-socket named volumes without publishing them.
-- [ ] 2–5 min: Apply the minimal nginx route:
+- [x] 2–5 min: Modify infra/compose/compose.yaml to remove ports from db and api, retain the four-service set, add internal health dependencies, and keep only Web mapping 127.0.0.1:${FAMILYCARE_WEB_PORT:-8080}:8080. Add the archive, worker-work, and secret-socket named volumes without publishing them.
+- [x] 2–5 min: Apply the minimal nginx route:
 
 ~~~nginx
 location /api/ {
@@ -154,16 +154,16 @@ location /api/ {
 }
 ~~~
 
-- [ ] 2–5 min: Run GREEN:
+- [x] 2–5 min: Run GREEN:
       docker compose --env-file .env.example -f infra/compose/compose.yaml config
       TMPDIR=/tmp uv run pytest scripts/tests/test_private_compose.py -q
       corepack pnpm@11.22.0 web:check
   Expected result: Compose config succeeds, exactly four services are listed, only Web has a host port, and Web checks pass. A local config test may use synthetic environment values only and must not print them.
-- [ ] 2–5 min: Run:
+- [x] 2–5 min: Run:
       TMPDIR=/tmp uv run python scripts/check_containers.py
       TMPDIR=/tmp uv run python scripts/check_workflows.py
   Record any pre-existing unrelated failure separately; do not weaken a safety rule to make this task pass.
-- [ ] 2–5 min: Commit only this task as:
+- [x] 2–5 min: Commit only this task as:
       build(runtime): expose one web gateway
 
 ### Task 3: Isolate archive, import, socket, and Worker-only AI access
