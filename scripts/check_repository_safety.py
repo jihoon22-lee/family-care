@@ -33,6 +33,7 @@ FORBIDDEN_SEGMENTS = {
 }
 DOCUMENT_API_SOURCE_ROOT = Path("apps/api/src/familycare_api/documents")
 WEB_DOCUMENT_SOURCE_ROOT = Path("apps/web/src/features/documents")
+WORKER_OCR_SOURCE_ROOT = Path("workers/analyzer/src/familycare_worker/ocr")
 PDF_ALLOW_ROOT = Path("fixtures/synthetic")
 IMAGE_ALLOW_ROOTS = (
     Path("apps/web/public"),
@@ -81,6 +82,12 @@ def inspect_path(root: Path, path: Path) -> list[str]:
         or (suffix == ".tsx" and relative_path.parent == WEB_DOCUMENT_SOURCE_ROOT)
     ):
         forbidden_segments.remove("documents")
+    if (
+        "ocr" in forbidden_segments
+        and suffix == ".py"
+        and relative_path.parent == WORKER_OCR_SOURCE_ROOT
+    ):
+        forbidden_segments.remove("ocr")
     if forbidden_segments:
         errors.append(
             f"forbidden data directory in {relative_path}: {', '.join(forbidden_segments)}"
