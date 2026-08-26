@@ -11,10 +11,14 @@ from uuid import UUID
 
 import pytest
 from familycare_api.documents import batch_router
+from familycare_api.documents.batch_repository import BatchItemRecord, BatchRecord
+from familycare_api.documents.batch_router import BatchItemResponse
+from familycare_api.documents.batch_service import _projection
 from familycare_api.errors import ApiBoundaryError
 from familycare_api.identity.context import AuthContext, get_session_service
 from familycare_api.main import create_app
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 USER_ID = UUID("00000000-0000-4000-8000-000000000011")
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-000000000001")
@@ -104,6 +108,9 @@ def _item(
     state: str = "queued",
     error_code: str | None = None,
     attempts: int = 0,
+    ocr_state: str = "pending",
+    ocr_pages_processed: int = 0,
+    ocr_warning_codes: Sequence[str] = (),
 ) -> dict[str, object]:
     return {
         "source_id": source_id,
@@ -111,6 +118,9 @@ def _item(
         "state": state,
         "error_code": error_code,
         "attempts": attempts,
+        "ocr_state": ocr_state,
+        "ocr_pages_processed": ocr_pages_processed,
+        "ocr_warning_codes": list(ocr_warning_codes),
     }
 
 
@@ -435,6 +445,121 @@ def test_status_projects_partial_and_success_without_source_paths(
         '"password":',
         "/mnt/",
     ):
+        assert forbidden not in serialized
+
+
+def test_status_projects_bounded_ocr_progress_without_ocr_payload(
+    client: TestClient,
+    dependencies: tuple[_FakeBatchService, _FakeCatalog, _FakeRepository, _FakeSocket],
+) -> None:
+    service, _catalog, _repository, _socket = dependencies
+    service.status = _batch(
+        state="partial",
+        items=[
+            _item(
+                SOURCE_ID_A,
+                "Sample Policy A.pdf",
+                state="succeeded",
+                attempts=1,
+                ocr_state="completed",
+                ocr_pages_processed=3,
+            ),
+            _item(
+                SOURCE_ID_B,
+                "Sample Policy B.pdf",
+                state="running",
+                attempts=1,
+                ocr_state="warning",
+                ocr_pages_processed=2,
+                ocr_warning_codes=("NO_TEXT_DETECTED",),
+            ),
+        ],
+    )
+
+    response = client.get(f"/api/v1/document-batches/{BATCH_ID}")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {
+            "source_id": SOURCE_ID_A,
+            "display_label": "Sample Policy A.pdf",
+            "state": "succeeded",
+            "error_code": None,
+            "attempts": 1,
+            "ocr_state": "completed",
+            "ocr_pages_processed": 3,
+            "ocr_warning_codes": [],
+        },
+        {
+            "source_id": SOURCE_ID_B,
+            "display_label": "Sample Policy B.pdf",
+            "state": "running",
+            "error_code": None,
+            "attempts": 1,
+            "ocr_state": "warning",
+            "ocr_pages_processed": 2,
+            "ocr_warning_codes": ["NO_TEXT_DETECTED"],
+        },
+    ]
+    serialized = response.text.lower()
+    for forbidden in ("ocr_text", "bbox", "coordinates", "stderr", "raw_error", "image_path"):
+        assert forbidden not in serialized
+
+
+def test_batch_item_rejects_duplicate_or_oversized_ocr_warning_codes() -> None:
+    with pytest.raises(ValidationError):
+        BatchItemResponse(
+            **_item(
+                SOURCE_ID_A,
+                "Sample Policy A.pdf",
+                ocr_warning_codes=("LOW_CONFIDENCE", "LOW_CONFIDENCE"),
+            )
+        )
+    with pytest.raises(ValidationError):
+        BatchItemResponse(
+            **_item(
+                SOURCE_ID_A,
+                "Sample Policy A.pdf",
+                ocr_warning_codes=("LOW_CONFIDENCE",) * 9,
+            )
+        )
+
+
+def test_service_projection_allowlists_ocr_progress_metadata() -> None:
+    value = _projection(
+        BatchRecord(
+            batch_id=BATCH_ID,
+            family_member_id=FAMILY_MEMBER_ID,
+            state="partial",
+            items=(
+                BatchItemRecord(
+                    source_id=SOURCE_ID_A,
+                    display_label="Sample Policy A.pdf",
+                    state="succeeded",
+                    error_code=None,
+                    attempts=1,
+                    ocr_state="warning",
+                    ocr_pages_processed=2,
+                    ocr_warning_codes=("NO_TEXT_DETECTED",),
+                ),
+            ),
+        )
+    )
+
+    assert value["items"] == [
+        {
+            "source_id": SOURCE_ID_A,
+            "display_label": "Sample Policy A.pdf",
+            "state": "succeeded",
+            "error_code": None,
+            "attempts": 1,
+            "ocr_state": "warning",
+            "ocr_pages_processed": 2,
+            "ocr_warning_codes": ["NO_TEXT_DETECTED"],
+        }
+    ]
+    serialized = str(value).lower()
+    for forbidden in ("ocr_text", "bbox", "coordinates", "image_path", "stderr", "raw_error"):
         assert forbidden not in serialized
 
 

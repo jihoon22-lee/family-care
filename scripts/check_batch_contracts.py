@@ -35,14 +35,23 @@ FORBIDDEN_FIELDS = {
     "archive_key",
     "archive_master_key",
     "auth_tag",
+    "bbox",
+    "coordinates",
     "document_text",
+    "file_name",
+    "filename",
+    "image_path",
     "key",
     "nonce",
     "object_key",
+    "ocr_path",
     "ocr_text",
     "password",
+    "path",
     "plaintext",
     "raw_pdf",
+    "raw_error",
+    "stderr",
     "source_key",
     "wrapped_data_key",
 }
@@ -56,6 +65,30 @@ BATCH_ITEM_STATES = [
     "permanently_failed",
     "cancelled",
 ]
+BATCH_ERROR_CODES = [
+    "ARCHIVE_INTEGRITY_ERROR",
+    "ARCHIVE_KEY_UNAVAILABLE",
+    "ARCHIVE_WRITE_FAILED",
+    "DOCUMENT_NOT_FOUND",
+    "DOCUMENT_PATH_ESCAPE",
+    "DOCUMENT_TOO_LARGE",
+    "EXTRACTION_TIMEOUT",
+    "INVALID_REQUEST",
+    "OCR_FAILED",
+    "OCR_TIMEOUT",
+    "OCR_UNAVAILABLE",
+    "OCR_OUTPUT_LIMIT_EXCEEDED",
+    "PAGE_LIMIT_EXCEEDED",
+    "PASSWORD_INVALID",
+    "PASSWORD_REQUIRED",
+    "PDF_CORRUPT",
+    "RESOURCE_LIMIT_EXCEEDED",
+    "SOURCE_CHANGED",
+    "TEMP_CLEANUP_FAILED",
+    "UNSUPPORTED_FILE_TYPE",
+]
+OCR_STATES = ["pending", "native_only", "running", "completed", "warning", "failed"]
+OCR_WARNING_CODES = ["LOW_CONFIDENCE", "NO_TEXT_DETECTED"]
 
 
 def _load_schema_validator() -> Callable[..., list[str]]:
@@ -180,6 +213,12 @@ def _validate_examples(
         errors.append("status item source_id must be lowercase SHA-256-shaped IDs")
     elif {str(item["source_id"]) for item in items} != set(SYNTHETIC_SOURCE_IDS):
         errors.append("status item source IDs must be the fixed synthetic IDs")
+    for index, item in enumerate(items if isinstance(items, list) else []):
+        if not isinstance(item, Mapping):
+            continue
+        warnings = item.get("ocr_warning_codes")
+        if isinstance(warnings, list) and len(warnings) != len(set(warnings)):
+            errors.append(f"status item {index} OCR warning codes must be unique")
     return errors
 
 
@@ -227,10 +266,26 @@ def validate_batch_contracts() -> list[str]:
         if source.get("minLength") != 64 or source.get("maxLength") != 64:
             errors.append(f"{label} SourceId must be exactly 64 characters")
     definitions = status_schema.get("$defs", {})
+    if definitions.get("BatchErrorCode", {}).get("enum") != BATCH_ERROR_CODES:
+        errors.append("batch error-code enum changed")
     if definitions.get("BatchState", {}).get("enum") != BATCH_STATES:
         errors.append("batch state enum changed")
     if definitions.get("BatchItemState", {}).get("enum") != BATCH_ITEM_STATES:
         errors.append("batch item state enum changed")
+    if definitions.get("OcrState", {}).get("enum") != OCR_STATES:
+        errors.append("OCR state enum changed")
+    if definitions.get("OcrWarningCode", {}).get("enum") != OCR_WARNING_CODES:
+        errors.append("OCR warning-code enum changed")
+    item_schema = definitions.get("DocumentBatchItem", {})
+    ocr_pages_schema = item_schema.get("properties", {}).get("ocr_pages_processed", {})
+    if ocr_pages_schema.get("minimum") != 0 or ocr_pages_schema.get("maximum") != 500:
+        errors.append("OCR processed-page bounds changed")
+    ocr_warnings_schema = item_schema.get("properties", {}).get("ocr_warning_codes", {})
+    if (
+        ocr_warnings_schema.get("maxItems") != 8
+        or ocr_warnings_schema.get("uniqueItems") is not True
+    ):
+        errors.append("OCR warning-code bounds changed")
 
     for label, value in (("request", request), ("status", status)):
         for path, child in _nested_strings(value):

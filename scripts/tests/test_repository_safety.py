@@ -101,6 +101,31 @@ class RepositorySafetyTest(unittest.TestCase):
         errors = inspect_path(self.root, path)
         self.assertTrue(any("directory" in error for error in errors))
 
+    def test_allows_python_modules_in_the_worker_ocr_package_only(self) -> None:
+        path = self.write(
+            "workers/analyzer/src/familycare_worker/ocr/engine.py",
+            b'"""Synthetic OCR adapter."""\n',
+        )
+
+        self.assertEqual(inspect_path(self.root, path), [])
+
+    def test_worker_ocr_package_exception_rejects_runtime_outputs(self) -> None:
+        for relative_path in (
+            "workers/analyzer/src/familycare_worker/ocr/page.png",
+            "workers/analyzer/src/familycare_worker/ocr/result.json",
+            "work/ocr/page.tsv",
+        ):
+            with self.subTest(relative_path=relative_path):
+                path = self.write(relative_path)
+                errors = inspect_path(self.root, path)
+                self.assertTrue(any("directory" in error for error in errors))
+
+    def test_worker_ocr_package_exception_rejects_other_source_roots(self) -> None:
+        path = self.write("workers/analyzer/ocr/engine.py")
+
+        errors = inspect_path(self.root, path)
+        self.assertTrue(any("directory" in error for error in errors))
+
     def test_rejects_file_larger_than_two_mib(self) -> None:
         path = self.write("oversized.bin", b"0" * (MAX_FILE_BYTES + 1))
 

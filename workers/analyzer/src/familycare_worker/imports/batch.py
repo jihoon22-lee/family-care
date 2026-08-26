@@ -19,6 +19,15 @@ from familycare_worker.archive.store import ArchiveStore, ArchiveStoreError
 from familycare_worker.imports.cleanup import cleanup_workspace
 from familycare_worker.imports.password_scope import PasswordScope
 from familycare_worker.imports.secret_channel import BatchPasswordRegistry
+from familycare_worker.ocr.models import (
+    OcrCancelled,
+    OcrConfigurationError,
+    OcrExecutionError,
+    OcrRenderError,
+    OcrTempCleanupError,
+    SelectiveOcrResult,
+)
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.pdf.errors import PdfIntakeError
 from familycare_worker.pdf.intake import (
     OpenedSource,
@@ -69,9 +78,20 @@ class BatchRepositoryLike(Protocol):
         *args: object,
         archive: ArchiveMetadata | None = None,
         extraction: object = None,
+        ocr: SelectiveOcrResult | None = None,
         validated: ValidatedPdf | None = None,
         **kwargs: object,
     ) -> None: ...
+
+    def mark_ocr_progress(
+        self,
+        item_id: UUID,
+        worker_id: str,
+        *,
+        state: str,
+        pages_processed: int,
+        warning_codes: tuple[str, ...] = (),
+    ) -> bool: ...
 
 
 class ParserRunner(Protocol):
@@ -142,6 +162,7 @@ class BatchRunner:
         master_key: MasterKey,
         password_scope: PasswordScope | BatchPasswordRegistry | None,
         parser_runner: ParserRunner = run_isolated_parser,
+        ocr_processor: SelectiveOcrProcessor | None = None,
         lease_seconds: int = 180,
         heartbeat_interval_seconds: float = 30.0,
         workspace_factory: Callable[[Path], Workspace] = create_workspace,
@@ -164,6 +185,7 @@ class BatchRunner:
         self.master_key = master_key
         self.password_scope = password_scope
         self.parser_runner = parser_runner
+        self.ocr_processor = ocr_processor
         self.lease_seconds = lease_seconds
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
         self.workspace_factory = workspace_factory
@@ -204,6 +226,7 @@ class BatchRunner:
     def _run_claimed(self, item: BatchItem, worker_id: str) -> None:
         workspace: Workspace | None = None
         archive = None
+        ocr_result: SelectiveOcrResult | None = None
         try:
             with open_source(self.document_root, item.source_key) as source:
                 with os.fdopen(os.dup(source.fd), "rb", closefd=True) as handle:
@@ -271,6 +294,50 @@ class BatchRunner:
                         return
                     if not self.repository.heartbeat(item.id, worker_id):
                         return
+                    if self.ocr_processor is not None:
+                        try:
+                            ocr_result = self.ocr_processor.process(
+                                outcome.result,
+                                plaintext.fileno(),
+                                workspace,
+                                document_version_id=version_id,
+                                content_sha256=validated.content_sha256,
+                                on_progress=lambda processed: (
+                                    not self.stop_requested()
+                                    and self.repository.mark_ocr_progress(
+                                        item.id,
+                                        worker_id,
+                                        state="running",
+                                        pages_processed=processed,
+                                    )
+                                ),
+                            )
+                            if ocr_result is None and not self.repository.mark_ocr_progress(
+                                item.id,
+                                worker_id,
+                                state="native_only",
+                                pages_processed=0,
+                            ):
+                                return
+                        except OcrCancelled:
+                            self._discard_password_for(item)
+                            return
+                        except OcrTempCleanupError:
+                            self.repository.mark_failed(
+                                item.id,
+                                worker_id,
+                                "TEMP_CLEANUP_FAILED",
+                            )
+                            return
+                        except OcrExecutionError as error:
+                            self.repository.mark_failed(item.id, worker_id, error.code)
+                            return
+                        except OcrConfigurationError, OcrRenderError:
+                            self.repository.mark_failed(item.id, worker_id, "OCR_FAILED")
+                            return
+                        except Exception:
+                            self.repository.mark_failed(item.id, worker_id, "OCR_FAILED")
+                            return
                     plaintext.seek(0)
                     archive = self.archive_store.put(
                         version_id,
@@ -289,6 +356,7 @@ class BatchRunner:
                     worker_id,
                     archive=archive,
                     extraction=outcome.result,
+                    ocr=ocr_result,
                     validated=validated,
                 )
             except Exception:

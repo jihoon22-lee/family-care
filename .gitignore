@@ -20,6 +20,8 @@ documents/
 !apps/web/src/features/documents/
 !apps/web/src/features/documents/*.tsx
 ocr/
+!workers/analyzer/src/familycare_worker/ocr/
+!workers/analyzer/src/familycare_worker/ocr/*.py
 private/
 uploads/
 *.db

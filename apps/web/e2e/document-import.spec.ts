@@ -61,6 +61,9 @@ function batchItem(
           : 1,
     display_label: source.display_label,
     error_code: state === "password_required" ? "PASSWORD_REQUIRED" : null,
+    ocr_pages_processed: state === "succeeded" ? 1 : 0,
+    ocr_state: state === "succeeded" ? "completed" : "pending",
+    ocr_warning_codes: [],
     source_id: source.source_id,
     state,
   };

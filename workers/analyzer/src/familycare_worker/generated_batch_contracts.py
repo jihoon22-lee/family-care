@@ -15,6 +15,8 @@ __all__ = [
     "DocumentBatchStatus",
     "FamilyMemberId",
     "ImportSource",
+    "OcrState",
+    "OcrWarningCode",
     "SourceId",
 ]
 
@@ -28,6 +30,10 @@ BatchErrorCode = Literal[
     "DOCUMENT_TOO_LARGE",
     "EXTRACTION_TIMEOUT",
     "INVALID_REQUEST",
+    "OCR_FAILED",
+    "OCR_OUTPUT_LIMIT_EXCEEDED",
+    "OCR_TIMEOUT",
+    "OCR_UNAVAILABLE",
     "PAGE_LIMIT_EXCEEDED",
     "PASSWORD_INVALID",
     "PASSWORD_REQUIRED",
@@ -66,6 +72,22 @@ BatchState = Literal[
 FamilyMemberId = str
 
 
+OcrState = Literal[
+    "completed",
+    "failed",
+    "native_only",
+    "pending",
+    "running",
+    "warning",
+]
+
+
+OcrWarningCode = Literal[
+    "LOW_CONFIDENCE",
+    "NO_TEXT_DETECTED",
+]
+
+
 SourceId = str
 
 
@@ -81,6 +103,9 @@ class DocumentBatchItem(TypedDict):
     attempts: int
     display_label: str
     error_code: BatchErrorCode | None
+    ocr_pages_processed: int
+    ocr_state: OcrState
+    ocr_warning_codes: list[OcrWarningCode]
     source_id: SourceId
     state: BatchItemState
 

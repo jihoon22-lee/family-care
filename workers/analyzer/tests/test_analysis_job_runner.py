@@ -14,6 +14,12 @@ from uuid import UUID
 import psycopg
 import pytest
 from familycare_worker.jobs import JobQueue
+from familycare_worker.ocr.models import (
+    EnginePageResult,
+    RawOcrBlock,
+    RenderedPage,
+)
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.pdf.errors import IntakeErrorCode
 from familycare_worker.pdf.isolation import ParseOutcome
 from familycare_worker.repository import ExtractionRepository
@@ -23,6 +29,7 @@ from psycopg.types.json import Jsonb
 
 from workers.analyzer.tests.synthetic_pdf_factory import (
     make_encrypted_pdf,
+    make_low_quality_pdf,
     make_table_pdf,
     make_text_pdf,
 )
@@ -132,6 +139,52 @@ def _counts() -> dict[str, int]:
         }
 
 
+class _SyntheticOcrRenderer:
+    def render(
+        self,
+        source_fd: int,
+        page_number: int,
+        output: object,
+        *,
+        dpi: int,
+    ) -> RenderedPage:
+        assert isinstance(source_fd, int)
+        assert hasattr(output, "write")
+        output.write(b"synthetic-image")
+        return RenderedPage(page_number, dpi, 1224, 1584)
+
+
+class _SyntheticOcrEngine:
+    engine_version = "synthetic-engine-1"
+
+    def __init__(self, *, confidence: float = 96.0) -> None:
+        self.confidence = confidence
+
+    def recognize(
+        self,
+        image_path: Path,
+        *,
+        languages: tuple[str, ...],
+    ) -> EnginePageResult:
+        assert image_path.is_file()
+        assert languages == ("kor", "eng")
+        return EnginePageResult(
+            engine_name="tesseract",
+            engine_version=self.engine_version,
+            image_width_pixels=1224,
+            image_height_pixels=1584,
+            blocks=(
+                RawOcrBlock(
+                    text="Synthetic OCR Evidence",
+                    pixel_bbox=(122, 158, 612, 316),
+                    reading_order=0,
+                    confidence=self.confidence,
+                ),
+            ),
+            warning_codes=(),
+        )
+
+
 def test_runner_persists_synthetic_extraction_and_completes_job(tmp_path: Path) -> None:
     document_root = tmp_path / "documents"
     work_root = tmp_path / "work"
@@ -157,6 +210,150 @@ def test_runner_persists_synthetic_extraction_and_completes_job(tmp_path: Path) 
         "extraction_tables": 0,
         "extraction_cells": 0,
     }
+
+
+def test_runner_persists_ocr_required_page_as_separate_layer(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-scanned.pdf")
+    _, job_id = _seed_job("synthetic-scanned.pdf")
+    runner = _runner(
+        document_root,
+        work_root,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            _SyntheticOcrEngine,
+        ),
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    job = runner.queue.get_job(job_id)
+    assert job is not None and job.state == "succeeded"
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        persisted = connection.execute(
+            """
+            SELECT count(DISTINCT extraction.id) AS native_extractions,
+                   count(DISTINCT ocr_layer.id) AS ocr_layers,
+                   count(DISTINCT ocr_page.id) AS ocr_pages,
+                   count(DISTINCT ocr_block.id) AS ocr_blocks
+            FROM extractions AS extraction
+            LEFT JOIN ocr_layers AS ocr_layer
+              ON ocr_layer.extraction_id = extraction.id
+            LEFT JOIN ocr_pages AS ocr_page
+              ON ocr_page.ocr_layer_id = ocr_layer.id
+            LEFT JOIN ocr_blocks AS ocr_block
+              ON ocr_block.ocr_page_id = ocr_page.id
+            """
+        ).fetchone()
+    assert persisted == {
+        "native_extractions": 1,
+        "ocr_layers": 1,
+        "ocr_pages": 1,
+        "ocr_blocks": 1,
+    }
+    assert list(work_root.iterdir()) == []
+
+
+def test_invalid_ocr_provenance_rolls_back_native_and_ocr_rows(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-invalid-ocr.pdf")
+    _, job_id = _seed_job("synthetic-invalid-ocr.pdf")
+    runner = _runner(
+        document_root,
+        work_root,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            lambda: _SyntheticOcrEngine(confidence=101.0),
+        ),
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    job = runner.queue.get_job(job_id)
+    assert job is not None
+    assert job.state == "permanently_failed"
+    assert job.error_code == IntakeErrorCode.PDF_CORRUPT
+    assert _counts()["extractions"] == 0
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        ocr_layers = connection.execute("SELECT count(*) AS count FROM ocr_layers").fetchone()
+    assert ocr_layers == {"count": 0}
+    assert list(work_root.iterdir()) == []
+
+
+def test_unexpected_ocr_failure_still_removes_outer_workspace(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-ocr-failure.pdf")
+    _, job_id = _seed_job("synthetic-ocr-failure.pdf")
+    engine_factory_calls = 0
+
+    def fail_engine_creation() -> _SyntheticOcrEngine:
+        nonlocal engine_factory_calls
+        engine_factory_calls += 1
+        workspace_paths = list(work_root.iterdir())
+        assert len(workspace_paths) == 1
+        (workspace_paths[0] / "synthetic-ocr-artifact").write_bytes(b"synthetic")
+        raise RuntimeError("synthetic OCR adapter failure")
+
+    def low_quality_result(
+        source_fd: int,
+        settings_json: str,
+        **kwargs: object,
+    ) -> ParseOutcome:
+        del source_fd, kwargs
+        settings = json.loads(settings_json)
+        return ParseOutcome(
+            success=True,
+            result={
+                "schema_version": "1",
+                "content_sha256": settings["content_sha256"],
+                "quality_rule_version": "quality-v1",
+                "pages": [
+                    {
+                        "page_number": 1,
+                        "width_points": 612.0,
+                        "height_points": 792.0,
+                        "quality": {
+                            "rule_version": "quality-v1",
+                            "classification": "OCR_REQUIRED",
+                        },
+                    }
+                ],
+            },
+        )
+
+    database_url = os.environ["FAMILYCARE_DATABASE_URL"]
+    runner = AnalysisJobRunner(
+        JobQueue(database_url, default_lease_seconds=180),
+        ExtractionRepository(database_url),
+        document_root=document_root,
+        work_root=work_root,
+        lease_seconds=180,
+        heartbeat_interval_seconds=30,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            fail_engine_creation,
+        ),
+        parser_runner=low_quality_result,
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    job = runner.queue.get_job(job_id)
+    assert job is not None
+    assert job.state == "permanently_failed"
+    assert job.error_code == IntakeErrorCode.PDF_CORRUPT
+    assert _counts()["extractions"] == 0
+    assert engine_factory_calls == 1
+    assert list(work_root.iterdir()) == []
 
 
 def test_duplicate_content_and_config_reuses_succeeded_extraction(tmp_path: Path) -> None:
@@ -194,6 +391,75 @@ def test_duplicate_content_and_config_reuses_succeeded_extraction(tmp_path: Path
         "extraction_tables": 0,
         "extraction_cells": 0,
     }
+
+
+def test_duplicate_native_only_result_reuses_when_ocr_is_disabled(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-native-only.pdf")
+    document_id, _ = _seed_job("synthetic-native-only.pdf")
+    first_runner = _runner(document_root, work_root)
+    assert first_runner.run_once("worker-a") is True
+    _, second_job_id = _seed_job(
+        "synthetic-native-only.pdf",
+        document_id=document_id,
+    )
+
+    def parser_must_not_run(source_fd: int, settings_json: str, **kwargs: object) -> ParseOutcome:
+        del source_fd, settings_json, kwargs
+        raise AssertionError("native-only reuse must skip the parser when OCR is disabled")
+
+    second_runner = _runner(
+        document_root,
+        work_root,
+        parser_runner=parser_must_not_run,
+    )
+    assert second_runner.run_once("worker-b") is True
+
+    job = second_runner.queue.get_job(second_job_id)
+    assert job is not None and job.state == "succeeded"
+    assert _counts()["extractions"] == 1
+
+
+def test_existing_native_only_result_is_backfilled_when_ocr_is_enabled(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-ocr-backfill.pdf")
+    document_id, _ = _seed_job("synthetic-ocr-backfill.pdf")
+    first_runner = _runner(document_root, work_root)
+    assert first_runner.run_once("worker-a") is True
+    _, second_job_id = _seed_job(
+        "synthetic-ocr-backfill.pdf",
+        document_id=document_id,
+    )
+    second_runner = _runner(
+        document_root,
+        work_root,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            _SyntheticOcrEngine,
+        ),
+    )
+
+    assert second_runner.run_once("worker-b") is True
+
+    job = second_runner.queue.get_job(second_job_id)
+    assert job is not None and job.state == "succeeded"
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        counts = connection.execute(
+            """
+            SELECT count(DISTINCT extraction.id) AS extractions,
+                   count(DISTINCT ocr_layer.id) AS ocr_layers
+            FROM extractions AS extraction
+            LEFT JOIN ocr_layers AS ocr_layer
+              ON ocr_layer.extraction_id = extraction.id
+            """
+        ).fetchone()
+    assert counts == {"extractions": 1, "ocr_layers": 1}
 
 
 def test_runner_persists_table_cells_and_candidate_coordinates(tmp_path: Path) -> None:

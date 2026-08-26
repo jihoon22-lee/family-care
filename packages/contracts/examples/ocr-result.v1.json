@@ -1,0 +1,45 @@
+{
+  "engine_name": "tesseract",
+  "engine_version": "synthetic-engine-1",
+  "extraction_id": "00000000-0000-4000-8000-000000000006",
+  "language_codes": [
+    "kor",
+    "eng"
+  ],
+  "pages": [
+    {
+      "blocks": [
+        {
+          "bbox": [
+            36.0,
+            54.0,
+            288.0,
+            72.0
+          ],
+          "confidence": 97.5,
+          "reading_order": 0,
+          "review_state": "candidate",
+          "source_layer": "ocr",
+          "text": "Synthetic OCR Evidence"
+        }
+      ],
+      "evidence": {
+        "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_version_id": "00000000-0000-4000-8000-000000000002",
+        "page_number": 1,
+        "source_layer": "ocr"
+      },
+      "image_height_pixels": 3300,
+      "image_width_pixels": 2550,
+      "page_number": 1,
+      "rendered_dpi": 300,
+      "selected_classification": "OCR_REQUIRED",
+      "status": "completed",
+      "warning_codes": []
+    }
+  ],
+  "quality_rule_version": "quality-v1",
+  "schema_version": "1",
+  "source_layer": "ocr",
+  "warning_codes": []
+}

@@ -10,6 +10,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - AI-assisted policy, clause, and rule structuring with an independent verifier and deterministic evidence/schema validation.
 - Hybrid pre-visit and post-treatment input, fixed-benefit and partial indemnity calculation, and action-first mobile results.
 - Local two-admin authentication, encrypted family-scoped PDF batches, managed encrypted archive, selective Korean/English OCR, and claim metadata/checklists in the v0.1 design.
+- Feature-branch selective OCR implementation: `OCR_REQUIRED`-only selection, separate `ocr_layers`/`ocr_pages`/`ocr_blocks` provenance, bounded descriptor-derived PDFium rendering, direct no-shell `/usr/bin/tesseract` stdout TSV with fixed `kor+eng` at 300 DPI, per-page and outer-workspace cleanup, bounded batch progress, and synthetic Worker image language checks. PR/CI/merge and private-runtime acceptance remain pending.
 - Local authentication implementation with exactly two equal administrators, safe `familycare-admin` TTY/stdin provisioning, hash-only server sessions, and the authenticated Web login/session boundary.
 
 - 프로젝트 기반 설계와 전체 단계별 로드맵

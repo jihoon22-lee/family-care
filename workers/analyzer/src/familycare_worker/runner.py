@@ -33,6 +33,15 @@ from familycare_worker.jobs import (
     JobQueue,
     JobStateConflict,
 )
+from familycare_worker.ocr.models import (
+    OcrCancelled,
+    OcrConfigurationError,
+    OcrExecutionError,
+    OcrRenderError,
+    OcrTempCleanupError,
+    SelectiveOcrResult,
+)
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.pdf.errors import (
     IntakeErrorCode,
     PdfIntakeError,
@@ -191,6 +200,7 @@ class AnalysisJobRunner:
         lease_seconds: int = 180,
         heartbeat_interval_seconds: float = 30.0,
         parser_runner: ParserRunner = run_isolated_parser,
+        ocr_processor: SelectiveOcrProcessor | None = None,
         workspace_factory: WorkspaceFactory = _default_workspace_factory,
         logger: logging.Logger = LOGGER,
         stop_requested: Callable[[], bool] = lambda: False,
@@ -216,6 +226,7 @@ class AnalysisJobRunner:
         self.lease_seconds = lease_seconds
         self.heartbeat_interval_seconds = heartbeat_interval_seconds
         self.parser_runner = parser_runner
+        self.ocr_processor = ocr_processor
         self.workspace_factory = workspace_factory
         self.logger = logger
         self.stop_requested = stop_requested
@@ -248,6 +259,7 @@ class AnalysisJobRunner:
                 existing = self.repository.find_succeeded_extraction(
                     document_version_id,
                     job.extractor_config_hash,
+                    require_ocr=self.ocr_processor is not None,
                 )
                 if existing is not None:
                     self.repository.complete_with_existing(job, worker_id, existing)
@@ -256,6 +268,10 @@ class AnalysisJobRunner:
                 workspace = self._create_workspace(job, worker_id)
                 if workspace is None:
                     return
+                ocr_result: SelectiveOcrResult | None = None
+                ocr_error: IntakeErrorCode | None = None
+                cancelled = False
+                lease_lost = False
                 try:
                     settings_json = self._child_settings_json(
                         job,
@@ -276,10 +292,46 @@ class AnalysisJobRunner:
                         error_code=IntakeErrorCode.PDF_CORRUPT,
                         error_message="parser failed",
                     )
+                if outcome.metadata.get("cancelled") is True:
+                    cancelled = True
+                elif outcome.success and not self.queue.heartbeat(job.id, worker_id):
+                    lease_lost = True
+                elif outcome.success and self.ocr_processor is not None:
+                    if not isinstance(workspace, Workspace):
+                        ocr_error = IntakeErrorCode.RESOURCE_LIMIT_EXCEEDED
+                    else:
+                        try:
+                            ocr_result = self.ocr_processor.process(
+                                outcome.result,
+                                source.fd,
+                                workspace,
+                                document_version_id=document_version_id,
+                                content_sha256=validated.content_sha256,
+                                on_progress=lambda _processed: (
+                                    not self.stop_requested()
+                                    and self.queue.heartbeat(job.id, worker_id)
+                                ),
+                            )
+                        except OcrCancelled:
+                            cancelled = True
+                        except OcrTempCleanupError:
+                            ocr_error = IntakeErrorCode.TEMP_CLEANUP_FAILED
+                        except OcrExecutionError as error:
+                            ocr_error = (
+                                IntakeErrorCode.EXTRACTION_TIMEOUT
+                                if error.code == "OCR_TIMEOUT"
+                                else IntakeErrorCode.RESOURCE_LIMIT_EXCEEDED
+                            )
+                        except OcrConfigurationError, OcrRenderError:
+                            ocr_error = IntakeErrorCode.PDF_CORRUPT
+                        except psycopg.Error:
+                            ocr_error = IntakeErrorCode.RESOURCE_LIMIT_EXCEEDED
+                        except Exception:
+                            ocr_error = IntakeErrorCode.PDF_CORRUPT
 
                 if not self._cleanup_workspace(workspace, job, worker_id):
                     return
-                if outcome.metadata.get("cancelled") is True:
+                if cancelled or lease_lost:
                     return
                 if not outcome.success:
                     self._safe_fail(
@@ -287,6 +339,9 @@ class AnalysisJobRunner:
                         worker_id,
                         outcome.error_code or IntakeErrorCode.PDF_CORRUPT,
                     )
+                    return
+                if ocr_error is not None:
+                    self._safe_fail(job, worker_id, ocr_error)
                     return
                 if not self.queue.heartbeat(job.id, worker_id):
                     return
@@ -296,6 +351,8 @@ class AnalysisJobRunner:
                         worker_id,
                         document_version_id,
                         outcome.result,
+                        ocr=ocr_result,
+                        ocr_attempted=self.ocr_processor is not None,
                     )
                 except InvalidExtractionResult:
                     self._safe_fail(job, worker_id, IntakeErrorCode.PDF_CORRUPT)

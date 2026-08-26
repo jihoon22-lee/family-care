@@ -284,6 +284,19 @@ _BATCH_CONTRACT_CHECKER = _load_batch_contract_checker()
 validate_batch_contracts = _BATCH_CONTRACT_CHECKER.validate_batch_contracts
 
 
+def _load_ocr_contract_checker() -> Any:
+    """Load the selective OCR checker from package or direct-script context."""
+
+    try:
+        return import_module("scripts.check_ocr_contracts")
+    except ModuleNotFoundError:  # pragma: no cover - direct-script execution path
+        return import_module("check_ocr_contracts")
+
+
+_OCR_CONTRACT_CHECKER = _load_ocr_contract_checker()
+validate_ocr_contracts = _OCR_CONTRACT_CHECKER.validate_ocr_contracts
+
+
 def _load_business_generator() -> Any:
     """Load the business generator from package or direct-script context."""
 
@@ -1791,6 +1804,7 @@ def main() -> int:
         *validate_job_contract(),
         *validate_document_contracts(),
         *validate_batch_contracts(),
+        *validate_ocr_contracts(),
         *validate_policy_contract(),
         *validate_policy_candidate_contract(),
         *validate_clause_search_contract(),
@@ -1806,7 +1820,7 @@ def main() -> int:
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
-        "encrypted document batch, "
+        "encrypted document batch, selective OCR, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
         "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"

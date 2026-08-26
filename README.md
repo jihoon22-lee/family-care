@@ -6,9 +6,11 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Phase 0 (Foundation)과 Phase 1 (Synthetic PDF Ingestion)은 완료되었고, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산이 `main`에 순차 merge되었습니다. 현재 Phase 5 Event/Result PWA는 병원 방문 전·치료 후 사건 입력, 선택적 AI 사실 구조화, 행동 우선 결과, bounded Evidence 확인을 구현하고 전체 PR 검증을 진행 중입니다.
+Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch가 `main`에 순차 merge되었습니다.
 
-Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 기본 scope resolver는 인증 연결 전까지 `401 AUTHENTICATION_REQUIRED`로 fail-closed하므로 현재 실제 로그인 사용이 가능하다고 과장하지 않습니다. 목표 릴리스는 `v0.1.0`이며 남은 후속 범위는 청구 이력, 두 로컬 관리자, 암호 PDF batch·선택적 OCR·개인 WSL/Tailscale acceptance입니다.
+Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. 목표 릴리스는 `v0.1.0`이며 이 branch의 선택적 OCR 이후 남은 후속 범위는 개인 WSL Compose/Tailscale acceptance와 릴리스입니다.
+
+현재 selective-OCR feature branch에는 `OCR_REQUIRED` page만 처리하는 local Korean/English OCR, separate native/OCR provenance, bounded cleanup/progress, and Worker image language smoke 경계가 구현되어 있습니다. 이 branch는 아직 PR·CI·merge 완료를 주장하지 않으며, 실제 private PDF, private Compose, Windows/mobile, Tailscale, provider acceptance는 private runtime PR 이후 별도로 검증합니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
@@ -45,7 +47,7 @@ Web gateway -> FastAPI modular monolith
                     |
        PostgreSQL <-> Analyzer Worker
                           |
-              local OCR + OpenAI verification
+              local OCR (OCR_REQUIRED only) + OpenAI verification
 ```
 
 - `apps/web`: React + TypeScript PWA

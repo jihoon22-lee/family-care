@@ -1,0 +1,238 @@
+{
+  "$id": "https://familycare.invalid/schemas/ocr-result.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A separate, local OCR provenance layer for native pages classified OCR_REQUIRED.",
+  "properties": {
+    "engine_name": {
+      "const": "tesseract",
+      "type": "string"
+    },
+    "engine_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$",
+      "type": "string"
+    },
+    "extraction_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "language_codes": {
+      "items": {
+        "enum": [
+          "kor",
+          "eng"
+        ],
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "prefixItems": [
+        {
+          "const": "kor"
+        },
+        {
+          "const": "eng"
+        }
+      ],
+      "type": "array"
+    },
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/OcrPage"
+      },
+      "maxItems": 500,
+      "minItems": 1,
+      "type": "array"
+    },
+    "quality_rule_version": {
+      "const": "quality-v1",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "source_layer": {
+      "const": "ocr",
+      "type": "string"
+    },
+    "warning_codes": {
+      "items": {
+        "$ref": "#/$defs/OcrWarningCode"
+      },
+      "maxItems": 500,
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "schema_version",
+    "extraction_id",
+    "source_layer",
+    "engine_name",
+    "engine_version",
+    "language_codes",
+    "quality_rule_version",
+    "pages",
+    "warning_codes"
+  ],
+  "title": "OcrResult",
+  "type": "object",
+  "$defs": {
+    "BoundingBox": {
+      "description": "[x0, top, x1, bottom] in PDF points with a top-left origin, rounded to 3 decimals.",
+      "items": {
+        "maximum": 1000000,
+        "minimum": 0,
+        "multipleOf": 0.001,
+        "type": "number"
+      },
+      "maxItems": 4,
+      "minItems": 4,
+      "type": "array"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "document_version_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "page_number": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_layer": {
+          "const": "ocr",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_version_id",
+        "page_number",
+        "content_sha256",
+        "source_layer"
+      ],
+      "type": "object"
+    },
+    "OcrBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "$ref": "#/$defs/BoundingBox"
+        },
+        "confidence": {
+          "maximum": 100,
+          "minimum": 0,
+          "type": "number"
+        },
+        "reading_order": {
+          "maximum": 9999,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "review_state": {
+          "const": "candidate",
+          "type": "string"
+        },
+        "source_layer": {
+          "const": "ocr",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "bbox",
+        "reading_order",
+        "confidence",
+        "source_layer",
+        "review_state"
+      ],
+      "type": "object"
+    },
+    "OcrPage": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/OcrBlock"
+          },
+          "maxItems": 10000,
+          "type": "array"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        },
+        "image_height_pixels": {
+          "maximum": 20000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "image_width_pixels": {
+          "maximum": 20000,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "page_number": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rendered_dpi": {
+          "const": 300,
+          "type": "integer"
+        },
+        "selected_classification": {
+          "const": "OCR_REQUIRED",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "warning"
+          ],
+          "type": "string"
+        },
+        "warning_codes": {
+          "items": {
+            "$ref": "#/$defs/OcrWarningCode"
+          },
+          "maxItems": 8,
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "page_number",
+        "rendered_dpi",
+        "image_width_pixels",
+        "image_height_pixels",
+        "selected_classification",
+        "status",
+        "warning_codes",
+        "blocks",
+        "evidence"
+      ],
+      "type": "object"
+    },
+    "OcrWarningCode": {
+      "enum": [
+        "LOW_CONFIDENCE",
+        "NO_TEXT_DETECTED"
+      ],
+      "type": "string"
+    }
+  }
+}

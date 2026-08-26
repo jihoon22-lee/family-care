@@ -31,10 +31,19 @@ from familycare_worker.imports.secret_channel import (
     BatchSecretSocketServer,
 )
 from familycare_worker.jobs import JobQueue
+from familycare_worker.ocr.engine import TesseractOcrEngine
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
+from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.repository import BatchRepository, ExtractionRepository
 from familycare_worker.runner import AnalysisJobRunner, EventStructuringJobRunner
 
 LOGGER = logging.getLogger("familycare.worker")
+
+
+def _local_ocr_processor() -> SelectiveOcrProcessor:
+    """Build a descriptor-only renderer with a page-selection-lazy engine."""
+
+    return SelectiveOcrProcessor(PdfiumPageRenderer(), TesseractOcrEngine)
 
 
 class JobRunner(Protocol):
@@ -159,6 +168,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             repository,
             document_root=Path(document_root),
             work_root=Path(work_root),
+            ocr_processor=_local_ocr_processor(),
             stop_requested=stop_event.is_set,
         )
         base_runner = FairJobRunner(events=event_runner, documents=document_runner)
@@ -197,6 +207,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         archive_store=ArchiveStore(archive_root),
         master_key=MasterKey.from_file(key_file),
         password_scope=registry,
+        ocr_processor=_local_ocr_processor(),
         stop_requested=stop_event.is_set,
         on_password_required=secret_server.activate,
     )
