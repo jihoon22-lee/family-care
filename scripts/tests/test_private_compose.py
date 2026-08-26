@@ -41,9 +41,10 @@ def test_web_gateway_proxies_only_api_and_disables_response_caching() -> None:
     assert "location /api/ {" in nginx
     assert "proxy_pass http://api:8000;" in nginx
     assert "proxy_http_version 1.1;" in nginx
-    assert "proxy_set_header Host $host;" in nginx
-    assert "proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;" in nginx
-    assert "proxy_set_header X-Forwarded-Proto $scheme;" in nginx
+    assert "map $http_x_forwarded_proto $familycare_forwarded_proto {" in nginx
+    assert "proxy_set_header Host $http_host;" in nginx
+    assert "proxy_set_header X-Forwarded-For $remote_addr;" in nginx
+    assert "proxy_set_header X-Forwarded-Proto $familycare_forwarded_proto;" in nginx
     assert "proxy_no_cache 1;" in nginx
     assert 'add_header Cache-Control "no-store" always;' in nginx
     assert "proxy_pass http://api:8000/documents" not in nginx
@@ -54,3 +55,10 @@ def test_web_waits_for_the_internal_api_healthcheck() -> None:
     web = _compose()["services"]["web"]
 
     assert web["depends_on"] == {"api": {"condition": "service_healthy"}}
+
+
+def test_internal_api_trusts_only_the_unpublished_proxy_boundary() -> None:
+    api_dockerfile = (ROOT / "infra/containers/api.Dockerfile").read_text(encoding="utf-8")
+
+    assert '"--proxy-headers"' in api_dockerfile
+    assert '"--forwarded-allow-ips=*"' in api_dockerfile

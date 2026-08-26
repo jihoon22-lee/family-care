@@ -14,6 +14,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Local authentication implementation with exactly two equal administrators, safe `familycare-admin` TTY/stdin provisioning, hash-only server sessions, and the authenticated Web login/session boundary.
 - Private encrypted-import reliability implementation: decrypted plaintext is bounded to 25 MiB and encrypted PDFs over 500 pages are rejected before cloning; cancellation, stop, and lease-loss paths dispose batch passwords and deactivate the secret-server identity; archive writes are bracketed by owned heartbeats with definite-orphan cleanup; ambiguous success commits retain ciphertext and emit only `batch_archive_commit_uncertain`; source labels are normalized to printable, path-free 1–160 character values with aligned API/OpenAPI/JSON Schema constraints.
 - Private local Compose implementation with one loopback Web gateway, internal API/PostgreSQL/Worker, read-only API/Worker import binds, Worker-only archive/work/key/AI scope, a fixed-group secret socket, fail-closed Worker readiness, and a bounded read-only Tailscale inspector. Synthetic Compose permission smoke passed; PR/CI/merge and actual private-data, Windows/mobile, Tailscale, provider, and private OCR acceptance remain pending.
+- One-time `familycare-admin init` provisioning that atomically creates the unseeded sole HouseholdSpace and first administrator while keeping the password on TTY/stdin and rejecting repeat or concurrent initialization.
 
 - 프로젝트 기반 설계와 전체 단계별 로드맵
 - 공개 저장소 개인정보 경계와 개발 지침

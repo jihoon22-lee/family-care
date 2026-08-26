@@ -221,10 +221,18 @@ master-key metadata를 읽기 전용으로 확인했을 때 numeric owner, mode,
 docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --wait db
 docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api \
   alembic -c apps/api/alembic.ini upgrade head
+docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api \
+  familycare-admin init \
+  --space-key primary-household \
+  --household-name "FamilyCare Home" \
+  --username admin-a \
+  --display-name "Admin A"
 docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --wait
 ```
 
-정상 상태에서는 네 서비스가 healthy이고 host publisher는 Web 하나뿐입니다. 외부 liveness는 Web 자체의 `/healthz`이고 API의 `/health/live`·`/health/ready`는 internal network에만 있습니다. Worker readiness는 DB와 import/archive/work, master-key mode, secret socket을 함께 검사하므로 key 또는 mount가 없으면 fail closed합니다. `FAMILYCARE_DOCUMENT_ROOT`는 별도 Phase 1 합성 개발 route 전용이며 private batch 입력으로 사용하지 않습니다.
+`init`은 fresh database에서 한 번만 실행하며 TTY에서 첫 관리자 password와 확인을 묻습니다. sole HouseholdSpace와 첫 관리자 insert는 한 transaction이고, 기존 또는 soft-deleted HouseholdSpace가 하나라도 있으면 `HOUSEHOLD_ALREADY_INITIALIZED`로 종료합니다. migration을 다시 실행하거나 Compose를 재시작할 때 `init`을 반복하지 않습니다.
+
+정상 상태에서는 네 서비스가 healthy이고 host publisher는 Web 하나뿐입니다. 외부 liveness는 Web 자체의 `/healthz`이고 API의 `/health/live`·`/health/ready`는 internal network에만 있습니다. Web gateway는 원래 Host와 port를 보존하고 Tailscale HTTPS proxy의 forwarded scheme만 제한적으로 전달하며, host에 publish되지 않은 API가 이 내부 proxy header를 해석합니다. Worker readiness는 DB와 import/archive/work, master-key mode, secret socket을 함께 검사하므로 key 또는 mount가 없으면 fail closed합니다. `FAMILYCARE_DOCUMENT_ROOT`는 별도 Phase 1 합성 개발 route 전용이며 private batch 입력으로 사용하지 않습니다.
 
 #### Read-only Tailscale inspection
 
@@ -250,13 +258,9 @@ docker compose --env-file .env.private -f infra/compose/compose.yaml down
 
 업무 API와 Web PWA는 하나의 `HouseholdSpace`에 연결된 동일 권한의 로컬 관리자 계정으로 보호됩니다. v0.1은 활성 관리자를 최대 두 개까지 지원하며 초기에는 한 계정만 생성해 사용할 수 있습니다. 두 번째 계정을 추가해도 역할 차등 없이 같은 가족 원장과 계약을 관리하며, 세 번째 활성 계정 생성은 `ADMIN_LIMIT_REACHED`로 거부됩니다.
 
-관리자 수명주기는 API container의 `familycare-admin` 명령으로만 관리합니다. 아래 계정명과 표시명은 합성 예시이며, 각 명령은 독립적으로 실행합니다.
+관리자 수명주기는 API container의 `familycare-admin` 명령으로만 관리합니다. 위의 `init`이 첫 HouseholdSpace와 첫 관리자를 만들며, 아래 `create`는 선택적 두 번째 관리자만 추가합니다. 계정명과 표시명은 합성 예시이며, 각 명령은 독립적으로 실행합니다.
 
 ```bash
-docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api familycare-admin create \
-  --username admin-a \
-  --display-name "Admin A"
-
 docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm api familycare-admin create \
   --username admin-b \
   --display-name "Admin B"
@@ -270,7 +274,7 @@ docker compose --env-file .env.private -f infra/compose/compose.yaml run --rm ap
 
 `admin-b` 생성은 두 번째 로그인 수단이 필요할 때만 수행합니다.
 
-`create`와 `set-password`는 TTY에서 비밀번호와 확인을 두 번 묻고, 비대화형 실행에서는 stdin의 두 줄을 읽습니다. 비밀번호는 명령 옵션·argv·환경변수·shell history·로그에 넣지 않습니다. CLI에는 `--password` 옵션이 없으며, 위 예시에도 비밀번호 값을 적지 않았습니다. `set-password`는 해당 관리자의 기존 session을 폐기하고, `disable`은 계정과 session만 비활성화하며 가족·계약·청구 기록을 삭제하지 않습니다. 복구용 자격 증명은 사용자가 관리하는 외부 password vault에 보관할 수 있지만 앱이 자동 동기화하지 않습니다.
+`init`, `create`, `set-password`는 TTY에서 비밀번호와 확인을 두 번 묻고, 비대화형 실행에서는 stdin의 두 줄을 읽습니다. 비밀번호는 명령 옵션·argv·환경변수·shell history·로그에 넣지 않습니다. CLI에는 `--password` 옵션이 없으며, 위 예시에도 비밀번호 값을 적지 않았습니다. `set-password`는 해당 관리자의 기존 session을 폐기하고, `disable`은 계정과 session만 비활성화하며 가족·계약·청구 기록을 삭제하지 않습니다. 복구용 자격 증명은 사용자가 관리하는 외부 password vault에 보관할 수 있지만 앱이 자동 동기화하지 않습니다.
 
 Web 로그인 성공 시 원본 session token은 `familycare_session` host-only cookie로만 전달됩니다. cookie는 `Secure`, `HttpOnly`, `SameSite=Strict`이며 `Domain`을 지정하지 않습니다. 서버는 PostgreSQL에 token hash와 최소 device label·lifecycle 시각만 저장하고 원본 token과 raw password를 저장하지 않습니다. session은 마지막 활동 후 7일 또는 생성 후 30일 중 먼저 도달하면 만료됩니다.
 

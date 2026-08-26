@@ -259,6 +259,7 @@ Before the root agent opens the PR for this plan, root must review the complete 
 - Automated Tailscale inspection is read-only; any post-merge mutation is one additive, collision-free FamilyCare HTTPS Serve endpoint with before/after evidence and no change to existing mappings.
 - Phase 1 routes, schemas, job lease, error semantics, and UNKNOWN behavior remain intact.
 - CI uses only synthetic fixtures and no actual private material.
+- A fresh migrated database can be initialized exactly once through the stdin-password `familycare-admin init` transaction and can then authenticate through the Web gateway.
 - Any unverified Compose/private-data runtime, Docker daemon, actual private data, Windows, mobile, existing Tailscale state, provider, or OCR acceptance is reported as unverified.
 
 The PR title should follow Conventional Commits, for example:
