@@ -324,6 +324,10 @@ class AnalysisJobRunner:
                             )
                         except OcrConfigurationError, OcrRenderError:
                             ocr_error = IntakeErrorCode.PDF_CORRUPT
+                        except psycopg.Error:
+                            ocr_error = IntakeErrorCode.RESOURCE_LIMIT_EXCEEDED
+                        except Exception:
+                            ocr_error = IntakeErrorCode.PDF_CORRUPT
 
                 if not self._cleanup_workspace(workspace, job, worker_id):
                     return

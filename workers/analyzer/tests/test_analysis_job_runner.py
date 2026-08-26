@@ -286,6 +286,76 @@ def test_invalid_ocr_provenance_rolls_back_native_and_ocr_rows(tmp_path: Path) -
     assert list(work_root.iterdir()) == []
 
 
+def test_unexpected_ocr_failure_still_removes_outer_workspace(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    document_root.mkdir()
+    work_root.mkdir()
+    make_low_quality_pdf(document_root / "synthetic-ocr-failure.pdf")
+    _, job_id = _seed_job("synthetic-ocr-failure.pdf")
+    engine_factory_calls = 0
+
+    def fail_engine_creation() -> _SyntheticOcrEngine:
+        nonlocal engine_factory_calls
+        engine_factory_calls += 1
+        workspace_paths = list(work_root.iterdir())
+        assert len(workspace_paths) == 1
+        (workspace_paths[0] / "synthetic-ocr-artifact").write_bytes(b"synthetic")
+        raise RuntimeError("synthetic OCR adapter failure")
+
+    def low_quality_result(
+        source_fd: int,
+        settings_json: str,
+        **kwargs: object,
+    ) -> ParseOutcome:
+        del source_fd, kwargs
+        settings = json.loads(settings_json)
+        return ParseOutcome(
+            success=True,
+            result={
+                "schema_version": "1",
+                "content_sha256": settings["content_sha256"],
+                "quality_rule_version": "quality-v1",
+                "pages": [
+                    {
+                        "page_number": 1,
+                        "width_points": 612.0,
+                        "height_points": 792.0,
+                        "quality": {
+                            "rule_version": "quality-v1",
+                            "classification": "OCR_REQUIRED",
+                        },
+                    }
+                ],
+            },
+        )
+
+    database_url = os.environ["FAMILYCARE_DATABASE_URL"]
+    runner = AnalysisJobRunner(
+        JobQueue(database_url, default_lease_seconds=180),
+        ExtractionRepository(database_url),
+        document_root=document_root,
+        work_root=work_root,
+        lease_seconds=180,
+        heartbeat_interval_seconds=30,
+        ocr_processor=SelectiveOcrProcessor(
+            _SyntheticOcrRenderer(),
+            fail_engine_creation,
+        ),
+        parser_runner=low_quality_result,
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    job = runner.queue.get_job(job_id)
+    assert job is not None
+    assert job.state == "permanently_failed"
+    assert job.error_code == IntakeErrorCode.PDF_CORRUPT
+    assert _counts()["extractions"] == 0
+    assert engine_factory_calls == 1
+    assert list(work_root.iterdir()) == []
+
+
 def test_duplicate_content_and_config_reuses_succeeded_extraction(tmp_path: Path) -> None:
     document_root = tmp_path / "documents"
     work_root = tmp_path / "work"
