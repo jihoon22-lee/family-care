@@ -195,6 +195,7 @@ class BatchRunner:
         logger: logging.Logger = LOGGER,
         stop_requested: Callable[[], bool] = lambda: False,
         on_password_required: Callable[[UUID], None] = lambda _batch_id: None,
+        on_password_discarded: Callable[[UUID], None] = lambda _batch_id: None,
     ) -> None:
         document_root = Path(document_root)
         work_root = Path(work_root)
@@ -218,6 +219,7 @@ class BatchRunner:
         self.logger = logger
         self.stop_requested = stop_requested
         self.on_password_required = on_password_required
+        self.on_password_discarded = on_password_discarded
 
     def _batch_id(self, item: BatchItem) -> UUID:
         value = getattr(item, "batch_id", None)
@@ -235,10 +237,15 @@ class BatchRunner:
         return None
 
     def _discard_password_for(self, item: BatchItem) -> None:
+        batch_id = self._batch_id(item)
         if isinstance(self.password_scope, BatchPasswordRegistry):
-            self.password_scope.discard(self._batch_id(item))
+            self.password_scope.discard(batch_id)
         elif isinstance(self.password_scope, PasswordScope):
             self.password_scope.dispose()
+        try:
+            self.on_password_discarded(batch_id)
+        except Exception:
+            self.logger.error("batch_password_deactivation_failed item_id=%s", item.id)
 
     def run_once(self, worker_id: str) -> bool:
         if isinstance(self.password_scope, BatchPasswordRegistry):
@@ -318,7 +325,11 @@ class BatchRunner:
                             str(outcome.error_code or "PDF_CORRUPT"),
                         )
                         return
-                    if not self.repository.heartbeat(item.id, worker_id):
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self._discard_password_for(item)
                         return
                     if self.ocr_processor is not None:
                         try:
@@ -344,6 +355,7 @@ class BatchRunner:
                                 state="native_only",
                                 pages_processed=0,
                             ):
+                                self._discard_password_for(item)
                                 return
                         except OcrCancelled:
                             self._discard_password_for(item)
@@ -364,12 +376,26 @@ class BatchRunner:
                         except Exception:
                             self.repository.mark_failed(item.id, worker_id, "OCR_FAILED")
                             return
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self._discard_password_for(item)
+                        return
                     plaintext.seek(0)
                     archive = self.archive_store.put(
                         version_id,
                         plaintext,
                         master_key=self.master_key,
                     )
+                    if self.stop_requested() or not self.repository.heartbeat(
+                        item.id,
+                        worker_id,
+                    ):
+                        self.archive_store.delete(archive)
+                        archive = None
+                        self._discard_password_for(item)
+                        return
             if workspace is None or not cleanup_workspace(workspace):
                 if archive is not None:
                     self.archive_store.delete(archive)
@@ -386,8 +412,8 @@ class BatchRunner:
                     validated=validated,
                 )
             except Exception:
-                if archive is not None:
-                    self.archive_store.delete(archive)
+                self._discard_password_for(item)
+                self.logger.error("batch_archive_commit_uncertain item_id=%s", item.id)
                 raise
         except ArchiveStoreError as error:
             self._safe_fail(item, worker_id, error.code)
