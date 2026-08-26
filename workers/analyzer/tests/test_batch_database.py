@@ -13,9 +13,11 @@ from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.imports.batch import BatchRunner
 from familycare_worker.imports.password_scope import PasswordScope
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.repository import BatchRepository
 
-from workers.analyzer.tests.synthetic_pdf_factory import make_text_pdf
+from workers.analyzer.tests.synthetic_pdf_factory import make_low_quality_pdf
+from workers.analyzer.tests.test_batch_runner import BatchOcrEngine, BatchOcrRenderer
 
 pytestmark = pytest.mark.integration
 
@@ -43,7 +45,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
     import_root.mkdir()
     work_root.mkdir()
     archive_root.mkdir()
-    make_text_pdf(import_root / "sample-policy.pdf")
+    make_low_quality_pdf(import_root / "sample-policy.pdf")
     catalog = ImportSourceCatalog(import_root)
     source = catalog.resolve(catalog.list()[0].source_id)
 
@@ -91,6 +93,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 password="synthetic-unused-password",
                 expires_at=datetime.now(UTC) + timedelta(minutes=5),
             ),
+            ocr_processor=SelectiveOcrProcessor(BatchOcrRenderer(), BatchOcrEngine),
         )
 
         assert runner.run_once("synthetic-worker") is True
@@ -106,18 +109,27 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
             persisted = connection.execute(
                 """
                 SELECT document.status, count(archive.id) AS archives,
-                       count(extraction.id) AS extractions
+                       count(DISTINCT extraction.id) AS extractions,
+                       count(DISTINCT ocr_layer.id) AS ocr_layers,
+                       count(DISTINCT ocr_page.id) AS ocr_pages,
+                       count(DISTINCT ocr_block.id) AS ocr_blocks,
+                       item.ocr_state, item.ocr_pages_processed,
+                       item.ocr_warning_codes
                 FROM document_batch_items AS item
                 JOIN documents AS document ON document.id = item.document_id
                 JOIN document_versions AS version ON version.document_id = document.id
                 JOIN managed_archives AS archive ON archive.document_version_id = version.id
                 JOIN extractions AS extraction ON extraction.document_version_id = version.id
+                JOIN ocr_layers AS ocr_layer ON ocr_layer.extraction_id = extraction.id
+                JOIN ocr_pages AS ocr_page ON ocr_page.ocr_layer_id = ocr_layer.id
+                JOIN ocr_blocks AS ocr_block ON ocr_block.ocr_page_id = ocr_page.id
                 WHERE item.batch_id = %s
-                GROUP BY document.status
+                GROUP BY document.status, item.ocr_state, item.ocr_pages_processed,
+                         item.ocr_warning_codes
                 """,
                 (created.batch_id,),
             ).fetchone()
-        assert persisted == ("ready", 1, 1)
+        assert persisted == ("ready", 1, 1, 1, 1, 1, "completed", 1, [])
         assert len(list(archive_root.iterdir())) == 1
         assert list(work_root.iterdir()) == []
     finally:

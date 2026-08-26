@@ -24,10 +24,18 @@ from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.imports.batch import BatchRunner
 from familycare_worker.imports.password_scope import PasswordScope
 from familycare_worker.imports.secret_channel import BatchPasswordRegistry
+from familycare_worker.ocr.models import (
+    EnginePageResult,
+    OcrExecutionError,
+    RawOcrBlock,
+    RenderedPage,
+)
+from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.pdf.isolation import ParseOutcome
 
 from workers.analyzer.tests.synthetic_pdf_factory import (
     make_encrypted_pdf,
+    make_low_quality_pdf,
     make_table_pdf,
     make_text_pdf,
 )
@@ -71,6 +79,7 @@ class FakeBatchRepository:
         self.persisted: list[dict[str, Any]] = []
         self.password_required: list[UUID] = []
         self.failed: list[tuple[UUID, str]] = []
+        self.ocr_progress: list[tuple[UUID, str, int, tuple[str, ...]]] = []
         self.fail_persist = False
 
     def get_item(self, item_id: UUID) -> SyntheticItem:
@@ -136,6 +145,19 @@ class FakeBatchRepository:
         item.lease_expires_at = None
         self.failed.append((self._item_id(item_id), error_code))
 
+    def mark_ocr_progress(
+        self,
+        item_id: UUID,
+        worker_id: str,
+        *,
+        state: str,
+        pages_processed: int,
+        warning_codes: tuple[str, ...] = (),
+    ) -> bool:
+        self._assert_owner(item_id, worker_id)
+        self.ocr_progress.append((self._item_id(item_id), state, pages_processed, warning_codes))
+        return self.heartbeat(item_id, worker_id)
+
     def mark_succeeded(
         self,
         item_id: UUID,
@@ -148,6 +170,7 @@ class FakeBatchRepository:
             raise SyntheticDatabaseFailure("synthetic database unavailable")
         archive = kwargs.get("archive") or kwargs.get("archive_metadata")
         extraction = kwargs.get("extraction") or kwargs.get("result")
+        ocr = kwargs.get("ocr")
         if archive is None:
             archive = next((value for value in args if isinstance(value, ArchiveMetadata)), None)
         if extraction is None:
@@ -165,6 +188,7 @@ class FakeBatchRepository:
                 "item_id": self._item_id(item_id),
                 "archive": archive,
                 "extraction": extraction,
+                "ocr": ocr,
             }
         )
 
@@ -247,6 +271,94 @@ def _runner(
         parser_runner=parser,
         **kwargs,
     )
+
+
+def _native_extraction(settings_json: str, *, classification: str) -> dict[str, object]:
+    settings = json.loads(settings_json)
+    quality = {
+        "rule_version": "quality-v1",
+        "classification": classification,
+        "non_whitespace_chars": 0 if classification == "OCR_REQUIRED" else 30,
+        "alphanumeric_ratio": 0.0 if classification == "OCR_REQUIRED" else 0.8,
+        "replacement_character_ratio": 0.0,
+        "maximum_repeated_character_run": 0,
+    }
+    return {
+        "schema_version": "1",
+        "content_sha256": settings["content_sha256"],
+        "extractor_name": "synthetic-native",
+        "extractor_version": "1",
+        "extractor_config_hash": settings["extractor_config_hash"],
+        "quality_rule_version": "quality-v1",
+        "pages": [
+            {
+                "page_number": 1,
+                "width_points": 612.0,
+                "height_points": 792.0,
+                "quality": quality,
+                "blocks": [],
+                "tables": [],
+                "warning_codes": ["OCR_REQUIRED"] if classification == "OCR_REQUIRED" else [],
+            }
+        ],
+        "evidence": [
+            {
+                "document_version_id": settings["document_version_id"],
+                "page_number": 1,
+                "content_sha256": settings["content_sha256"],
+                "review_state": "candidate",
+            }
+        ],
+    }
+
+
+class BatchOcrRenderer:
+    def __init__(self) -> None:
+        self.pages: list[int] = []
+
+    def render(
+        self,
+        source_fd: int,
+        page_number: int,
+        output: Any,
+        *,
+        dpi: int,
+    ) -> RenderedPage:
+        assert isinstance(source_fd, int)
+        self.pages.append(page_number)
+        output.write(b"synthetic-image")
+        output.flush()
+        return RenderedPage(page_number, dpi, 1224, 1584)
+
+
+class BatchOcrEngine:
+    engine_version = "synthetic-engine-1"
+
+    def __init__(self, *, error: OcrExecutionError | None = None) -> None:
+        self.error = error
+        self.calls = 0
+
+    def recognize(self, image_path: Path, *, languages: tuple[str, ...]) -> EnginePageResult:
+        assert image_path.is_file()
+        assert languages == ("kor", "eng")
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return EnginePageResult(
+            engine_name="tesseract",
+            engine_version=self.engine_version,
+            image_width_pixels=1224,
+            image_height_pixels=1584,
+            blocks=(
+                RawOcrBlock(
+                    text="Synthetic OCR Evidence",
+                    pixel_bbox=(122, 158, 612, 316),
+                    reading_order=0,
+                    confidence=96.0,
+                ),
+            ),
+            warning_codes=(),
+        )
 
 
 def test_two_workers_claim_distinct_items_and_recover_expired_lease(tmp_path: Path) -> None:
@@ -483,3 +595,126 @@ def test_source_replacement_is_rejected_before_parse_or_archive(tmp_path: Path) 
     assert parser_calls == 0
     assert repository.persisted == []
     assert list(archive_root.iterdir()) == []
+
+
+def test_batch_runner_processes_ocr_required_before_archive_and_persists_layer(
+    tmp_path: Path,
+) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    archive_root = tmp_path / "archive"
+    document_root.mkdir()
+    work_root.mkdir()
+    archive_root.mkdir()
+    source = make_low_quality_pdf(document_root / "synthetic-scanned.pdf")
+    item = _item(SYNTHETIC_ITEM_ID_A, SYNTHETIC_VERSION_ID_A, source)
+    repository = FakeBatchRepository(item)
+    renderer = BatchOcrRenderer()
+    engine = BatchOcrEngine()
+
+    def parser(source_fd: int, settings_json: str, **kwargs: object) -> ParseOutcome:
+        del source_fd, kwargs
+        return ParseOutcome(
+            success=True,
+            result=_native_extraction(settings_json, classification="OCR_REQUIRED"),
+        )
+
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        _scope("synthetic-unused-password"),
+        parser,
+        ocr_processor=SelectiveOcrProcessor(renderer, lambda: engine),
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    assert renderer.pages == [1]
+    assert engine.calls == 1
+    assert repository.ocr_progress == [
+        (SYNTHETIC_ITEM_ID_A, "running", 0, ()),
+        (SYNTHETIC_ITEM_ID_A, "running", 1, ()),
+    ]
+    assert len(repository.persisted) == 1
+    result = repository.persisted[0]["ocr"]
+    assert result is not None
+    assert result.pages[0].blocks[0].source_layer == "ocr"
+    assert len(list(archive_root.iterdir())) == 1
+    assert list(work_root.iterdir()) == []
+
+
+def test_batch_runner_marks_text_sufficient_document_native_only(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    archive_root = tmp_path / "archive"
+    document_root.mkdir()
+    work_root.mkdir()
+    archive_root.mkdir()
+    source = make_text_pdf(document_root / "synthetic-native.pdf")
+    item = _item(SYNTHETIC_ITEM_ID_A, SYNTHETIC_VERSION_ID_A, source)
+    repository = FakeBatchRepository(item)
+
+    def parser(source_fd: int, settings_json: str, **kwargs: object) -> ParseOutcome:
+        del source_fd, kwargs
+        return ParseOutcome(
+            success=True,
+            result=_native_extraction(settings_json, classification="TEXT_SUFFICIENT"),
+        )
+
+    def engine_must_not_exist() -> BatchOcrEngine:
+        raise AssertionError("TEXT_SUFFICIENT must not create an OCR engine")
+
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        _scope("synthetic-unused-password"),
+        parser,
+        ocr_processor=SelectiveOcrProcessor(BatchOcrRenderer(), engine_must_not_exist),
+    )
+
+    assert runner.run_once("worker-a") is True
+    assert repository.ocr_progress == [(SYNTHETIC_ITEM_ID_A, "native_only", 0, ())]
+    assert repository.persisted[0]["ocr"] is None
+
+
+def test_batch_runner_ocr_timeout_creates_no_archive_or_success(tmp_path: Path) -> None:
+    document_root = tmp_path / "documents"
+    work_root = tmp_path / "work"
+    archive_root = tmp_path / "archive"
+    document_root.mkdir()
+    work_root.mkdir()
+    archive_root.mkdir()
+    source = make_low_quality_pdf(document_root / "synthetic-timeout.pdf")
+    item = _item(SYNTHETIC_ITEM_ID_A, SYNTHETIC_VERSION_ID_A, source)
+    repository = FakeBatchRepository(item)
+
+    def parser(source_fd: int, settings_json: str, **kwargs: object) -> ParseOutcome:
+        del source_fd, kwargs
+        return ParseOutcome(
+            success=True,
+            result=_native_extraction(settings_json, classification="OCR_REQUIRED"),
+        )
+
+    runner = _runner(
+        repository,
+        document_root,
+        work_root,
+        ArchiveStore(archive_root),
+        _scope("synthetic-unused-password"),
+        parser,
+        ocr_processor=SelectiveOcrProcessor(
+            BatchOcrRenderer(),
+            lambda: BatchOcrEngine(error=OcrExecutionError("OCR_TIMEOUT")),
+        ),
+    )
+
+    assert runner.run_once("worker-a") is True
+
+    assert repository.failed == [(SYNTHETIC_ITEM_ID_A, "OCR_TIMEOUT")]
+    assert repository.persisted == []
+    assert list(archive_root.iterdir()) == []
+    assert list(work_root.iterdir()) == []

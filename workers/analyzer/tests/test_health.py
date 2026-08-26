@@ -7,12 +7,15 @@ import psycopg
 import pytest
 from familycare_worker.__main__ import (
     FairJobRunner,
+    _local_ocr_processor,
     _runner_from_environment,
     main,
     run_idle,
     run_worker_loop,
 )
 from familycare_worker.health import database_is_ready, health_payload
+from familycare_worker.ocr.engine import TesseractOcrEngine
+from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.runner import EventStructuringJobRunner
 from pytest import CaptureFixture, MonkeyPatch
 
@@ -195,6 +198,13 @@ def test_environment_builds_event_runner_without_document_roots(
     runner = _runner_from_environment(Event())
 
     assert isinstance(runner, EventStructuringJobRunner)
+
+
+def test_local_ocr_processor_factory_is_lazy_and_descriptor_only() -> None:
+    processor = _local_ocr_processor()
+
+    assert isinstance(processor.renderer, PdfiumPageRenderer)
+    assert processor.engine_factory is TesseractOcrEngine
 
 
 def test_console_entrypoint_reads_process_arguments(

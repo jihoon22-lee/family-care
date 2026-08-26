@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 import re
 from collections.abc import Mapping
@@ -24,6 +25,7 @@ from familycare_worker.jobs import (
     JobStateConflict,
     psycopg_database_url,
 )
+from familycare_worker.ocr.models import SelectiveOcrResult
 from familycare_worker.pdf.intake import ValidatedPdf
 
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -31,6 +33,7 @@ _BATCH_EXTRACTOR_CONFIG_HASH = hashlib.sha256(
     b'{"profile":"quality-v1","quality_rule_version":"quality-v1","table_strategy":"auto"}'
 ).hexdigest()
 _REVIEW_STATES = frozenset({"candidate", "confirmed", "rejected"})
+_OCR_WARNING_CODES = frozenset({"LOW_CONFIDENCE", "NO_TEXT_DETECTED"})
 _TOP_LEVEL_KEYS = frozenset(
     {
         "content_sha256",
@@ -272,6 +275,163 @@ def _validate_result(
     return cast(ExtractionResult, result)
 
 
+def _ocr_config_hash(engine_version: str) -> str:
+    canonical = json.dumps(
+        {
+            "dpi": 300,
+            "engine_name": "tesseract",
+            "engine_version": engine_version,
+            "language_codes": ["kor", "eng"],
+            "quality_rule_version": "quality-v1",
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _validate_ocr_result(
+    value: SelectiveOcrResult | None,
+    *,
+    native: ExtractionResult,
+    document_version_id: UUID,
+    content_sha256: str,
+) -> SelectiveOcrResult | None:
+    selected: list[tuple[int, float, float]] = []
+    for raw_page in native["pages"]:
+        page = cast(Mapping[str, Any], raw_page)
+        quality = cast(Mapping[str, Any], page["quality"])
+        if quality["classification"] == "OCR_REQUIRED":
+            selected.append(
+                (
+                    cast(int, page["page_number"]),
+                    float(cast(float, page["width_points"])),
+                    float(cast(float, page["height_points"])),
+                )
+            )
+    if not selected:
+        if value is not None:
+            raise InvalidExtractionResult
+        return None
+    if not isinstance(value, SelectiveOcrResult):
+        raise InvalidExtractionResult
+    if (
+        value.document_version_id != document_version_id
+        or value.content_sha256 != content_sha256
+        or value.engine_name != "tesseract"
+        or not 1 <= len(value.engine_version) <= 64
+        or value.language_codes != ("kor", "eng")
+        or value.language_config_hash != _ocr_config_hash(value.engine_version)
+        or value.quality_rule_version != "quality-v1"
+        or len(value.pages) != len(selected)
+        or len(set(value.warning_codes)) != len(value.warning_codes)
+        or any(code not in _OCR_WARNING_CODES for code in value.warning_codes)
+    ):
+        raise InvalidExtractionResult
+    aggregate_warnings: list[str] = []
+    for ocr_page, (page_number, page_width, page_height) in zip(value.pages, selected, strict=True):
+        if (
+            ocr_page.page_number != page_number
+            or ocr_page.rendered_dpi != 300
+            or not 1 <= ocr_page.image_width_pixels <= 20_000
+            or not 1 <= ocr_page.image_height_pixels <= 20_000
+            or ocr_page.image_width_pixels * ocr_page.image_height_pixels > 25_000_000
+            or len(set(ocr_page.warning_codes)) != len(ocr_page.warning_codes)
+            or any(code not in _OCR_WARNING_CODES for code in ocr_page.warning_codes)
+            or ocr_page.status != ("warning" if ocr_page.warning_codes else "completed")
+        ):
+            raise InvalidExtractionResult
+        for code in ocr_page.warning_codes:
+            if code not in aggregate_warnings:
+                aggregate_warnings.append(code)
+        for expected_order, block in enumerate(ocr_page.blocks):
+            if (
+                block.reading_order != expected_order
+                or not 1 <= len(block.text) <= 8192
+                or block.source_layer != "ocr"
+                or block.review_state != "candidate"
+                or not math.isfinite(block.confidence)
+                or not 0 <= block.confidence <= 100
+            ):
+                raise InvalidExtractionResult
+            _bbox(list(block.bbox), width=page_width, height=page_height)
+    if tuple(aggregate_warnings) != value.warning_codes:
+        raise InvalidExtractionResult
+    return value
+
+
+def _persist_ocr(
+    connection: Connection[dict[str, Any]],
+    *,
+    extraction_id: UUID,
+    result: SelectiveOcrResult,
+) -> None:
+    layer = connection.execute(
+        """
+        INSERT INTO ocr_layers (
+            extraction_id, source_layer, engine_name, engine_version,
+            language_config_hash, quality_rule_version, status, warning_codes
+        )
+        VALUES (%s, 'ocr', %s, %s, %s, %s, 'succeeded', %s)
+        RETURNING id
+        """,
+        (
+            extraction_id,
+            result.engine_name,
+            result.engine_version,
+            result.language_config_hash,
+            result.quality_rule_version,
+            Jsonb(list(result.warning_codes)),
+        ),
+    ).fetchone()
+    if layer is None:
+        raise DocumentStateConflict
+    layer_id = cast(UUID, layer["id"])
+    for page in result.pages:
+        page_row = connection.execute(
+            """
+            INSERT INTO ocr_pages (
+                ocr_layer_id, document_version_id, content_sha256, page_number,
+                rendered_dpi, image_width_pixels, image_height_pixels,
+                selected_classification, status, warning_codes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, 'OCR_REQUIRED', %s, %s)
+            RETURNING id
+            """,
+            (
+                layer_id,
+                result.document_version_id,
+                result.content_sha256,
+                page.page_number,
+                page.rendered_dpi,
+                page.image_width_pixels,
+                page.image_height_pixels,
+                page.status,
+                Jsonb(list(page.warning_codes)),
+            ),
+        ).fetchone()
+        if page_row is None:
+            raise DocumentStateConflict
+        page_id = cast(UUID, page_row["id"])
+        for block in page.blocks:
+            connection.execute(
+                """
+                INSERT INTO ocr_blocks (
+                    ocr_page_id, text, bbox, reading_order, confidence,
+                    source_layer, review_state
+                )
+                VALUES (%s, %s, %s, %s, %s, 'ocr', 'candidate')
+                """,
+                (
+                    page_id,
+                    block.text,
+                    Jsonb(list(block.bbox)),
+                    block.reading_order,
+                    block.confidence,
+                ),
+            )
+
+
 def _lock_owned_job(
     connection: Connection[dict[str, Any]],
     job_id: UUID,
@@ -407,6 +567,20 @@ class ExtractionRepository:
                 WHERE document_version_id = %s
                   AND extractor_config_hash = %s
                   AND status = 'succeeded'
+                  AND (
+                    NOT EXISTS (
+                      SELECT 1
+                      FROM extraction_pages AS page
+                      WHERE page.extraction_id = extractions.id
+                        AND page.classification = 'OCR_REQUIRED'
+                    )
+                    OR EXISTS (
+                      SELECT 1
+                      FROM ocr_layers AS layer
+                      WHERE layer.extraction_id = extractions.id
+                        AND layer.status = 'succeeded'
+                    )
+                  )
                 """,
                 (document_version_id, extractor_config_hash),
             ).fetchone()
@@ -443,6 +617,9 @@ class ExtractionRepository:
         worker_id: str,
         document_version_id: UUID,
         raw_result: object,
+        *,
+        ocr: SelectiveOcrResult | None = None,
+        ocr_attempted: bool = False,
     ) -> UUID:
         """Validate child JSON and atomically store or reuse one success."""
 
@@ -465,6 +642,16 @@ class ExtractionRepository:
                 expected_content_sha256=version["content_sha256"],
                 expected_config_hash=job.extractor_config_hash,
             )
+            ocr_result = (
+                _validate_ocr_result(
+                    ocr,
+                    native=result,
+                    document_version_id=document_version_id,
+                    content_sha256=version["content_sha256"],
+                )
+                if ocr_attempted
+                else None
+            )
             existing = connection.execute(
                 """
                 SELECT id
@@ -476,8 +663,24 @@ class ExtractionRepository:
                 (document_version_id, job.extractor_config_hash),
             ).fetchone()
             if existing is not None:
+                extraction_id = cast(UUID, existing["id"])
+                if ocr_result is not None:
+                    persisted_layer = connection.execute(
+                        """
+                        SELECT 1
+                        FROM ocr_layers
+                        WHERE extraction_id = %s AND status = 'succeeded'
+                        """,
+                        (extraction_id,),
+                    ).fetchone()
+                    if persisted_layer is None:
+                        _persist_ocr(
+                            connection,
+                            extraction_id=extraction_id,
+                            result=ocr_result,
+                        )
                 self._mark_job_succeeded(connection, job.id, worker_id)
-                return cast(UUID, existing["id"])
+                return extraction_id
 
             extraction = connection.execute(
                 """
@@ -603,6 +806,12 @@ class ExtractionRepository:
                 """,
                 (extraction_id,),
             )
+            if ocr_result is not None:
+                _persist_ocr(
+                    connection,
+                    extraction_id=extraction_id,
+                    result=ocr_result,
+                )
             self._mark_job_succeeded(connection, job.id, worker_id)
             return extraction_id
 
@@ -634,7 +843,7 @@ class ExtractionRepository:
 
 
 _BATCH_WORKER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-_BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
+_BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "OCR_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
 
 
 def _lock_owned_batch_item(
@@ -764,6 +973,8 @@ class BatchRepository:
                 )
                 UPDATE document_batch_items AS item
                 SET state = 'running', attempts = item.attempts + 1,
+                    ocr_state = 'pending', ocr_pages_processed = 0,
+                    ocr_warning_codes = '[]'::jsonb,
                     lease_owner = %s,
                     lease_expires_at = clock_timestamp() + (%s * interval '1 second'),
                     heartbeat_at = clock_timestamp(), error_code = NULL,
@@ -842,6 +1053,52 @@ class BatchRepository:
             )
             _refresh_batch_state(connection, cast(UUID, item["batch_id"]))
 
+    def mark_ocr_progress(
+        self,
+        item_id: UUID,
+        worker_id: str,
+        *,
+        state: str,
+        pages_processed: int,
+        warning_codes: tuple[str, ...] = (),
+        lease_seconds: int = 180,
+    ) -> bool:
+        if (
+            state not in {"running", "native_only"}
+            or isinstance(pages_processed, bool)
+            or not 0 <= pages_processed <= 500
+            or (state == "native_only" and pages_processed != 0)
+            or len(warning_codes) > 8
+            or len(set(warning_codes)) != len(warning_codes)
+            or any(code not in _OCR_WARNING_CODES for code in warning_codes)
+            or _BATCH_WORKER_PATTERN.fullmatch(worker_id) is None
+            or not 1 <= lease_seconds <= 3600
+        ):
+            raise ValueError("invalid OCR progress")
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            row = connection.execute(
+                """
+                UPDATE document_batch_items
+                SET ocr_state = %s, ocr_pages_processed = %s,
+                    ocr_warning_codes = %s,
+                    heartbeat_at = clock_timestamp(),
+                    lease_expires_at = clock_timestamp() + (%s * interval '1 second'),
+                    updated_at = clock_timestamp()
+                WHERE id = %s AND state = 'running' AND lease_owner = %s
+                  AND lease_expires_at > clock_timestamp()
+                RETURNING id
+                """,
+                (
+                    state,
+                    pages_processed,
+                    Jsonb(list(warning_codes)),
+                    lease_seconds,
+                    item_id,
+                    worker_id,
+                ),
+            ).fetchone()
+        return row is not None
+
     def mark_failed(
         self,
         item_id: UUID,
@@ -860,6 +1117,8 @@ class BatchRepository:
                 """
                 UPDATE document_batch_items
                 SET state = %s, error_code = %s,
+                    ocr_state = CASE WHEN ocr_state = 'running'
+                        THEN 'failed' ELSE ocr_state END,
                     available_at = CASE WHEN %s
                         THEN clock_timestamp() + interval '5 seconds' ELSE available_at END,
                     lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
@@ -884,6 +1143,7 @@ class BatchRepository:
         *args: object,
         archive: ArchiveMetadata | None = None,
         extraction: object = None,
+        ocr: SelectiveOcrResult | None = None,
         validated: ValidatedPdf | None = None,
         **_: object,
     ) -> None:
@@ -900,6 +1160,12 @@ class BatchRepository:
                 document_version_id=archive.document_version_id,
                 expected_content_sha256=validated.content_sha256,
                 expected_config_hash=_BATCH_EXTRACTOR_CONFIG_HASH,
+            )
+            ocr_result = _validate_ocr_result(
+                ocr,
+                native=result,
+                document_version_id=archive.document_version_id,
+                content_sha256=validated.content_sha256,
             )
             connection.execute(
                 """
@@ -1001,6 +1267,12 @@ class BatchRepository:
                                 cell["review_state"],
                             ),
                         )
+            if ocr_result is not None:
+                _persist_ocr(
+                    connection,
+                    extraction_id=extraction_id,
+                    result=ocr_result,
+                )
             connection.execute(
                 """
                 INSERT INTO managed_archives (
@@ -1039,11 +1311,22 @@ class BatchRepository:
                 """
                 UPDATE document_batch_items
                 SET state = 'succeeded', error_code = NULL,
+                    ocr_state = %s, ocr_pages_processed = %s,
+                    ocr_warning_codes = %s,
                     lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
                     completed_at = clock_timestamp(), updated_at = clock_timestamp()
                 WHERE id = %s
                 """,
-                (item_id,),
+                (
+                    "warning"
+                    if ocr_result is not None and ocr_result.warning_codes
+                    else "completed"
+                    if ocr_result is not None
+                    else "native_only",
+                    len(ocr_result.pages) if ocr_result is not None else 0,
+                    Jsonb(list(ocr_result.warning_codes) if ocr_result is not None else []),
+                    item_id,
+                ),
             )
             _refresh_batch_state(connection, cast(UUID, item["batch_id"]))
 
