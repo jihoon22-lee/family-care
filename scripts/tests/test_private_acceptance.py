@@ -27,7 +27,7 @@ SYNTHETIC_NODE = "synthetic-node-a"
 SYNTHETIC_IP = "100.64.0.42"
 SYNTHETIC_TAILNET = "synthetic-tailnet.example"
 SYNTHETIC_STDOUT = "raw synthetic output must never be copied"
-STATUS_COMMAND = ["tailscale", "status", "--json"]
+STATUS_COMMAND = ["tailscale", "status", "--json", "--peers=false"]
 SERVE_COMMAND = ["tailscale", "serve", "status", "--json"]
 
 
@@ -95,7 +95,7 @@ def _assert_mutation_commands_are_rejected_before_runner_invocation(
         ["tailscale", "up"],
         ["tailscale", "down"],
         ["tailscale", "logout"],
-        ["tailscale", "status", "--json", "--peers=false"],
+        ["tailscale", "status", "--json"],
     ],
 )
 def test_mutation_or_unknown_forms_are_rejected(argv: list[str]) -> None:

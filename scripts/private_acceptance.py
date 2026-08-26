@@ -353,7 +353,7 @@ def inspect_tailscale(
 
     if result.returncode != 0:
         return _report(AcceptanceCategory.TAILSCALE_COMMAND_FAILED)
-    if command == ("tailscale", "status", "--json"):
+    if command == ("tailscale", "status", "--json", "--peers=false"):
         return _classify_status_json(stdout)
     if command == serve_command:
         return _classify_serve_json(
