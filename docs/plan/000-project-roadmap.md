@@ -21,7 +21,7 @@
 |---|---|---|
 | Phase 0 — Project Foundation | Complete | PR #1, merge `0f632989df891ae944c012bfcce6c838009867a9`, required CI passed. |
 | Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation, PR #13 completion record, current main `8c6ceab`; no release tag or real-data acceptance. |
-| Phase 2 — Policy Ledger | Core ledger implemented | Family, contract, party, actual Rider and Evidence complete; AI candidate review and Web UI pending. |
+| Phase 2 — Policy Ledger | Private acceptance in progress | Family, contract, party, actual Rider and Evidence implemented; family document review and insurance-document completeness view remain. |
 | Phase 3 — Clause Linking and Search | Approved design | TermsEdition, Clause, full-text search, Rider link, AI rule validation. |
 | Phase 4 — Coverage Decision Engine | Approved design | MedicalEvent, tri-state engine, fixed and indemnity calculation. |
 | Phase 5 — Event and Result PWA | Approved design | Hybrid input and action-first mobile result. |
@@ -35,7 +35,8 @@
 ```text
 Phase 0 Foundation [complete]
   -> Phase 1 Synthetic PDF Ingestion [complete]
-  -> Phase 2 core Policy Ledger [implemented], AI candidate review [pending]
+  -> Phase 2 core Policy Ledger and candidate review [implemented]
+  -> Root-owned private family review and insurance-document inventory [in progress/planned]
   -> Phase 3 Clause search, linking, and executable rule validation
   -> Phase 4 MedicalEvent, tri-state decision, fixed/indemnity calculation
   -> Phase 5 Hybrid input and action-first PWA

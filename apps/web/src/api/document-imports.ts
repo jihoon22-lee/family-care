@@ -16,13 +16,13 @@ export const listImportSources = (signal?: AbortSignal) =>
 
 export function createDocumentBatch(
   familyMemberId: string,
-  sourceIds: string[],
+  sources: BatchCreateRequest["sources"],
   signal?: AbortSignal,
 ): Promise<BatchResponse> {
   const request: BatchCreateRequest = {
     family_member_id: familyMemberId,
     schema_version: "1",
-    source_ids: sourceIds,
+    sources,
   };
   return apiRequest<BatchResponse>("/api/v1/document-batches", {
     body: JSON.stringify(request),

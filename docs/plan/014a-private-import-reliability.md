@@ -10,6 +10,8 @@
 
 **Implementation status:** Tasks 1–4 and Task 5 documentation are implemented. The complete serial local gate, task-owned PostgreSQL integration suite, and concentrated root review passed. PR/CI, merge, and private runtime acceptance remain pending.
 
+**Current capacity:** Private source, decrypted plaintext extent, and managed archive payload are each bounded to 128 MiB. Parser limits remain 500 pages, 64 MiB output/`RLIMIT_FSIZE`, 1536 MiB address space, 90-second child CPU, 120-second parent wall timeout, and 64 open descriptors.
+
 **Primary files:**
 
 - `workers/analyzer/src/familycare_worker/imports/batch.py`
@@ -23,7 +25,7 @@
 
 ## Invariants
 
-- The encrypted input and decrypted output are each bounded to the existing 25 MiB policy, and page count is checked before `PdfWriter.clone_document_from_reader()` writes plaintext.
+- The encrypted input and decrypted output are each bounded to the current 128 MiB policy, and page count is checked before `PdfWriter.clone_document_from_reader()` writes plaintext. Managed archive payload is bounded to 128 MiB as well.
 - Decrypted bytes and PDF passwords never enter logs, DB rows, API responses, fixtures, command output, or Git.
 - A Worker may create an archive only while it still owns a live item lease. It checks ownership again immediately after the durable archive write and before any DB success transaction.
 - Cancellation, stop request, lease loss, and uncertain DB completion dispose the batch registry entry and deactivate its secret-server batch identity.
@@ -34,7 +36,7 @@
 
 ## Task 1: Bound encrypted-PDF plaintext creation
 
-- [x] Add focused RED tests in `workers/analyzer/tests/test_batch_runner.py` for an encrypted reader whose page count exceeds 500 and a writer that attempts to exceed 25 MiB. Assert parser/archive/persistence are not called, the item receives `PAGE_LIMIT_EXCEEDED` or `DOCUMENT_TOO_LARGE`, and the mode-0700 workspace is removed.
+- [x] Add focused RED tests in `workers/analyzer/tests/test_batch_runner.py` for an encrypted reader whose page count exceeds 500 and a writer that attempts to exceed 128 MiB. Assert parser/archive/persistence are not called, the item receives `PAGE_LIMIT_EXCEEDED` or `DOCUMENT_TOO_LARGE`, and the mode-0700 workspace is removed.
 - [x] Implement a small seek-aware bounded binary writer around the pre-created mode-0600 plaintext handle. Reject a write whose resulting maximum extent exceeds `MAX_INPUT_BYTES`; do not buffer the complete output in Python.
 - [x] After password acceptance and before cloning, evaluate `len(reader.pages)` and reject more than `MAX_PDF_PAGES`. Keep wrong/missing passwords mapped to `PASSWORD_REQUIRED`.
 - [x] Run focused unit tests, Ruff, and mypy for the batch module; commit as `fix(import): bound decrypted pdf output`.

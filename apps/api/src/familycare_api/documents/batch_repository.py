@@ -25,6 +25,7 @@ class BatchRepositoryUnavailable(BatchRepositoryError):
 class BatchItemRecord:
     source_id: str
     display_label: str
+    document_kind: str
     state: str
     error_code: str | None
     attempts: int
@@ -39,6 +40,19 @@ class BatchRecord:
     family_member_id: UUID
     state: str
     items: tuple[BatchItemRecord, ...]
+
+
+@dataclass(frozen=True)
+class BatchSourceSelection:
+    """One catalog source paired with its caller-selected private kind."""
+
+    source: ResolvedImportSource
+    document_kind: str
+
+
+_PRIVATE_DOCUMENT_KINDS = frozenset(
+    {"application", "policy", "product_explanation", "supporting", "terms"}
+)
 
 
 def _database_url(value: str) -> str:
@@ -71,6 +85,7 @@ def _batch(row: dict[str, Any], items: list[dict[str, Any]]) -> BatchRecord:
             BatchItemRecord(
                 source_id=cast(str, item["source_id"]),
                 display_label=cast(str, item["display_label"]),
+                document_kind=cast(str, item["document_kind"]),
                 state=cast(str, item["state"]),
                 error_code=cast(str | None, item["error_code"]),
                 attempts=cast(int, item["attempts"]),
@@ -95,8 +110,16 @@ class BatchRepository:
         household_space_id: UUID,
         created_by: UUID,
         family_member_id: UUID,
-        sources: tuple[ResolvedImportSource, ...],
+        sources: tuple[BatchSourceSelection, ...],
     ) -> BatchRecord | None:
+        if any(not isinstance(selection, BatchSourceSelection) for selection in sources):
+            raise TypeError("explicit batch source selection required")
+        source_ids = [selection.source.source_id for selection in sources]
+        if len(source_ids) != len(set(source_ids)):
+            raise ValueError("duplicate source id")
+        for selection in sources:
+            if selection.document_kind not in _PRIVATE_DOCUMENT_KINDS:
+                raise ValueError("unsupported document kind")
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 member = connection.execute(
@@ -134,14 +157,16 @@ class BatchRepository:
                 if row is None:
                     raise BatchRepositoryUnavailable
                 items: list[dict[str, Any]] = []
-                for source in sources:
+                for selection in sources:
+                    source = selection.source
                     item = connection.execute(
                         """
                         INSERT INTO document_batch_items (
-                            batch_id, source_id, source_key, display_label
+                            batch_id, source_id, source_key, display_label, document_kind
                         )
-                        VALUES (%s, %s, %s, %s)
-                        RETURNING source_id, display_label, state, error_code, attempts,
+                        VALUES (%s, %s, %s, %s, %s)
+                        RETURNING source_id, display_label, document_kind, state,
+                                  error_code, attempts,
                                   ocr_state, ocr_pages_processed, ocr_warning_codes
                         """,
                         (
@@ -149,6 +174,7 @@ class BatchRepository:
                             source.source_id,
                             source.source_key,
                             source.display_label,
+                            selection.document_kind,
                         ),
                     ).fetchone()
                     if item is None:
@@ -175,7 +201,7 @@ class BatchRepository:
                     return None
                 items = connection.execute(
                     """
-                    SELECT source_id, display_label, state, error_code, attempts,
+                    SELECT source_id, display_label, document_kind, state, error_code, attempts,
                            ocr_state, ocr_pages_processed, ocr_warning_codes
                     FROM document_batch_items
                     WHERE batch_id = %s
@@ -277,4 +303,5 @@ __all__ = [
     "BatchRepository",
     "BatchRepositoryError",
     "BatchRepositoryUnavailable",
+    "BatchSourceSelection",
 ]

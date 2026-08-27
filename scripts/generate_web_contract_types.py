@@ -140,6 +140,12 @@ def _render_property(name: str, optional: bool, type_name: str, terminator: str 
     if type_name.startswith("Array<") and type_name.endswith(">"):
         item_type = type_name.removeprefix("Array<").removesuffix(">")
         if " | " in item_type and len(one_line) + 2 > PRINT_WIDTH:
+            if len(item_type) + 4 <= PRINT_WIDTH:
+                return [
+                    f"{rendered_name}: Array<",
+                    f"  {item_type}",
+                    f">{terminator}",
+                ]
             members = item_type.split(" | ")
             return [
                 f"{rendered_name}: Array<",

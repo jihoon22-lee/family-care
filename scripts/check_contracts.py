@@ -19,6 +19,12 @@ OPENAPI_PATH = ROOT / "packages/contracts/openapi/familycare.v1.json"
 JOB_SCHEMA_PATH = ROOT / "packages/contracts/schemas/analysis-job.v1.schema.json"
 JOB_EXAMPLE_PATH = ROOT / "packages/contracts/examples/analysis-job.v1.json"
 DOCUMENT_SCHEMA_PATH = ROOT / "packages/contracts/schemas/document-ingestion.v1.schema.json"
+INVENTORY_SCHEMA_PATH = (
+    ROOT / "packages/contracts/schemas/insurance-document-inventory.v1.schema.json"
+)
+INVENTORY_EXAMPLE_PATH = (
+    ROOT / "packages/contracts/examples/insurance-document-inventory.v1.example.json"
+)
 POLICY_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json"
 POLICY_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-ledger.v1.json"
 CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json"
@@ -31,6 +37,7 @@ RIDER_CLAUSE_RULES_SCHEMA_PATH = (
 RIDER_CLAUSE_RULES_EXAMPLE_PATH = ROOT / "packages/contracts/examples/rider-clause-rules.v1.json"
 BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 WEB_OUTPUT_PATH = ROOT / "apps/web/src/api/generated.ts"
+MAX_IMPORT_SOURCE_BYTES = 128 * 1024 * 1024
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 POLICY_FORBIDDEN_FIELDS = {
     "absolute_path",
@@ -388,7 +395,13 @@ def validate_openapi() -> list[str]:
         "/api/v1/family-members",
         "/api/v1/family-members/trash",
         "/api/v1/family-members/{member_id}",
+        "/api/v1/family-members/{member_id}/insurance-document-components",
+        "/api/v1/family-members/{member_id}/insurance-document-inventory",
+        "/api/v1/family-members/{member_id}/insurance-document-sets",
         "/api/v1/family-members/{member_id}/restore",
+        "/api/v1/insurance-document-sets/{document_set_id}",
+        "/api/v1/insurance-document-sets/{document_set_id}/items",
+        "/api/v1/insurance-document-set-items/{item_id}",
         "/api/v1/policies",
         "/api/v1/policies/trash",
         "/api/v1/policies/{policy_id}",
@@ -497,6 +510,97 @@ def validate_openapi() -> list[str]:
     publish_properties = schemas.get("CoverageRulePublishRequest", {}).get("properties", {})
     if set(publish_properties) != {"expected_version", "version_id"}:
         errors.append("CoverageRule publish request must not accept an arbitrary rule body")
+    import_source_response = schemas.get("ImportSourceResponse", {})
+    import_source_size = import_source_response.get("properties", {}).get("size_bytes", {})
+    if import_source_size.get("minimum") != 0.0 or import_source_size.get("maximum") != float(
+        MAX_IMPORT_SOURCE_BYTES
+    ):
+        errors.append("ImportSourceResponse size bound changed")
+    batch_request = schemas.get("BatchCreateRequest", {})
+    if set(batch_request.get("properties", {})) != {
+        "schema_version",
+        "family_member_id",
+        "sources",
+    }:
+        errors.append("private batch request must contain only per-source selections")
+    if batch_request.get("additionalProperties") is not False:
+        errors.append("private batch request must reject additional properties")
+    batch_sources = batch_request.get("properties", {}).get("sources", {})
+    if (
+        batch_sources.get("minItems") != 1.0
+        or batch_sources.get("maxItems") != 100.0
+        or batch_sources.get("items") != {"$ref": "#/components/schemas/BatchSourceRequest"}
+    ):
+        errors.append("private batch sources must be bounded per-source selections")
+    batch_source = schemas.get("BatchSourceRequest", {})
+    if set(batch_source.get("properties", {})) != {"source_id", "document_kind"}:
+        errors.append("private batch source must contain source_id and document_kind")
+    if set(batch_source.get("required", [])) != {"source_id", "document_kind"}:
+        errors.append("private batch source fields must be required")
+    if batch_source.get("properties", {}).get("document_kind", {}).get("enum") != [
+        "application",
+        "policy",
+        "product_explanation",
+        "supporting",
+        "terms",
+    ]:
+        errors.append("private batch document-kind enum changed")
+    batch_item = schemas.get("BatchItemResponse", {})
+    if batch_item.get("properties", {}).get("document_kind", {}).get("enum") != [
+        "application",
+        "policy",
+        "product_explanation",
+        "supporting",
+        "terms",
+    ]:
+        errors.append("private batch status document-kind enum changed")
+    if "document_kind" not in batch_item.get("required", []):
+        errors.append("private batch status must project document_kind")
+
+    inventory_get = paths["/api/v1/family-members/{member_id}/insurance-document-inventory"].get(
+        "get", {}
+    )
+    inventory_response_ref = (
+        inventory_get.get("responses", {})
+        .get("200", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+        .get("$ref")
+    )
+    if inventory_response_ref != ("#/components/schemas/MemberInsuranceDocumentInventoryResponse"):
+        errors.append("insurance document inventory must use its bounded read model")
+    component_request = schemas.get("ComponentCreateRequest", {})
+    if set(component_request.get("properties", {})) != {
+        "document_batch_item_id",
+        "role",
+        "page_start",
+        "page_end",
+        "evidence_id",
+        "review_state",
+    }:
+        errors.append("insurance component request exposes unexpected fields")
+    if component_request.get("additionalProperties") is not False:
+        errors.append("insurance component request must reject additional properties")
+    inventory_contract = json.dumps(
+        {
+            name: schema
+            for name, schema in schemas.items()
+            if "InsuranceDocument" in name or name.startswith("Inventory")
+        },
+        sort_keys=True,
+    ).lower()
+    for forbidden in (
+        "source_key",
+        "absolute_path",
+        "archive_key",
+        "password",
+        "policy_number",
+        "raw_text",
+        "content_sha256",
+    ):
+        if f'"{forbidden}":' in inventory_contract:
+            errors.append(f"insurance document inventory exposes forbidden field {forbidden}")
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})
@@ -1783,6 +1887,93 @@ def validate_job_contract() -> list[str]:
     return errors
 
 
+def validate_insurance_document_inventory_contract() -> list[str]:
+    """Validate the versioned, path-free member inventory response contract."""
+
+    from familycare_api.insurance_documents.schemas import (
+        MemberInsuranceDocumentInventoryResponse,
+    )
+    from pydantic import ValidationError
+
+    try:
+        schema = load_json(INVENTORY_SCHEMA_PATH)
+        example = load_json(INVENTORY_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    expected_fields = {
+        "schema_version",
+        "member_id",
+        "summary",
+        "registered_policies",
+        "unregistered_document_sets",
+        "unpaired_components",
+        "unreadable_sources",
+    }
+    if set(schema.get("properties", {})) != expected_fields:
+        errors.append("insurance document inventory top-level fields changed")
+    if set(schema.get("required", [])) != expected_fields:
+        errors.append("insurance document inventory fields must all be required")
+    if schema.get("additionalProperties") is not False:
+        errors.append("insurance document inventory must reject additional properties")
+    if schema.get("properties", {}).get("schema_version", {}).get("const") != "1":
+        errors.append("insurance document inventory schema_version must be 1")
+    definitions = schema.get("$defs", {})
+    if definitions.get("RegisteredPolicy", {}).get("properties", {}).get("completeness", {}).get(
+        "enum"
+    ) != ["CERTIFICATE_AND_TERMS", "CERTIFICATE_ONLY"]:
+        errors.append("insurance document completeness values changed")
+    if definitions.get("UnregisteredSet", {}).get("properties", {}).get("enrollment_confirmed") != {
+        "const": False
+    }:
+        errors.append("unregistered document sets must deny enrollment authority")
+    if definitions.get("Role", {}).get("enum") != [
+        "policy",
+        "terms",
+        "product_explanation",
+        "application",
+        "supporting",
+    ]:
+        errors.append("insurance document roles changed")
+    try:
+        MemberInsuranceDocumentInventoryResponse.model_validate(example)
+    except ValidationError:
+        errors.append("insurance document inventory example does not match the API model")
+
+    serialized_example = json.dumps(example, sort_keys=True).lower()
+    for forbidden_field in (
+        "source_key",
+        "absolute_path",
+        "archive_key",
+        "password",
+        "policy_number",
+        "raw_text",
+        "content_sha256",
+    ):
+        if f'"{forbidden_field}":' in serialized_example:
+            errors.append(f"insurance document inventory example contains {forbidden_field}")
+    if "/mnt/" in serialized_example:
+        errors.append("insurance document inventory example contains /mnt/")
+    registered = example.get("registered_policies", [])
+    summary = example.get("summary", {})
+    if isinstance(registered, list) and isinstance(summary, dict):
+        if summary.get("certificate_backed_policies") != len(registered):
+            errors.append("insurance document inventory example policy count is inconsistent")
+        if summary.get("certificate_and_terms") != sum(
+            isinstance(item, dict) and item.get("completeness") == "CERTIFICATE_AND_TERMS"
+            for item in registered
+        ):
+            errors.append("insurance document inventory example completeness is inconsistent")
+    unregistered = example.get("unregistered_document_sets", [])
+    if not isinstance(unregistered, list) or any(
+        not isinstance(item, dict) or item.get("enrollment_confirmed") is not False
+        for item in unregistered
+    ):
+        errors.append("insurance document inventory example grants unregistered enrollment")
+    return errors
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-openapi", action="store_true")
@@ -1803,6 +1994,7 @@ def main() -> int:
         *validate_openapi(),
         *validate_job_contract(),
         *validate_document_contracts(),
+        *validate_insurance_document_inventory_contract(),
         *validate_batch_contracts(),
         *validate_ocr_contracts(),
         *validate_policy_contract(),
@@ -1820,7 +2012,7 @@ def main() -> int:
         return 1
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
-        "encrypted document batch, selective OCR, "
+        "encrypted document batch, selective OCR, insurance-document-inventory.v1, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
         "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"

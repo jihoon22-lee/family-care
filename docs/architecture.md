@@ -54,7 +54,7 @@ API는 입력 검증, 인증·인가, use case, 결정론적 판정·계산과 �
 
 Worker는 문서 분석 작업을 격리된 임시 directory에서 수행한다. 작업은 idempotent하며 lease 만료 후 재처리할 수 있다. 복호화 평문과 OCR page image는 모든 종료 경로에서 삭제한다.
 
-Phase 1 parser isolation의 descriptor-only input, 25 MiB/500 page, parent wall 120초, child CPU 90초, address space 1536 MiB, output 64 MiB, descriptor 64개 제한은 유지한다. v0.1의 암호·OCR·AI 단계는 이 parser 결과를 후속 입력으로 사용하며 원본 path를 다시 여는 우회 경로를 만들지 않는다. OCR renderer는 이미 열린 read-only descriptor에서 bounded bytes를 PDFium으로 읽고, fixed 300 DPI mode-0600 PNG를 page별로 생성·삭제한다. OCR engine은 `/usr/bin/tesseract`를 `shell=False`와 fixed `kor+eng`로 호출해 TSV를 stdout에서만 읽으며 `pytesseract`와 TSV artifact를 사용하지 않는다.
+Phase 1 parser isolation의 descriptor-only input, 128 MiB input/500 page, parent wall 120초, child CPU 90초, address space 1536 MiB, parser output/`RLIMIT_FSIZE` 64 MiB, descriptor 64개 제한은 유지한다. Private batch source, decrypted plaintext extent, managed archive payload는 각각 128 MiB로 제한한다. v0.1의 암호·OCR·AI 단계는 이 parser 결과를 후속 입력으로 사용하며 원본 path를 다시 여는 우회 경로를 만들지 않는다. OCR renderer는 이미 열린 read-only descriptor에서 bounded bytes를 PDFium으로 읽고, fixed 300 DPI mode-0600 PNG를 page별로 생성·삭제한다. OCR engine은 `/usr/bin/tesseract`를 `shell=False`와 fixed `kor+eng`로 호출해 TSV를 stdout에서만 읽으며 `pytesseract`와 TSV artifact를 사용하지 않는다.
 
 ### External AI boundary
 

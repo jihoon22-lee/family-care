@@ -21,6 +21,7 @@ REQUEST_SCHEMA_PATH = SCHEMA_ROOT / "document-batch.v1.schema.json"
 STATUS_SCHEMA_PATH = SCHEMA_ROOT / "document-batch-status.v1.schema.json"
 REQUEST_EXAMPLE_PATH = EXAMPLE_ROOT / "document-batch.v1.json"
 STATUS_EXAMPLE_PATH = EXAMPLE_ROOT / "document-batch-status.v1.json"
+MAX_IMPORT_SOURCE_BYTES = 128 * 1024 * 1024
 
 SYNTHETIC_FAMILY_MEMBER_ID = "00000000-0000-4000-8000-000000000004"
 SYNTHETIC_BATCH_ID = "00000000-0000-4000-8000-000000000005"
@@ -28,6 +29,13 @@ SYNTHETIC_SOURCE_IDS = (
     "a" * 64,
     "b" * 64,
 )
+PRIVATE_DOCUMENT_KINDS = [
+    "application",
+    "policy",
+    "product_explanation",
+    "supporting",
+    "terms",
+]
 SOURCE_ID_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 UUID4_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 FORBIDDEN_FIELDS = {
@@ -180,22 +188,38 @@ def _validate_examples(
         for error in validate_schema_instance(status_schema, status)
     )
 
+    expected_sources = [
+        {"document_kind": "policy", "source_id": SYNTHETIC_SOURCE_IDS[0]},
+        {"document_kind": "terms", "source_id": SYNTHETIC_SOURCE_IDS[1]},
+    ]
     if request != {
         "family_member_id": SYNTHETIC_FAMILY_MEMBER_ID,
         "schema_version": "1",
-        "source_ids": list(SYNTHETIC_SOURCE_IDS),
+        "sources": expected_sources,
     }:
         errors.append("request example must use the fixed synthetic batch projection")
     if request.get("family_member_id") != SYNTHETIC_FAMILY_MEMBER_ID:
         errors.append("request family_member_id must be synthetic")
-    source_ids = request.get("source_ids")
-    if not isinstance(source_ids, list) or len(source_ids) != len(set(source_ids)):
-        errors.append("request source_ids must be unique")
-    if not isinstance(source_ids, list) or any(
-        not isinstance(source_id, str) or SOURCE_ID_PATTERN.fullmatch(source_id) is None
-        for source_id in source_ids
-    ):
-        errors.append("request source_ids must be lowercase SHA-256-shaped IDs")
+    sources = request.get("sources")
+    if not isinstance(sources, list) or not sources:
+        errors.append("request sources must contain at least one item")
+    else:
+        source_ids = [source.get("source_id") for source in sources if isinstance(source, Mapping)]
+        if len(source_ids) != len(set(source_ids)):
+            errors.append("request source IDs must be unique")
+        if any(
+            not isinstance(source, Mapping)
+            or not isinstance(source.get("source_id"), str)
+            or SOURCE_ID_PATTERN.fullmatch(str(source["source_id"])) is None
+            for source in sources
+        ):
+            errors.append("request source IDs must be lowercase SHA-256-shaped IDs")
+        if any(
+            not isinstance(source, Mapping)
+            or source.get("document_kind") not in PRIVATE_DOCUMENT_KINDS
+            for source in sources
+        ):
+            errors.append("request source document kinds are unsupported")
 
     if status.get("batch_id") != SYNTHETIC_BATCH_ID:
         errors.append("status batch_id must be synthetic")
@@ -216,6 +240,8 @@ def _validate_examples(
     for index, item in enumerate(items if isinstance(items, list) else []):
         if not isinstance(item, Mapping):
             continue
+        if item.get("document_kind") not in PRIVATE_DOCUMENT_KINDS:
+            errors.append(f"status item {index} document kind is unsupported")
         warnings = item.get("ocr_warning_codes")
         if isinstance(warnings, list) and len(warnings) != len(set(warnings)):
             errors.append(f"status item {index} OCR warning codes must be unique")
@@ -266,6 +292,32 @@ def validate_batch_contracts() -> list[str]:
         if source.get("minLength") != 64 or source.get("maxLength") != 64:
             errors.append(f"{label} SourceId must be exactly 64 characters")
     definitions = status_schema.get("$defs", {})
+    request_definitions = request_schema.get("$defs", {})
+    if request_definitions.get("BatchDocumentKind", {}).get("enum") != PRIVATE_DOCUMENT_KINDS:
+        errors.append("request batch document-kind enum changed")
+    if definitions.get("BatchDocumentKind", {}).get("enum") != PRIVATE_DOCUMENT_KINDS:
+        errors.append("status batch document-kind enum changed")
+    request_sources = request_schema.get("properties", {}).get("sources", {})
+    if (
+        request_sources.get("minItems") != 1
+        or request_sources.get("maxItems") != 100
+        or request_sources.get("uniqueItems") is not True
+        or request_sources.get("items") != {"$ref": "#/$defs/DocumentBatchSource"}
+    ):
+        errors.append("request sources must be bounded and per-source")
+    source_definition = request_definitions.get("DocumentBatchSource", {})
+    if (
+        source_definition.get("additionalProperties") is not False
+        or set(source_definition.get("required", [])) != {"source_id", "document_kind"}
+        or source_definition.get("properties", {}).get("document_kind")
+        != {"$ref": "#/$defs/BatchDocumentKind"}
+    ):
+        errors.append("request source entries must require source_id and document_kind")
+    status_item_kind = (
+        definitions.get("DocumentBatchItem", {}).get("properties", {}).get("document_kind", {})
+    )
+    if status_item_kind != {"$ref": "#/$defs/BatchDocumentKind"}:
+        errors.append("status items must project document_kind")
     if definitions.get("BatchErrorCode", {}).get("enum") != BATCH_ERROR_CODES:
         errors.append("batch error-code enum changed")
     if definitions.get("BatchState", {}).get("enum") != BATCH_STATES:
@@ -286,6 +338,13 @@ def validate_batch_contracts() -> list[str]:
         or ocr_warnings_schema.get("uniqueItems") is not True
     ):
         errors.append("OCR warning-code bounds changed")
+    import_source = definitions.get("ImportSource", {})
+    import_source_size = import_source.get("properties", {}).get("size_bytes", {})
+    if (
+        import_source_size.get("minimum") != 0
+        or import_source_size.get("maximum") != MAX_IMPORT_SOURCE_BYTES
+    ):
+        errors.append("import source size bound changed")
 
     for label, value in (("request", request), ("status", status)):
         for path, child in _nested_strings(value):

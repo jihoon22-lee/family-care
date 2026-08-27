@@ -12,6 +12,7 @@ const BATCH: BatchResponse = {
     {
       attempts: 1,
       display_label: "Sample policy document A.pdf",
+      document_kind: "policy",
       error_code: null,
       ocr_pages_processed: 2,
       ocr_state: "running",
@@ -22,6 +23,7 @@ const BATCH: BatchResponse = {
     {
       attempts: 1,
       display_label: "Sample policy document B.pdf",
+      document_kind: "policy",
       error_code: null,
       ocr_pages_processed: 3,
       ocr_state: "warning",

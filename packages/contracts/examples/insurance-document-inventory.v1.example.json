@@ -1,0 +1,118 @@
+{
+  "schema_version": "1",
+  "member_id": "00000000-0000-4000-8000-000000000101",
+  "summary": {
+    "certificate_backed_policies": 1,
+    "certificate_and_terms": 1,
+    "certificate_only": 0,
+    "terms_only_documents": 0,
+    "product_explanation_documents": 1,
+    "application_documents": 0,
+    "unreadable_documents": 1,
+    "pairing_conflicts": 0
+  },
+  "registered_policies": [
+    {
+      "policy_id": "00000000-0000-4000-8000-000000000201",
+      "insurer_display": "Sample Insurer",
+      "product_display": "Sample Policy",
+      "status": "unknown",
+      "rider_count": 2,
+      "completeness": "CERTIFICATE_AND_TERMS",
+      "documents": [
+        {
+          "role": "policy",
+          "source_count": 1,
+          "component_count": 1,
+          "bundled_source": false,
+          "items": [
+            {
+              "id": "00000000-0000-4000-8000-000000000301",
+              "version": 1,
+              "match_state": "USER_CONFIRMED",
+              "component": {
+                "id": "00000000-0000-4000-8000-000000000401",
+                "document_batch_item_id": "00000000-0000-4000-8000-000000000501",
+                "role": "policy",
+                "page_start": 1,
+                "page_end": 2,
+                "review_state": "USER_CONFIRMED",
+                "processing_state": "READY",
+                "duplicate_state": "UNIQUE"
+              }
+            }
+          ]
+        },
+        {
+          "role": "terms",
+          "source_count": 1,
+          "component_count": 1,
+          "bundled_source": false,
+          "items": [
+            {
+              "id": "00000000-0000-4000-8000-000000000302",
+              "version": 1,
+              "match_state": "USER_CONFIRMED",
+              "component": {
+                "id": "00000000-0000-4000-8000-000000000402",
+                "document_batch_item_id": "00000000-0000-4000-8000-000000000502",
+                "role": "terms",
+                "page_start": 1,
+                "page_end": 5,
+                "review_state": "USER_CONFIRMED",
+                "processing_state": "READY",
+                "duplicate_state": "UNIQUE"
+              }
+            }
+          ]
+        }
+      ],
+      "has_product_explanation": false,
+      "has_application": false,
+      "missing_document_roles": [],
+      "document_set_id": "00000000-0000-4000-8000-000000000601",
+      "document_set_version": 3
+    }
+  ],
+  "unregistered_document_sets": [
+    {
+      "id": "00000000-0000-4000-8000-000000000602",
+      "insurer_display": "Sample Insurer",
+      "product_display": "Sample Material",
+      "display_label": "Sample explanation",
+      "version": 1,
+      "primary_classification": "PRODUCT_EXPLANATION_ONLY",
+      "enrollment_confirmed": false,
+      "has_product_explanation": true,
+      "has_application": false,
+      "source_count": 1,
+      "component_count": 1,
+      "items": [
+        {
+          "id": "00000000-0000-4000-8000-000000000303",
+          "version": 1,
+          "match_state": "USER_CONFIRMED",
+          "component": {
+            "id": "00000000-0000-4000-8000-000000000403",
+            "document_batch_item_id": "00000000-0000-4000-8000-000000000503",
+            "role": "product_explanation",
+            "page_start": 1,
+            "page_end": 4,
+            "review_state": "USER_CONFIRMED",
+            "processing_state": "READY",
+            "duplicate_state": "UNIQUE"
+          }
+        }
+      ]
+    }
+  ],
+  "unpaired_components": [],
+  "unreadable_sources": [
+    {
+      "document_batch_item_id": "00000000-0000-4000-8000-000000000504",
+      "source_kind": "policy",
+      "display_label": "보험증권 문서",
+      "processing_state": "PASSWORD_REQUIRED"
+    }
+  ]
+}

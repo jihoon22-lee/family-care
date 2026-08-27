@@ -34,7 +34,10 @@ def test_batch_request_has_one_family_member_and_no_secret_fields() -> None:
 
     assert request["schema_version"] == "1"
     assert request["family_member_id"] == SYNTHETIC_FAMILY_MEMBER_ID
-    assert request["source_ids"] == [SYNTHETIC_SOURCE_ID_A, SYNTHETIC_SOURCE_ID_B]
+    assert request["sources"] == [
+        {"document_kind": "policy", "source_id": SYNTHETIC_SOURCE_ID_A},
+        {"document_kind": "terms", "source_id": SYNTHETIC_SOURCE_ID_B},
+    ]
     forbidden = {"password", "absolute_path", "raw_pdf", "archive_master_key"}
     assert forbidden.isdisjoint(request)
     assert all(field not in json.dumps(request) for field in forbidden)
@@ -50,6 +53,7 @@ def test_batch_status_contains_only_bounded_source_projection() -> None:
         SYNTHETIC_SOURCE_ID_A,
         SYNTHETIC_SOURCE_ID_B,
     }
+    assert [item["document_kind"] for item in status["items"]] == ["policy", "terms"]
     forbidden = {
         "absolute_path",
         "archive_master_key",
@@ -80,6 +84,22 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
     assert request_schema["additionalProperties"] is False
     assert status_schema["additionalProperties"] is False
     assert request_schema["$defs"]["SourceId"]["pattern"] == "^[a-f0-9]{64}$"
+    assert request_schema["$defs"]["BatchDocumentKind"]["enum"] == [
+        "application",
+        "policy",
+        "product_explanation",
+        "supporting",
+        "terms",
+    ]
+    assert request_schema["properties"]["sources"]["items"] == {
+        "$ref": "#/$defs/DocumentBatchSource"
+    }
+    assert request_schema["properties"]["sources"]["maxItems"] == 100
+    assert status_schema["properties"]["items"]["maxItems"] == 100
+    assert set(request_schema["$defs"]["DocumentBatchSource"]["required"]) == {
+        "source_id",
+        "document_kind",
+    }
     assert status_schema["$defs"]["BatchState"]["enum"] == [
         "created",
         "running",
@@ -97,6 +117,9 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
         "permanently_failed",
         "cancelled",
     ]
+    assert status_schema["$defs"]["DocumentBatchItem"]["properties"]["document_kind"] == {
+        "$ref": "#/$defs/BatchDocumentKind"
+    }
     label_pattern = "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
     assert (
         status_schema["$defs"]["DocumentBatchItem"]["properties"]["display_label"]["pattern"]
@@ -105,6 +128,10 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
     assert (
         status_schema["$defs"]["ImportSource"]["properties"]["display_label"]["pattern"]
         == label_pattern
+    )
+    assert (
+        status_schema["$defs"]["ImportSource"]["properties"]["size_bytes"]["maximum"]
+        == 128 * 1024 * 1024
     )
 
 

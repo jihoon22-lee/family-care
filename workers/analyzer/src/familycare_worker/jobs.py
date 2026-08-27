@@ -24,7 +24,9 @@ _WORKER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SOURCE_KEY_PATTERN = re.compile(
     r"^(?!/)(?![A-Za-z]:)(?!.*\\)(?!.*[\r\n])(?!.*(?:^|/)\.\.(?:/|$))[^\x00]+$"
 )
-_DOCUMENT_KINDS = frozenset({"amendment", "application", "claim", "policy", "supporting", "terms"})
+_DOCUMENT_KINDS = frozenset(
+    {"amendment", "application", "claim", "policy", "product_explanation", "supporting", "terms"}
+)
 _TABLE_STRATEGIES = frozenset({"auto", "lines", "text"})
 _RETRYABLE_CODES = frozenset(
     {

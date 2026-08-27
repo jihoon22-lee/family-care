@@ -10,6 +10,7 @@
         "application",
         "claim",
         "policy",
+        "product_explanation",
         "supporting",
         "terms"
       ],
@@ -172,7 +173,7 @@
   "x-familycare-safety-limits": {
     "child_address_space_bytes": 1610612736,
     "child_cpu_limit_seconds": 90,
-    "max_input_bytes": 26214400,
+    "max_input_bytes": 134217728,
     "max_open_descriptors": 64,
     "max_output_bytes": 67108864,
     "max_pages": 500,

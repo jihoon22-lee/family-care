@@ -46,6 +46,7 @@ _TOP_LEVEL_KEYS = frozenset(
         "schema_version",
     }
 )
+_PageEvidenceRecord = tuple[UUID, UUID, UUID, str, int, str]
 
 
 class RepositoryError(RuntimeError):
@@ -68,6 +69,7 @@ class BatchItemRecord:
     batch_id: UUID
     source_id: str
     source_key: str
+    document_kind: str
     document_id: UUID
     document_version_id: UUID
     state: str
@@ -273,6 +275,47 @@ def _validate_result(
             width, height = page_dimensions[page_number]
             _bbox(item["bbox"], width=width, height=height)
     return cast(ExtractionResult, result)
+
+
+def _page_evidence_records(
+    result: ExtractionResult,
+    *,
+    household_space_id: UUID,
+    document_version_id: UUID,
+    extraction_id: UUID,
+    content_sha256: str,
+    expected_page_count: int,
+) -> tuple[_PageEvidenceRecord, ...]:
+    """Bind every validated physical page to one scoped, reviewable Evidence row."""
+
+    if (
+        any(
+            not isinstance(value, UUID) or value.int == 0
+            for value in (household_space_id, document_version_id, extraction_id)
+        )
+        or _SHA256_PATTERN.fullmatch(content_sha256) is None
+        or isinstance(expected_page_count, bool)
+        or not 1 <= expected_page_count <= 500
+    ):
+        raise InvalidExtractionResult
+    pages = result["pages"]
+    if len(pages) != expected_page_count:
+        raise InvalidExtractionResult
+    records: list[_PageEvidenceRecord] = []
+    for expected_page, page in enumerate(pages, start=1):
+        if page["page_number"] != expected_page:
+            raise InvalidExtractionResult
+        records.append(
+            (
+                household_space_id,
+                document_version_id,
+                extraction_id,
+                content_sha256,
+                expected_page,
+                "NEEDS_REVIEW",
+            )
+        )
+    return tuple(records)
 
 
 def _ocr_config_hash(engine_version: str) -> str:
@@ -846,6 +889,13 @@ class ExtractionRepository:
 
 _BATCH_WORKER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "OCR_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
+_POLICY_STRUCTURING_PIPELINE_VERSION = "policy-candidate-batch-v2"
+
+
+def _should_enqueue_policy_structuring_job(document_kind: object) -> bool:
+    """Keep policy-candidate work behind the explicit policy source boundary."""
+
+    return document_kind == "policy"
 
 
 def _lock_owned_batch_item(
@@ -855,10 +905,14 @@ def _lock_owned_batch_item(
 ) -> dict[str, Any]:
     row = connection.execute(
         """
-        SELECT item.*, item.lease_expires_at > clock_timestamp() AS lease_valid
+        SELECT item.*,
+               batch.household_space_id AS batch_household_space_id,
+               batch.family_member_id AS batch_family_member_id,
+               item.lease_expires_at > clock_timestamp() AS lease_valid
         FROM document_batch_items AS item
+        JOIN document_batches AS batch ON batch.id = item.batch_id
         WHERE item.id = %s
-        FOR UPDATE
+        FOR UPDATE OF item
         """,
         (item_id,),
     ).fetchone()
@@ -994,10 +1048,13 @@ class BatchRepository:
                 document = connection.execute(
                     """
                     INSERT INTO documents (source_key, document_kind, status)
-                    VALUES (%s, 'supporting', 'pending')
+                    VALUES (%s, %s, 'pending')
                     RETURNING id
                     """,
-                    (f"private-import/{row['batch_id'].hex}/{row['source_id']}",),
+                    (
+                        f"private-import/{row['batch_id'].hex}/{row['source_id']}",
+                        row["document_kind"],
+                    ),
                 ).fetchone()
                 if document is None:
                     raise DocumentStateConflict
@@ -1012,6 +1069,7 @@ class BatchRepository:
                 batch_id=cast(UUID, row["batch_id"]),
                 source_id=cast(str, row["source_id"]),
                 source_key=cast(str, row["source_key"]),
+                document_kind=cast(str, row["document_kind"]),
                 document_id=cast(UUID, document_id),
                 document_version_id=UUID(int=cast(UUID, row["id"]).int),
                 state="running",
@@ -1204,7 +1262,18 @@ class BatchRepository:
             if extraction_row is None:
                 raise DocumentStateConflict
             extraction_id = cast(UUID, extraction_row["id"])
-            for page in result["pages"]:
+            household_space_id = item["batch_household_space_id"]
+            if not isinstance(household_space_id, UUID):
+                raise DocumentStateConflict
+            evidence_records = _page_evidence_records(
+                result,
+                household_space_id=household_space_id,
+                document_version_id=archive.document_version_id,
+                extraction_id=extraction_id,
+                content_sha256=validated.content_sha256,
+                expected_page_count=validated.page_count,
+            )
+            for page, evidence_record in zip(result["pages"], evidence_records, strict=True):
                 quality = page["quality"]
                 page_row = connection.execute(
                     """
@@ -1233,6 +1302,16 @@ class BatchRepository:
                 if page_row is None:
                     raise DocumentStateConflict
                 page_id = cast(UUID, page_row["id"])
+                connection.execute(
+                    """
+                    INSERT INTO evidence (
+                        household_space_id, document_version_id, extraction_id,
+                        content_sha256, physical_page, review_state
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    evidence_record,
+                )
                 for block in page["blocks"]:
                     connection.execute(
                         """
@@ -1309,10 +1388,36 @@ class BatchRepository:
                     document_id,
                 ),
             )
+            if _should_enqueue_policy_structuring_job(item["document_kind"]):
+                family_member_id = item["batch_family_member_id"]
+                if not isinstance(family_member_id, UUID):
+                    raise DocumentStateConflict
+                structuring_job = connection.execute(
+                    """
+                    INSERT INTO policy_structuring_jobs (
+                        household_space_id, batch_item_id, family_member_id,
+                        document_version_id, extraction_id, state,
+                        pipeline_version, available_at, max_attempts
+                    ) VALUES (%s, %s, %s, %s, %s, 'queued', %s,
+                              clock_timestamp(), 5)
+                    RETURNING id
+                    """,
+                    (
+                        household_space_id,
+                        item_id,
+                        family_member_id,
+                        archive.document_version_id,
+                        extraction_id,
+                        _POLICY_STRUCTURING_PIPELINE_VERSION,
+                    ),
+                ).fetchone()
+                if structuring_job is None:
+                    raise DocumentStateConflict
             connection.execute(
                 """
                 UPDATE document_batch_items
                 SET state = 'succeeded', error_code = NULL,
+                    processed_document_version_id = %s,
                     ocr_state = %s, ocr_pages_processed = %s,
                     ocr_warning_codes = %s,
                     lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
@@ -1320,6 +1425,7 @@ class BatchRepository:
                 WHERE id = %s
                 """,
                 (
+                    archive.document_version_id,
                     "warning"
                     if ocr_result is not None and ocr_result.warning_codes
                     else "completed"

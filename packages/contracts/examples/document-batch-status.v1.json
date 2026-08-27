@@ -4,6 +4,7 @@
   "items": [
     {
       "attempts": 1,
+      "document_kind": "policy",
       "display_label": "Sample policy document A.pdf",
       "error_code": null,
       "ocr_pages_processed": 2,
@@ -14,6 +15,7 @@
     },
     {
       "attempts": 1,
+      "document_kind": "terms",
       "display_label": "Sample policy document B.pdf",
       "error_code": "PASSWORD_REQUIRED",
       "ocr_pages_processed": 0,

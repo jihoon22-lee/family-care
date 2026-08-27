@@ -1,0 +1,266 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/insurance-document-inventory.v1.schema.json",
+  "title": "FamilyCare member insurance document inventory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "member_id",
+    "summary",
+    "registered_policies",
+    "unregistered_document_sets",
+    "unpaired_components",
+    "unreadable_sources"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "member_id": { "$ref": "#/$defs/Uuid" },
+    "summary": { "$ref": "#/$defs/Summary" },
+    "registered_policies": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/RegisteredPolicy" }
+    },
+    "unregistered_document_sets": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/UnregisteredSet" }
+    },
+    "unpaired_components": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/Component" }
+    },
+    "unreadable_sources": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/UnreadableSource" }
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "Role": {
+      "type": "string",
+      "enum": ["policy", "terms", "product_explanation", "application", "supporting"]
+    },
+    "ReviewState": {
+      "type": "string",
+      "enum": ["SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED"]
+    },
+    "ProcessingState": {
+      "type": "string",
+      "enum": ["READY", "PENDING", "PASSWORD_REQUIRED", "OCR_REQUIRED", "FAILED"]
+    },
+    "DuplicateState": {
+      "type": "string",
+      "enum": ["UNIQUE", "SAME_MEMBER_DUPLICATE", "CROSS_MEMBER_COPY_POSSIBLE"]
+    },
+    "Component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "document_batch_item_id",
+        "role",
+        "page_start",
+        "page_end",
+        "review_state",
+        "processing_state",
+        "duplicate_state"
+      ],
+      "properties": {
+        "id": { "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }] },
+        "document_batch_item_id": {
+          "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+        },
+        "role": { "$ref": "#/$defs/Role" },
+        "page_start": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "page_end": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "review_state": { "$ref": "#/$defs/ReviewState" },
+        "processing_state": { "$ref": "#/$defs/ProcessingState" },
+        "duplicate_state": { "$ref": "#/$defs/DuplicateState" }
+      }
+    },
+    "SetItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "match_state", "component"],
+      "properties": {
+        "id": { "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }] },
+        "version": { "type": "integer", "minimum": 1 },
+        "match_state": { "$ref": "#/$defs/ReviewState" },
+        "component": { "$ref": "#/$defs/Component" }
+      }
+    },
+    "RoleSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "source_count", "component_count", "bundled_source", "items"],
+      "properties": {
+        "role": { "$ref": "#/$defs/Role" },
+        "source_count": { "type": "integer", "minimum": 0 },
+        "component_count": { "type": "integer", "minimum": 0 },
+        "bundled_source": { "type": "boolean" },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/SetItem" }
+        }
+      }
+    },
+    "RegisteredPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_id",
+        "insurer_display",
+        "product_display",
+        "status",
+        "rider_count",
+        "completeness",
+        "documents",
+        "has_product_explanation",
+        "has_application",
+        "missing_document_roles",
+        "document_set_id",
+        "document_set_version"
+      ],
+      "properties": {
+        "policy_id": { "$ref": "#/$defs/Uuid" },
+        "insurer_display": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "product_display": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "expired", "cancelled", "unknown"]
+        },
+        "rider_count": { "type": "integer", "minimum": 0 },
+        "completeness": {
+          "type": "string",
+          "enum": ["CERTIFICATE_AND_TERMS", "CERTIFICATE_ONLY"]
+        },
+        "documents": {
+          "type": "array",
+          "maxItems": 5,
+          "items": { "$ref": "#/$defs/RoleSummary" }
+        },
+        "has_product_explanation": { "type": "boolean" },
+        "has_application": { "type": "boolean" },
+        "missing_document_roles": {
+          "type": "array",
+          "maxItems": 5,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Role" }
+        },
+        "document_set_id": {
+          "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+        },
+        "document_set_version": {
+          "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }]
+        }
+      }
+    },
+    "UnregisteredSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "insurer_display",
+        "product_display",
+        "display_label",
+        "version",
+        "primary_classification",
+        "enrollment_confirmed",
+        "has_product_explanation",
+        "has_application",
+        "source_count",
+        "component_count",
+        "items"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/Uuid" },
+        "insurer_display": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 160 },
+            { "type": "null" }
+          ]
+        },
+        "product_display": {
+          "anyOf": [
+            { "type": "string", "minLength": 1, "maxLength": 200 },
+            { "type": "null" }
+          ]
+        },
+        "display_label": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "version": { "type": "integer", "minimum": 1 },
+        "primary_classification": {
+          "type": "string",
+          "enum": [
+            "TERMS_ONLY",
+            "PRODUCT_EXPLANATION_ONLY",
+            "APPLICATION_ONLY",
+            "POLICY_UNREVIEWED",
+            "SUPPORTING_ONLY"
+          ]
+        },
+        "enrollment_confirmed": { "const": false },
+        "has_product_explanation": { "type": "boolean" },
+        "has_application": { "type": "boolean" },
+        "source_count": { "type": "integer", "minimum": 0 },
+        "component_count": { "type": "integer", "minimum": 0 },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": { "$ref": "#/$defs/SetItem" }
+        }
+      }
+    },
+    "UnreadableSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_batch_item_id",
+        "source_kind",
+        "display_label",
+        "processing_state"
+      ],
+      "properties": {
+        "document_batch_item_id": { "$ref": "#/$defs/Uuid" },
+        "source_kind": { "$ref": "#/$defs/Role" },
+        "display_label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "processing_state": {
+          "type": "string",
+          "enum": ["PASSWORD_REQUIRED", "OCR_REQUIRED", "FAILED"]
+        }
+      }
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "certificate_backed_policies",
+        "certificate_and_terms",
+        "certificate_only",
+        "terms_only_documents",
+        "product_explanation_documents",
+        "application_documents",
+        "unreadable_documents",
+        "pairing_conflicts"
+      ],
+      "properties": {
+        "certificate_backed_policies": { "type": "integer", "minimum": 0 },
+        "certificate_and_terms": { "type": "integer", "minimum": 0 },
+        "certificate_only": { "type": "integer", "minimum": 0 },
+        "terms_only_documents": { "type": "integer", "minimum": 0 },
+        "product_explanation_documents": { "type": "integer", "minimum": 0 },
+        "application_documents": { "type": "integer", "minimum": 0 },
+        "unreadable_documents": { "type": "integer", "minimum": 0 },
+        "pairing_conflicts": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

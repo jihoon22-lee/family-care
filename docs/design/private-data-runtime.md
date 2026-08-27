@@ -59,6 +59,10 @@ API UID `10001`과 Worker UID `10002`는 supplementary GID `10003`을 공유하�
 
 Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만큼 증가한다. 원본·DB·archive backup과 복구는 v0.1 운영 가이드에서 명령 단위로 분리한다.
 
+### Private PDF capacity
+
+Private batch source, decrypted plaintext extent, and managed archive payload are each bounded to 128 MiB. This capacity boundary does not change parser isolation: PDF pages remain capped at 500; parser output and `RLIMIT_FSIZE` remain 64 MiB; child address space remains 1536 MiB, child CPU 90 seconds, parent wall timeout 120 seconds, and open descriptors 64.
+
 ## Password handling
 
 - batch는 정확히 한 FamilyMember를 가진다.
@@ -92,7 +96,7 @@ Archive write와 DB success transition 사이의 실패는 두 종류로 나눈�
 선택적 OCR 계약과 Worker 구현은 `main`에 있으며 합성 renderer/engine/processor/cleanup/atomic-persistence 테스트와 Worker 이미지 language smoke 경계가 있다. 이는 실제 private PDF acceptance를 의미하지 않는다.
 
 - native extraction이 `OCR_REQUIRED`로 분류한 page만 OCR한다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않는다.
-- renderer는 이미 열린 read-only descriptor에서 25 MiB 이내 bounded bytes를 읽어 PDFium으로 한 page를 fixed 300 DPI로 렌더링한다. source PDF path를 OCR renderer에 전달하거나 다시 열지 않는다.
+- renderer는 이미 열린 read-only descriptor에서 128 MiB 이내 bounded bytes를 읽어 PDFium으로 한 page를 fixed 300 DPI로 렌더링한다. source PDF path를 OCR renderer에 전달하거나 다시 열지 않는다.
 - OCR engine은 `/usr/bin/tesseract`를 fixed `kor+eng` argv로 `shell=False` 실행하고 `stdout ... tsv`를 bounded bytes로 파싱한다. `pytesseract` dependency와 TSV/image artifact file은 없다.
 - page 전체 PDF나 image를 외부 OCR provider로 보내지 않는다.
 - OCR text, coordinates, engine/language/version과 quality warning을 `ocr_layers`/`ocr_pages`/`ocr_blocks` 별도 extraction layer로 저장한다. native extraction rows와 Evidence는 덮어쓰지 않고 source layer를 구분한다.
@@ -150,7 +154,7 @@ v0.1에 포함하지 않음:
 
 - 가족별 batch scope와 cross-member 혼합 거부
 - 한 번 입력 password 재사용, 부분 실패 재입력, DB/job/log 비저장
-- encrypted plaintext 25 MiB extent와 500-page pre-clone bound, parser/archive/persistence 미호출
+- encrypted plaintext 128 MiB extent, managed archive payload 128 MiB bound와 500-page pre-clone bound, parser/archive/persistence 미호출
 - cancellation·stop·lease loss의 registry disposal과 secret-server deactivation callback
 - archive 전후 heartbeat, definite-orphan 삭제, ambiguous commit ciphertext 보존과 안정 이벤트
 - printable path-free display-label normalization과 API/OpenAPI/JSON Schema parity

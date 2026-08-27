@@ -6,7 +6,7 @@ import json
 import math
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol, cast
 from uuid import UUID
@@ -14,6 +14,8 @@ from uuid import UUID
 import openai
 
 _MAX_EVIDENCE_TEXT = 240
+MAX_PROVIDER_OUTPUT_TOKENS = 20_000
+PROVIDER_REQUEST_TIMEOUT_SECONDS = 120.0
 DEFAULT_STRUCTURER_MODEL = "gpt-5.6-luna"
 DEFAULT_VERIFIER_MODEL = "gpt-5.6-terra"
 _FORBIDDEN_INPUT_KEYS = frozenset(
@@ -41,6 +43,18 @@ class RetryableProviderError(ProviderBoundaryError):
         super().__init__("RETRYABLE_PROVIDER_ERROR")
 
 
+class ProviderTimeoutError(RetryableProviderError):
+    """The provider call exceeded its bounded request time."""
+
+
+class ProviderRateLimitError(RetryableProviderError):
+    """The provider rejected a call at its temporary rate boundary."""
+
+
+class ProviderUnavailableError(RetryableProviderError):
+    """The provider could not be reached or returned a temporary server error."""
+
+
 class ProviderConfigurationError(ProviderBoundaryError):
     def __init__(self) -> None:
         super().__init__("CONFIGURATION_ERROR")
@@ -58,7 +72,7 @@ class EvidenceSlice:
     evidence_id: UUID
     document_version_id: UUID
     page: int
-    text: str
+    text: str = field(repr=False)
     bbox: tuple[float, float, float, float] | None
     document_kind: str = "policy"
 
@@ -202,6 +216,7 @@ class OpenAiResponsesAdapter:
                 model=model,
                 instructions=system_instruction,
                 input=json.dumps(input_payload, sort_keys=True, separators=(",", ":")),
+                max_output_tokens=MAX_PROVIDER_OUTPUT_TOKENS,
                 text={
                     "format": {
                         "type": "json_schema",
@@ -211,13 +226,14 @@ class OpenAiResponsesAdapter:
                     }
                 },
                 store=False,
+                timeout=PROVIDER_REQUEST_TIMEOUT_SECONDS,
             )
-        except (
-            openai.APITimeoutError,
-            openai.APIConnectionError,
-            openai.RateLimitError,
-        ):
-            raise RetryableProviderError from None
+        except openai.APITimeoutError:
+            raise ProviderTimeoutError from None
+        except openai.RateLimitError:
+            raise ProviderRateLimitError from None
+        except openai.APIConnectionError, openai.InternalServerError:
+            raise ProviderUnavailableError from None
         except (
             openai.AuthenticationError,
             openai.PermissionDeniedError,
@@ -253,11 +269,16 @@ __all__ = [
     "DEFAULT_STRUCTURER_MODEL",
     "DEFAULT_VERIFIER_MODEL",
     "EvidenceSlice",
+    "MAX_PROVIDER_OUTPUT_TOKENS",
     "OpenAiResponsesAdapter",
     "ProviderBoundaryError",
     "ProviderConfigurationError",
+    "ProviderRateLimitError",
     "ProviderResponse",
+    "ProviderTimeoutError",
+    "ProviderUnavailableError",
     "ProviderValidationError",
+    "PROVIDER_REQUEST_TIMEOUT_SECONDS",
     "RetryableProviderError",
     "provider_payload",
 ]

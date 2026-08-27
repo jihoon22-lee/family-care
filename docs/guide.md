@@ -344,6 +344,8 @@ password scope는 batch 안에서 재사용할 수 있지만 Worker 반복에서
 
 성공한 평문은 Worker 전용 archive root에 document별 AES-GCM data key와 AES-KW wrapped key로 저장한 뒤에만 ready가 됩니다. archive master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600` 조건을 만족해야 합니다. 복호화 PDF와 중간 산출물은 Worker work root의 mode `0700`/`0600` 작업 공간에만 존재하며 import source와 Google Drive 원본은 성공·실패·취소 어느 경로에서도 수정·삭제하지 않습니다.
 
+Private batch source, decrypted plaintext extent, and managed archive payload are each bounded to 128 MiB. The parser safety contract remains 500 pages, 64 MiB parser output/`RLIMIT_FSIZE`, 1536 MiB child address space, 90-second child CPU, 120-second parent wall timeout, and 64 open descriptors.
+
 native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택적 OCR 대상이 됩니다. `TEXT_SUFFICIENT` page는 renderer와 engine을 호출하지 않습니다. Worker는 read-only source descriptor에서 bounded bytes를 PDFium으로 읽어 fixed 300 DPI PNG를 mode `0600` handle에 만들고, `/usr/bin/tesseract`를 fixed `kor+eng` argv와 `shell=False`로 실행해 bounded TSV를 stdout에서 파싱합니다. `pytesseract` dependency와 TSV artifact는 없으며 OCR 결과는 `ocr_layers`/`ocr_pages`/`ocr_blocks`의 별도 provenance layer에 저장됩니다. native blocks와 Evidence는 덮어쓰지 않습니다.
 
 각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 테스트는 선택 page, provenance separation, cleanup, atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF acceptance를 대신하지 않습니다.
@@ -406,7 +408,7 @@ FAMILYCARE_ARCHIVE_MASTER_KEY_FILE=/absolute/path/outside/repository/master-key
 
 `FAMILYCARE_IMPORT_ROOT`는 API와 Worker에만 read-only로 공유합니다. Compose의 archive/work는 Worker-only named volume이며 container 내부 `FAMILYCARE_ARCHIVE_ROOT`와 `FAMILYCARE_WORK_ROOT`를 가리킵니다. master-key file은 absolute regular file, 정확히 32 bytes, mode `0600`, UID `10002`여야 하며 key 값은 환경변수·Compose YAML·image·DB·log에 넣지 않습니다. `FAMILYCARE_SECRET_SOCKET`은 API/Worker가 공유하는 named volume 내부 socket path이며 host path가 아닙니다. Worker image의 `eng`/`kor` language package smoke와 합성 Compose permission smoke는 실제 자료·Windows·mobile·Tailscale·provider acceptance를 대신하지 않습니다.
 
-Phase 1 safety contract는 25 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB output file, 64 open descriptors입니다. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
+현재 PDF safety contract는 128 MiB input, 500 pages, 120-second parent wall timeout, 90-second child CPU, 1536 MiB address space, 64 MiB parser output/`RLIMIT_FSIZE`, 64 open descriptors입니다. Private batch source, decrypted plaintext extent, and managed archive payload are each bounded to 128 MiB. Work directory는 `0700`, file은 `0600`이며 SHA-256은 1 MiB chunk로 계산합니다. 요청과 job은 relative `source_key`만 사용하고, resolved regular file은 root 아래에 있어야 하며 symlink traversal과 `%PDF-` magic 불일치를 거부합니다.
 
 문서 parser child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하며 network client나 external URL resolution을 제공하지 않습니다. OS egress enforcement와 실제 private-data acceptance는 approved runtime boundary가 마련될 때까지 수행하지 않습니다.
 

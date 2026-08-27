@@ -10,16 +10,20 @@ import psycopg
 import pytest
 from familycare_worker.__main__ import (
     FairJobRunner,
+    ManagedPrivateRunner,
     _local_ocr_processor,
     _runner_from_environment,
     main,
     run_idle,
     run_worker_loop,
 )
+from familycare_worker.ai.provider import OpenAiResponsesAdapter
 from familycare_worker.health import database_is_ready, health_payload, private_runtime_is_ready
+from familycare_worker.imports.secret_channel import BatchSecretReceiver
 from familycare_worker.ocr.engine import TesseractOcrEngine
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
-from familycare_worker.runner import EventStructuringJobRunner
+from familycare_worker.repository import BatchRepository
+from familycare_worker.runner import EventStructuringJobRunner, PolicyStructuringJobRunner
 from pytest import CaptureFixture, MonkeyPatch
 
 
@@ -51,7 +55,7 @@ def test_health_payload_reports_analyzer_identity() -> None:
     assert health_payload() == {
         "service": "analyzer",
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
@@ -62,14 +66,14 @@ def test_main_prints_health_payload(capsys: CaptureFixture[str]) -> None:
     assert main([], stop_event=stop_event) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ok", "version": "0.1.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ok", "version": "0.2.0"}\n'
 
 
 def test_health_command_reports_database_ready(capsys: CaptureFixture[str]) -> None:
     assert main(["--health"], database_probe=lambda: True) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.1.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.2.0"}\n'
 
 
 def test_health_command_fails_when_database_is_unavailable(
@@ -79,7 +83,7 @@ def test_health_command_fails_when_database_is_unavailable(
 
     captured = capsys.readouterr()
     assert captured.out == (
-        '{"service": "analyzer", "status": "unavailable", "version": "0.1.0"}\n'
+        '{"service": "analyzer", "status": "unavailable", "version": "0.2.0"}\n'
     )
 
 
@@ -209,7 +213,7 @@ def test_health_command_combines_database_and_private_runtime_readiness(
 
     captured = capsys.readouterr()
     assert captured.out == (
-        '{"service": "analyzer", "status": "unavailable", "version": "0.1.0"}\n'
+        '{"service": "analyzer", "status": "unavailable", "version": "0.2.0"}\n'
     )
     assert os.getcwd() not in captured.out
 
@@ -327,6 +331,50 @@ def test_private_work_root_alone_does_not_enable_the_document_runner(
     assert "document_runner_configuration_incomplete" not in caplog.messages
 
 
+def test_private_environment_wires_policy_queue_and_strict_schemas(
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import_root = tmp_path / "import"
+    work_root = tmp_path / "work"
+    archive_root = tmp_path / "archive"
+    socket_root = tmp_path / "run"
+    for path in (import_root, work_root, archive_root, socket_root):
+        path.mkdir()
+    key_file = tmp_path / "master-key"
+    key_file.write_bytes(b"k" * 32)
+    key_file.chmod(0o600)
+    environment = {
+        "FAMILYCARE_DATABASE_URL": "postgresql://synthetic",
+        "FAMILYCARE_IMPORT_ROOT": str(import_root),
+        "FAMILYCARE_WORK_ROOT": str(work_root),
+        "FAMILYCARE_ARCHIVE_ROOT": str(archive_root),
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE": str(key_file),
+        "FAMILYCARE_SECRET_SOCKET": str(socket_root / "secret.sock"),
+    }
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.delenv("FAMILYCARE_DOCUMENT_ROOT", raising=False)
+    monkeypatch.setattr(BatchRepository, "active_password_batches", lambda _: set())
+    monkeypatch.setattr(BatchSecretReceiver, "start", lambda _: None)
+
+    runner = _runner_from_environment(Event())
+    assert isinstance(runner, ManagedPrivateRunner)
+    try:
+        assert isinstance(runner.runner, FairJobRunner)
+        policy_runners = [
+            item for item in runner.runner._runners if isinstance(item, PolicyStructuringJobRunner)
+        ]
+        assert len(policy_runners) == 1
+        provider = policy_runners[0].provider
+        assert isinstance(provider, OpenAiResponsesAdapter)
+        schemas = provider._schemas
+        assert "policy_candidate_batch_structurer_v2" in schemas
+        assert "policy_candidate_verifier_v1" in schemas
+    finally:
+        runner.shutdown()
+
+
 def test_local_ocr_processor_factory_is_lazy_and_descriptor_only() -> None:
     processor = _local_ocr_processor()
 
@@ -345,4 +393,4 @@ def test_console_entrypoint_reads_process_arguments(
     assert main(database_probe=lambda: True, stop_event=stop_event) == 0
 
     captured = capsys.readouterr()
-    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.1.0"}\n'
+    assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.2.0"}\n'

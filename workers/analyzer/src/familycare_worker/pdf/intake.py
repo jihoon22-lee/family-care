@@ -211,7 +211,7 @@ def validate_pdf(source: OpenedSource) -> ValidatedPdf:
 
         try:
             with _duplicate_handle(source.fd) as handle:
-                reader = PdfReader(handle, strict=True)
+                reader = PdfReader(handle, strict=False)
                 if reader.is_encrypted:
                     raise PasswordRequired
                 page_count = len(reader.pages)

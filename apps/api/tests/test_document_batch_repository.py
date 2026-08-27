@@ -10,7 +10,11 @@ from uuid import UUID, uuid4
 
 import psycopg
 import pytest
-from familycare_api.documents.batch_repository import BatchRecord, BatchRepository
+from familycare_api.documents.batch_repository import (
+    BatchRecord,
+    BatchRepository,
+    BatchSourceSelection,
+)
 from familycare_api.documents.import_sources import ResolvedImportSource
 
 pytestmark = pytest.mark.integration
@@ -183,7 +187,13 @@ def _create_batch(
         household_space_id=seed.household_a,
         created_by=seed.admin_a,
         family_member_id=seed.member_a,
-        sources=_sources(count),
+        sources=tuple(
+            BatchSourceSelection(
+                source=source,
+                document_kind=("policy", "terms", "supporting")[index],
+            )
+            for index, source in enumerate(_sources(count))
+        ),
     )
     assert batch is not None
     return batch
@@ -245,6 +255,7 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
     created = _create_batch(repository, seed)
     assert created.state == "created"
     assert [item.source_id for item in created.items] == [SOURCE_ID_A, SOURCE_ID_B]
+    assert [item.document_kind for item in created.items] == ["policy", "terms"]
 
     scoped = repository.get(
         household_space_id=seed.household_a,
@@ -269,7 +280,7 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
         household_space_id=seed.household_a,
         created_by=seed.admin_a,
         family_member_id=seed.member_b,
-        sources=_sources(1),
+        sources=(BatchSourceSelection(source=_sources(1)[0], document_kind="policy"),),
     )
     assert cross_member is None
 
@@ -277,7 +288,7 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
         household_space_id=seed.household_a,
         created_by=seed.admin_b,
         family_member_id=seed.member_a,
-        sources=_sources(1),
+        sources=(BatchSourceSelection(source=_sources(1)[0], document_kind="policy"),),
     )
     assert cross_household_admin is None
 
@@ -287,6 +298,7 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
     assert {field for item in scoped.items for field in asdict(item)} == {
         "source_id",
         "display_label",
+        "document_kind",
         "state",
         "error_code",
         "attempts",

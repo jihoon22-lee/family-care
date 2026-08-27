@@ -73,7 +73,7 @@ PDF가 파서 취약점, 과도한 메모리·CPU 사용, embedded action, 경�
 - 읽기 전용 원본과 별도 임시 root
 - 크기·페이지·시간·메모리 제한
 - parser dedicated child process와 64 open descriptor limit
-- 25 MiB input, 500 page, 120초 parent wall, 90초 child CPU, 1536 MiB address-space, 64 MiB output-file 제한
+- 128 MiB private input/decrypted/archive payload, 500 page, 120초 parent wall, 90초 child CPU, 1536 MiB address-space, 64 MiB parser output/`RLIMIT_FSIZE` 제한
 - child에는 부모가 no-follow 방식으로 연 read-only source descriptor와 canonical JSON settings만 전달하고 external URL resolution을 제공하지 않음
 - fork 후 parser 호출 전 source와 supervision pipe 외의 inherited application file·socket descriptor를 닫음
 - parser child의 stdout·stderr를 폐기해 library 출력이 Worker log로 유입되지 않게 함

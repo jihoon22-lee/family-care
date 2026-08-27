@@ -11,11 +11,11 @@
       "const": "1",
       "type": "string"
     },
-    "source_ids": {
+    "sources": {
       "items": {
-        "$ref": "#/$defs/SourceId"
+        "$ref": "#/$defs/DocumentBatchSource"
       },
-      "maxItems": 64,
+      "maxItems": 100,
       "minItems": 1,
       "type": "array",
       "uniqueItems": true
@@ -24,7 +24,7 @@
   "required": [
     "schema_version",
     "family_member_id",
-    "source_ids"
+    "sources"
   ],
   "title": "DocumentBatchRequest",
   "type": "object",
@@ -34,6 +34,34 @@
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "title": "FamilyMemberId",
       "type": "string"
+    },
+    "BatchDocumentKind": {
+      "enum": [
+        "application",
+        "policy",
+        "product_explanation",
+        "supporting",
+        "terms"
+      ],
+      "title": "BatchDocumentKind",
+      "type": "string"
+    },
+    "DocumentBatchSource": {
+      "additionalProperties": false,
+      "properties": {
+        "document_kind": {
+          "$ref": "#/$defs/BatchDocumentKind"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId"
+        }
+      },
+      "required": [
+        "source_id",
+        "document_kind"
+      ],
+      "title": "DocumentBatchSource",
+      "type": "object"
     },
     "SourceId": {
       "maxLength": 64,

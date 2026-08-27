@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 type CandidateKind = Literal["policy_contract", "policy_party", "rider"]
 type CandidateStatus = Literal["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED", "rejected"]
@@ -62,7 +62,28 @@ class StructurerCandidate(BaseModel):
     schema_version: Literal["1"]
     candidate_id: UUID
     candidate_kind: CandidateKind
-    fields: tuple[CandidateField, ...] = Field(min_length=1, max_length=32)
+    fields: tuple[CandidateField, ...] = Field(min_length=1, max_length=15)
+
+
+class StructurerCandidateBatch(BaseModel):
+    """One enrolled policy candidate plus a bounded set of enrolled riders."""
+
+    model_config = _STRICT
+
+    schema_version: Literal["2"]
+    policy: StructurerCandidate
+    riders: tuple[StructurerCandidate, ...] = Field(max_length=31)
+
+    @model_validator(mode="after")
+    def validate_candidate_roles(self) -> Self:
+        candidates = (self.policy, *self.riders)
+        if (
+            self.policy.candidate_kind != "policy_contract"
+            or any(candidate.candidate_kind != "rider" for candidate in self.riders)
+            or len({candidate.candidate_id for candidate in candidates}) != len(candidates)
+        ):
+            raise ValueError("invalid policy candidate batch")
+        return self
 
 
 class VerifierDecision(BaseModel):
@@ -104,6 +125,7 @@ def openai_schema_registry() -> dict[str, dict[str, object]]:
 
     return {
         "policy_candidate_structurer_v1": StructurerCandidate.model_json_schema(),
+        "policy_candidate_batch_structurer_v2": StructurerCandidateBatch.model_json_schema(),
         "policy_candidate_verifier_v1": VerifierDecision.model_json_schema(),
     }
 
@@ -119,6 +141,7 @@ __all__ = [
     "PolicyCandidate",
     "PolicyCandidateFieldId",
     "StructurerCandidate",
+    "StructurerCandidateBatch",
     "VerifierDecision",
     "openai_schema_registry",
 ]

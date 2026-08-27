@@ -54,9 +54,17 @@ def list_review_items(
     service: ServiceDependency,
     domain: Literal["policy", "rider_clause", "coverage_rule"] = "policy",
     status: Literal["NEEDS_REVIEW", "AI_VERIFIED", "USER_CONFIRMED"] = "NEEDS_REVIEW",
+    family_member_id: UUID | None = None,
 ) -> list[PolicyReviewItem]:
     _no_store(response)
-    return service.list_review_items(scope=scope, status=status, domain=domain)
+    if family_member_id is None:
+        return service.list_review_items(scope=scope, status=status, domain=domain)
+    return service.list_review_items(
+        scope=scope,
+        status=status,
+        domain=domain,
+        family_member_id=family_member_id,
+    )
 
 
 @router.get(

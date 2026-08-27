@@ -1,5 +1,16 @@
 import type { BatchResponse } from "../../api/generated";
 
+const DOCUMENT_KIND_LABELS: Record<
+  BatchResponse["items"][number]["document_kind"],
+  string
+> = {
+  application: "청약서",
+  policy: "증권",
+  product_explanation: "상품설명서",
+  supporting: "보조자료",
+  terms: "약관",
+};
+
 const ITEM_LABELS: Record<BatchResponse["items"][number]["state"], string> = {
   cancelled: "취소됨",
   password_required: "비밀번호 필요",
@@ -59,6 +70,9 @@ export function BatchProgress({
           <li key={item.source_id}>
             <span>
               <strong>{item.display_label}</strong>
+              <small>
+                문서 종류: {DOCUMENT_KIND_LABELS[item.document_kind]}
+              </small>
               <small>시도 {item.attempts}회</small>
               <small>OCR 상태: {OCR_STATE_LABELS[item.ocr_state]}</small>
               <small>OCR 처리 페이지 {item.ocr_pages_processed}</small>

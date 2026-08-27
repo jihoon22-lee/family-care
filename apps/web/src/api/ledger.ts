@@ -21,9 +21,9 @@ export const listPolicyRiders = (policyId: string, signal?: AbortSignal) =>
     { signal },
   );
 
-export const listReviewItems = (signal?: AbortSignal) =>
+export const listReviewItems = (familyMemberId: string, signal?: AbortSignal) =>
   apiRequest<PolicyReviewItem[]>(
-    "/api/v1/review-items?domain=policy&status=NEEDS_REVIEW",
+    `/api/v1/review-items?domain=policy&status=NEEDS_REVIEW&family_member_id=${encodeURIComponent(familyMemberId)}`,
     { signal },
   );
 

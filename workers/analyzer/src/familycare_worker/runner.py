@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID
@@ -12,12 +12,18 @@ from uuid import UUID
 import psycopg
 
 from familycare_worker.ai.event_structurer import EventStructuringRequest, structure_event
-from familycare_worker.ai.policy_pipeline import run_policy_pipeline
+from familycare_worker.ai.evidence_loader import (
+    EvidenceLoadError,
+    EvidenceRepositoryUnavailable,
+)
+from familycare_worker.ai.minimizer import EvidenceMinimizationError, minimize_evidence
+from familycare_worker.ai.policy_pipeline import run_policy_batch_pipeline, run_policy_pipeline
 from familycare_worker.ai.provider import (
     DEFAULT_STRUCTURER_MODEL,
     DEFAULT_VERIFIER_MODEL,
     AiProvider,
     EvidenceSlice,
+    ProviderResponse,
 )
 from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.event_jobs import (
@@ -49,6 +55,21 @@ from familycare_worker.pdf.errors import (
 from familycare_worker.pdf.intake import open_source, validate_pdf
 from familycare_worker.pdf.isolation import ParseOutcome, run_isolated_parser
 from familycare_worker.pdf.workspace import Workspace, create_workspace
+from familycare_worker.policy_candidates import (
+    InvalidPolicyCandidateBatch,
+    PolicyCandidateJobConflict,
+    PolicyCandidateRepositoryUnavailable,
+)
+from familycare_worker.policy_jobs import (
+    PolicyStructuringErrorCode,
+    PolicyStructuringJobNotFound,
+    PolicyStructuringJobRecord,
+    PolicyStructuringJobStateConflict,
+    PolicyStructuringNoEvidenceError,
+    PolicyStructuringQueue,
+    PolicyStructuringQueueUnavailable,
+    map_policy_structuring_error,
+)
 from familycare_worker.repository import (
     DocumentStateConflict,
     ExtractionRepository,
@@ -115,6 +136,200 @@ class PolicyCandidatePipelineRunner:
         if result.candidates:
             self.publisher.publish(result, bounded_evidence)
         return result
+
+
+class PolicyEvidenceLoaderLike(Protocol):
+    def load(
+        self,
+        *,
+        household_space_id: UUID,
+        document_version_id: UUID,
+        extraction_id: UUID,
+    ) -> tuple[EvidenceSlice, ...]: ...
+
+    def load_member_terms(
+        self,
+        *,
+        household_space_id: UUID,
+        family_member_id: UUID,
+    ) -> tuple[str, ...]: ...
+
+
+class PolicyJobCandidatePublisher(Protocol):
+    def publish(
+        self,
+        *,
+        job: PolicyStructuringJobRecord,
+        worker_id: str,
+        result: CandidatePipelineResult,
+        evidence: Sequence[EvidenceSlice],
+    ) -> tuple[UUID, ...]: ...
+
+
+_POLICY_RESULT_ERRORS: dict[str, PolicyStructuringErrorCode] = {
+    "CONFIGURATION_ERROR": "POLICY_STRUCTURING_AUTHENTICATION_FAILED",
+    "RETRYABLE_PROVIDER_ERROR": "POLICY_STRUCTURING_PROVIDER_TIMEOUT",
+    "VALIDATION_ERROR": "POLICY_STRUCTURING_INVALID_RESPONSE",
+    "SUCCESS": "POLICY_STRUCTURING_INVALID_RESPONSE",
+    "NEEDS_REVIEW": "POLICY_STRUCTURING_INVALID_RESPONSE",
+}
+
+
+class _PolicyStructuringLeaseLost(RuntimeError):
+    """Internal control flow that carries no job or provider data."""
+
+
+class _LeasedPolicyProvider:
+    """Refresh the database lease immediately before every provider call."""
+
+    def __init__(self, provider: AiProvider, heartbeat: Callable[[], bool]) -> None:
+        self.provider = provider
+        self.heartbeat = heartbeat
+
+    def complete(
+        self,
+        *,
+        model: str,
+        schema_name: str,
+        system_instruction: str,
+        input_payload: Mapping[str, object],
+    ) -> ProviderResponse:
+        if not self.heartbeat():
+            raise _PolicyStructuringLeaseLost
+        return self.provider.complete(
+            model=model,
+            schema_name=schema_name,
+            system_instruction=system_instruction,
+            input_payload=input_payload,
+        )
+
+
+class PolicyStructuringJobRunner:
+    """Run one private policy job without coupling provider success to import success."""
+
+    def __init__(
+        self,
+        *,
+        queue: PolicyStructuringQueue,
+        evidence_loader: PolicyEvidenceLoaderLike,
+        provider: AiProvider,
+        publisher: PolicyJobCandidatePublisher,
+        structurer_model: str = DEFAULT_STRUCTURER_MODEL,
+        verifier_model: str = DEFAULT_VERIFIER_MODEL,
+        lease_seconds: int = 180,
+    ) -> None:
+        if (
+            not isinstance(structurer_model, str)
+            or not 1 <= len(structurer_model) <= 128
+            or not isinstance(verifier_model, str)
+            or not 1 <= len(verifier_model) <= 128
+            or isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or not 1 <= lease_seconds <= 3_600
+        ):
+            raise ValueError("invalid policy structuring runner configuration")
+        self.queue = queue
+        self.evidence_loader = evidence_loader
+        self.provider = provider
+        self.publisher = publisher
+        self.structurer_model = structurer_model
+        self.verifier_model = verifier_model
+        self.lease_seconds = lease_seconds
+
+    def run_once(self, worker_id: str) -> bool:
+        """Process one due policy job and preserve commit ambiguity for lease recovery."""
+
+        job = self.queue.claim_next_job(worker_id, lease_seconds=self.lease_seconds)
+        if job is None:
+            return False
+        try:
+            evidence = self.evidence_loader.load(
+                household_space_id=job.household_space_id,
+                document_version_id=job.document_version_id,
+                extraction_id=job.extraction_id,
+            )
+            if not evidence:
+                raise PolicyStructuringNoEvidenceError
+            member_terms = self.evidence_loader.load_member_terms(
+                household_space_id=job.household_space_id,
+                family_member_id=job.family_member_id,
+            )
+            minimized = minimize_evidence(evidence, sensitive_terms=member_terms)
+            leased_provider = _LeasedPolicyProvider(
+                self.provider,
+                lambda: self.queue.heartbeat(
+                    job.id,
+                    worker_id,
+                    lease_seconds=self.lease_seconds,
+                ),
+            )
+            result = run_policy_batch_pipeline(
+                evidence=minimized,
+                provider=leased_provider,
+                structurer_model=self.structurer_model,
+                verifier_model=self.verifier_model,
+            )
+            if not result.candidates:
+                self._safe_fail(
+                    job.id,
+                    worker_id,
+                    _POLICY_RESULT_ERRORS[result.classification],
+                )
+                return True
+            if not self.queue.heartbeat(
+                job.id,
+                worker_id,
+                lease_seconds=self.lease_seconds,
+            ):
+                return True
+            self.publisher.publish(
+                job=job,
+                worker_id=worker_id,
+                result=result,
+                evidence=minimized,
+            )
+        except EvidenceRepositoryUnavailable, PolicyCandidateRepositoryUnavailable:
+            return True
+        except _PolicyStructuringLeaseLost:
+            return True
+        except PolicyStructuringJobNotFound, PolicyStructuringJobStateConflict:
+            return True
+        except PolicyStructuringQueueUnavailable, PolicyCandidateJobConflict:
+            return True
+        except InvalidPolicyCandidateBatch, EvidenceLoadError, EvidenceMinimizationError:
+            self._safe_fail(
+                job.id,
+                worker_id,
+                "POLICY_STRUCTURING_INVALID_RESPONSE",
+            )
+        except PolicyStructuringNoEvidenceError:
+            self._safe_fail(
+                job.id,
+                worker_id,
+                "POLICY_STRUCTURING_NO_EVIDENCE",
+            )
+        except Exception as error:
+            self._safe_fail(
+                job.id,
+                worker_id,
+                map_policy_structuring_error(error),
+            )
+        return True
+
+    def _safe_fail(
+        self,
+        job_id: UUID,
+        worker_id: str,
+        error_code: PolicyStructuringErrorCode,
+    ) -> None:
+        try:
+            self.queue.fail_job(job_id, worker_id, error_code)
+        except (
+            PolicyStructuringJobNotFound,
+            PolicyStructuringJobStateConflict,
+            PolicyStructuringQueueUnavailable,
+        ):
+            return
 
 
 class EventStructuringJobRunner:

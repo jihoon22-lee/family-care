@@ -270,20 +270,20 @@
             "title": "Schema Version",
             "type": "string"
           },
-          "source_ids": {
+          "sources": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/BatchSourceRequest"
             },
             "maxItems": 100,
             "minItems": 1,
-            "title": "Source Ids",
+            "title": "Sources",
             "type": "array"
           }
         },
         "required": [
           "schema_version",
           "family_member_id",
-          "source_ids"
+          "sources"
         ],
         "title": "BatchCreateRequest",
         "type": "object"
@@ -302,6 +302,17 @@
             "minLength": 1,
             "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
             "title": "Display Label",
+            "type": "string"
+          },
+          "document_kind": {
+            "enum": [
+              "application",
+              "policy",
+              "product_explanation",
+              "supporting",
+              "terms"
+            ],
+            "title": "Document Kind",
             "type": "string"
           },
           "error_code": {
@@ -390,6 +401,7 @@
         "required": [
           "source_id",
           "display_label",
+          "document_kind",
           "state",
           "error_code",
           "attempts",
@@ -446,6 +458,33 @@
           "items"
         ],
         "title": "BatchResponse",
+        "type": "object"
+      },
+      "BatchSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "enum": [
+              "application",
+              "policy",
+              "product_explanation",
+              "supporting",
+              "terms"
+            ],
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "document_kind"
+        ],
+        "title": "BatchSourceRequest",
         "type": "object"
       },
       "BenefitCalculationResponse": {
@@ -2252,6 +2291,70 @@
         "title": "ClauseSearchResponse",
         "type": "object"
       },
+      "ComponentCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_batch_item_id": {
+            "format": "uuid",
+            "title": "Document Batch Item Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "page_end": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "review_state": {
+            "default": "USER_CONFIRMED",
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_batch_item_id",
+          "role",
+          "page_start",
+          "page_end"
+        ],
+        "title": "ComponentCreateRequest",
+        "type": "object"
+      },
       "CoverageDecisionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2524,6 +2627,7 @@
               "application",
               "claim",
               "policy",
+              "product_explanation",
               "supporting",
               "terms"
             ],
@@ -2553,6 +2657,107 @@
           "extractor_config"
         ],
         "title": "DocumentAnalysisRequest",
+        "type": "object"
+      },
+      "DocumentSetCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "display_label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[^/\\\\\\r\\n]+$",
+            "title": "Display Label",
+            "type": "string"
+          },
+          "insurer_display": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
+          "policy_contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
+          },
+          "product_display": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "pattern": "^[^\\r\\n]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Display"
+          }
+        },
+        "required": [
+          "display_label"
+        ],
+        "title": "DocumentSetCreateRequest",
+        "type": "object"
+      },
+      "DocumentSetItemCreateRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Id"
+          },
+          "expected_set_version": {
+            "minimum": 1.0,
+            "title": "Expected Set Version",
+            "type": "integer"
+          },
+          "insurance_document_component_id": {
+            "format": "uuid",
+            "title": "Insurance Document Component Id",
+            "type": "string"
+          },
+          "match_state": {
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Match State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "insurance_document_component_id",
+          "match_state",
+          "expected_set_version"
+        ],
+        "title": "DocumentSetItemCreateRequest",
         "type": "object"
       },
       "ErrorResponse": {
@@ -2725,6 +2930,21 @@
           }
         },
         "title": "EvidenceSnapshotResponse",
+        "type": "object"
+      },
+      "ExpectedItemVersionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "minimum": 1.0,
+            "title": "Expected Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_version"
+        ],
+        "title": "ExpectedItemVersionRequest",
         "type": "object"
       },
       "ExtractionSummaryResponse": {
@@ -3038,7 +3258,7 @@
             "type": "string"
           },
           "version": {
-            "default": "0.1.0",
+            "default": "0.2.0",
             "title": "Version",
             "type": "string"
           }
@@ -3064,7 +3284,7 @@
             "type": "boolean"
           },
           "size_bytes": {
-            "maximum": 26214400.0,
+            "maximum": 134217728.0,
             "minimum": 0.0,
             "title": "Size Bytes",
             "type": "integer"
@@ -3082,6 +3302,420 @@
           "encrypted"
         ],
         "title": "ImportSourceResponse",
+        "type": "object"
+      },
+      "InsuranceDocumentComponentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "document_batch_item_id": {
+            "format": "uuid",
+            "title": "Document Batch Item Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "page_end": {
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "document_batch_item_id",
+          "role",
+          "page_start",
+          "page_end",
+          "review_state",
+          "version"
+        ],
+        "title": "InsuranceDocumentComponentResponse",
+        "type": "object"
+      },
+      "InsuranceDocumentErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "InsuranceDocumentErrorResponse",
+        "type": "object"
+      },
+      "InsuranceDocumentSetItemMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurance_document_component_id": {
+            "format": "uuid",
+            "title": "Insurance Document Component Id",
+            "type": "string"
+          },
+          "insurance_document_set_id": {
+            "format": "uuid",
+            "title": "Insurance Document Set Id",
+            "type": "string"
+          },
+          "match_state": {
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Match State",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "insurance_document_set_id",
+          "insurance_document_component_id",
+          "role",
+          "match_state",
+          "version"
+        ],
+        "title": "InsuranceDocumentSetItemMutationResponse",
+        "type": "object"
+      },
+      "InsuranceDocumentSetResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_label": {
+            "title": "Display Label",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurer_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "policy_contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
+          },
+          "product_display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Display"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "member_id",
+          "policy_contract_id",
+          "insurer_display",
+          "product_display",
+          "display_label",
+          "version"
+        ],
+        "title": "InsuranceDocumentSetResponse",
+        "type": "object"
+      },
+      "InventoryComponentResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "document_batch_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Batch Item Id"
+          },
+          "duplicate_state": {
+            "enum": [
+              "UNIQUE",
+              "SAME_MEMBER_DUPLICATE",
+              "CROSS_MEMBER_COPY_POSSIBLE"
+            ],
+            "title": "Duplicate State",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "page_end": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "processing_state": {
+            "enum": [
+              "READY",
+              "PENDING",
+              "PASSWORD_REQUIRED",
+              "OCR_REQUIRED",
+              "FAILED"
+            ],
+            "title": "Processing State",
+            "type": "string"
+          },
+          "review_state": {
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "document_batch_item_id",
+          "role",
+          "page_start",
+          "page_end",
+          "review_state",
+          "processing_state",
+          "duplicate_state"
+        ],
+        "title": "InventoryComponentResponse",
+        "type": "object"
+      },
+      "InventorySetItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "$ref": "#/components/schemas/InventoryComponentResponse"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "match_state": {
+            "enum": [
+              "SUGGESTED",
+              "USER_CONFIRMED",
+              "CONFLICT",
+              "REJECTED"
+            ],
+            "title": "Match State",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "match_state",
+          "component"
+        ],
+        "title": "InventorySetItemResponse",
+        "type": "object"
+      },
+      "InventorySummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "application_documents": {
+            "minimum": 0.0,
+            "title": "Application Documents",
+            "type": "integer"
+          },
+          "certificate_and_terms": {
+            "minimum": 0.0,
+            "title": "Certificate And Terms",
+            "type": "integer"
+          },
+          "certificate_backed_policies": {
+            "minimum": 0.0,
+            "title": "Certificate Backed Policies",
+            "type": "integer"
+          },
+          "certificate_only": {
+            "minimum": 0.0,
+            "title": "Certificate Only",
+            "type": "integer"
+          },
+          "pairing_conflicts": {
+            "minimum": 0.0,
+            "title": "Pairing Conflicts",
+            "type": "integer"
+          },
+          "product_explanation_documents": {
+            "minimum": 0.0,
+            "title": "Product Explanation Documents",
+            "type": "integer"
+          },
+          "terms_only_documents": {
+            "minimum": 0.0,
+            "title": "Terms Only Documents",
+            "type": "integer"
+          },
+          "unreadable_documents": {
+            "minimum": 0.0,
+            "title": "Unreadable Documents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "certificate_backed_policies",
+          "certificate_and_terms",
+          "certificate_only",
+          "terms_only_documents",
+          "product_explanation_documents",
+          "application_documents",
+          "unreadable_documents",
+          "pairing_conflicts"
+        ],
+        "title": "InventorySummaryResponse",
         "type": "object"
       },
       "LoginRequest": {
@@ -3389,6 +4023,67 @@
           "expected_version"
         ],
         "title": "MedicalEventUpdateRequest",
+        "type": "object"
+      },
+      "MemberInsuranceDocumentInventoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "registered_policies": {
+            "items": {
+              "$ref": "#/components/schemas/RegisteredPolicyInventoryResponse"
+            },
+            "maxItems": 256,
+            "title": "Registered Policies",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/InventorySummaryResponse"
+          },
+          "unpaired_components": {
+            "items": {
+              "$ref": "#/components/schemas/InventoryComponentResponse"
+            },
+            "maxItems": 1000,
+            "title": "Unpaired Components",
+            "type": "array"
+          },
+          "unreadable_sources": {
+            "items": {
+              "$ref": "#/components/schemas/UnreadableSourceResponse"
+            },
+            "maxItems": 1000,
+            "title": "Unreadable Sources",
+            "type": "array"
+          },
+          "unregistered_document_sets": {
+            "items": {
+              "$ref": "#/components/schemas/UnregisteredDocumentSetResponse"
+            },
+            "maxItems": 512,
+            "title": "Unregistered Document Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "member_id",
+          "summary",
+          "registered_policies",
+          "unregistered_document_sets",
+          "unpaired_components",
+          "unreadable_sources"
+        ],
+        "title": "MemberInsuranceDocumentInventoryResponse",
         "type": "object"
       },
       "MoneyResponse": {
@@ -4415,6 +5110,122 @@
         "title": "ReceiptLinesResponse",
         "type": "object"
       },
+      "RegisteredPolicyInventoryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "completeness": {
+            "enum": [
+              "CERTIFICATE_AND_TERMS",
+              "CERTIFICATE_ONLY"
+            ],
+            "title": "Completeness",
+            "type": "string"
+          },
+          "document_set_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Set Id"
+          },
+          "document_set_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Set Version"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/RoleDocumentSummaryResponse"
+            },
+            "maxItems": 5,
+            "title": "Documents",
+            "type": "array"
+          },
+          "has_application": {
+            "title": "Has Application",
+            "type": "boolean"
+          },
+          "has_product_explanation": {
+            "title": "Has Product Explanation",
+            "type": "boolean"
+          },
+          "insurer_display": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "missing_document_roles": {
+            "items": {
+              "enum": [
+                "policy",
+                "terms",
+                "product_explanation",
+                "application",
+                "supporting"
+              ],
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Missing Document Roles",
+            "type": "array"
+          },
+          "policy_id": {
+            "format": "uuid",
+            "title": "Policy Id",
+            "type": "string"
+          },
+          "product_display": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Product Display",
+            "type": "string"
+          },
+          "rider_count": {
+            "minimum": 0.0,
+            "title": "Rider Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_id",
+          "insurer_display",
+          "product_display",
+          "status",
+          "rider_count",
+          "completeness",
+          "documents",
+          "has_product_explanation",
+          "has_application",
+          "missing_document_roles",
+          "document_set_id",
+          "document_set_version"
+        ],
+        "title": "RegisteredPolicyInventoryResponse",
+        "type": "object"
+      },
       "ReviewIssue": {
         "additionalProperties": false,
         "properties": {
@@ -4735,6 +5546,53 @@
           "version"
         ],
         "title": "RiderResponse",
+        "type": "object"
+      },
+      "RoleDocumentSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bundled_source": {
+            "title": "Bundled Source",
+            "type": "boolean"
+          },
+          "component_count": {
+            "minimum": 0.0,
+            "title": "Component Count",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventorySetItemResponse"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "role": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "source_count": {
+            "minimum": 0.0,
+            "title": "Source Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role",
+          "source_count",
+          "component_count",
+          "bundled_source",
+          "items"
+        ],
+        "title": "RoleDocumentSummaryResponse",
         "type": "object"
       },
       "RuleEvaluationResponse": {
@@ -5197,6 +6055,154 @@
         "title": "TermsEditionResponse",
         "type": "object"
       },
+      "UnreadableSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "display_label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Label",
+            "type": "string"
+          },
+          "document_batch_item_id": {
+            "format": "uuid",
+            "title": "Document Batch Item Id",
+            "type": "string"
+          },
+          "processing_state": {
+            "enum": [
+              "PASSWORD_REQUIRED",
+              "OCR_REQUIRED",
+              "FAILED"
+            ],
+            "title": "Processing State",
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_batch_item_id",
+          "source_kind",
+          "display_label",
+          "processing_state"
+        ],
+        "title": "UnreadableSourceResponse",
+        "type": "object"
+      },
+      "UnregisteredDocumentSetResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "component_count": {
+            "minimum": 0.0,
+            "title": "Component Count",
+            "type": "integer"
+          },
+          "display_label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Display Label",
+            "type": "string"
+          },
+          "enrollment_confirmed": {
+            "title": "Enrollment Confirmed",
+            "type": "boolean"
+          },
+          "has_application": {
+            "title": "Has Application",
+            "type": "boolean"
+          },
+          "has_product_explanation": {
+            "title": "Has Product Explanation",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "insurer_display": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InventorySetItemResponse"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "primary_classification": {
+            "enum": [
+              "TERMS_ONLY",
+              "PRODUCT_EXPLANATION_ONLY",
+              "APPLICATION_ONLY",
+              "POLICY_UNREVIEWED",
+              "SUPPORTING_ONLY"
+            ],
+            "title": "Primary Classification",
+            "type": "string"
+          },
+          "product_display": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Display"
+          },
+          "source_count": {
+            "minimum": 0.0,
+            "title": "Source Count",
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "insurer_display",
+          "product_display",
+          "display_label",
+          "version",
+          "primary_classification",
+          "enrollment_confirmed",
+          "has_product_explanation",
+          "has_application",
+          "source_count",
+          "component_count",
+          "items"
+        ],
+        "title": "UnregisteredDocumentSetResponse",
+        "type": "object"
+      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -5459,7 +6465,7 @@
   "info": {
     "description": "Evidence-first family insurance guidance API",
     "title": "FamilyCare API",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -8217,6 +9223,290 @@
         ]
       }
     },
+    "/api/v1/family-members/{member_id}/insurance-document-components": {
+      "post": {
+        "operationId": "create_insurance_document_component_api_v1_family_members__member_id__insurance_document_components_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComponentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentComponentResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Insurance Document Component",
+        "tags": [
+          "insurance document inventory"
+        ]
+      }
+    },
+    "/api/v1/family-members/{member_id}/insurance-document-inventory": {
+      "get": {
+        "operationId": "get_member_insurance_document_inventory_api_v1_family_members__member_id__insurance_document_inventory_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberInsuranceDocumentInventoryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Get Member Insurance Document Inventory",
+        "tags": [
+          "insurance document inventory"
+        ]
+      }
+    },
+    "/api/v1/family-members/{member_id}/insurance-document-sets": {
+      "post": {
+        "operationId": "create_insurance_document_set_api_v1_family_members__member_id__insurance_document_sets_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentSetCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentSetResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Create Insurance Document Set",
+        "tags": [
+          "insurance document inventory"
+        ]
+      }
+    },
     "/api/v1/family-members/{member_id}/restore": {
       "post": {
         "operationId": "restore_family_member_api_v1_family_members__member_id__restore_post",
@@ -8312,6 +9602,286 @@
         "summary": "Restore Family Member",
         "tags": [
           "policy ledger"
+        ]
+      }
+    },
+    "/api/v1/insurance-document-set-items/{item_id}": {
+      "delete": {
+        "operationId": "detach_insurance_document_set_item_api_v1_insurance_document_set_items__item_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedItemVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Detach Insurance Document Set Item",
+        "tags": [
+          "insurance document inventory"
+        ]
+      }
+    },
+    "/api/v1/insurance-document-sets/{document_set_id}": {
+      "delete": {
+        "operationId": "delete_insurance_document_set_api_v1_insurance_document_sets__document_set_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpectedItemVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Delete Insurance Document Set",
+        "tags": [
+          "insurance document inventory"
+        ]
+      }
+    },
+    "/api/v1/insurance-document-sets/{document_set_id}/items": {
+      "post": {
+        "operationId": "attach_insurance_document_set_item_api_v1_insurance_document_sets__document_set_id__items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_set_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Set Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentSetItemCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentSetItemMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Version or state conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request or Evidence"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceDocumentErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Attach Insurance Document Set Item",
+        "tags": [
+          "insurance document inventory"
         ]
       }
     },
@@ -10655,6 +12225,23 @@
               ],
               "title": "Status",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "family_member_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family Member Id"
             }
           }
         ],

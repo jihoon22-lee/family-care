@@ -14,6 +14,7 @@ from uuid import UUID
 
 import pytest
 from familycare_worker.archive.crypto import (
+    MAX_ARCHIVE_BYTES,
     ArchiveIntegrityError,
     decrypt_document,
     encrypt_document,
@@ -147,6 +148,21 @@ def test_encrypt_document_round_trips_with_aes_gcm_and_aes_kw_metadata() -> None
     assert decrypt_document(metadata, ciphertext, master_key=key) == SYNTHETIC_PLAINTEXT
 
 
+def test_encrypt_document_accepts_exact_128_mib_plaintext_with_gcm_tag_overhead() -> None:
+    key = _synthetic_key()
+    plaintext = b"x" * (128 * 1024 * 1024)
+
+    metadata, ciphertext = encrypt_document(
+        plaintext,
+        document_version_id=SYNTHETIC_VERSION_ID,
+        master_key=key,
+    )
+
+    assert len(ciphertext) == len(plaintext)
+    assert len(ciphertext) + len(metadata.auth_tag) == 128 * 1024 * 1024 + 16
+    assert len(ciphertext) == MAX_ARCHIVE_BYTES
+
+
 def test_encrypt_document_authenticates_document_version_as_aad() -> None:
     key = _synthetic_key()
     metadata, ciphertext = encrypt_document(
@@ -275,12 +291,12 @@ class _SyntheticOverflowStream(io.RawIOBase):
         return amount
 
 
-def test_archive_store_rejects_more_than_64_mib_without_unbounded_source_read(
+def test_archive_store_rejects_more_than_128_mib_without_unbounded_source_read(
     tmp_path: Path,
 ) -> None:
     key = _synthetic_key()
     store = ArchiveStore(tmp_path)
-    source: BinaryIO = _SyntheticOverflowStream(64 * 1024 * 1024 + 1)
+    source: BinaryIO = _SyntheticOverflowStream(MAX_ARCHIVE_BYTES + 1)
 
     with pytest.raises(Exception) as raised:
         store.put(SYNTHETIC_VERSION_ID, source, master_key=key)

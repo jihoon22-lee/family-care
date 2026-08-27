@@ -125,7 +125,7 @@ opaque browser session의 서버 측 레코드입니다. session token hash, App
 
 저장소 밖 import source와 application-encrypted managed archive의 논리 식별자입니다.
 
-- 문서 종류: policy, terms, application, amendment, claim, supporting
+- 문서 종류: policy, terms, product_explanation, application, amendment, claim, supporting
 - 원본 제공자와 비공개 외부 참조
 - MIME, 크기, 페이지 수
 - 문서 작성·수집·수정 시각
@@ -135,6 +135,10 @@ opaque browser session의 서버 측 레코드입니다. session token hash, App
 v0.1의 archive metadata는 encrypted object key, encryption scheme/version, nonce, wrapped data key, ciphertext size와 integrity tag를 가집니다. archive master key와 PDF password는 저장하지 않습니다.
 
 외부 참조는 API 응답과 일반 로그에 노출하지 않습니다.
+
+`product_explanation`은 청약 전·계약 안내용 상품설명서를 뜻하며 증권이나 약관을 대체하지 않습니다. 이 문서만으로 PolicyContract나 Rider를 만들지 않습니다. 가족별 보유 문서와 계약 연결은 `docs/design/insurance-document-inventory.md`의 별도 읽기 모델을 따릅니다.
+
+Document kind는 intake 시점의 source-level 분류입니다. 한 PDF 안에 서로 다른 보험의 증권이나 증권·약관·상품설명서·청약서가 함께 있을 수 있으므로 파일명이나 이 단일 값만으로 최종 역할을 확정하지 않습니다.
 
 ### DocumentVersion
 
@@ -157,6 +161,20 @@ v0.1의 archive metadata는 encrypted object key, encryption scheme/version, non
 `OcrLayer`, `OcrPage`, `OcrBlock`은 native `Extraction`과 독립된 후보 provenance입니다. Worker는 native `quality-v1` 결과에서 `OCR_REQUIRED`인 page만 선택하고, fixed local `kor+eng` Tesseract result를 300 DPI render metadata와 함께 저장합니다. `TEXT_SUFFICIENT` page는 OCR row를 만들지 않으며, OCR text가 native `ExtractionBlock`을 덮어쓰지 않습니다. 각 OCR page Evidence는 같은 `DocumentVersion` UUID, 1-based page, content hash, and `source_layer='ocr'`를 가집니다.
 
 The source descriptor and temporary PNG are runtime-only. PDFium reads bounded bytes from the already-open read-only descriptor; Tesseract is invoked directly as `/usr/bin/tesseract` with no shell and TSV on stdout; no `pytesseract` dependency or TSV artifact is persisted. Each PNG is removed immediately after its page is recognized, and the outer Worker workspace is removed on every terminal path.
+
+### Private batch page Evidence
+
+Successful private batch persistence creates one bbox-free `Evidence` row for every validated physical page in the same transaction as the `DocumentVersion`, successful `Extraction`, native/OCR provenance, managed archive metadata, and terminal batch state. The locked batch supplies `household_space_id`; the validated intake supplies content hash and expected page count; the newly created successful Extraction supplies `extraction_id`. A page-count mismatch, non-sequential page number, invalid identity, or missing household scope aborts the transaction. Initial state is always `NEEDS_REVIEW`.
+
+같은 성공 transaction에서 `document_batch_items.processed_document_version_id`를 고정한다. 이후 page-range component는 이 값을 사용하므로 동일 `Document`에 새 version이 생겨도 과거 batch가 처리한 원본을 임의 최신 version으로 바꾸지 않는다. password/OCR/failed item은 version을 꾸며 내지 않고 nullable 상태로 남긴다.
+
+For later candidate structuring, the Worker can resolve only those scoped page rows whose Evidence hash matches the same DocumentVersion and whose Extraction is successful. It reads at most 500 ordered rows and emits at most 64 non-empty in-memory slices of 240 characters each. An `OCR_REQUIRED` page prefers its successful OCR layer and falls back to native text only when OCR text is empty; `TEXT_SUFFICIENT` pages use native extraction. These slices are not stored in a new table and are not returned by batch APIs or logs.
+
+### Private policy structuring jobs
+
+`policy_structuring_jobs`는 성공한 private `policy` batch item 하나와 DocumentVersion, successful Extraction, 선택된 FamilyMember, HouseholdSpace를 연결하는 별도 leased queue다. import/archive 성공은 provider 결과와 분리되며 timeout·rate limit·일시 장애만 최대 5회 bounded backoff로 재시도한다. 인증·응답 검증·Evidence 부재 오류는 영구 실패가 된다. job에는 source path, document text, provider payload를 저장하지 않는다.
+
+각 job은 하나의 `policy_aggregate_id`를 미리 예약한다. Worker가 만든 contract와 rider `AnalysisCandidateVersion`은 `structuring_job_id`와 provider candidate ID를 저장하고 모두 이 aggregate ID를 공유한다. candidate fields와 candidate Evidence, job 성공 전이는 한 transaction으로 저장된다. 초기 private page Evidence가 `NEEDS_REVIEW`이면 AI가 승인한 후보도 review 후보로 낮추며 policy, party, rider projection은 사용자 확인 전 생성하지 않는다.
 
 ## Policy boundary
 
@@ -201,6 +219,22 @@ PolicyContract와 FamilyMember 사이의 역할 연결입니다.
 ### PolicyStatusSnapshot
 
 사고일 기준 계약과 Rider 유효성을 평가하기 위한 시점별 상태입니다. 최신 상태 근거가 없으면 현재 활성으로 추정하지 않습니다.
+
+### Insurance document inventory associations
+
+등록 보험과 보완 문서를 직접 연결하는 단일 link 대신 아래의 component와 document set 모델을 사용합니다.
+
+### InsuranceDocumentComponent
+
+하나의 immutable DocumentVersion 안에서 검수된 역할과 1-based inclusive page range를 보존합니다. 역할은 `policy`, `terms`, `product_explanation`, `application`, `supporting`이며 source-level Document kind와 다를 수 있습니다. 제안·사용자 확인·상충·거부 상태, Evidence, optimistic version과 soft delete를 보존합니다. 원시 extraction이나 batch 분류를 덮어쓰지 않습니다.
+
+### InsuranceDocumentSet
+
+같은 HouseholdSpace와 FamilyMember에 속하며 같은 보험 상품·계약으로 검토되는 component의 묶음입니다. 증권 근거가 없는 set도 만들 수 있고, 등록 보험 set만 nullable `policy_contract_id`를 가집니다. document set은 가입 authority가 아니며 PolicyContract를 생성하지 않습니다.
+
+### InsuranceDocumentSetItem
+
+document set과 component의 다대다 연결입니다. import batch item과 immutable DocumentVersion을 함께 참조하고, 제안·사용자 확인·상충·거부 상태와 optimistic version을 보존합니다. 사용자 확인 상태인 active terms item만 등록 set의 문서 완전성 계산에 포함합니다. 약관·상품설명서·청약서가 연결되지 않았다는 사실은 계약 불일치 판정이 아니라 보완할 문서 상태입니다.
 
 ## Terms and rules boundary
 
