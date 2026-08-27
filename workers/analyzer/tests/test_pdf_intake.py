@@ -22,7 +22,8 @@ from familycare_worker.pdf.intake import (
     stream_sha256,
     validate_pdf,
 )
-from pypdf import PdfWriter
+from pypdf import PdfReader, PdfWriter
+from pypdf.errors import PdfReadError
 
 
 def write_synthetic_pdf(path: Path, *, pages: int = 1, password: str | None = None) -> None:
@@ -216,6 +217,35 @@ def test_validate_pdf_checks_magic_structure_page_count_and_hash(tmp_path: Path)
     assert result.page_count == 2
     assert result.encrypted is False
     assert result.content_sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_validate_pdf_accepts_recoverable_xref_deviation(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    path = root / "synthetic-recoverable-xref.pdf"
+    write_synthetic_pdf(path)
+
+    payload = path.read_bytes()
+    marker = b"startxref\n"
+    marker_start = payload.rfind(marker)
+    assert marker_start >= 0
+    pointer_start = marker_start + len(marker)
+    pointer_end = payload.index(b"\n", pointer_start)
+    pointer = int(payload[pointer_start:pointer_end])
+    path.write_bytes(
+        payload[:pointer_start] + str(pointer + 1).encode("ascii") + payload[pointer_end:]
+    )
+
+    with path.open("rb") as handle, pytest.raises(PdfReadError):
+        PdfReader(handle, strict=True)
+
+    source = open_source(root, path.name)
+    try:
+        result = validate_pdf(source)
+    finally:
+        source.close()
+
+    assert result.page_count == 1
 
 
 def test_validate_pdf_rejects_wrong_magic_and_corrupt_structure(tmp_path: Path) -> None:
