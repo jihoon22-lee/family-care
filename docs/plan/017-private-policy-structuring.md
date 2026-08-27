@@ -51,10 +51,10 @@
 
 ## Task 4: Human confirmation and family ledger projection
 
-1. Reserve and reuse one aggregate ID for contract/rider candidates from the same policy document.
-2. On `USER_CONFIRMED`, promote referenced Evidence in the same household and publish contract/rider projections atomically.
-3. For a private batch policy, create the selected FamilyMember as `primary_insured` using confirmed Evidence.
-4. Prove policy, party, riders, review queue, and Evidence API behavior with synthetic PostgreSQL integration tests.
+- [x] Reserve and reuse one aggregate ID for contract/rider candidates from the same policy document.
+- [x] On `USER_CONFIRMED`, promote referenced Evidence in the same household and publish contract/rider projections atomically.
+- [x] For a private batch policy, create the selected FamilyMember as `primary_insured` using confirmed Evidence.
+- [x] Prove policy, party, riders, review queue, and Evidence API behavior with synthetic PostgreSQL integration tests.
 
 ## Task 5: UI and grouped verification
 

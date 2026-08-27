@@ -506,6 +506,11 @@ class CandidateRepository:
                     "policy_party",
                     "rider",
                 }:
+                    self._promote_candidate_evidence(
+                        connection,
+                        scope.household_space_id,
+                        child_id,
+                    )
                     published = self._publish_projection(
                         connection,
                         scope.household_space_id,
@@ -639,6 +644,128 @@ class CandidateRepository:
             )
         return child_id
 
+    def _promote_candidate_evidence(
+        self,
+        connection: Connection[dict[str, Any]],
+        household_space_id: UUID,
+        candidate_version_id: UUID,
+    ) -> None:
+        references = connection.execute(
+            """
+            SELECT DISTINCT evidence_id, document_version_id, physical_page
+            FROM analysis_candidate_evidence
+            WHERE candidate_version_id = %s
+            """,
+            (candidate_version_id,),
+        ).fetchall()
+        if not references:
+            raise InvalidCandidateCorrection
+        evidence_rows = connection.execute(
+            """
+            WITH candidate_refs AS (
+                SELECT DISTINCT evidence_id, document_version_id, physical_page
+                FROM analysis_candidate_evidence
+                WHERE candidate_version_id = %s
+            )
+            SELECT evidence.id
+            FROM candidate_refs
+            JOIN evidence
+              ON evidence.id = candidate_refs.evidence_id
+             AND evidence.document_version_id = candidate_refs.document_version_id
+             AND evidence.physical_page = candidate_refs.physical_page
+            JOIN document_versions AS version
+              ON version.id = evidence.document_version_id
+             AND version.content_sha256 = evidence.content_sha256
+            JOIN extractions AS extraction
+              ON extraction.id = evidence.extraction_id
+             AND extraction.document_version_id = evidence.document_version_id
+             AND extraction.status = 'succeeded'
+            WHERE evidence.household_space_id = %s
+            FOR UPDATE OF evidence
+            """,
+            (candidate_version_id, household_space_id),
+        ).fetchall()
+        if len(evidence_rows) != len(references):
+            raise InvalidCandidateCorrection
+        evidence_ids = [cast(UUID, row["id"]) for row in evidence_rows]
+        promoted = connection.execute(
+            """
+            UPDATE evidence
+            SET review_state = 'USER_CONFIRMED'
+            WHERE id = ANY(%s) AND household_space_id = %s
+            """,
+            (evidence_ids, household_space_id),
+        )
+        if promoted.rowcount != len(evidence_ids):
+            raise InvalidCandidateCorrection
+
+    def _private_structuring_context(
+        self,
+        connection: Connection[dict[str, Any]],
+        household_space_id: UUID,
+        candidate_version_id: UUID,
+    ) -> dict[str, Any] | None:
+        lineage_rows = connection.execute(
+            """
+            WITH RECURSIVE lineage AS (
+                SELECT id, parent_version_id, structuring_job_id
+                FROM analysis_candidate_versions
+                WHERE id = %s AND household_space_id = %s
+                UNION ALL
+                SELECT parent.id, parent.parent_version_id, parent.structuring_job_id
+                FROM analysis_candidate_versions AS parent
+                JOIN lineage AS child ON child.parent_version_id = parent.id
+                WHERE parent.household_space_id = %s
+            )
+            SELECT DISTINCT structuring_job_id
+            FROM lineage
+            WHERE structuring_job_id IS NOT NULL
+            """,
+            (candidate_version_id, household_space_id, household_space_id),
+        ).fetchall()
+        if not lineage_rows:
+            return None
+        if len(lineage_rows) != 1:
+            raise InvalidCandidateCorrection
+        structuring_job_id = lineage_rows[0]["structuring_job_id"]
+        context = connection.execute(
+            """
+            SELECT job.id, job.family_member_id, job.document_version_id,
+                   job.extraction_id, job.policy_aggregate_id
+            FROM policy_structuring_jobs AS job
+            JOIN document_batch_items AS item
+              ON item.id = job.batch_item_id
+             AND item.state = 'succeeded'
+             AND item.document_kind = 'policy'
+            JOIN document_batches AS batch
+              ON batch.id = item.batch_id
+             AND batch.household_space_id = job.household_space_id
+             AND batch.family_member_id = job.family_member_id
+            JOIN document_versions AS version
+              ON version.id = job.document_version_id
+            JOIN extractions AS extraction
+              ON extraction.id = job.extraction_id
+             AND extraction.document_version_id = job.document_version_id
+             AND extraction.status = 'succeeded'
+            JOIN documents AS document
+              ON document.id = version.document_id
+             AND document.id = item.document_id
+             AND document.document_kind = 'policy'
+             AND document.deleted_at IS NULL
+            JOIN family_members AS member
+              ON member.id = job.family_member_id
+             AND member.household_space_id = job.household_space_id
+             AND member.deleted_at IS NULL
+            WHERE job.id = %s
+              AND job.household_space_id = %s
+              AND job.state = 'succeeded'
+            """,
+            (structuring_job_id, household_space_id),
+        ).fetchone()
+        if context is None:
+            raise InvalidCandidateCorrection
+        return context
+
     def _review_item(
         self,
         connection: Connection[dict[str, Any]],
@@ -733,6 +860,11 @@ class CandidateRepository:
             isinstance(issue, dict) and issue.get("code") == "TERMS_ONLY_RIDER" for issue in issues
         ):
             return False
+        private_context = self._private_structuring_context(
+            connection,
+            household_space_id,
+            candidate_version_id,
+        )
         field_rows = connection.execute(
             "SELECT field_id, value FROM analysis_candidate_fields WHERE candidate_version_id = %s",
             (candidate_version_id,),
@@ -752,6 +884,35 @@ class CandidateRepository:
         ).fetchone()
         if evidence is None or evidence["document_kind"] != "policy":
             return False
+        if private_context is not None:
+            mismatch = connection.execute(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM analysis_candidate_evidence AS candidate_evidence
+                    JOIN evidence
+                      ON evidence.id = candidate_evidence.evidence_id
+                    WHERE candidate_evidence.candidate_version_id = %s
+                      AND (
+                        candidate_evidence.document_version_id <> %s
+                        OR evidence.extraction_id <> %s
+                      )
+                ) AS has_mismatched_document
+                """,
+                (
+                    candidate_version_id,
+                    private_context["document_version_id"],
+                    private_context["extraction_id"],
+                ),
+            ).fetchone()
+            if mismatch is None:
+                raise CandidateRepositoryUnavailable
+            if (
+                private_context["policy_aggregate_id"] != version["aggregate_id"]
+                or private_context["document_version_id"] != evidence["document_version_id"]
+                or mismatch["has_mismatched_document"]
+            ):
+                return False
         if version["candidate_kind"] == "policy_contract":
             insurer = values.get("insurer")
             product = values.get("product_name")
@@ -796,6 +957,26 @@ class CandidateRepository:
             if policy is None:
                 return False
             aggregate_id = policy["id"]
+            if private_context is not None:
+                party = connection.execute(
+                    """
+                    INSERT INTO policy_parties (
+                        household_space_id, policy_contract_id, family_member_id,
+                        role, effective_from, effective_to, evidence_id
+                    ) VALUES (%s, %s, %s, 'primary_insured', %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        household_space_id,
+                        aggregate_id,
+                        private_context["family_member_id"],
+                        contract_date,
+                        coverage_end,
+                        evidence["evidence_id"],
+                    ),
+                ).fetchone()
+                if party is None:
+                    return False
         elif version["candidate_kind"] == "rider":
             rider_name = values.get("rider_name")
             rider_key = values.get("rider_key")
