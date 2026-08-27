@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from familycare_api.documents.batch_service import BatchService, DocumentBatchUnavailable
 from familycare_api.documents.generated_batch_contracts import (
+    BatchDocumentKind,
     BatchErrorCode,
     BatchItemState,
     BatchState,
@@ -39,21 +40,25 @@ class ImportSourceResponse(BaseModel):
     encrypted: bool
 
 
+class BatchSourceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: str = Field(pattern=r"^[a-f0-9]{64}$")
+    document_kind: BatchDocumentKind
+
+
 class BatchCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal["1"]
     family_member_id: UUID
-    source_ids: list[str] = Field(min_length=1, max_length=100)
+    sources: list[BatchSourceRequest] = Field(min_length=1, max_length=100)
 
-    @field_validator("source_ids")
+    @field_validator("sources")
     @classmethod
-    def validate_source_ids(cls, value: list[str]) -> list[str]:
-        if len(set(value)) != len(value) or any(
-            len(source_id) != 64
-            or any(character not in "0123456789abcdef" for character in source_id)
-            for source_id in value
-        ):
+    def validate_sources(cls, value: list[BatchSourceRequest]) -> list[BatchSourceRequest]:
+        source_ids = [source.source_id for source in value]
+        if len(set(source_ids)) != len(source_ids):
             raise ValueError("invalid source id")
         return value
 
@@ -73,6 +78,7 @@ class BatchItemResponse(BaseModel):
         max_length=160,
         pattern=r"^[^\u0000-\u001f\u007f-\u009f]+$",
     )
+    document_kind: BatchDocumentKind
     state: BatchItemState
     error_code: BatchErrorCode | None
     attempts: int = Field(ge=0, le=20)
@@ -180,7 +186,7 @@ def create_batch(
     return service.create(
         context=context,
         family_member_id=request.family_member_id,
-        source_ids=tuple(request.source_ids),
+        sources=tuple((source.source_id, source.document_kind) for source in request.sources),
     )
 
 

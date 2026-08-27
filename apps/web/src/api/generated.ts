@@ -591,12 +591,13 @@ export interface AuthUserResponse {
 export interface BatchCreateRequest {
   family_member_id: string;
   schema_version: "1";
-  source_ids: Array<string>;
+  sources: Array<BatchSourceRequest>;
 }
 
 export interface BatchItemResponse {
   attempts: number;
   display_label: string;
+  document_kind: "policy" | "supporting" | "terms";
   error_code:
     | "ARCHIVE_INTEGRITY_ERROR"
     | "ARCHIVE_KEY_UNAVAILABLE"
@@ -641,6 +642,11 @@ export interface BatchResponse {
   schema_version: "1";
   state:
     "cancelled" | "created" | "failed" | "partial" | "running" | "succeeded";
+}
+
+export interface BatchSourceRequest {
+  document_kind: "policy" | "supporting" | "terms";
+  source_id: string;
 }
 
 export interface BenefitCalculationResponse {

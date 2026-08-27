@@ -504,6 +504,42 @@ def validate_openapi() -> list[str]:
         MAX_IMPORT_SOURCE_BYTES
     ):
         errors.append("ImportSourceResponse size bound changed")
+    batch_request = schemas.get("BatchCreateRequest", {})
+    if set(batch_request.get("properties", {})) != {
+        "schema_version",
+        "family_member_id",
+        "sources",
+    }:
+        errors.append("private batch request must contain only per-source selections")
+    if batch_request.get("additionalProperties") is not False:
+        errors.append("private batch request must reject additional properties")
+    batch_sources = batch_request.get("properties", {}).get("sources", {})
+    if (
+        batch_sources.get("minItems") != 1.0
+        or batch_sources.get("maxItems") != 100.0
+        or batch_sources.get("items") != {"$ref": "#/components/schemas/BatchSourceRequest"}
+    ):
+        errors.append("private batch sources must be bounded per-source selections")
+    batch_source = schemas.get("BatchSourceRequest", {})
+    if set(batch_source.get("properties", {})) != {"source_id", "document_kind"}:
+        errors.append("private batch source must contain source_id and document_kind")
+    if set(batch_source.get("required", [])) != {"source_id", "document_kind"}:
+        errors.append("private batch source fields must be required")
+    if batch_source.get("properties", {}).get("document_kind", {}).get("enum") != [
+        "policy",
+        "supporting",
+        "terms",
+    ]:
+        errors.append("private batch document-kind enum changed")
+    batch_item = schemas.get("BatchItemResponse", {})
+    if batch_item.get("properties", {}).get("document_kind", {}).get("enum") != [
+        "policy",
+        "supporting",
+        "terms",
+    ]:
+        errors.append("private batch status document-kind enum changed")
+    if "document_kind" not in batch_item.get("required", []):
+        errors.append("private batch status must project document_kind")
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})

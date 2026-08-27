@@ -12,7 +12,9 @@ from familycare_api.documents.batch_repository import (
     BatchRecord,
     BatchRepository,
     BatchRepositoryUnavailable,
+    BatchSourceSelection,
 )
+from familycare_api.documents.generated_batch_contracts import BatchDocumentKind
 from familycare_api.documents.import_sources import ImportSourceCatalog, ImportSourceNotFound
 from familycare_api.documents.secret_channel import (
     BatchSecretSocketClient,
@@ -46,6 +48,7 @@ def _projection(batch: BatchRecord) -> dict[str, Any]:
             {
                 "source_id": item.source_id,
                 "display_label": item.display_label,
+                "document_kind": item.document_kind,
                 "state": item.state,
                 "error_code": item.error_code,
                 "attempts": item.attempts,
@@ -89,15 +92,21 @@ class BatchService:
         self,
         context: AuthContext,
         family_member_id: UUID,
-        source_ids: tuple[str, ...],
+        sources: tuple[tuple[str, BatchDocumentKind], ...],
     ) -> dict[str, Any]:
         try:
-            sources = tuple(self.catalog.resolve(source_id) for source_id in source_ids)
+            resolved_sources = tuple(
+                BatchSourceSelection(
+                    source=self.catalog.resolve(source_id),
+                    document_kind=document_kind,
+                )
+                for source_id, document_kind in sources
+            )
             batch = self.repository.create(
                 household_space_id=context.household_space_id,
                 created_by=context.user_id,
                 family_member_id=family_member_id,
-                sources=sources,
+                sources=resolved_sources,
             )
         except ImportSourceNotFound:
             raise DocumentBatchNotFound from None

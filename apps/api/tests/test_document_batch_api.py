@@ -143,6 +143,7 @@ def _item(
     source_id: str,
     label: str,
     *,
+    document_kind: str = "policy",
     state: str = "queued",
     error_code: str | None = None,
     attempts: int = 0,
@@ -153,6 +154,7 @@ def _item(
     return {
         "source_id": source_id,
         "display_label": label,
+        "document_kind": document_kind,
         "state": state,
         "error_code": error_code,
         "attempts": attempts,
@@ -209,14 +211,14 @@ class _FakeBatchService:
         member = kwargs.get("family_member_id")
         if member is None and len(args) >= 2:
             member = args[1]
-        source_ids = kwargs.get("source_ids")
-        if source_ids is None and len(args) >= 3:
-            source_ids = args[2]
+        sources = kwargs.get("sources")
+        if sources is None and len(args) >= 3:
+            sources = args[2]
         if context.household_space_id != HOUSEHOLD_ID or member != FAMILY_MEMBER_ID:
             raise _ScopedNotFound
-        if tuple(source_ids or ()) != (SOURCE_ID_A, SOURCE_ID_B):
+        if tuple(sources or ()) != ((SOURCE_ID_A, "policy"), (SOURCE_ID_B, "terms")):
             raise _ScopedNotFound
-        self.repository.record({"family_member_id": str(member), "source_ids": list(source_ids)})
+        self.repository.record({"family_member_id": str(member), "sources": list(sources)})
         return self.status
 
     def get_status(self, *args: object, **kwargs: object) -> dict[str, object]:
@@ -297,7 +299,10 @@ def _create_payload(**extra: object) -> dict[str, object]:
     return {
         "schema_version": "1",
         "family_member_id": str(FAMILY_MEMBER_ID),
-        "source_ids": [SOURCE_ID_A, SOURCE_ID_B],
+        "sources": [
+            {"source_id": SOURCE_ID_A, "document_kind": "policy"},
+            {"source_id": SOURCE_ID_B, "document_kind": "terms"},
+        ],
         **extra,
     }
 
@@ -407,18 +412,29 @@ def test_authenticated_writes_require_csrf_and_same_origin(
 @pytest.mark.parametrize(
     ("field", "value"),
     [
-        ("source_ids", ["not-a-source-id"]),
-        ("source_ids", ["A" * 64]),
-        ("source_ids", ["a" * 63]),
-        ("source_ids", ["a" * 65]),
-        ("source_ids", ["synthetic/import-root/policy.pdf"]),
+        ("sources", [{"source_id": "not-a-source-id", "document_kind": "policy"}]),
+        ("sources", [{"source_id": "A" * 64, "document_kind": "policy"}]),
+        ("sources", [{"source_id": "a" * 63, "document_kind": "policy"}]),
+        ("sources", [{"source_id": "a" * 65, "document_kind": "policy"}]),
+        (
+            "sources",
+            [{"source_id": "synthetic/import-root/policy.pdf", "document_kind": "policy"}],
+        ),
+        ("sources", [{"source_id": SOURCE_ID_A, "document_kind": "rider"}]),
+        (
+            "sources",
+            [
+                {"source_id": SOURCE_ID_A, "document_kind": "policy"},
+                {"source_id": SOURCE_ID_A, "document_kind": "terms"},
+            ],
+        ),
         ("household_space_id", str(HOUSEHOLD_ID)),
         ("source_key", "synthetic/policy-001.pdf"),
         ("absolute_path", "/synthetic/import-root/policy-001.pdf"),
         ("password", PASSWORD),
     ],
 )
-def test_create_rejects_strict_source_ids_paths_and_client_scope_without_echo(
+def test_create_rejects_strict_source_selections_paths_and_client_scope_without_echo(
     client: TestClient,
     field: str,
     value: object,
@@ -431,7 +447,7 @@ def test_create_rejects_strict_source_ids_paths_and_client_scope_without_echo(
 
     assert response.status_code == 422
     assert response.json()["error_code"] == "INVALID_REQUEST"
-    assert field in response.json().get("fields", []) or field == "source_ids"
+    assert field in response.json().get("fields", []) or field == "sources"
     assert str(value) not in response.text
 
 
@@ -521,6 +537,7 @@ def test_status_projects_bounded_ocr_progress_without_ocr_payload(
         {
             "source_id": SOURCE_ID_A,
             "display_label": "Sample Policy A.pdf",
+            "document_kind": "policy",
             "state": "succeeded",
             "error_code": None,
             "attempts": 1,
@@ -531,6 +548,7 @@ def test_status_projects_bounded_ocr_progress_without_ocr_payload(
         {
             "source_id": SOURCE_ID_B,
             "display_label": "Sample Policy B.pdf",
+            "document_kind": "policy",
             "state": "running",
             "error_code": None,
             "attempts": 1,
@@ -573,6 +591,7 @@ def test_service_projection_allowlists_ocr_progress_metadata() -> None:
                 BatchItemRecord(
                     source_id=SOURCE_ID_A,
                     display_label="Sample Policy A.pdf",
+                    document_kind="policy",
                     state="succeeded",
                     error_code=None,
                     attempts=1,
@@ -588,6 +607,7 @@ def test_service_projection_allowlists_ocr_progress_metadata() -> None:
         {
             "source_id": SOURCE_ID_A,
             "display_label": "Sample Policy A.pdf",
+            "document_kind": "policy",
             "state": "succeeded",
             "error_code": None,
             "attempts": 1,

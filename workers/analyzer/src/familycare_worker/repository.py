@@ -68,6 +68,7 @@ class BatchItemRecord:
     batch_id: UUID
     source_id: str
     source_key: str
+    document_kind: str
     document_id: UUID
     document_version_id: UUID
     state: str
@@ -994,10 +995,13 @@ class BatchRepository:
                 document = connection.execute(
                     """
                     INSERT INTO documents (source_key, document_kind, status)
-                    VALUES (%s, 'supporting', 'pending')
+                    VALUES (%s, %s, 'pending')
                     RETURNING id
                     """,
-                    (f"private-import/{row['batch_id'].hex}/{row['source_id']}",),
+                    (
+                        f"private-import/{row['batch_id'].hex}/{row['source_id']}",
+                        row["document_kind"],
+                    ),
                 ).fetchone()
                 if document is None:
                     raise DocumentStateConflict
@@ -1012,6 +1016,7 @@ class BatchRepository:
                 batch_id=cast(UUID, row["batch_id"]),
                 source_id=cast(str, row["source_id"]),
                 source_key=cast(str, row["source_key"]),
+                document_kind=cast(str, row["document_kind"]),
                 document_id=cast(UUID, document_id),
                 document_version_id=UUID(int=cast(UUID, row["id"]).int),
                 state="running",

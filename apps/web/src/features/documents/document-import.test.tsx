@@ -42,6 +42,7 @@ function batch(
       {
         attempts: itemState === "queued" ? 0 : 1,
         display_label: SOURCE.display_label,
+        document_kind: "policy",
         error_code:
           itemState === "password_required" ? "PASSWORD_REQUIRED" : null,
         ocr_pages_processed: itemState === "succeeded" ? 1 : 0,
@@ -82,7 +83,9 @@ describe("document import API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await listImportSources();
-    await createDocumentBatch(MEMBER.id, [SOURCE.source_id]);
+    await createDocumentBatch(MEMBER.id, [
+      { source_id: SOURCE.source_id, document_kind: "policy" },
+    ]);
     await handoffBatchPassword(BATCH_ID, "synthetic-password");
     await cancelDocumentBatch(BATCH_ID);
 
@@ -98,7 +101,7 @@ describe("document import API", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
       family_member_id: MEMBER.id,
       schema_version: "1",
-      source_ids: [SOURCE.source_id],
+      sources: [{ source_id: SOURCE.source_id, document_kind: "policy" }],
     });
     expect(String(fetchMock.mock.calls[2]?.[1]?.body)).toBe(
       JSON.stringify({ password: "synthetic-password" }),
@@ -128,10 +131,16 @@ describe("document import page", () => {
     expect(
       screen.getByRole("button", { name: "가져오기 시작" }),
     ).toBeDisabled();
+    const documentKind = screen.getByRole("combobox", {
+      name: `${SOURCE.display_label} 문서 종류`,
+    });
+    expect(documentKind).toBeDisabled();
+    expect(documentKind).toHaveValue("supporting");
 
     fireEvent.click(
       screen.getByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
     );
+    expect(documentKind).toBeEnabled();
     expect(screen.getByRole("button", { name: "가져오기 시작" })).toBeEnabled();
   });
 
@@ -142,6 +151,7 @@ describe("document import page", () => {
         {
           attempts: 1,
           display_label: "Sample Policy Completed.pdf",
+          document_kind: "policy",
           error_code: null,
           ocr_pages_processed: 1,
           ocr_state: "completed",
@@ -179,6 +189,12 @@ describe("document import page", () => {
     await user.click(
       await screen.findByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
     );
+    await user.selectOptions(
+      screen.getByRole("combobox", {
+        name: `${SOURCE.display_label} 문서 종류`,
+      }),
+      "policy",
+    );
     await user.click(screen.getByRole("button", { name: "가져오기 시작" }));
 
     expect(
@@ -196,6 +212,11 @@ describe("document import page", () => {
     expect(String(fetchMock.mock.calls[3]?.[1]?.body)).toBe(
       JSON.stringify({ password: "synthetic-password" }),
     );
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body))).toEqual({
+      family_member_id: MEMBER.id,
+      schema_version: "1",
+      sources: [{ source_id: SOURCE.source_id, document_kind: "policy" }],
+    });
     expect(storageSet).not.toHaveBeenCalled();
   });
 

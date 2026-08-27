@@ -270,20 +270,20 @@
             "title": "Schema Version",
             "type": "string"
           },
-          "source_ids": {
+          "sources": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/BatchSourceRequest"
             },
             "maxItems": 100,
             "minItems": 1,
-            "title": "Source Ids",
+            "title": "Sources",
             "type": "array"
           }
         },
         "required": [
           "schema_version",
           "family_member_id",
-          "source_ids"
+          "sources"
         ],
         "title": "BatchCreateRequest",
         "type": "object"
@@ -302,6 +302,15 @@
             "minLength": 1,
             "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
             "title": "Display Label",
+            "type": "string"
+          },
+          "document_kind": {
+            "enum": [
+              "policy",
+              "supporting",
+              "terms"
+            ],
+            "title": "Document Kind",
             "type": "string"
           },
           "error_code": {
@@ -390,6 +399,7 @@
         "required": [
           "source_id",
           "display_label",
+          "document_kind",
           "state",
           "error_code",
           "attempts",
@@ -446,6 +456,31 @@
           "items"
         ],
         "title": "BatchResponse",
+        "type": "object"
+      },
+      "BatchSourceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "document_kind": {
+            "enum": [
+              "policy",
+              "supporting",
+              "terms"
+            ],
+            "title": "Document Kind",
+            "type": "string"
+          },
+          "source_id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_id",
+          "document_kind"
+        ],
+        "title": "BatchSourceRequest",
         "type": "object"
       },
       "BenefitCalculationResponse": {

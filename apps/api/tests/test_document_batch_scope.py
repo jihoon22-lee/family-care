@@ -96,6 +96,7 @@ class _ScopedBatchService:
                 {
                     "source_id": SOURCE_ID_A,
                     "display_label": "Sample Policy A.pdf",
+                    "document_kind": "policy",
                     "state": "queued",
                     "error_code": None,
                     "attempts": 0,
@@ -122,6 +123,7 @@ class _ScopedBatchService:
                 {
                     "source_id": SOURCE_ID_A,
                     "display_label": "Sample Policy A.pdf",
+                    "document_kind": "policy",
                     "state": "running",
                     "error_code": None,
                     "attempts": 1,
@@ -164,7 +166,7 @@ def _create(member_id: UUID, **extra: object) -> dict[str, object]:
     return {
         "schema_version": "1",
         "family_member_id": str(member_id),
-        "source_ids": [SOURCE_ID_A],
+        "sources": [{"source_id": SOURCE_ID_A, "document_kind": "policy"}],
         **extra,
     }
 

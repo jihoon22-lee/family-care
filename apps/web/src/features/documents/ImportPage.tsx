@@ -9,6 +9,7 @@ import {
 } from "../../api/document-imports";
 import { ApiError } from "../../api/errors";
 import type {
+  BatchSourceRequest,
   BatchResponse,
   FamilyMemberResponse,
   ImportSourceResponse,
@@ -36,6 +37,9 @@ export function ImportPage() {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const [selectedKinds, setSelectedKinds] = useState<
+    ReadonlyMap<string, BatchSourceRequest["document_kind"]>
+  >(new Map());
   const [batch, setBatch] = useState<BatchResponse>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -45,6 +49,7 @@ export function ImportPage() {
 
   function clearPrivateState(): void {
     setSelectedIds(new Set());
+    setSelectedKinds(new Map());
     setBatch(undefined);
     setPasswordError(undefined);
     setPasswordDismissed(false);
@@ -128,6 +133,23 @@ export function ImportPage() {
       else next.delete(sourceId);
       return next;
     });
+    setSelectedKinds((current) => {
+      const next = new Map(current);
+      if (selected) next.set(sourceId, current.get(sourceId) ?? "supporting");
+      else next.delete(sourceId);
+      return next;
+    });
+  }
+
+  function changeSourceKind(
+    sourceId: string,
+    documentKind: BatchSourceRequest["document_kind"],
+  ): void {
+    setSelectedKinds((current) => {
+      const next = new Map(current);
+      if (selectedIds.has(sourceId)) next.set(sourceId, documentKind);
+      return next;
+    });
   }
 
   async function create(): Promise<void> {
@@ -136,7 +158,11 @@ export function ImportPage() {
     setError(undefined);
     setPasswordDismissed(false);
     try {
-      setBatch(await createDocumentBatch(memberId, [...selectedIds]));
+      const selectedSources = [...selectedIds].map((sourceId) => ({
+        source_id: sourceId,
+        document_kind: selectedKinds.get(sourceId) ?? "supporting",
+      }));
+      setBatch(await createDocumentBatch(memberId, selectedSources));
     } catch (reason) {
       handleError(reason);
     } finally {
@@ -216,8 +242,10 @@ export function ImportPage() {
           )}
           <ImportSourcePicker
             disabled={busy}
+            onKindChange={changeSourceKind}
             onChange={toggleSource}
             selectedIds={selectedIds}
+            selectedKinds={selectedKinds}
             sources={sources}
           />
           <div className="import-actions">

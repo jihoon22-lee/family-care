@@ -7,7 +7,10 @@ from uuid import uuid4
 
 import psycopg
 import pytest
-from familycare_api.documents.batch_repository import BatchRepository as ApiBatchRepository
+from familycare_api.documents.batch_repository import (
+    BatchRepository as ApiBatchRepository,
+)
+from familycare_api.documents.batch_repository import BatchSourceSelection
 from familycare_api.documents.import_sources import ImportSourceCatalog
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
@@ -79,7 +82,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
             household_space_id=household_id,
             created_by=user_id,
             family_member_id=member_id,
-            sources=(source,),
+            sources=(BatchSourceSelection(source=source, document_kind="policy"),),
         )
         assert created is not None
         runner = BatchRunner(
@@ -108,7 +111,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
         with psycopg.connect(_psycopg_url(database_url)) as connection:
             persisted = connection.execute(
                 """
-                SELECT document.status, count(archive.id) AS archives,
+                SELECT document.status, document.document_kind, count(archive.id) AS archives,
                        count(DISTINCT extraction.id) AS extractions,
                        count(DISTINCT ocr_layer.id) AS ocr_layers,
                        count(DISTINCT ocr_page.id) AS ocr_pages,
@@ -124,12 +127,13 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 JOIN ocr_pages AS ocr_page ON ocr_page.ocr_layer_id = ocr_layer.id
                 JOIN ocr_blocks AS ocr_block ON ocr_block.ocr_page_id = ocr_page.id
                 WHERE item.batch_id = %s
-                GROUP BY document.status, item.ocr_state, item.ocr_pages_processed,
+                GROUP BY document.status, document.document_kind,
+                         item.ocr_state, item.ocr_pages_processed,
                          item.ocr_warning_codes
                 """,
                 (created.batch_id,),
             ).fetchone()
-        assert persisted == ("ready", 1, 1, 1, 1, 1, "completed", 1, [])
+        assert persisted == ("ready", "policy", 1, 1, 1, 1, 1, "completed", 1, [])
         assert len(list(archive_root.iterdir())) == 1
         assert list(work_root.iterdir()) == []
     finally:

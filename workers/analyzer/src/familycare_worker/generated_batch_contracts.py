@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 __all__ = [
+    "BatchDocumentKind",
     "BatchErrorCode",
     "BatchId",
     "BatchItemState",
@@ -12,12 +13,20 @@ __all__ = [
     "DocumentBatch",
     "DocumentBatchItem",
     "DocumentBatchRequest",
+    "DocumentBatchSource",
     "DocumentBatchStatus",
     "FamilyMemberId",
     "ImportSource",
     "OcrState",
     "OcrWarningCode",
     "SourceId",
+]
+
+
+BatchDocumentKind = Literal[
+    "policy",
+    "supporting",
+    "terms",
 ]
 
 
@@ -102,6 +111,7 @@ class DocumentBatch(TypedDict):
 class DocumentBatchItem(TypedDict):
     attempts: int
     display_label: str
+    document_kind: BatchDocumentKind
     error_code: BatchErrorCode | None
     ocr_pages_processed: int
     ocr_state: OcrState
@@ -113,7 +123,12 @@ class DocumentBatchItem(TypedDict):
 class DocumentBatchRequest(TypedDict):
     family_member_id: FamilyMemberId
     schema_version: Literal["1"]
-    source_ids: list[SourceId]
+    sources: list[DocumentBatchSource]
+
+
+class DocumentBatchSource(TypedDict):
+    document_kind: BatchDocumentKind
+    source_id: SourceId
 
 
 class DocumentBatchStatus(TypedDict):

@@ -59,6 +59,7 @@ class SyntheticItem:
     source_id: str
     source_key: str
     document_version_id: UUID
+    document_kind: str = "supporting"
     batch_id: UUID = SYNTHETIC_BATCH_ID
     state: str = "queued"
     attempts: int = 0
@@ -238,12 +239,14 @@ def _item(
     path: Path,
     *,
     source_id: str | None = None,
+    document_kind: str = "supporting",
 ) -> SyntheticItem:
     return SyntheticItem(
         id=item_id,
         source_id=source_id or _source_id(path),
         source_key=path.name,
         document_version_id=version_id,
+        document_kind=document_kind,
     )
 
 

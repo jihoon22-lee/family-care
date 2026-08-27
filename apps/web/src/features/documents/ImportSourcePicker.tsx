@@ -1,4 +1,16 @@
-import type { ImportSourceResponse } from "../../api/generated";
+import type {
+  BatchSourceRequest,
+  ImportSourceResponse,
+} from "../../api/generated";
+
+const DOCUMENT_KIND_OPTIONS: Array<{
+  label: string;
+  value: BatchSourceRequest["document_kind"];
+}> = [
+  { label: "증권", value: "policy" },
+  { label: "약관", value: "terms" },
+  { label: "보조자료", value: "supporting" },
+];
 
 function sizeLabel(sizeBytes: number): string {
   if (sizeBytes < 1024 * 1024)
@@ -8,13 +20,20 @@ function sizeLabel(sizeBytes: number): string {
 
 export function ImportSourcePicker({
   disabled = false,
+  onKindChange,
   onChange,
   selectedIds,
+  selectedKinds,
   sources,
 }: {
   disabled?: boolean;
   onChange: (sourceId: string, selected: boolean) => void;
+  onKindChange: (
+    sourceId: string,
+    documentKind: BatchSourceRequest["document_kind"],
+  ) => void;
   selectedIds: ReadonlySet<string>;
+  selectedKinds: ReadonlyMap<string, BatchSourceRequest["document_kind"]>;
   sources: ImportSourceResponse[];
 }) {
   return (
@@ -41,6 +60,23 @@ export function ImportSourcePicker({
                     {source.encrypted ? " · 암호 확인 가능성 있음" : ""}
                   </small>
                 </span>
+                <select
+                  aria-label={`${source.display_label} 문서 종류`}
+                  disabled={!selectedIds.has(source.source_id)}
+                  onChange={(event) =>
+                    onKindChange(
+                      source.source_id,
+                      event.target.value as BatchSourceRequest["document_kind"],
+                    )
+                  }
+                  value={selectedKinds.get(source.source_id) ?? "supporting"}
+                >
+                  {DOCUMENT_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </label>
             </li>
           ))}

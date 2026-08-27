@@ -56,6 +56,9 @@ class BatchItem(Protocol):
     @property
     def source_key(self) -> str: ...
 
+    @property
+    def document_kind(self) -> str: ...
+
 
 class BatchRepositoryLike(Protocol):
     def claim_next_item(self, worker_id: str, *, lease_seconds: int = 180) -> BatchItem | None: ...

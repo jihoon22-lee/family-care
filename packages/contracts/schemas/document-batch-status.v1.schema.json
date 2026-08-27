@@ -14,7 +14,7 @@
       "items": {
         "$ref": "#/$defs/DocumentBatchItem"
       },
-      "maxItems": 64,
+      "maxItems": 100,
       "minItems": 1,
       "type": "array"
     },
@@ -93,6 +93,15 @@
       "title": "BatchState",
       "type": "string"
     },
+    "BatchDocumentKind": {
+      "enum": [
+        "policy",
+        "terms",
+        "supporting"
+      ],
+      "title": "BatchDocumentKind",
+      "type": "string"
+    },
     "DocumentBatch": {
       "additionalProperties": false,
       "properties": {
@@ -142,6 +151,9 @@
           "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
           "type": "string"
         },
+        "document_kind": {
+          "$ref": "#/$defs/BatchDocumentKind"
+        },
         "error_code": {
           "anyOf": [
             {
@@ -179,6 +191,7 @@
       "required": [
         "source_id",
         "display_label",
+        "document_kind",
         "state",
         "error_code",
         "attempts",

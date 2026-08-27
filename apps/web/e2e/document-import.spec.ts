@@ -60,6 +60,7 @@ function batchItem(
           ? 2
           : 1,
     display_label: source.display_label,
+    document_kind: "policy",
     error_code: state === "password_required" ? "PASSWORD_REQUIRED" : null,
     ocr_pages_processed: state === "succeeded" ? 1 : 0,
     ocr_state: state === "succeeded" ? "completed" : "pending",
