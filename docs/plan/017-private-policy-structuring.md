@@ -62,7 +62,14 @@
 2. [x] Keep password handling, no-store behavior, and current login/session behavior unchanged.
 3. [x] Run Web checks, Python format/lint/type/tests, contract/container/workflow checks, PostgreSQL integration tests, migration upgrade, repository safety, and `git diff --check` serially.
 4. [x] Rebuild API/Worker images, apply migrations, restart only FamilyCare-owned services, and revalidate the existing HTTPS login endpoint without changing credentials.
-5. [ ] After synthetic acceptance passes, materialize the approved Drive files outside Git and begin root-owned family-by-family analysis.
+5. [ ] Continue root-owned actual family-by-family analysis outside Git after synthetic acceptance:
+   - [x] Family E review complete from 6 readable PDFs: 3 policies and 94 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family F review complete from 8 readable PDFs: 4 certificate-backed policies and 160 coverages. One nonfinal product explanation was excluded from the policy aggregate. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family C review complete from 17 PDFs and 1 JPEG: 10 readable and 8 unreadable sources, yielding 2 policies and 19 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family B review complete from 18 PDFs: 11 readable and 7 unreadable sources, yielding 2 policies and 41 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [ ] Review Family A and Family D.
+   - [ ] Complete raw visual/OCR review for unreadable sources and verify current/renewal status before changing any `UNKNOWN` result.
+   - Keep actual source files and all raw or derived private data outside Git; only sanitized aggregate progress may be recorded here.
 
 ## Acceptance boundary
 
