@@ -12,7 +12,12 @@ from typing import Any
 
 import pytest
 from familycare_worker.pdf.errors import InvalidRequest, PdfCorrupt
-from familycare_worker.pdf.extractor import ExtractionSettings, PdfPlumberExtractor
+from familycare_worker.pdf.extractor import (
+    ExtractionSettings,
+    PdfPlumberExtractor,
+    _extract_blocks,
+    _extract_tables,
+)
 from familycare_worker.pdf.intake import open_source, validate_pdf
 from familycare_worker.pdf.isolation import run_isolated_parser
 
@@ -120,6 +125,82 @@ def test_ruled_table_retains_table_and_cell_coordinates(tmp_path: Path) -> None:
     assert all(cell["text"].startswith("Synthetic") for cell in table["cells"])
     assert all(cell["review_state"] == "candidate" for cell in table["cells"])
     assert all(len(cell["bbox"]) == 4 for cell in table["cells"])
+
+
+def test_invalid_word_bbox_is_skipped_without_dropping_valid_words() -> None:
+    class SyntheticPage:
+        width = 100.0
+        height = 200.0
+
+        def extract_words(self, **kwargs: object) -> list[dict[str, object]]:
+            del kwargs
+            return [
+                {"text": "kept-before", "x0": 1.0, "top": 2.0, "x1": 20.0, "bottom": 12.0},
+                {"text": "outside-page", "x0": 21.0, "top": 2.0, "x1": 40.0, "bottom": 201.0},
+                {"text": "kept-after", "x0": 41.0, "top": 2.0, "x1": 60.0, "bottom": 12.0},
+            ]
+
+    blocks = _extract_blocks(SyntheticPage(), page_number=1)
+
+    assert [block["text"] for block in blocks] == ["kept-before", "kept-after"]
+    assert [block["reading_order"] for block in blocks] == [0, 1]
+
+
+def test_invalid_table_bbox_is_skipped_without_dropping_valid_tables() -> None:
+    class SyntheticRow:
+        cells = [(1.0, 2.0, 20.0, 12.0)]
+
+    class SyntheticTable:
+        def __init__(self, bbox: tuple[float, float, float, float]) -> None:
+            self.bbox = bbox
+            self.rows = [SyntheticRow()]
+
+        def extract(self) -> list[list[str]]:
+            return [["kept-cell"]]
+
+    class SyntheticPage:
+        width = 100.0
+        height = 200.0
+
+        def find_tables(self, table_settings: object) -> list[SyntheticTable]:
+            del table_settings
+            return [
+                SyntheticTable((0.0, 0.0, 101.0, 20.0)),
+                SyntheticTable((0.0, 20.0, 100.0, 40.0)),
+            ]
+
+    tables = _extract_tables(SyntheticPage(), strategy="auto")
+
+    assert len(tables) == 1
+    assert tables[0]["cells"][0]["text"] == "kept-cell"
+
+
+def test_invalid_cell_bbox_is_skipped_without_dropping_valid_cells() -> None:
+    class SyntheticRow:
+        cells = [
+            (1.0, 2.0, 20.0, 12.0),
+            (21.0, 2.0, 101.0, 12.0),
+        ]
+
+    class SyntheticTable:
+        bbox = (0.0, 0.0, 100.0, 20.0)
+        rows = [SyntheticRow()]
+
+        def extract(self) -> list[list[str]]:
+            return [["kept-cell", "outside-page"]]
+
+    class SyntheticPage:
+        width = 100.0
+        height = 200.0
+
+        def find_tables(self, table_settings: object) -> list[SyntheticTable]:
+            del table_settings
+            return [SyntheticTable()]
+
+    tables = _extract_tables(SyntheticPage(), strategy="auto")
+
+    assert len(tables) == 1
+    assert [cell["text"] for cell in tables[0]["cells"]] == ["kept-cell"]
 
 
 def test_low_quality_page_is_classified_without_running_ocr(tmp_path: Path) -> None:

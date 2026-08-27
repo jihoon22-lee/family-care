@@ -167,14 +167,17 @@ def _extract_blocks(page: Any, page_number: int) -> list[TextBlock]:
         text = word.get("text")
         if not isinstance(text, str) or not text:
             continue
-        bbox = normalize_bbox(
-            cast(float, word.get("x0")),
-            cast(float, word.get("top")),
-            cast(float, word.get("x1")),
-            cast(float, word.get("bottom")),
-            page_width=page.width,
-            page_height=page.height,
-        )
+        try:
+            bbox = normalize_bbox(
+                cast(float, word.get("x0")),
+                cast(float, word.get("top")),
+                cast(float, word.get("x1")),
+                cast(float, word.get("bottom")),
+                page_width=page.width,
+                page_height=page.height,
+            )
+        except PdfCorrupt:
+            continue
         blocks.append(
             TextBlock(
                 page_number=page_number,
@@ -193,14 +196,17 @@ def _extract_tables(page: Any, strategy: TableStrategy) -> list[ExtractionTable]
         raise PdfCorrupt
     for table in tables:
         raw_table_bbox = cast(tuple[float, float, float, float], table.bbox)
-        table_bbox = normalize_bbox(
-            raw_table_bbox[0],
-            raw_table_bbox[1],
-            raw_table_bbox[2],
-            raw_table_bbox[3],
-            page_width=page.width,
-            page_height=page.height,
-        )
+        try:
+            table_bbox = normalize_bbox(
+                raw_table_bbox[0],
+                raw_table_bbox[1],
+                raw_table_bbox[2],
+                raw_table_bbox[3],
+                page_width=page.width,
+                page_height=page.height,
+            )
+        except PdfCorrupt:
+            continue
         text_rows = table.extract()
         cells: list[ExtractionCell] = []
         for row_index, row in enumerate(table.rows):
@@ -210,19 +216,23 @@ def _extract_tables(page: Any, strategy: TableStrategy) -> list[ExtractionTable]
                     continue
                 text = row_text[column_index] if column_index < len(row_text) else ""
                 raw_cell_bbox = cast(tuple[float, float, float, float], cell_bbox)
+                try:
+                    cell_bbox = normalize_bbox(
+                        raw_cell_bbox[0],
+                        raw_cell_bbox[1],
+                        raw_cell_bbox[2],
+                        raw_cell_bbox[3],
+                        page_width=page.width,
+                        page_height=page.height,
+                    )
+                except PdfCorrupt:
+                    continue
                 cells.append(
                     ExtractionCell(
                         row_index=row_index,
                         column_index=column_index,
                         text=text or "",
-                        bbox=normalize_bbox(
-                            raw_cell_bbox[0],
-                            raw_cell_bbox[1],
-                            raw_cell_bbox[2],
-                            raw_cell_bbox[3],
-                            page_width=page.width,
-                            page_height=page.height,
-                        ),
+                        bbox=cell_bbox,
                         review_state="candidate",
                     )
                 )
