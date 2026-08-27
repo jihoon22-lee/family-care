@@ -158,6 +158,12 @@ v0.1의 archive metadata는 encrypted object key, encryption scheme/version, non
 
 The source descriptor and temporary PNG are runtime-only. PDFium reads bounded bytes from the already-open read-only descriptor; Tesseract is invoked directly as `/usr/bin/tesseract` with no shell and TSV on stdout; no `pytesseract` dependency or TSV artifact is persisted. Each PNG is removed immediately after its page is recognized, and the outer Worker workspace is removed on every terminal path.
 
+### Private batch page Evidence
+
+Successful private batch persistence creates one bbox-free `Evidence` row for every validated physical page in the same transaction as the `DocumentVersion`, successful `Extraction`, native/OCR provenance, managed archive metadata, and terminal batch state. The locked batch supplies `household_space_id`; the validated intake supplies content hash and expected page count; the newly created successful Extraction supplies `extraction_id`. A page-count mismatch, non-sequential page number, invalid identity, or missing household scope aborts the transaction. Initial state is always `NEEDS_REVIEW`.
+
+For later candidate structuring, the Worker can resolve only those scoped page rows whose Evidence hash matches the same DocumentVersion and whose Extraction is successful. It reads at most 500 ordered rows and emits at most 64 non-empty in-memory slices of 240 characters each. An `OCR_REQUIRED` page prefers its successful OCR layer and falls back to native text only when OCR text is empty; `TEXT_SUFFICIENT` pages use native extraction. These slices are not stored in a new table and are not returned by batch APIs or logs.
+
 ## Policy boundary
 
 ### PolicyContract

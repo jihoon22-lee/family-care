@@ -82,6 +82,8 @@ AI_VERIFIED | NEEDS_REVIEW
 
 요청 batch는 문서 전체를 관성적으로 보내지 않고 목표 필드 또는 Clause에 필요한 page 범위로 제한한다.
 
+Private policy ingestion의 후보 입력 loader는 household, DocumentVersion, successful Extraction, content hash가 모두 일치하는 bbox-free page Evidence만 사용한다. 물리 페이지 순서가 모호하거나 중복되면 요청을 만들지 않는다. 각 페이지 text는 공백을 정규화한 뒤 240자로 제한하고 전체 입력은 64개 slice를 넘지 않는다. Native 품질이 `OCR_REQUIRED`인 페이지에만 성공한 OCR layer를 우선하며, OCR text가 없으면 native layer로 제한적으로 fallback한다. 이 loader는 DB·메모리 내부 경계일 뿐이며 provider 연결 전에는 선택된 가족 표시값과 형식으로 식별 가능한 불필요한 증권번호·연락처를 추가로 제거해야 한다.
+
 ## Coverage rule DSL
 
 DSL은 data-only JSON이며 임의 code를 실행하지 않는다.

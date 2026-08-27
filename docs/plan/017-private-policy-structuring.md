@@ -35,18 +35,19 @@
 
 ## Task 2: Atomic Evidence persistence
 
-1. Add RED Worker repository tests proving successful private extraction writes Evidence in the same transaction as extraction/archive metadata.
-2. Derive `household_space_id` through the locked batch row and reject inconsistent document/version/page/bbox relationships.
-3. Persist one page-addressable Evidence row per extracted page with initial `NEEDS_REVIEW`. Keep the native extraction ID and content hash authoritative; OCR remains a separate provenance layer for the same page.
-4. Build at most 64 deterministic, 240-character internal Evidence slices from page text, preferring successful OCR text on OCR-required pages. Keep text out of logs and batch responses.
+- [x] Add RED Worker repository tests proving successful private extraction writes Evidence in the same transaction as extraction/archive metadata.
+- [x] Derive `household_space_id` through the locked batch row and reject inconsistent document/version/page/bbox relationships.
+- [x] Persist one page-addressable Evidence row per extracted page with initial `NEEDS_REVIEW`. Keep the native extraction ID and content hash authoritative; OCR remains a separate provenance layer for the same page.
+- [x] Build at most 64 deterministic, 240-character internal Evidence slices from page text, preferring successful OCR text on OCR-required pages. Keep text out of logs and batch responses.
 
 ## Task 3: Retryable policy-candidate job
 
 1. Add a leased `policy_structuring_jobs` table keyed to one policy `document_version_id` and extraction.
 2. Enqueue it atomically only for successful `policy` imports.
 3. Extend the structurer schema to a bounded candidate batch; verify candidates independently and retain only request IDs, validated fields, issues, and bounded Evidence.
-4. Add a Worker-side publisher/job repository that persists the same candidate tables consumed by the API review use cases.
-5. Wire the job runner and policy schemas into the existing Worker process. Provider configuration/retry errors change only the structuring job, never the completed document batch.
+4. Before provider submission, remove selected-member display values and format-detected policy numbers/contact details that are unnecessary for structuring; never log the source or redacted text.
+5. Add a Worker-side publisher/job repository that persists the same candidate tables consumed by the API review use cases.
+6. Wire the job runner and policy schemas into the existing Worker process. Provider configuration/retry errors change only the structuring job, never the completed document batch.
 
 ## Task 4: Human confirmation and family ledger projection
 

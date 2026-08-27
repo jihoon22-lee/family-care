@@ -46,6 +46,7 @@ _TOP_LEVEL_KEYS = frozenset(
         "schema_version",
     }
 )
+_PageEvidenceRecord = tuple[UUID, UUID, UUID, str, int, str]
 
 
 class RepositoryError(RuntimeError):
@@ -274,6 +275,47 @@ def _validate_result(
             width, height = page_dimensions[page_number]
             _bbox(item["bbox"], width=width, height=height)
     return cast(ExtractionResult, result)
+
+
+def _page_evidence_records(
+    result: ExtractionResult,
+    *,
+    household_space_id: UUID,
+    document_version_id: UUID,
+    extraction_id: UUID,
+    content_sha256: str,
+    expected_page_count: int,
+) -> tuple[_PageEvidenceRecord, ...]:
+    """Bind every validated physical page to one scoped, reviewable Evidence row."""
+
+    if (
+        any(
+            not isinstance(value, UUID) or value.int == 0
+            for value in (household_space_id, document_version_id, extraction_id)
+        )
+        or _SHA256_PATTERN.fullmatch(content_sha256) is None
+        or isinstance(expected_page_count, bool)
+        or not 1 <= expected_page_count <= 500
+    ):
+        raise InvalidExtractionResult
+    pages = result["pages"]
+    if len(pages) != expected_page_count:
+        raise InvalidExtractionResult
+    records: list[_PageEvidenceRecord] = []
+    for expected_page, page in enumerate(pages, start=1):
+        if page["page_number"] != expected_page:
+            raise InvalidExtractionResult
+        records.append(
+            (
+                household_space_id,
+                document_version_id,
+                extraction_id,
+                content_sha256,
+                expected_page,
+                "NEEDS_REVIEW",
+            )
+        )
+    return tuple(records)
 
 
 def _ocr_config_hash(engine_version: str) -> str:
@@ -856,10 +898,13 @@ def _lock_owned_batch_item(
 ) -> dict[str, Any]:
     row = connection.execute(
         """
-        SELECT item.*, item.lease_expires_at > clock_timestamp() AS lease_valid
+        SELECT item.*,
+               batch.household_space_id AS batch_household_space_id,
+               item.lease_expires_at > clock_timestamp() AS lease_valid
         FROM document_batch_items AS item
+        JOIN document_batches AS batch ON batch.id = item.batch_id
         WHERE item.id = %s
-        FOR UPDATE
+        FOR UPDATE OF item
         """,
         (item_id,),
     ).fetchone()
@@ -1209,7 +1254,18 @@ class BatchRepository:
             if extraction_row is None:
                 raise DocumentStateConflict
             extraction_id = cast(UUID, extraction_row["id"])
-            for page in result["pages"]:
+            household_space_id = item["batch_household_space_id"]
+            if not isinstance(household_space_id, UUID):
+                raise DocumentStateConflict
+            evidence_records = _page_evidence_records(
+                result,
+                household_space_id=household_space_id,
+                document_version_id=archive.document_version_id,
+                extraction_id=extraction_id,
+                content_sha256=validated.content_sha256,
+                expected_page_count=validated.page_count,
+            )
+            for page, evidence_record in zip(result["pages"], evidence_records, strict=True):
                 quality = page["quality"]
                 page_row = connection.execute(
                     """
@@ -1238,6 +1294,16 @@ class BatchRepository:
                 if page_row is None:
                     raise DocumentStateConflict
                 page_id = cast(UUID, page_row["id"])
+                connection.execute(
+                    """
+                    INSERT INTO evidence (
+                        household_space_id, document_version_id, extraction_id,
+                        content_sha256, physical_page, review_state
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    evidence_record,
+                )
                 for block in page["blocks"]:
                     connection.execute(
                         """

@@ -12,6 +12,7 @@ from familycare_api.documents.batch_repository import (
 )
 from familycare_api.documents.batch_repository import BatchSourceSelection
 from familycare_api.documents.import_sources import ImportSourceCatalog
+from familycare_worker.ai.evidence_loader import PolicyEvidenceLoader
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.imports.batch import BatchRunner
@@ -133,7 +134,54 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 """,
                 (created.batch_id,),
             ).fetchone()
+            evidence = connection.execute(
+                """
+                SELECT e.id, e.document_version_id, e.extraction_id,
+                       e.household_space_id,
+                       e.document_version_id = version.id AS version_matches,
+                       e.extraction_id = extraction.id AS extraction_matches,
+                       e.content_sha256 = version.content_sha256 AS hash_matches,
+                       e.physical_page, e.x0, e.y0, e.x1, e.y1, e.review_state
+                FROM document_batch_items AS item
+                JOIN document_batches AS batch ON batch.id = item.batch_id
+                JOIN documents AS document ON document.id = item.document_id
+                JOIN document_versions AS version ON version.document_id = document.id
+                JOIN extractions AS extraction ON extraction.document_version_id = version.id
+                JOIN evidence AS e
+                  ON e.document_version_id = version.id
+                 AND e.extraction_id = extraction.id
+                WHERE item.batch_id = %s
+                ORDER BY e.physical_page
+                """,
+                (created.batch_id,),
+            ).fetchall()
         assert persisted == ("ready", "policy", 1, 1, 1, 1, 1, "completed", 1, [])
+        assert len(evidence) == 1
+        evidence_row = evidence[0]
+        assert evidence_row[3:] == (
+            household_id,
+            True,
+            True,
+            True,
+            1,
+            None,
+            None,
+            None,
+            None,
+            "NEEDS_REVIEW",
+        )
+        slices = PolicyEvidenceLoader(database_url).load(
+            household_space_id=household_id,
+            document_version_id=evidence_row[1],
+            extraction_id=evidence_row[2],
+        )
+        assert len(slices) == 1
+        assert slices[0].evidence_id == evidence_row[0]
+        assert slices[0].document_version_id == evidence_row[1]
+        assert slices[0].page == 1
+        assert slices[0].text == "Synthetic OCR Evidence"
+        assert slices[0].bbox is None
+        assert slices[0].document_kind == "policy"
         assert len(list(archive_root.iterdir())) == 1
         assert list(work_root.iterdir()) == []
     finally:
@@ -149,6 +197,11 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 (household_id,),
             )
             if document_ids:
+                connection.execute(
+                    "DELETE FROM evidence WHERE document_version_id IN "
+                    "(SELECT id FROM document_versions WHERE document_id = ANY(%s))",
+                    (document_ids,),
+                )
                 connection.execute(
                     "DELETE FROM managed_archives WHERE document_version_id IN "
                     "(SELECT id FROM document_versions WHERE document_id = ANY(%s))",
