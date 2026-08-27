@@ -24,6 +24,12 @@ FamilyCare Web, API, and Analyzer Worker product metadata now consistently repor
 - Aligned the synthetic API and Worker health-response expectations in `apps/api/tests/test_health.py` and `workers/analyzer/tests/test_health.py`.
 - Added the dated `0.2.0` section to `CHANGELOG.md`, covering document inventory, policy structuring, member scoping, bounded PDF handling, and the private-data boundary.
 
+### Canonical OpenAPI follow-up
+
+- The full Python gate exposed deterministic OpenAPI drift after the API package version changed; all other tests in that run passed.
+- Regenerated only `packages/contracts/openapi/familycare.v1.json` with the repository-owned `TMPDIR=/tmp uv run python scripts/check_contracts.py --write-openapi` command.
+- Reviewed the generated diff: only `info.version` and the health response version default changed from `0.1.0` to `0.2.0`; paths, schemas, examples, and error codes were unchanged.
+
 ## Code Example
 
 All runtime health identities are derived from their package version rather than duplicating a release-only constant:
@@ -66,6 +72,16 @@ All matched files use Prettier code style!
 
 git diff --check
 passed
+```
+
+### Canonical OpenAPI follow-up
+
+```text
+TMPDIR=/tmp uv run pytest apps/api/tests/test_policy_ledger_contracts.py::test_committed_openapi_has_no_contract_drift_and_policy_error_codes_are_fixed -q
+1 passed in 6.22s
+
+TMPDIR=/tmp uv run python scripts/check_contracts.py
+contract checks passed
 ```
 
 ## Next Steps
