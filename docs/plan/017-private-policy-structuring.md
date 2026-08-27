@@ -65,10 +65,11 @@
 5. [ ] Continue root-owned actual family-by-family analysis outside Git after synthetic acceptance:
    - [x] Family E review complete from 6 readable PDFs: 3 policies and 94 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
    - [x] Family F review complete from 8 readable PDFs: 4 certificate-backed policies and 160 coverages. One nonfinal product explanation was excluded from the policy aggregate. All statuses remain `UNKNOWN` pending current/renewal verification.
-   - [x] Family C review complete from 17 PDFs and 1 JPEG: 10 readable and 8 unreadable sources, yielding 2 policies and 19 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
-   - [x] Family B review complete from 18 PDFs: 11 readable and 7 unreadable sources, yielding 2 policies and 41 coverages. All statuses remain `UNKNOWN` pending current/renewal verification.
-   - [ ] Review Family A and Family D.
-   - [ ] Complete raw visual/OCR review for unreadable sources and verify current/renewal status before changing any `UNKNOWN` result.
+   - [x] Family C source review complete from 17 PDFs and 1 image: 12 readable and 6 password-required sources, yielding 2 readable certificate-backed policies and 19 coverages. Six encrypted policy candidates remain unpublished. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family B source review complete from 18 PDFs: 15 readable and 3 password-required sources, yielding 6 readable certificate-backed policies and 92 coverages. Three encrypted policy candidates remain unpublished, and one legacy-font certificate retains an exact-label boundary. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family D accessible-source review complete from 21 PDFs: 18 readable and 3 password-required sources, yielding 4 certificate-backed policies and 95 coverages. Two additional password-required policy candidates remain unpublished. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [x] Family A accessible-source review complete from 37 PDFs: 34 readable and 3 password-required sources, yielding 13 readable certificate-backed policies and 132 coverages. Three password-required policy candidates remain unpublished. Mixed-role source files and same-member duplicates were reviewed without inflating the aggregate. All statuses remain `UNKNOWN` pending current/renewal verification.
+   - [ ] Complete remaining password/font/raw visual boundaries across the family set and verify current/renewal status before changing any `UNKNOWN` result.
    - Keep actual source files and all raw or derived private data outside Git; only sanitized aggregate progress may be recorded here.
 
 ## Follow-up after actual review

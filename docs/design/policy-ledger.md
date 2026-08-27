@@ -24,6 +24,7 @@
 - contract, coverage start/end dates
 - current status와 status Evidence
 - source policy DocumentVersion
+- 선택적 reviewed policy component. 묶음 PDF라면 PolicyContract Evidence page가 그 component page range 안에 있어야 함
 - PolicyParty role과 effective period
 - 실제 가입 Rider
 - optimistic concurrency version

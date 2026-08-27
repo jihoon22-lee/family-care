@@ -5,10 +5,10 @@
 This workthrough records sanitized aggregate progress from the root-owned review
 of actual family insurance sources. The source review remains outside Git and
 this document contains no source content, extracted text, OCR output, document
-identifiers, names, amounts, or source paths. The repository plan remains open
-because Family A and Family D are still pending, unreadable-source review is
-still pending, and current/renewal verification has not yet changed any result
-from `UNKNOWN`.
+identifiers, names, amounts, or source paths. Accessible-source review now
+covers all six family aliases, but the repository plan remains open because
+password/font/raw-visual boundaries and current/renewal verification have not
+yet changed any result from `UNKNOWN`.
 
 ## Context
 
@@ -27,9 +27,10 @@ File: `docs/plan/017-private-policy-structuring.md`
 
 - Kept Task 5 item 5 unchecked so the overall actual-acceptance task is not
   represented as complete.
-- Recorded completed aggregate review for Families B, C, E, and F.
-- Recorded Family A and Family D, unreadable-source visual/OCR review, and
-  current/renewal verification as remaining work.
+- Recorded completed accessible-source aggregate review for Families A through
+  F.
+- Kept password/font/raw-visual review and current/renewal verification as
+  remaining work.
 - Preserved the rule that actual source material and private derivatives stay
   outside Git.
 
@@ -48,12 +49,14 @@ File: `workthrough/2026-08-27-private-actual-review-progress.md`
 | --- | --- | --- | --- |
 | Family E | 6 readable PDFs reviewed | 3 policies / 94 coverages | All `UNKNOWN` pending current/renewal verification |
 | Family F | 8 readable PDFs reviewed; 1 nonfinal product explanation excluded | 4 certificate-backed policies / 160 coverages | All `UNKNOWN` pending current/renewal verification |
-| Family C | 17 PDFs + 1 JPEG; 10 readable / 8 unreadable | 2 policies / 19 coverages | All `UNKNOWN` pending current/renewal verification |
-| Family B | 18 PDFs; 11 readable / 7 unreadable | 2 policies / 41 coverages | All `UNKNOWN` pending current/renewal verification |
+| Family C | 17 PDFs + 1 image; 12 readable / 6 password-required | 2 readable certificate-backed policies / 19 coverages; 6 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family B | 18 PDFs; 15 readable / 3 password-required; one legacy-font label boundary | 6 readable certificate-backed policies / 92 coverages; 3 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family D | 21 PDFs; 18 readable / 3 password-required | 4 certificate-backed policies / 95 coverages; 2 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family A | 37 PDFs; 34 readable / 3 password-required; mixed-role and duplicate sources reviewed | 13 readable certificate-backed policies / 132 coverages; 3 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
 
-Family A and Family D remain to be reviewed. Raw visual/OCR review also remains
-for unreadable sources. These follow-up items prevent the actual-review plan
-item from being checked off.
+Password/font/raw-visual review remains for inaccessible boundaries across the
+family set. These follow-up items and current/renewal verification prevent the
+actual-review plan item from being checked off.
 
 ## Code Examples
 
@@ -83,7 +86,7 @@ progress update.
 
 ## Next Steps
 
-- Review Family A and Family D outside the repository.
-- Complete raw visual/OCR review for unreadable sources.
+- Complete the remaining password/font/raw-visual boundaries outside the
+  repository.
 - Verify current and renewal status before revisiting any `UNKNOWN` result.
 - Keep the Task 5 actual-acceptance item open until those boundaries are met.

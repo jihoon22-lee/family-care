@@ -8,7 +8,7 @@ This workthrough records the design and implementation plan for a FamilyMember-s
 
 - The existing ledger intentionally publishes only `PolicyContract` and Rider records supported by policy Evidence.
 - The private batch currently distinguishes `policy`, `terms`, and `supporting`, but does not give product explanations an explicit role.
-- The current persistence model does not represent a reviewed many-to-many link between one policy and its terms or product explanation documents.
+- The current persistence model does not represent reviewed page-range components inside mixed PDFs or a member-scoped document set that can exist before a certificate-backed policy is confirmed.
 - Actual family source review remains root-owned and outside Git. This change contains only public design, synthetic implementation guidance, and aggregate workflow boundaries.
 
 ## Changes Made
@@ -22,13 +22,15 @@ File: `docs/design/insurance-document-inventory.md`
 - Kept product-explanation presence independent so it never substitutes for terms or policy Evidence.
 - Defined terms-only, product-explanation-only, unpublished-policy, unreadable, conflict, supporting-only, and duplicate states.
 - Kept document role, processing, pairing, and duplicate state as independent dimensions so unreadable or conflict warnings do not hide the original document role.
-- Added a reviewed `policy_document_links` boundary and required active `USER_CONFIRMED` links for completeness.
+- Added reviewed page-range components and member-scoped insurance document sets, then required active `USER_CONFIRMED` set items for completeness.
+- Kept physical source counts separate from role component counts so a bundled PDF or duplicate does not inflate missing-document totals.
+- Added explicit application handling while preserving that neither an application nor a product explanation is enrollment authority.
 
 ### 2. Defined the follow-up implementation plan
 
 File: `docs/plan/018-insurance-document-inventory.md`
 
-- Sequenced explicit product-explanation classification, policy-document links, the member inventory projection, the ledger UI, and grouped verification.
+- Sequenced product-explanation/application classification, mixed-source components, insurance document sets, the member inventory projection, the ledger UI, and grouped verification.
 - Required RED tests before each behavior change and a full serial repository gate after the assembled work unit.
 - Kept actual-data acceptance after the remaining root-owned family review.
 - Prohibited credential, session, port, and key changes during this follow-up.
@@ -58,11 +60,12 @@ The documentation test was first changed to require the new design and plan and 
 ## Key decisions
 
 1. `PolicyContract` remains the sole registered-insurance aggregate.
-2. `product_explanation` becomes an explicit document kind and has no enrollment authority.
-3. Product-explanation presence is a flag/count, not a completeness category.
-4. Only active user-confirmed terms links make a policy certificate-and-terms complete.
-5. Content-hash duplicates are counted once but never moved between family members automatically.
-6. Missing or unreadable material remains visible and does not produce a coverage decision.
+2. `product_explanation` and `application` become explicit source/component roles and have no enrollment authority.
+3. A physical source can contain several insurance products or roles; final classification uses reviewed 1-based page-range components rather than filename or source kind alone.
+4. Product-explanation and application presence are independent flags/counts, not completeness categories.
+5. Only active user-confirmed terms set items make a policy certificate-and-terms complete.
+6. Content-hash and component duplicates are counted once but never moved between family members automatically.
+7. Missing or unreadable material remains visible and does not produce a coverage decision.
 
 ## Verification Results
 
@@ -86,7 +89,6 @@ The application, Python domain, contract, container, and workflow suites were no
 
 ## Next Steps
 
-- Complete the remaining Family D and Family A review outside Git.
-- Resolve unreadable-source visual/OCR access and current/renewal verification without inferring missing facts.
+- Complete remaining password/font/raw-visual boundaries and current/renewal verification without inferring missing facts.
 - Implement the inventory plan after that review, using synthetic tests and grouped verification.
 - Compare the final runtime counts and pairings against the root-owned external review before release.

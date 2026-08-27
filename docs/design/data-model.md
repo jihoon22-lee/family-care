@@ -138,6 +138,8 @@ v0.1의 archive metadata는 encrypted object key, encryption scheme/version, non
 
 `product_explanation`은 청약 전·계약 안내용 상품설명서를 뜻하며 증권이나 약관을 대체하지 않습니다. 이 문서만으로 PolicyContract나 Rider를 만들지 않습니다. 가족별 보유 문서와 계약 연결은 `docs/design/insurance-document-inventory.md`의 별도 읽기 모델을 따릅니다.
 
+Document kind는 intake 시점의 source-level 분류입니다. 한 PDF 안에 서로 다른 보험의 증권이나 증권·약관·상품설명서·청약서가 함께 있을 수 있으므로 파일명이나 이 단일 값만으로 최종 역할을 확정하지 않습니다.
+
 ### DocumentVersion
 
 같은 논리 문서가 교체되거나 재발급됐을 때 원본 버전을 보존합니다. `document_versions`는 `(document_id, content_sha256)`를 unique로 관리하며, 이 행이 content hash의 단일 대표입니다. 해시가 같으면 새 버전을 만들지 않습니다.
@@ -216,9 +218,21 @@ PolicyContract와 FamilyMember 사이의 역할 연결입니다.
 
 사고일 기준 계약과 Rider 유효성을 평가하기 위한 시점별 상태입니다. 최신 상태 근거가 없으면 현재 활성으로 추정하지 않습니다.
 
-### PolicyDocumentLink
+### Insurance document inventory associations
 
-증권 근거로 게시된 PolicyContract와 같은 FamilyMember의 약관·상품설명서·보조자료를 연결합니다. import batch item과 immutable DocumentVersion을 함께 참조하고, 제안·사용자 확인·상충·거부 상태와 optimistic version을 보존합니다. 사용자 확인 상태인 active link만 문서 완전성 계산에 포함합니다. 약관이나 상품설명서가 연결되지 않았다는 사실은 계약 불일치 판정이 아니라 보완할 문서 상태입니다.
+등록 보험과 보완 문서를 직접 연결하는 단일 link 대신 아래의 component와 document set 모델을 사용합니다.
+
+### InsuranceDocumentComponent
+
+하나의 immutable DocumentVersion 안에서 검수된 역할과 1-based inclusive page range를 보존합니다. 역할은 `policy`, `terms`, `product_explanation`, `application`, `supporting`이며 source-level Document kind와 다를 수 있습니다. 제안·사용자 확인·상충·거부 상태, Evidence, optimistic version과 soft delete를 보존합니다. 원시 extraction이나 batch 분류를 덮어쓰지 않습니다.
+
+### InsuranceDocumentSet
+
+같은 HouseholdSpace와 FamilyMember에 속하며 같은 보험 상품·계약으로 검토되는 component의 묶음입니다. 증권 근거가 없는 set도 만들 수 있고, 등록 보험 set만 nullable `policy_contract_id`를 가집니다. document set은 가입 authority가 아니며 PolicyContract를 생성하지 않습니다.
+
+### InsuranceDocumentSetItem
+
+document set과 component의 다대다 연결입니다. import batch item과 immutable DocumentVersion을 함께 참조하고, 제안·사용자 확인·상충·거부 상태와 optimistic version을 보존합니다. 사용자 확인 상태인 active terms item만 등록 set의 문서 완전성 계산에 포함합니다. 약관·상품설명서·청약서가 연결되지 않았다는 사실은 계약 불일치 판정이 아니라 보완할 문서 상태입니다.
 
 ## Terms and rules boundary
 
