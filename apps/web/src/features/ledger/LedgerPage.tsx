@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { ApiError } from "../../api/errors";
 import { CandidateReviewQueue } from "./CandidateReviewQueue";
 import { FamilyMemberPicker } from "./FamilyMemberPicker";
+import { InsuranceDocumentInventory } from "./InsuranceDocumentInventory";
 import { PolicySummaryCard } from "./PolicySummaryCard";
 import { useLedger } from "./useLedger";
 
@@ -89,6 +90,8 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
               <strong>{data.reviewItems.length}</strong>
             </div>
           </section>
+
+          <InsuranceDocumentInventory memberId={data.selectedMember.id} />
 
           <div className="ledger-columns">
             <section

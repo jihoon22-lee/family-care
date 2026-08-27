@@ -4,7 +4,9 @@ const DOCUMENT_KIND_LABELS: Record<
   BatchResponse["items"][number]["document_kind"],
   string
 > = {
+  application: "청약서",
   policy: "증권",
+  product_explanation: "상품설명서",
   supporting: "보조자료",
   terms: "약관",
 };

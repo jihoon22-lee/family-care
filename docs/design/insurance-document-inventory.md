@@ -66,6 +66,8 @@ private batch와 공통 `Document` 종류에 `product_explanation`과 `applicati
 
 `insurance_document_components`는 하나의 immutable `DocumentVersion` 안에서 검수된 역할과 1-based inclusive page range를 보존한다.
 
+private batch item은 성공 완료 transaction에서 `processed_document_version_id`를 함께 기록한다. component 생성 시 서버는 파일의 임의 최신 version을 고르지 않고 이 처리 완료 version만 사용한다. 기존 성공 item은 policy structuring job 또는 완료 시각 이전의 active managed archive로 안전하게 역추적할 수 있을 때만 backfill하며, lineage를 결정할 수 없는 item은 component 생성 대상으로 사용하지 않는다.
+
 - component role: `policy`, `terms`, `product_explanation`, `application`, `supporting`
 - page start/end와 component Evidence
 - `SUGGESTED`, `USER_CONFIRMED`, `CONFLICT`, `REJECTED` 검수 상태
@@ -151,9 +153,16 @@ MemberInsuranceDocumentInventory
     pairing state
     duplicate state
     safe display label
+  unreadable_sources[]
+    internal batch item id
+    source role
+    generalized safe label
+    password required, OCR required, or failed processing state
 ```
 
 응답은 source key, 절대경로, archive object key, 문서 본문, 정책번호, password, provider payload를 포함하지 않는다. 모든 응답은 `Cache-Control: no-store`이며 Web query cache는 메모리에서만 유지한다.
+
+아직 `DocumentVersion`이 없는 암호 필요·OCR 필요·실패 item은 component를 꾸며 내지 않는다. 대신 `unreadable_sources`에 내부 batch item ID, intake role, 서버가 만든 일반화 라벨, bounded processing state만 반환한다. 따라서 사용자는 어떤 종류의 자료가 보완 대상인지 확인할 수 있지만 실제 파일명·경로·암호는 읽기 모델에 노출되지 않는다.
 
 ## UI behavior
 
@@ -179,6 +188,8 @@ MemberInsuranceDocumentInventory
 9. 중복 사본 탐지는 소유권이나 FamilyMember 연결을 자동 변경하지 않는다.
 10. 모든 조회·수정은 server-derived HouseholdSpace 범위를 사용한다.
 11. 실제 문서와 파생 본문은 저장소, fixture, test, log에 들어가지 않는다.
+12. 성공 batch item과 component의 DocumentVersion lineage는 `processed_document_version_id`로 고정하며 임의 최신 version으로 바꾸지 않는다.
+13. 암호 필요·OCR 필요 자료는 가짜 component로 만들지 않고 path-free `unreadable_sources`로 표시한다.
 
 ## Verification
 

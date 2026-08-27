@@ -23,6 +23,13 @@ const MEMBER: FamilyMemberResponse = {
   internal_alias: "family-member-a",
   version: 1,
 };
+const MEMBER_B: FamilyMemberResponse = {
+  deleted: false,
+  display_name: "Family Member B",
+  id: "00000000-0000-4000-8000-000000000102",
+  internal_alias: "family-member-b",
+  version: 1,
+};
 const SOURCE: ImportSourceResponse = {
   display_label: "Sample Policy A.pdf",
   encrypted: true,
@@ -70,6 +77,7 @@ function response(value: unknown, status = 200): Response {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/app/documents/import");
 });
 
 describe("document import API", () => {
@@ -113,6 +121,24 @@ describe("document import API", () => {
 });
 
 describe("document import page", () => {
+  it("offers product explanations and applications as non-certificate source kinds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(response([MEMBER]))
+        .mockResolvedValueOnce(response([SOURCE])),
+    );
+
+    renderWithProviders(<ImportPage />);
+
+    const kindPicker = await screen.findByRole("combobox", {
+      name: /Sample Policy A\.pdf 문서 종류/i,
+    });
+    expect(kindPicker).toHaveTextContent("상품설명서");
+    expect(kindPicker).toHaveTextContent("청약서");
+  });
+
   it("selects one member and opaque sources without upload or path controls", async () => {
     const fetchMock = vi
       .fn()
@@ -142,6 +168,28 @@ describe("document import page", () => {
     );
     expect(documentKind).toBeEnabled();
     expect(screen.getByRole("button", { name: "가져오기 시작" })).toBeEnabled();
+  });
+
+  it("honors the member query when opening an import handoff", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/app/documents/import?member=${MEMBER_B.id}`,
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(response([MEMBER, MEMBER_B]))
+        .mockResolvedValueOnce(response([SOURCE])),
+    );
+
+    renderWithProviders(<ImportPage />);
+
+    expect(await screen.findByText(SOURCE.display_label)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "가족 구성원" })).toHaveValue(
+      MEMBER_B.id,
+    );
   });
 
   it("prompts only failed items once, clears the password, and preserves successes", async () => {

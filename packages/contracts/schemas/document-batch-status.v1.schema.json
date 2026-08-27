@@ -95,9 +95,11 @@
     },
     "BatchDocumentKind": {
       "enum": [
+        "application",
         "policy",
-        "terms",
-        "supporting"
+        "product_explanation",
+        "supporting",
+        "terms"
       ],
       "title": "BatchDocumentKind",
       "type": "string"

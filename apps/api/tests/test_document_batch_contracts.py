@@ -85,9 +85,11 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
     assert status_schema["additionalProperties"] is False
     assert request_schema["$defs"]["SourceId"]["pattern"] == "^[a-f0-9]{64}$"
     assert request_schema["$defs"]["BatchDocumentKind"]["enum"] == [
+        "application",
         "policy",
-        "terms",
+        "product_explanation",
         "supporting",
+        "terms",
     ]
     assert request_schema["properties"]["sources"]["items"] == {
         "$ref": "#/$defs/DocumentBatchSource"

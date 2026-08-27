@@ -166,6 +166,8 @@ The source descriptor and temporary PNG are runtime-only. PDFium reads bounded b
 
 Successful private batch persistence creates one bbox-free `Evidence` row for every validated physical page in the same transaction as the `DocumentVersion`, successful `Extraction`, native/OCR provenance, managed archive metadata, and terminal batch state. The locked batch supplies `household_space_id`; the validated intake supplies content hash and expected page count; the newly created successful Extraction supplies `extraction_id`. A page-count mismatch, non-sequential page number, invalid identity, or missing household scope aborts the transaction. Initial state is always `NEEDS_REVIEW`.
 
+같은 성공 transaction에서 `document_batch_items.processed_document_version_id`를 고정한다. 이후 page-range component는 이 값을 사용하므로 동일 `Document`에 새 version이 생겨도 과거 batch가 처리한 원본을 임의 최신 version으로 바꾸지 않는다. password/OCR/failed item은 version을 꾸며 내지 않고 nullable 상태로 남긴다.
+
 For later candidate structuring, the Worker can resolve only those scoped page rows whose Evidence hash matches the same DocumentVersion and whose Extraction is successful. It reads at most 500 ordered rows and emits at most 64 non-empty in-memory slices of 240 characters each. An `OCR_REQUIRED` page prefers its successful OCR layer and falls back to native text only when OCR text is empty; `TEXT_SUFFICIENT` pages use native extraction. These slices are not stored in a new table and are not returned by batch APIs or logs.
 
 ### Private policy structuring jobs

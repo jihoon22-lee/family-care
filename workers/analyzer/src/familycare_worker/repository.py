@@ -892,6 +892,12 @@ _BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "OCR_TIMEOUT", "RESOUR
 _POLICY_STRUCTURING_PIPELINE_VERSION = "policy-candidate-batch-v2"
 
 
+def _should_enqueue_policy_structuring_job(document_kind: object) -> bool:
+    """Keep policy-candidate work behind the explicit policy source boundary."""
+
+    return document_kind == "policy"
+
+
 def _lock_owned_batch_item(
     connection: Connection[dict[str, Any]],
     item_id: UUID,
@@ -1382,7 +1388,7 @@ class BatchRepository:
                     document_id,
                 ),
             )
-            if item["document_kind"] == "policy":
+            if _should_enqueue_policy_structuring_job(item["document_kind"]):
                 family_member_id = item["batch_family_member_id"]
                 if not isinstance(family_member_id, UUID):
                     raise DocumentStateConflict
@@ -1411,6 +1417,7 @@ class BatchRepository:
                 """
                 UPDATE document_batch_items
                 SET state = 'succeeded', error_code = NULL,
+                    processed_document_version_id = %s,
                     ocr_state = %s, ocr_pages_processed = %s,
                     ocr_warning_codes = %s,
                     lease_owner = NULL, lease_expires_at = NULL, heartbeat_at = NULL,
@@ -1418,6 +1425,7 @@ class BatchRepository:
                 WHERE id = %s
                 """,
                 (
+                    archive.document_version_id,
                     "warning"
                     if ocr_result is not None and ocr_result.warning_codes
                     else "completed"

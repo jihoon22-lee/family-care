@@ -74,12 +74,16 @@ class AnalysisJob(TypedDict):
 
 
 class AnalysisSettings(TypedDict):
-    document_kind: Literal["amendment", "application", "claim", "policy", "supporting", "terms"]
+    document_kind: Literal[
+        "amendment", "application", "claim", "policy", "product_explanation", "supporting", "terms"
+    ]
     extractor_config: ExtractorConfig
 
 
 class DocumentIngestionRequest(TypedDict):
-    document_kind: Literal["amendment", "application", "claim", "policy", "supporting", "terms"]
+    document_kind: Literal[
+        "amendment", "application", "claim", "policy", "product_explanation", "supporting", "terms"
+    ]
     extractor_config: ExtractorConfig
     schema_version: Literal["1"]
     source_key: str

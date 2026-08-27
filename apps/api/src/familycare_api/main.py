@@ -27,6 +27,7 @@ from familycare_api.health import (
     readiness,
 )
 from familycare_api.identity.router import router as identity_router
+from familycare_api.insurance_documents.router import router as insurance_document_router
 from familycare_api.policies.candidate_router import router as policy_candidate_router
 from familycare_api.policies.router import router as policy_ledger_router
 
@@ -103,6 +104,7 @@ def create_app(
     app.include_router(document_batch_router)
     app.include_router(policy_ledger_router)
     app.include_router(policy_candidate_router)
+    app.include_router(insurance_document_router)
     app.include_router(clause_search_router)
     app.include_router(coverage_decision_router)
     app.include_router(structuring_job_router)

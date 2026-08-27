@@ -51,6 +51,15 @@ def test_private_batch_request_requires_explicit_kind_for_each_source() -> None:
     assert [item.document_kind for item in request.sources] == ["policy", "terms"]
 
 
+@pytest.mark.parametrize("document_kind", ["product_explanation", "application"])
+def test_private_batch_request_accepts_non_authoritative_insurance_materials(
+    document_kind: str,
+) -> None:
+    request = BatchCreateRequest.model_validate(_request(_source(SOURCE_ID_A, document_kind)))
+
+    assert request.sources[0].document_kind == document_kind
+
+
 def test_private_batch_request_preserves_the_existing_100_source_limit() -> None:
     sources = [_source(f"{index:064x}", "supporting") for index in range(100)]
 

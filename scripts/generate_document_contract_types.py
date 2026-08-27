@@ -19,6 +19,7 @@ DEFAULT_WORKER_OUTPUT = ROOT / "workers/analyzer/src/familycare_worker/generated
 
 Schema = dict[str, Any]
 ClassSpec = tuple[Schema, frozenset[str]]
+LINE_LENGTH = 100
 
 
 def load_schemas() -> list[Schema]:
@@ -114,6 +115,24 @@ def collect_aliases(schemas: list[Schema]) -> dict[str, str]:
     return aliases
 
 
+def _render_field(field_name: str, annotation: str) -> list[str]:
+    line = f"    {field_name}: {annotation}"
+    if len(line) <= LINE_LENGTH or not annotation.startswith("Literal["):
+        return [line]
+    values = annotation[len("Literal[") : -1]
+    if len(values) + 8 <= LINE_LENGTH:
+        return [
+            f"    {field_name}: Literal[",
+            f"        {values}",
+            "    ]",
+        ]
+    return [
+        f"    {field_name}: Literal[",
+        *(f"        {value}," for value in values.split(", ")),
+        "    ]",
+    ]
+
+
 def render_module(schemas: list[Schema]) -> str:
     """Render both service consumers from the same sorted schema model."""
 
@@ -164,7 +183,7 @@ def render_module(schemas: list[Schema]) -> str:
                 annotation = _python_type(properties[field_name])
                 if field_name not in required:
                     annotation = f"NotRequired[{annotation}]"
-                lines.append(f"    {field_name}: {annotation}")
+                lines.extend(_render_field(str(field_name), annotation))
         if index != len(names) - 1:
             lines.extend(("", ""))
     return "\n".join(lines) + "\n"

@@ -29,7 +29,13 @@ SYNTHETIC_SOURCE_IDS = (
     "a" * 64,
     "b" * 64,
 )
-PRIVATE_DOCUMENT_KINDS = ["policy", "terms", "supporting"]
+PRIVATE_DOCUMENT_KINDS = [
+    "application",
+    "policy",
+    "product_explanation",
+    "supporting",
+    "terms",
+]
 SOURCE_ID_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 UUID4_PATTERN = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
 FORBIDDEN_FIELDS = {

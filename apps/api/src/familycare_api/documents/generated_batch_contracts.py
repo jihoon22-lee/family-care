@@ -24,7 +24,9 @@ __all__ = [
 
 
 BatchDocumentKind = Literal[
+    "application",
     "policy",
+    "product_explanation",
     "supporting",
     "terms",
 ]

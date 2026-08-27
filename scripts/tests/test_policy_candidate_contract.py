@@ -132,6 +132,45 @@ def test_web_generator_wraps_long_array_unions_at_item_boundaries() -> None:
     ) in rendered
 
 
+def test_web_generator_keeps_fitting_array_union_on_one_continuation_line() -> None:
+    sys.path.insert(0, str(ROOT))
+    from scripts.generate_web_contract_types import render_module
+
+    openapi = {
+        "components": {
+            "schemas": {
+                "SyntheticEnvelope": {
+                    "type": "object",
+                    "required": ["missing_document_roles"],
+                    "properties": {
+                        "missing_document_roles": {
+                            "type": "array",
+                            "items": {
+                                "enum": [
+                                    "policy",
+                                    "terms",
+                                    "product_explanation",
+                                    "application",
+                                    "supporting",
+                                ]
+                            },
+                        }
+                    },
+                }
+            }
+        },
+        "paths": {},
+    }
+
+    rendered = render_module(openapi, {})
+
+    assert (
+        "  missing_document_roles: Array<\n"
+        '    "policy" | "terms" | "product_explanation" | "application" | "supporting"\n'
+        "  >;"
+    ) in rendered
+
+
 def test_api_business_types_include_the_candidate_contract() -> None:
     text = GENERATED_BUSINESS_PATH.read_text(encoding="utf-8")
 

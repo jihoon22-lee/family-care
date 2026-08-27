@@ -4,7 +4,7 @@ This directory contains the versioned contracts shared by the FamilyCare web,
 API, and analyzer services.
 
 - `openapi/` is generated from the FastAPI application and committed so drift is reviewable.
-- `schemas/` contains transport-neutral JSON Schemas, including the pre-intake `analysis-job.v1`, `document-ingestion.v1`, post-extraction `extraction-result.v1`, separate `ocr-result.v1`, encrypted `document-batch.v1` and `document-batch-status.v1`, versioned `policy-candidate.v1`, and bounded `clause-search.v1` contracts.
+- `schemas/` contains transport-neutral JSON Schemas, including the pre-intake `analysis-job.v1`, `document-ingestion.v1`, post-extraction `extraction-result.v1`, separate `ocr-result.v1`, encrypted `document-batch.v1` and `document-batch-status.v1`, path-free `insurance-document-inventory.v1`, versioned `policy-candidate.v1`, and bounded `clause-search.v1` contracts.
 - `examples/` contains synthetic examples that must not include real insurance or family data. Queue examples are password-free and do not contain `content_sha256` before Worker intake; encrypted batch examples contain only opaque source IDs and bounded status projections.
 - `apps/api/src/familycare_api/documents/generated_contracts.py` and `workers/analyzer/src/familycare_worker/generated_contracts.py` are deterministic TypedDict consumers generated from the Phase 1 document schemas; do not edit them manually.
 - `apps/api/src/familycare_api/documents/generated_batch_contracts.py` and `workers/analyzer/src/familycare_worker/generated_batch_contracts.py` are deterministic TypedDict consumers generated from the encrypted batch schemas; do not edit them manually.

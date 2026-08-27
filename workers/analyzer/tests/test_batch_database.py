@@ -171,6 +171,8 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                        count(DISTINCT ocr_layer.id) AS ocr_layers,
                        count(DISTINCT ocr_page.id) AS ocr_pages,
                        count(DISTINCT ocr_block.id) AS ocr_blocks,
+                       item.processed_document_version_id = version.id
+                         AS processed_version_matches,
                        item.ocr_state, item.ocr_pages_processed,
                        item.ocr_warning_codes
                 FROM document_batch_items AS item
@@ -183,6 +185,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 JOIN ocr_blocks AS ocr_block ON ocr_block.ocr_page_id = ocr_page.id
                 WHERE item.batch_id = %s
                 GROUP BY document.status, document.document_kind,
+                         item.processed_document_version_id, version.id,
                          item.ocr_state, item.ocr_pages_processed,
                          item.ocr_warning_codes
                 """,
@@ -222,7 +225,19 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 """,
                 (created.batch_id,),
             ).fetchall()
-        assert persisted == ("ready", "policy", 1, 1, 1, 1, 1, "completed", 1, [])
+        assert persisted == (
+            "ready",
+            "policy",
+            1,
+            1,
+            1,
+            1,
+            1,
+            True,
+            "completed",
+            1,
+            [],
+        )
         assert len(evidence) == 1
         evidence_row = evidence[0]
         assert evidence_row[3:] == (

@@ -240,6 +240,30 @@ export function createMockApi(
       return jsonResponse(fixture.reviewItems);
     }
 
+    const inventoryMatch = url.pathname.match(
+      /^\/api\/v1\/family-members\/([^/]+)\/insurance-document-inventory$/,
+    );
+    if (inventoryMatch) {
+      return jsonResponse({
+        member_id: inventoryMatch[1],
+        registered_policies: [],
+        schema_version: "1",
+        summary: {
+          application_documents: 0,
+          certificate_and_terms: 0,
+          certificate_backed_policies: 0,
+          certificate_only: 0,
+          pairing_conflicts: 0,
+          product_explanation_documents: 0,
+          terms_only_documents: 0,
+          unreadable_documents: 0,
+        },
+        unpaired_components: [],
+        unregistered_document_sets: [],
+        unreadable_sources: [],
+      });
+    }
+
     return jsonResponse(
       { error_code: "NOT_FOUND", message: "synthetic route not found" },
       404,

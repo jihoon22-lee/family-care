@@ -9,6 +9,8 @@ const DOCUMENT_KIND_OPTIONS: Array<{
 }> = [
   { label: "증권", value: "policy" },
   { label: "약관", value: "terms" },
+  { label: "상품설명서", value: "product_explanation" },
+  { label: "청약서", value: "application" },
   { label: "보조자료", value: "supporting" },
 ];
 

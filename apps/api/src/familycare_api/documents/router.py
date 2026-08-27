@@ -22,7 +22,15 @@ SOURCE_KEY_PATTERN_TEXT = (
 )
 SOURCE_KEY_PATTERN = re.compile(SOURCE_KEY_PATTERN_TEXT)
 
-DocumentKind = Literal["amendment", "application", "claim", "policy", "supporting", "terms"]
+DocumentKind = Literal[
+    "amendment",
+    "application",
+    "claim",
+    "policy",
+    "product_explanation",
+    "supporting",
+    "terms",
+]
 TableStrategy = Literal["auto", "lines", "text"]
 
 

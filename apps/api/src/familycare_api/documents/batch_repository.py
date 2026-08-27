@@ -50,7 +50,9 @@ class BatchSourceSelection:
     document_kind: str
 
 
-_PRIVATE_DOCUMENT_KINDS = frozenset({"policy", "terms", "supporting"})
+_PRIVATE_DOCUMENT_KINDS = frozenset(
+    {"application", "policy", "product_explanation", "supporting", "terms"}
+)
 
 
 def _database_url(value: str) -> str:

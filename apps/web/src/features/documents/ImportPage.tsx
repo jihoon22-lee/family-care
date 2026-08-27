@@ -30,10 +30,15 @@ function safeErrorMessage(): string {
   return "문서 가져오기를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+function requestedMemberId(): string | undefined {
+  const value = new URLSearchParams(window.location.search).get("member");
+  return value || undefined;
+}
+
 export function ImportPage() {
   const [members, setMembers] = useState<FamilyMemberResponse[]>([]);
   const [sources, setSources] = useState<ImportSourceResponse[]>([]);
-  const [memberId, setMemberId] = useState("");
+  const [memberId, setMemberId] = useState(() => requestedMemberId() ?? "");
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -77,7 +82,18 @@ export function ImportPage() {
       .then(([loadedMembers, loadedSources]) => {
         setMembers(loadedMembers);
         setSources(loadedSources);
-        setMemberId((current) => current || loadedMembers[0]?.id || "");
+        const requestedId = requestedMemberId();
+        setMemberId((current) => {
+          if (
+            requestedId &&
+            loadedMembers.some((member) => member.id === requestedId)
+          ) {
+            return requestedId;
+          }
+          if (loadedMembers.some((member) => member.id === current))
+            return current;
+          return loadedMembers[0]?.id || "";
+        });
       })
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {

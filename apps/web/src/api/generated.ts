@@ -30,7 +30,13 @@ export const API_PATHS = [
   "/api/v1/family-members",
   "/api/v1/family-members/trash",
   "/api/v1/family-members/{member_id}",
+  "/api/v1/family-members/{member_id}/insurance-document-components",
+  "/api/v1/family-members/{member_id}/insurance-document-inventory",
+  "/api/v1/family-members/{member_id}/insurance-document-sets",
   "/api/v1/family-members/{member_id}/restore",
+  "/api/v1/insurance-document-set-items/{item_id}",
+  "/api/v1/insurance-document-sets/{document_set_id}",
+  "/api/v1/insurance-document-sets/{document_set_id}/items",
   "/api/v1/medical-event-structuring-jobs/{job_id}",
   "/api/v1/medical-events",
   "/api/v1/medical-events/trash",
@@ -240,9 +246,45 @@ export const API_OPERATIONS = [
   },
   {
     method: "POST",
+    path: "/api/v1/family-members/{member_id}/insurance-document-components",
+    operationId:
+      "create_insurance_document_component_api_v1_family_members__member_id__insurance_document_components_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family-members/{member_id}/insurance-document-inventory",
+    operationId:
+      "get_member_insurance_document_inventory_api_v1_family_members__member_id__insurance_document_inventory_get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/family-members/{member_id}/insurance-document-sets",
+    operationId:
+      "create_insurance_document_set_api_v1_family_members__member_id__insurance_document_sets_post",
+  },
+  {
+    method: "POST",
     path: "/api/v1/family-members/{member_id}/restore",
     operationId:
       "restore_family_member_api_v1_family_members__member_id__restore_post",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/insurance-document-set-items/{item_id}",
+    operationId:
+      "detach_insurance_document_set_item_api_v1_insurance_document_set_items__item_id__delete",
+  },
+  {
+    method: "DELETE",
+    path: "/api/v1/insurance-document-sets/{document_set_id}",
+    operationId:
+      "delete_insurance_document_set_api_v1_insurance_document_sets__document_set_id__delete",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/insurance-document-sets/{document_set_id}/items",
+    operationId:
+      "attach_insurance_document_set_item_api_v1_insurance_document_sets__document_set_id__items_post",
   },
   {
     method: "GET",
@@ -597,7 +639,8 @@ export interface BatchCreateRequest {
 export interface BatchItemResponse {
   attempts: number;
   display_label: string;
-  document_kind: "policy" | "supporting" | "terms";
+  document_kind:
+    "application" | "policy" | "product_explanation" | "supporting" | "terms";
   error_code:
     | "ARCHIVE_INTEGRITY_ERROR"
     | "ARCHIVE_KEY_UNAVAILABLE"
@@ -645,7 +688,8 @@ export interface BatchResponse {
 }
 
 export interface BatchSourceRequest {
-  document_kind: "policy" | "supporting" | "terms";
+  document_kind:
+    "application" | "policy" | "product_explanation" | "supporting" | "terms";
   source_id: string;
 }
 
@@ -1050,6 +1094,16 @@ export interface ClauseSearchResponse {
   schema_version: "1";
 }
 
+export interface ComponentCreateRequest {
+  document_batch_item_id: string;
+  evidence_id?: string | null;
+  page_end: number;
+  page_start: number;
+  review_state?: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  role:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+}
+
 export interface CoverageDecisionResponse {
   candidates: Array<ClaimCandidateResponse>;
   engine_version: string;
@@ -1100,10 +1154,30 @@ export interface DecisionErrorResponse {
 
 export interface DocumentAnalysisRequest {
   document_kind:
-    "amendment" | "application" | "claim" | "policy" | "supporting" | "terms";
+    | "amendment"
+    | "application"
+    | "claim"
+    | "policy"
+    | "product_explanation"
+    | "supporting"
+    | "terms";
   extractor_config: ExtractorConfigRequest;
   schema_version: "1";
   source_key: string;
+}
+
+export interface DocumentSetCreateRequest {
+  display_label: string;
+  insurer_display?: string | null;
+  policy_contract_id?: string | null;
+  product_display?: string | null;
+}
+
+export interface DocumentSetItemCreateRequest {
+  evidence_id?: string | null;
+  expected_set_version: number;
+  insurance_document_component_id: string;
+  match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
 }
 
 export type DocumentVersionId = string;
@@ -1153,6 +1227,10 @@ export interface EvidenceRef {
 export interface EvidenceSnapshotResponse {
   content_sha256?: Array<string>;
   evidence_ids?: Array<string>;
+}
+
+export interface ExpectedItemVersionRequest {
+  expected_version: number;
 }
 
 export interface ExtractionSummaryResponse {
@@ -1226,6 +1304,75 @@ export interface ImportSourceResponse {
   source_id: string;
 }
 
+export interface InsuranceDocumentComponentResponse {
+  document_batch_item_id: string;
+  id: string;
+  page_end: number;
+  page_start: number;
+  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  role:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+  version: number;
+}
+
+export interface InsuranceDocumentErrorResponse {
+  error_code: string;
+  fields?: Array<string> | null;
+  message: string;
+}
+
+export interface InsuranceDocumentSetItemMutationResponse {
+  id: string;
+  insurance_document_component_id: string;
+  insurance_document_set_id: string;
+  match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  role:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+  version: number;
+}
+
+export interface InsuranceDocumentSetResponse {
+  display_label: string;
+  id: string;
+  insurer_display: string | null;
+  member_id: string;
+  policy_contract_id: string | null;
+  product_display: string | null;
+  version: number;
+}
+
+export interface InventoryComponentResponse {
+  document_batch_item_id: string | null;
+  duplicate_state:
+    "UNIQUE" | "SAME_MEMBER_DUPLICATE" | "CROSS_MEMBER_COPY_POSSIBLE";
+  id: string | null;
+  page_end: number;
+  page_start: number;
+  processing_state:
+    "READY" | "PENDING" | "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
+  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  role:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+}
+
+export interface InventorySetItemResponse {
+  component: InventoryComponentResponse;
+  id: string | null;
+  match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  version: number;
+}
+
+export interface InventorySummaryResponse {
+  application_documents: number;
+  certificate_and_terms: number;
+  certificate_backed_policies: number;
+  certificate_only: number;
+  pairing_conflicts: number;
+  product_explanation_documents: number;
+  terms_only_documents: number;
+  unreadable_documents: number;
+}
+
 export interface LoginRequest {
   device_label: string;
   password: string;
@@ -1269,6 +1416,16 @@ export interface MedicalEventUpdateRequest {
   situation?: string | null;
   structured_facts?: Array<StructuredFactInput> | null;
   visit_date?: string | null;
+}
+
+export interface MemberInsuranceDocumentInventoryResponse {
+  member_id: string;
+  registered_policies: Array<RegisteredPolicyInventoryResponse>;
+  schema_version: "1";
+  summary: InventorySummaryResponse;
+  unpaired_components: Array<InventoryComponentResponse>;
+  unreadable_sources: Array<UnreadableSourceResponse>;
+  unregistered_document_sets: Array<UnregisteredDocumentSetResponse>;
 }
 
 export interface MoneyResponse {
@@ -1494,6 +1651,23 @@ export interface ReceiptLinesResponse {
   schema_version: "1";
 }
 
+export interface RegisteredPolicyInventoryResponse {
+  completeness: "CERTIFICATE_AND_TERMS" | "CERTIFICATE_ONLY";
+  document_set_id: string | null;
+  document_set_version: number | null;
+  documents: Array<RoleDocumentSummaryResponse>;
+  has_application: boolean;
+  has_product_explanation: boolean;
+  insurer_display: string;
+  missing_document_roles: Array<
+    "policy" | "terms" | "product_explanation" | "application" | "supporting"
+  >;
+  policy_id: string;
+  product_display: string;
+  rider_count: number;
+  status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
+}
+
 export interface ReviewIssue {
   code:
     | "COMMON_SPECIAL_TERMS_CONFLICT"
@@ -1572,6 +1746,15 @@ export interface RiderResponse {
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
   status_evidence: familycare_api__policies__schemas__EvidenceResponse | null;
   version: number;
+}
+
+export interface RoleDocumentSummaryResponse {
+  bundled_source: boolean;
+  component_count: number;
+  items: Array<InventorySetItemResponse>;
+  role:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+  source_count: number;
 }
 
 export interface RuleEvaluationResponse {
@@ -1666,6 +1849,34 @@ export interface TermsEditionResponse {
   normalization_version: string;
   product_display: string;
   product_key: string;
+  version: number;
+}
+
+export interface UnreadableSourceResponse {
+  display_label: string;
+  document_batch_item_id: string;
+  processing_state: "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
+  source_kind:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+}
+
+export interface UnregisteredDocumentSetResponse {
+  component_count: number;
+  display_label: string;
+  enrollment_confirmed: boolean;
+  has_application: boolean;
+  has_product_explanation: boolean;
+  id: string;
+  insurer_display: string | null;
+  items: Array<InventorySetItemResponse>;
+  primary_classification:
+    | "TERMS_ONLY"
+    | "PRODUCT_EXPLANATION_ONLY"
+    | "APPLICATION_ONLY"
+    | "POLICY_UNREVIEWED"
+    | "SUPPORTING_ONLY";
+  product_display: string | null;
+  source_count: number;
   version: number;
 }
 
