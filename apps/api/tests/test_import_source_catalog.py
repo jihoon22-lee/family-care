@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from familycare_api.documents.import_sources import (
+    MAX_SOURCE_BYTES,
     ImportSourceCatalog,
     ImportSourceNotFound,
 )
@@ -76,3 +77,27 @@ def test_catalog_rejects_relative_or_missing_root(tmp_path: Path) -> None:
         ImportSourceCatalog(Path("relative"))
     with pytest.raises(ValueError, match="import root"):
         ImportSourceCatalog(tmp_path / "missing")
+
+
+@pytest.mark.parametrize(
+    ("size", "listed"),
+    [(128 * 1024 * 1024, True), (128 * 1024 * 1024 + 1, False)],
+)
+def test_catalog_enforces_exact_128_mib_private_input_boundary(
+    tmp_path: Path,
+    size: int,
+    listed: bool,
+) -> None:
+    root = tmp_path / "synthetic-inbox"
+    path = root / "synthetic-private-size.pdf"
+    path.parent.mkdir(parents=True)
+    with path.open("wb") as handle:
+        handle.write(b"%PDF-")
+        handle.truncate(size)
+
+    assert MAX_SOURCE_BYTES == 128 * 1024 * 1024
+    sources = ImportSourceCatalog(root).list()
+
+    assert bool(sources) is listed
+    if listed:
+        assert sources[0].size_bytes == size

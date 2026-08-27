@@ -88,7 +88,7 @@ def _make_source(tmp_path: Path) -> int:
 
 
 def test_limits_are_exact() -> None:
-    assert limits.MAX_INPUT_BYTES == 25 * 1024 * 1024
+    assert limits.MAX_INPUT_BYTES == 128 * 1024 * 1024
     assert limits.MAX_PDF_PAGES == 500
     assert limits.PARENT_WALL_TIMEOUT_SECONDS == 120
     assert limits.CHILD_CPU_LIMIT_SECONDS == 90

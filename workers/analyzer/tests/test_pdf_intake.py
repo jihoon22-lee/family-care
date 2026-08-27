@@ -171,6 +171,31 @@ def test_open_source_enforces_exact_size_limit(
             open_source(root, path.name)
 
 
+@pytest.mark.parametrize(
+    ("size", "expected"),
+    [(128 * 1024 * 1024, None), (128 * 1024 * 1024 + 1, DocumentTooLarge)],
+)
+def test_open_source_accepts_exact_128_mib_private_input_boundary(
+    tmp_path: Path,
+    size: int,
+    expected: type[DocumentTooLarge] | None,
+) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    path = root / "synthetic-private-size.pdf"
+    with path.open("wb") as handle:
+        handle.write(b"%PDF-")
+        handle.truncate(size)
+
+    assert MAX_INPUT_BYTES == 128 * 1024 * 1024
+    if expected is None:
+        source = open_source(root, path.name)
+        source.close()
+    else:
+        with pytest.raises(expected):
+            open_source(root, path.name)
+
+
 def test_validate_pdf_checks_magic_structure_page_count_and_hash(tmp_path: Path) -> None:
     root = tmp_path / "root"
     root.mkdir()

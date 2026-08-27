@@ -106,6 +106,10 @@ def test_batch_schemas_are_strict_and_define_stable_states() -> None:
         status_schema["$defs"]["ImportSource"]["properties"]["display_label"]["pattern"]
         == label_pattern
     )
+    assert (
+        status_schema["$defs"]["ImportSource"]["properties"]["size_bytes"]["maximum"]
+        == 128 * 1024 * 1024
+    )
 
 
 def test_batch_status_defines_bounded_ocr_progress_projection() -> None:

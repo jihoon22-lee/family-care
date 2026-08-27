@@ -18,6 +18,7 @@ from familycare_api.documents.generated_batch_contracts import (
     OcrWarningCode,
 )
 from familycare_api.documents.import_sources import (
+    MAX_SOURCE_BYTES,
     ImportSourceCatalog,
     normalize_display_label,
 )
@@ -34,7 +35,7 @@ class ImportSourceResponse(BaseModel):
         max_length=160,
         pattern=r"^[^\u0000-\u001f\u007f-\u009f]+$",
     )
-    size_bytes: int = Field(ge=0, le=25 * 1024 * 1024)
+    size_bytes: int = Field(ge=0, le=MAX_SOURCE_BYTES)
     encrypted: bool
 
 

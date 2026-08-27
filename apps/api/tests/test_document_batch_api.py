@@ -52,6 +52,24 @@ def test_display_label_normalizer_removes_paths_and_falls_back() -> None:
     assert batch_router._label("nested/\x00\r\n\t\x01") == "PDF document"
 
 
+def test_import_source_response_accepts_exact_128_mib_private_input_boundary() -> None:
+    response = ImportSourceResponse(
+        source_id=SOURCE_ID_A,
+        display_label="Sample Policy.pdf",
+        size_bytes=128 * 1024 * 1024,
+        encrypted=False,
+    )
+
+    assert response.size_bytes == 128 * 1024 * 1024
+    with pytest.raises(ValidationError):
+        ImportSourceResponse(
+            source_id=SOURCE_ID_A,
+            display_label="Sample Policy.pdf",
+            size_bytes=128 * 1024 * 1024 + 1,
+            encrypted=False,
+        )
+
+
 class _ScopedNotFound(ApiBoundaryError):
     status_code = 404
     error_code = "DOCUMENT_NOT_FOUND"

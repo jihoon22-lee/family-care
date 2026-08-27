@@ -21,6 +21,7 @@ REQUEST_SCHEMA_PATH = SCHEMA_ROOT / "document-batch.v1.schema.json"
 STATUS_SCHEMA_PATH = SCHEMA_ROOT / "document-batch-status.v1.schema.json"
 REQUEST_EXAMPLE_PATH = EXAMPLE_ROOT / "document-batch.v1.json"
 STATUS_EXAMPLE_PATH = EXAMPLE_ROOT / "document-batch-status.v1.json"
+MAX_IMPORT_SOURCE_BYTES = 128 * 1024 * 1024
 
 SYNTHETIC_FAMILY_MEMBER_ID = "00000000-0000-4000-8000-000000000004"
 SYNTHETIC_BATCH_ID = "00000000-0000-4000-8000-000000000005"
@@ -286,6 +287,13 @@ def validate_batch_contracts() -> list[str]:
         or ocr_warnings_schema.get("uniqueItems") is not True
     ):
         errors.append("OCR warning-code bounds changed")
+    import_source = definitions.get("ImportSource", {})
+    import_source_size = import_source.get("properties", {}).get("size_bytes", {})
+    if (
+        import_source_size.get("minimum") != 0
+        or import_source_size.get("maximum") != MAX_IMPORT_SOURCE_BYTES
+    ):
+        errors.append("import source size bound changed")
 
     for label, value in (("request", request), ("status", status)):
         for path, child in _nested_strings(value):

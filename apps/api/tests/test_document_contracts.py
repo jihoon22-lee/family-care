@@ -53,6 +53,15 @@ def test_document_request_has_relative_source_key_only() -> None:
     assert "extractor_config_hash" not in schema["properties"]
 
 
+def test_document_input_limit_is_exactly_128_mib_without_changing_parser_limits() -> None:
+    schema = load_json("schemas/document-ingestion.v1.schema.json")
+    limits = schema["x-familycare-safety-limits"]
+
+    assert limits["max_input_bytes"] == 128 * 1024 * 1024
+    assert limits["max_pages"] == 500
+    assert limits["max_output_bytes"] == 64 * 1024 * 1024
+
+
 def test_pre_intake_analysis_job_is_password_free_and_has_no_content_hash() -> None:
     schema = load_json("schemas/analysis-job.v1.schema.json")
     example = load_json("examples/analysis-job.v1.json")

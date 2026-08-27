@@ -10,7 +10,7 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-MAX_SOURCE_BYTES = 25 * 1024 * 1024
+MAX_SOURCE_BYTES = 128 * 1024 * 1024
 MAX_SOURCE_COUNT = 256
 _PDF_MAGIC = b"%PDF-"
 _HASH_CHUNK_BYTES = 1024 * 1024

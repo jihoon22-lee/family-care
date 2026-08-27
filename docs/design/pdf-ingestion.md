@@ -69,8 +69,9 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 
 | 제한 | 정확한 값 | 적용 위치 |
 |---|---:|---|
-| 입력 파일 | 25 MiB 이하 | child 실행 전 intake |
-| 복호화 평문 extent | 25 MiB 이하 | 암호 해제 writer의 clone/write 경계 |
+| 입력 파일 | 128 MiB 이하 | child 실행 전 intake |
+| 복호화 평문 extent | 128 MiB 이하 | 암호 해제 writer의 clone/write 경계 |
+| managed archive payload | 128 MiB 이하 | `ArchiveStore` 암호화 read/write 경계 |
 | PDF 페이지 | 500 이하 | `pypdf` structural validation |
 | parent wall timeout | 120초 | parser supervisor |
 | child CPU limit | 90초 | parser child `RLIMIT_CPU` |
@@ -85,7 +86,7 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 
 이 보강은 private batch 경계의 합성 fixture와 fake repository에서 구현·검증되었으며, 실제 private PDF나 Compose runtime acceptance를 의미하지 않습니다.
 
-- 암호 해제 성공 뒤 `len(reader.pages)`를 확인하고, 500페이지를 넘으면 `PdfWriter.clone_document_from_reader()` 전에 `PAGE_LIMIT_EXCEEDED`로 종료합니다. mode `0600` 평문 handle을 감싸는 seek-aware writer는 현재 extent를 25 MiB(`MAX_INPUT_BYTES`)보다 크게 만드는 write를 거부합니다. 이 경계에서 parser·archive·persistence는 호출되지 않고 mode `0700` workspace cleanup이 계속 적용됩니다.
+- 암호 해제 성공 뒤 `len(reader.pages)`를 확인하고, 500페이지를 넘으면 `PdfWriter.clone_document_from_reader()` 전에 `PAGE_LIMIT_EXCEEDED`로 종료합니다. mode `0600` 평문 handle을 감싸는 seek-aware writer는 현재 extent를 128 MiB(`MAX_INPUT_BYTES`)보다 크게 만드는 write를 거부합니다. 이 경계에서 parser·archive·persistence는 호출되지 않고 mode `0700` workspace cleanup이 계속 적용됩니다.
 - `BatchPasswordRegistry`는 cancellation, stop request, parser/OCR cancellation, heartbeat에 의한 lease loss에서 현재 batch scope를 폐기합니다. `BatchRunner`의 sanitized `on_password_discarded` callback은 production에서 `BatchSecretSocketServer.deactivate`로 연결됩니다. 정상 sibling 성공에서는 password를 재사용할 수 있도록 폐기하지 않으며 Worker shutdown은 registry 전체를 폐기합니다.
 - Worker는 archive 생성 직전에 stop 상태와 owned heartbeat를 확인하고, durable `ArchiveStore.put()` 직후에도 다시 확인합니다. 두 번째 확인이 실패하면 새 ciphertext는 아직 DB가 참조하지 않는 definite orphan이므로 정확한 archive object만 삭제한 뒤 password scope를 폐기합니다.
 - `mark_succeeded()` 호출 이후 예외는 DB commit 결과가 불명확할 수 있으므로 ciphertext를 삭제하지 않습니다. password scope를 폐기하고 path, object key, password, label, document content를 포함하지 않는 `batch_archive_commit_uncertain` 안정 이벤트(허용된 item ID만 포함)를 기록합니다. 남은 encrypted orphan은 향후 DB/archive reconciler가 다룰 별도 작업입니다.
@@ -98,7 +99,7 @@ Phase 1 synthetic API는 합성 fixture를 사용하는 로컬 개발 경계입�
 3. 요청과 job은 relative `source_key`만 받습니다. absolute path, NUL byte, `..` component, root 밖으로 정규화되는 경로를 거부합니다.
 4. root directory descriptor에서 시작해 각 상대 path component를 chained `openat`/`dir_fd`, `O_NOFOLLOW`, directory-only flags로 열고, 최종 source를 `O_RDONLY | O_CLOEXEC | O_NOFOLLOW` semantics로 한 번만 엽니다. 디렉터리 descriptor는 최종 파일을 열 때까지 유지합니다. 이 열린 file identity의 duplicate handles에 대해 `fstat` regular-file, size, PDF magic, pypdf structure, and SHA-256을 수행합니다. consumer 사이에는 offset을 reset하거나 descriptor를 duplicate하며, validate-path 후 path를 다시 여는 TOCTOU 경로를 만들지 않습니다.
 5. Linux child에는 reopen 가능한 path를 전달하지 않습니다. parent가 연 read-only descriptor를 inherited 또는 duplicated descriptor로 전달하고, child는 그 descriptor를 통해서만 PDF를 읽습니다. source_key, descriptor metadata, errors와 logs는 sanitized form만 사용합니다.
-6. 원본과 복호화 평문 extent는 각각 25 MiB로 제한하고 parser output은 64 MiB 제한에 맞춰 검사합니다.
+6. 원본과 복호화 평문 extent는 각각 128 MiB로 제한하고 parser output은 64 MiB 제한에 맞춰 검사합니다. managed archive payload도 128 MiB로 제한합니다.
 7. 원본 바이트의 SHA-256은 열린 descriptor에서 1 MiB(`1_048_576`) chunk로 streaming 계산합니다. 전체 원본을 메모리에 올리지 않습니다.
 
 다음 인터페이스가 path validation과 opened-handle hash 경계를 고정합니다.
@@ -192,7 +193,7 @@ Phase 1 asynchronous API는 unencrypted PDF만 받습니다. `pypdf`가 encrypti
 
 The selector consumes the validated native `ExtractionResult` and accepts only pages whose quality-v1 classification is `OCR_REQUIRED`. The selected 1-based page number and native page dimensions are checked again before persistence; OCR blocks are mapped from pixel coordinates to top-left PDF points and rounded to three decimals. OCR Evidence points to the same `DocumentVersion` and content hash, with `source_layer='ocr'`; native blocks and native warning codes are left unchanged.
 
-The renderer receives the already-open read-only source descriptor and a pre-created mode-0600 output handle. It validates regular-file/read-only descriptor metadata, reads bounded source bytes (the existing 25 MiB limit), opens PDFium from those bytes, rejects page dimensions that would exceed the fixed 300 DPI dimension/pixel bounds before allocating a bitmap, rechecks the actual rendered image, and writes PNG to the handle. It never accepts or reopens a source PDF path.
+The renderer receives the already-open read-only source descriptor and a pre-created mode-0600 output handle. It validates regular-file/read-only descriptor metadata, reads bounded source bytes (the existing 128 MiB limit), opens PDFium from those bytes, rejects page dimensions that would exceed the fixed 300 DPI dimension/pixel bounds before allocating a bitmap, rechecks the actual rendered image, and writes PNG to the handle. It never accepts or reopens a source PDF path.
 
 The engine invokes only `/usr/bin/tesseract` with an argv list and `shell=False`: the image path is a transient workspace path, the fixed `kor+eng` language argument and `stdout ... tsv` request produce bounded TSV on stdout, and stderr is discarded. Selector setup, timeout, output overflow, parser failure, and unexpected exits all close the pipe and reap the dedicated process group. There is no `pytesseract` dependency and no TSV artifact file. Malformed rows, invalid boxes/confidences, unavailable binaries, timeout, or output overflow become stable sanitized OCR errors.
 
@@ -245,7 +246,7 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 | `ANALYSIS_JOB_NOT_FOUND` | status 조회의 job UUID가 없음 | 아니오 |
 | `DOCUMENT_PATH_ESCAPE` | absolute path, symlink, 또는 root 밖 경로 | 아니오 |
 | `UNSUPPORTED_FILE_TYPE` | PDF magic이 아님 | 아니오 |
-| `DOCUMENT_TOO_LARGE` | 25 MiB 초과 | 정책 변경 후 |
+| `DOCUMENT_TOO_LARGE` | 128 MiB 초과 | 정책 변경 후 |
 | `PAGE_LIMIT_EXCEEDED` | 500 페이지 초과 | 정책 변경 후 |
 | `PASSWORD_REQUIRED` | encrypted PDF이며 password transport 없음 | 아니오 |
 | `PASSWORD_INVALID` | one-shot adapter password가 틀림 | 입력 수정 후 |
@@ -277,7 +278,7 @@ SIGTERM/SIGINT가 들어오거나 lease heartbeat가 실패하면 supervisor pro
 - 잘못된 magic bytes와 잘린 xref
 - encryption `PASSWORD_REQUIRED`와 one-shot wrong-password `PASSWORD_INVALID`
 - absolute source key, `..`, symlink root escape, non-regular file
-- 25 MiB·500 page·120초·90초·1536 MiB·64 MiB·64 descriptor limits
+- 128 MiB input/decrypted/archive payload·500 page·120초·90초·1536 MiB·64 MiB parser output·64 descriptor limits
 - 1 MiB chunk SHA-256과 동일 hash/config idempotency
 - `documents`, `document_versions`, `extractions`, `extraction_pages`, `extraction_blocks`, `extraction_tables`, `extraction_cells`, `analysis_jobs` physical table mapping and unique constraints
 - top-left coordinate, 3-decimal rounding, 1-based page, 0-based reading order

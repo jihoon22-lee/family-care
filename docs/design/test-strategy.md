@@ -113,7 +113,7 @@ CI 브라우저 자동화와 Windows·모바일 실제 기기 검증을 별도 �
 - secret scan
 - dependency·container scan
 
-Phase 1 security tests additionally verify 25 MiB input, 500 pages, 120초 parent wall, 90초 child CPU, 1536 MiB address space, 64 MiB output, 64 open descriptors, mode `0700` work directories, mode `0600` files, 1 MiB streaming SHA-256, `%PDF-` magic, password absence, and symlink rejection.
+PDF security tests additionally verify 128 MiB source input, 128 MiB decrypted plaintext/archive payload bounds, 500 pages, 120초 parent wall, 90초 child CPU, 1536 MiB address space, 64 MiB parser output/`RLIMIT_FSIZE`, 64 open descriptors, mode `0700` work directories, mode `0600` files, 1 MiB streaming SHA-256, `%PDF-` magic, password absence, and symlink rejection.
 
 v0.1 security tests additionally verify family-scoped batch password reuse and disposal, encrypted archive round-trip and tamper detection, selective OCR cleanup, Worker-only OpenAI key injection, external payload allowlist, local session/CSRF/object scope, and gateway-only host exposure.
 

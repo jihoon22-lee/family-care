@@ -3064,7 +3064,7 @@
             "type": "boolean"
           },
           "size_bytes": {
-            "maximum": 26214400.0,
+            "maximum": 134217728.0,
             "minimum": 0.0,
             "title": "Size Bytes",
             "type": "integer"

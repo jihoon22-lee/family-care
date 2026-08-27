@@ -10,7 +10,7 @@ except ImportError:  # pragma: no cover - Windows is an explicitly unverified bo
     resource = None  # type: ignore[assignment]
 
 
-MAX_INPUT_BYTES: Final = 25 * 1024 * 1024
+MAX_INPUT_BYTES: Final = 128 * 1024 * 1024
 MAX_PDF_PAGES: Final = 500
 PARENT_WALL_TIMEOUT_SECONDS: Final = 120
 CHILD_CPU_LIMIT_SECONDS: Final = 90

@@ -50,7 +50,7 @@ FORBIDDEN_FIELDS = {"password", "absolute_path", "raw_pdf", "external_url"}
 SAFETY_LIMITS = {
     "child_address_space_bytes": 1536 * 1024 * 1024,
     "child_cpu_limit_seconds": 90,
-    "max_input_bytes": 25 * 1024 * 1024,
+    "max_input_bytes": 128 * 1024 * 1024,
     "max_open_descriptors": 64,
     "max_output_bytes": 64 * 1024 * 1024,
     "max_pages": 500,

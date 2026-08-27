@@ -31,6 +31,7 @@ RIDER_CLAUSE_RULES_SCHEMA_PATH = (
 RIDER_CLAUSE_RULES_EXAMPLE_PATH = ROOT / "packages/contracts/examples/rider-clause-rules.v1.json"
 BUSINESS_OUTPUT_PATH = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 WEB_OUTPUT_PATH = ROOT / "apps/web/src/api/generated.ts"
+MAX_IMPORT_SOURCE_BYTES = 128 * 1024 * 1024
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 POLICY_FORBIDDEN_FIELDS = {
     "absolute_path",
@@ -497,6 +498,12 @@ def validate_openapi() -> list[str]:
     publish_properties = schemas.get("CoverageRulePublishRequest", {}).get("properties", {})
     if set(publish_properties) != {"expected_version", "version_id"}:
         errors.append("CoverageRule publish request must not accept an arbitrary rule body")
+    import_source_response = schemas.get("ImportSourceResponse", {})
+    import_source_size = import_source_response.get("properties", {}).get("size_bytes", {})
+    if import_source_size.get("minimum") != 0.0 or import_source_size.get("maximum") != float(
+        MAX_IMPORT_SOURCE_BYTES
+    ):
+        errors.append("ImportSourceResponse size bound changed")
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})

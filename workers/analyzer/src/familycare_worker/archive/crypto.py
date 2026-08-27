@@ -13,10 +13,10 @@ from cryptography.hazmat.primitives.keywrap import InvalidUnwrap, aes_key_unwrap
 from .keys import MasterKey
 
 ARCHIVE_SCHEME = "aes-256-gcm+aes-kw-v1"
-MAX_ARCHIVE_BYTES = 64 * 1024 * 1024
 _GCM_NONCE_BYTES = 12
 _GCM_TAG_BYTES = 16
 _DATA_KEY_BYTES = 32
+MAX_ARCHIVE_BYTES = 128 * 1024 * 1024
 
 
 class ArchiveIntegrityError(RuntimeError):
