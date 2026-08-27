@@ -71,6 +71,10 @@
    - [ ] Complete raw visual/OCR review for unreadable sources and verify current/renewal status before changing any `UNKNOWN` result.
    - Keep actual source files and all raw or derived private data outside Git; only sanitized aggregate progress may be recorded here.
 
+## Follow-up after actual review
+
+After the family-by-family review above is complete, implement `docs/plan/018-insurance-document-inventory.md`. It adds the per-member certificate+terms, certificate-only, unpaired-terms, product-explanation, unreadable, conflict, and duplicate views without treating non-policy documents as enrolled insurance.
+
 ## Acceptance boundary
 
 This plan is complete only when a synthetic private policy import can move through:

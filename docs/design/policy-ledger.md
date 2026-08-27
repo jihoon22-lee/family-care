@@ -8,6 +8,8 @@
 
 보험 대상 가족과 실제 계약·Rider를 증권 Evidence로 관리하는 원장을 정의한다. AI가 검증한 후보는 즉시 사용할 수 있고 예외만 사용자에게 노출한다. 약관에 존재한다는 사실만으로 가입 Rider를 만들지 않는다.
 
+가족별 증권·약관·상품설명서 보유 현황과 누락 문서 표시는 `docs/design/insurance-document-inventory.md`가 소유한다. 이 읽기 모델은 PolicyContract 원장을 확장하지만 증권 근거가 없는 문서를 원장 계약으로 승격하지 않는다.
+
 ## Components
 
 ### Family registry

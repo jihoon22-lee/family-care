@@ -125,7 +125,7 @@ opaque browser session의 서버 측 레코드입니다. session token hash, App
 
 저장소 밖 import source와 application-encrypted managed archive의 논리 식별자입니다.
 
-- 문서 종류: policy, terms, application, amendment, claim, supporting
+- 문서 종류: policy, terms, product_explanation, application, amendment, claim, supporting
 - 원본 제공자와 비공개 외부 참조
 - MIME, 크기, 페이지 수
 - 문서 작성·수집·수정 시각
@@ -135,6 +135,8 @@ opaque browser session의 서버 측 레코드입니다. session token hash, App
 v0.1의 archive metadata는 encrypted object key, encryption scheme/version, nonce, wrapped data key, ciphertext size와 integrity tag를 가집니다. archive master key와 PDF password는 저장하지 않습니다.
 
 외부 참조는 API 응답과 일반 로그에 노출하지 않습니다.
+
+`product_explanation`은 청약 전·계약 안내용 상품설명서를 뜻하며 증권이나 약관을 대체하지 않습니다. 이 문서만으로 PolicyContract나 Rider를 만들지 않습니다. 가족별 보유 문서와 계약 연결은 `docs/design/insurance-document-inventory.md`의 별도 읽기 모델을 따릅니다.
 
 ### DocumentVersion
 
@@ -213,6 +215,10 @@ PolicyContract와 FamilyMember 사이의 역할 연결입니다.
 ### PolicyStatusSnapshot
 
 사고일 기준 계약과 Rider 유효성을 평가하기 위한 시점별 상태입니다. 최신 상태 근거가 없으면 현재 활성으로 추정하지 않습니다.
+
+### PolicyDocumentLink
+
+증권 근거로 게시된 PolicyContract와 같은 FamilyMember의 약관·상품설명서·보조자료를 연결합니다. import batch item과 immutable DocumentVersion을 함께 참조하고, 제안·사용자 확인·상충·거부 상태와 optimistic version을 보존합니다. 사용자 확인 상태인 active link만 문서 완전성 계산에 포함합니다. 약관이나 상품설명서가 연결되지 않았다는 사실은 계약 불일치 판정이 아니라 보완할 문서 상태입니다.
 
 ## Terms and rules boundary
 

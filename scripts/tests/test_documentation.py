@@ -9,6 +9,7 @@ V0_1_REQUIRED_DOCUMENTS = {
     "docs/design/claim-workflow.md",
     "docs/design/clause-linking-search.md",
     "docs/design/event-result-pwa.md",
+    "docs/design/insurance-document-inventory.md",
     "docs/design/policy-ledger.md",
     "docs/design/private-data-runtime.md",
     "docs/plan/003-v0.1-implementation-index.md",
@@ -26,6 +27,8 @@ V0_1_REQUIRED_DOCUMENTS = {
     "docs/plan/014a-private-import-reliability.md",
     "docs/plan/015-private-local-runtime.md",
     "docs/plan/016-v0.1-release.md",
+    "docs/plan/017-private-policy-structuring.md",
+    "docs/plan/018-insurance-document-inventory.md",
     "docs/release/v0.1.0-verification.md",
 }
 
