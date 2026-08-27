@@ -96,6 +96,24 @@ git diff --check: passed
 The Web suite ran with one worker because concurrent WSL filesystem load made
 fork startup slow. It completed without worker timeout or assertion failure.
 
+### Deployment verification
+
+```text
+docker compose --env-file .env.private -f infra/compose/compose.yaml build api: passed
+docker compose --env-file .env.private -f infra/compose/compose.yaml up -d --no-deps api: passed
+Compose health: API, DB, Web, and Worker healthy
+https://main.tail30f401.ts.net:8443/login: HTTP/2 200
+deployed inventory read: all six member scopes returned independently
+inventory component row delta across all six reads: 0
+```
+
+The deployed read model returned different registered, suggested-unreviewed,
+and unreadable counts for each member. Members with succeeded sources lacking
+reviewed components now receive synthetic `SUGGESTED` entries, while sources
+already represented by active components or active policies are excluded. The
+API rebuild did not change the login credential, session policy, encryption
+keys, Worker image, Web image, database container, or the external port.
+
 ## Privacy and authority boundary
 
 - No actual/private documents, extracted text, OCR output, paths, source keys, archive keys, credentials, or runtime data were accessed or recorded.
@@ -104,5 +122,5 @@ fork startup slow. It completed without worker timeout or assertion failure.
 
 ## Next Steps
 
-- Rebuild and restart only the FamilyCare API, then compare the deployed
-  member inventories with the root-owned private runtime review.
+- Continue root-owned private document reconciliation and verify the member
+  presentation in the user's already authenticated browser session.
