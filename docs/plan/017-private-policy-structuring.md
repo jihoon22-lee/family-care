@@ -58,11 +58,11 @@
 
 ## Task 5: UI and grouped verification
 
-1. Add document-kind controls and status copy to the import page.
-2. Keep password handling, no-store behavior, and current login/session behavior unchanged.
-3. Run Web checks, Python format/lint/type/tests, contract/container/workflow checks, PostgreSQL integration tests, migration upgrade, repository safety, and `git diff --check` serially.
-4. Rebuild API/Worker images, apply migrations, restart only FamilyCare-owned services, and revalidate the existing HTTPS login endpoint without changing credentials.
-5. After synthetic acceptance passes, materialize the approved Drive files outside Git and begin root-owned family-by-family analysis.
+1. [x] Add document-kind controls and status copy to the import page.
+2. [x] Keep password handling, no-store behavior, and current login/session behavior unchanged.
+3. [x] Run Web checks, Python format/lint/type/tests, contract/container/workflow checks, PostgreSQL integration tests, migration upgrade, repository safety, and `git diff --check` serially.
+4. [x] Rebuild API/Worker images, apply migrations, restart only FamilyCare-owned services, and revalidate the existing HTTPS login endpoint without changing credentials.
+5. [ ] After synthetic acceptance passes, materialize the approved Drive files outside Git and begin root-owned family-by-family analysis.
 
 ## Acceptance boundary
 
