@@ -7,11 +7,45 @@ function isTermsOnly(item: PolicyReviewItem): boolean {
   return item.issues.some((issue) => issue.code === "TERMS_ONLY_RIDER");
 }
 
+function stringField(
+  item: PolicyReviewItem,
+  fieldId: string,
+): string | undefined {
+  const value = item.fields.find((field) => field.field_id === fieldId)?.value;
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function insuranceLabel(
+  item: PolicyReviewItem,
+  items: PolicyReviewItem[],
+): string {
+  const policyCandidate =
+    item.candidate_kind === "policy_contract"
+      ? item
+      : items.find(
+          (candidate) =>
+            candidate.aggregate_id === item.aggregate_id &&
+            candidate.candidate_kind === "policy_contract",
+        );
+  const insurer = policyCandidate
+    ? stringField(policyCandidate, "insurer")
+    : undefined;
+  const product = policyCandidate
+    ? stringField(policyCandidate, "product_name")
+    : undefined;
+  if (insurer && product) return `${insurer} · ${product}`;
+  if (product) return product;
+  if (insurer) return insurer;
+  return stringField(item, "rider_name") ?? "식별 정보 확인 필요";
+}
+
 export function CandidateReviewQueue({
   items,
+  memberDisplayName,
   onMutated,
 }: {
   items: PolicyReviewItem[];
+  memberDisplayName: string;
   onMutated: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -50,8 +84,21 @@ export function CandidateReviewQueue({
           {visible.map((item) => (
             <li key={item.review_item_id}>
               <div>
-                <code>{item.issues[0]?.code ?? "LOW_CONFIDENCE"}</code>
-                <p>{ISSUE_COPY[item.issues[0]?.code ?? "LOW_CONFIDENCE"]}</p>
+                <p className="review-member">대상: {memberDisplayName}</p>
+                <p className="review-policy">
+                  보험: {insuranceLabel(item, items)}
+                </p>
+                {(item.issues.length > 0
+                  ? item.issues
+                  : [{ code: "LOW_CONFIDENCE" as const, field_id: null }]
+                ).map((issue) => (
+                  <div
+                    key={`${item.review_item_id}:${issue.code}:${issue.field_id ?? "all"}`}
+                  >
+                    <code>{issue.code}</code>
+                    <p>{ISSUE_COPY[issue.code]}</p>
+                  </div>
+                ))}
               </div>
               <button
                 type="button"

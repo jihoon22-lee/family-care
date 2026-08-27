@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import type { PolicyReviewItem } from "../../api/generated";
 
 import { LedgerPage } from "./LedgerPage";
 import {
@@ -77,6 +78,83 @@ describe("ledger read projection", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Sample Travel Benefit" }),
+    ).toBeInTheDocument();
+  });
+
+  it("requests and labels review candidates for the selected member with every issue", async () => {
+    const memberAItem: PolicyReviewItem = {
+      ...SYNTHETIC_LEDGER.reviewItems[0],
+      review_item_id: "synthetic-review-item-member-a",
+      candidate_kind: "policy_contract",
+      fields: [
+        { field_id: "insurer", value: "Sample Insurer", evidence_ids: [] },
+        {
+          field_id: "product_name",
+          value: "Sample Review Plan",
+          evidence_ids: [],
+        },
+      ],
+      issues: [
+        { code: "LOW_CONFIDENCE", field_id: "rider_name" },
+        { code: "INVALID_DATE", field_id: "coverage_end" },
+      ],
+    };
+    const memberBItem: PolicyReviewItem = {
+      ...SYNTHETIC_LEDGER.reviewItems[0],
+      review_item_id: "synthetic-review-item-member-b",
+      issues: [{ code: "CONFLICTING_EVIDENCE", field_id: "rider_name" }],
+    };
+    const fetchMock = installFetch({
+      ...SYNTHETIC_LEDGER,
+      reviewItems: [memberAItem],
+      reviewItemsByMember: {
+        "synthetic-member-a": [memberAItem],
+        "synthetic-member-b": [memberBItem],
+      },
+    });
+
+    renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
+
+    expect(await screen.findByText("LOW_CONFIDENCE")).toBeInTheDocument();
+    expect(screen.getByText("INVALID_DATE")).toBeInTheDocument();
+    expect(screen.getByText("대상: Family Member A")).toBeInTheDocument();
+    expect(
+      screen.getByText("보험: Sample Insurer · Sample Review Plan"),
+    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const url = new URL(String(input), window.location.origin);
+          return (
+            url.pathname === "/api/v1/review-items" &&
+            url.searchParams.get("family_member_id") === "synthetic-member-a"
+          );
+        }),
+      ).toBe(true);
+    });
+
+    fireEvent.change(
+      screen.getByRole("combobox", { name: /family member|가족 구성원/i }),
+      { target: { value: "synthetic-member-b" } },
+    );
+
+    expect(await screen.findByText("CONFLICTING_EVIDENCE")).toBeInTheDocument();
+    expect(screen.getByText("대상: Family Member B")).toBeInTheDocument();
+    expect(screen.queryByText("INVALID_DATE")).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([input]) => {
+          const url = new URL(String(input), window.location.origin);
+          return (
+            url.pathname === "/api/v1/review-items" &&
+            url.searchParams.get("family_member_id") === "synthetic-member-b"
+          );
+        }),
+      ).toBe(true);
+    });
+
+    expect(
+      await screen.findByRole("heading", { name: "Sample Policy B" }),
     ).toBeInTheDocument();
   });
 

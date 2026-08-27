@@ -30,11 +30,7 @@ async function loadLedger(
   memberId: string | undefined,
   signal: AbortSignal,
 ): Promise<LedgerSnapshot> {
-  const [familyMembers, allPolicies, reviewItems] = await Promise.all([
-    listFamilyMembers(signal),
-    listPolicies(signal),
-    listReviewItems(signal),
-  ]);
+  const familyMembers = await listFamilyMembers(signal);
   const selectedMember =
     familyMembers.find((member) => member.id === memberId) ?? familyMembers[0];
   if (!selectedMember) {
@@ -42,9 +38,13 @@ async function loadLedger(
       familyMembers,
       selectedMember: undefined,
       policies: [],
-      reviewItems,
+      reviewItems: [],
     };
   }
+  const [allPolicies, reviewItems] = await Promise.all([
+    listPolicies(signal),
+    listReviewItems(selectedMember.id, signal),
+  ]);
   const relevantPolicies = allPolicies.filter(
     (policy) =>
       policy.parties.length === 0 ||

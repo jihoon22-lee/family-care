@@ -36,6 +36,15 @@ JOB_ID = UUID("00000000-0000-4000-8000-000000000910")
 AGGREGATE_ID = UUID("00000000-0000-4000-8000-000000000911")
 CONTRACT_CANDIDATE_ID = UUID("00000000-0000-4000-8000-000000000912")
 RIDER_CANDIDATE_ID = UUID("00000000-0000-4000-8000-000000000913")
+MEMBER_B_ID = UUID("00000000-0000-4000-8000-000000000914")
+BATCH_B_ID = UUID("00000000-0000-4000-8000-000000000915")
+BATCH_ITEM_B_ID = UUID("00000000-0000-4000-8000-000000000916")
+DOCUMENT_B_ID = UUID("00000000-0000-4000-8000-000000000917")
+VERSION_B_ID = UUID("00000000-0000-4000-8000-000000000918")
+EXTRACTION_B_ID = UUID("00000000-0000-4000-8000-000000000919")
+EVIDENCE_B_ID = UUID("00000000-0000-4000-8000-000000000920")
+JOB_B_ID = UUID("00000000-0000-4000-8000-000000000921")
+AGGREGATE_B_ID = UUID("00000000-0000-4000-8000-000000000922")
 
 
 def _database_url() -> str:
@@ -163,14 +172,100 @@ def _seed(database_url: str) -> None:
         )
 
 
-def _field(field_id: str, value: object) -> CandidateField:
+def _seed_second_member(database_url: str) -> None:
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO family_members (
+              id, household_space_id, display_name, internal_alias
+            ) VALUES (%s, %s, 'Family Member B', 'family-member-b')
+            """,
+            (MEMBER_B_ID, HOUSEHOLD_ID),
+        )
+        connection.execute(
+            """
+            INSERT INTO documents (id, source_key, document_kind, status, page_count)
+            VALUES (%s, 'synthetic/private-confirmation-b.pdf', 'policy', 'ready', 1)
+            """,
+            (DOCUMENT_B_ID,),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_versions (
+              id, document_id, version_number, content_sha256, byte_size, page_count
+            ) VALUES (%s, %s, 1, %s, 128, 1)
+            """,
+            (VERSION_B_ID, DOCUMENT_B_ID, "d" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO extractions (
+              id, document_version_id, extractor_name, extractor_version,
+              extractor_config_hash, quality_rule_version, status, succeeded_at
+            ) VALUES (%s, %s, 'synthetic', 'synthetic-v1', %s,
+                      'quality-v1', 'succeeded', clock_timestamp())
+            """,
+            (EXTRACTION_B_ID, VERSION_B_ID, "e" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO evidence (
+              id, household_space_id, document_version_id, extraction_id,
+              content_sha256, physical_page, review_state
+            ) VALUES (%s, %s, %s, %s, %s, 1, 'NEEDS_REVIEW')
+            """,
+            (EVIDENCE_B_ID, HOUSEHOLD_ID, VERSION_B_ID, EXTRACTION_B_ID, "f" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_batches (
+              id, household_space_id, family_member_id, created_by, state, completed_at
+            ) VALUES (%s, %s, %s, %s, 'succeeded', clock_timestamp())
+            """,
+            (BATCH_B_ID, HOUSEHOLD_ID, MEMBER_B_ID, USER_ID),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_batch_items (
+              id, batch_id, document_id, source_id, source_key, display_label,
+              document_kind, state, available_at, completed_at
+            ) VALUES (%s, %s, %s, %s, 'synthetic/private-confirmation-b.pdf',
+                      'Sample Policy B', 'policy', 'succeeded', clock_timestamp(),
+                      clock_timestamp())
+            """,
+            (BATCH_ITEM_B_ID, BATCH_B_ID, DOCUMENT_B_ID, "0" * 64),
+        )
+        connection.execute(
+            """
+            INSERT INTO policy_structuring_jobs (
+              id, household_space_id, batch_item_id, family_member_id,
+              document_version_id, extraction_id, policy_aggregate_id,
+              state, pipeline_version, available_at, lease_owner,
+              lease_expires_at, heartbeat_at, attempts, max_attempts
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'running',
+                      'policy-candidate-batch-v2', clock_timestamp(), 'worker-b',
+                      clock_timestamp() + interval '3 minutes', clock_timestamp(), 1, 5)
+            """,
+            (
+                JOB_B_ID,
+                HOUSEHOLD_ID,
+                BATCH_ITEM_B_ID,
+                MEMBER_B_ID,
+                VERSION_B_ID,
+                EXTRACTION_B_ID,
+                AGGREGATE_B_ID,
+            ),
+        )
+
+
+def _field(field_id: str, value: object, *, evidence_id: UUID = EVIDENCE_ID) -> CandidateField:
     return CandidateField.model_validate(
-        {"field_id": field_id, "value": value, "evidence_ids": (EVIDENCE_ID,)},
+        {"field_id": field_id, "value": value, "evidence_ids": (evidence_id,)},
         strict=True,
     )
 
 
-def _candidate_batch() -> CandidatePipelineResult:
+def _candidate_batch(*, evidence_id: UUID = EVIDENCE_ID) -> CandidatePipelineResult:
     return CandidatePipelineResult(
         classification="SUCCESS",
         candidates=(
@@ -179,11 +274,11 @@ def _candidate_batch() -> CandidatePipelineResult:
                 candidate_kind="policy_contract",
                 status="AI_VERIFIED",
                 fields=(
-                    _field("insurer", "Sample Insurer"),
-                    _field("product_name", "Sample Plan"),
-                    _field("contract_start", "2026-01-01"),
-                    _field("contract_end", "2026-12-31"),
-                    _field("policy_status", "active"),
+                    _field("insurer", "Sample Insurer", evidence_id=evidence_id),
+                    _field("product_name", "Sample Plan", evidence_id=evidence_id),
+                    _field("contract_start", "2026-01-01", evidence_id=evidence_id),
+                    _field("contract_end", "2026-12-31", evidence_id=evidence_id),
+                    _field("policy_status", "active", evidence_id=evidence_id),
                 ),
                 issue_codes=(),
                 provider_request_ids=("synthetic-structurer", "synthetic-policy-verifier"),
@@ -193,15 +288,15 @@ def _candidate_batch() -> CandidatePipelineResult:
                 candidate_kind="rider",
                 status="AI_VERIFIED",
                 fields=(
-                    _field("rider_name", "Sample Rider"),
-                    _field("rider_key", "sample-rider"),
-                    _field("benefit_type", "fixed"),
-                    _field("sum_assured", 1000),
-                    _field("currency", "KRW"),
-                    _field("coverage_start", "2026-01-01"),
-                    _field("coverage_end", "2026-12-31"),
-                    _field("renewable", False),
-                    _field("rider_status", "active"),
+                    _field("rider_name", "Sample Rider", evidence_id=evidence_id),
+                    _field("rider_key", "sample-rider", evidence_id=evidence_id),
+                    _field("benefit_type", "fixed", evidence_id=evidence_id),
+                    _field("sum_assured", 1000, evidence_id=evidence_id),
+                    _field("currency", "KRW", evidence_id=evidence_id),
+                    _field("coverage_start", "2026-01-01", evidence_id=evidence_id),
+                    _field("coverage_end", "2026-12-31", evidence_id=evidence_id),
+                    _field("renewable", False, evidence_id=evidence_id),
+                    _field("rider_status", "active", evidence_id=evidence_id),
                 ),
                 issue_codes=(),
                 provider_request_ids=("synthetic-structurer", "synthetic-rider-verifier"),
@@ -210,17 +305,24 @@ def _candidate_batch() -> CandidatePipelineResult:
     )
 
 
-def _publish_candidates(database_url: str) -> CandidateReviewService:
-    job = PolicyStructuringJobQueue(database_url).get_job(JOB_ID)
+def _publish_candidates(
+    database_url: str,
+    *,
+    job_id: UUID = JOB_ID,
+    evidence_id: UUID = EVIDENCE_ID,
+    document_version_id: UUID = VERSION_ID,
+    worker_id: str = "worker-a",
+) -> CandidateReviewService:
+    job = PolicyStructuringJobQueue(database_url).get_job(job_id)
     assert job is not None
     PolicyCandidatePublisher(database_url).publish(
         job=job,
-        worker_id="worker-a",
-        result=_candidate_batch(),
+        worker_id=worker_id,
+        result=_candidate_batch(evidence_id=evidence_id),
         evidence=(
             EvidenceSlice(
-                evidence_id=EVIDENCE_ID,
-                document_version_id=VERSION_ID,
+                evidence_id=evidence_id,
+                document_version_id=document_version_id,
                 page=1,
                 text="Sample minimized policy evidence.",
                 bbox=None,
@@ -229,6 +331,44 @@ def _publish_candidates(database_url: str) -> CandidateReviewService:
         ),
     )
     return CandidateReviewService(CandidateRepository(database_url))
+
+
+def test_review_items_filter_to_selected_family_member_without_cross_member_leakage() -> None:
+    database_url = _database_url()
+    _reset(database_url)
+    _seed(database_url)
+    _seed_second_member(database_url)
+    service = _publish_candidates(database_url)
+    _publish_candidates(
+        database_url,
+        job_id=JOB_B_ID,
+        evidence_id=EVIDENCE_B_ID,
+        document_version_id=VERSION_B_ID,
+        worker_id="worker-b",
+    )
+    scope = HouseholdScope(HOUSEHOLD_ID)
+
+    member_a_items = service.list_review_items(scope=scope, family_member_id=MEMBER_ID)
+    member_b_items = service.list_review_items(scope=scope, family_member_id=MEMBER_B_ID)
+    assert {item.aggregate_id for item in member_a_items} == {AGGREGATE_ID}
+    assert {item.aggregate_id for item in member_b_items} == {AGGREGATE_B_ID}
+
+    app = create_app(enable_synthetic_ingestion=False)
+    app.dependency_overrides[resolve_household_scope] = lambda: scope
+    with TestClient(app) as client:
+        response_a = client.get(
+            "/api/v1/review-items",
+            params={"domain": "policy", "family_member_id": str(MEMBER_ID)},
+        )
+        response_b = client.get(
+            "/api/v1/review-items",
+            params={"domain": "policy", "family_member_id": str(MEMBER_B_ID)},
+        )
+
+    assert response_a.status_code == 200
+    assert response_b.status_code == 200
+    assert {item["aggregate_id"] for item in response_a.json()} == {str(AGGREGATE_ID)}
+    assert {item["aggregate_id"] for item in response_b.json()} == {str(AGGREGATE_B_ID)}
 
 
 def test_user_confirmation_promotes_evidence_and_publishes_family_policy_aggregate() -> None:

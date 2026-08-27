@@ -300,6 +300,7 @@ class CandidateRepository:
         *,
         status: str = "NEEDS_REVIEW",
         domain: str = "policy",
+        family_member_id: UUID | None = None,
     ) -> list[PolicyReviewItem]:
         if status not in _VISIBLE_STATUSES or domain not in {
             "policy",
@@ -308,25 +309,50 @@ class CandidateRepository:
         }:
             return []
         domain_predicate = (
-            "candidate_kind IN ('policy_contract', 'policy_party', 'rider')"
+            "candidate.candidate_kind IN ('policy_contract', 'policy_party', 'rider')"
             if domain == "policy"
-            else "candidate_kind = %(domain)s"
+            else "candidate.candidate_kind = %(domain)s"
         )
+        member_predicate = ""
+        if family_member_id is not None and domain == "policy":
+            member_predicate = """
+                      AND EXISTS (
+                          SELECT 1
+                          FROM analysis_candidate_evidence AS candidate_evidence
+                          JOIN evidence AS linked_evidence
+                            ON linked_evidence.id = candidate_evidence.evidence_id
+                           AND linked_evidence.document_version_id =
+                               candidate_evidence.document_version_id
+                          JOIN policy_structuring_jobs AS job
+                            ON job.document_version_id = candidate_evidence.document_version_id
+                           AND job.extraction_id = linked_evidence.extraction_id
+                           AND job.household_space_id = candidate.household_space_id
+                          JOIN family_members AS member
+                            ON member.id = job.family_member_id
+                           AND member.household_space_id = candidate.household_space_id
+                           AND member.deleted_at IS NULL
+                          WHERE candidate_evidence.candidate_version_id = candidate.id
+                            AND job.family_member_id = %(family_member_id)s
+                            AND job.state = 'succeeded'
+                      )
+            """
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 rows = connection.execute(
                     f"""
-                    SELECT * FROM analysis_candidate_versions
-                    WHERE household_space_id = %(household_space_id)s
-                      AND status = %(status)s
+                    SELECT candidate.* FROM analysis_candidate_versions AS candidate
+                    WHERE candidate.household_space_id = %(household_space_id)s
+                      AND candidate.status = %(status)s
                       AND {domain_predicate}
-                      AND is_current AND deleted_at IS NULL
-                    ORDER BY created_at, id
+                      AND candidate.is_current AND candidate.deleted_at IS NULL
+                      {member_predicate}
+                    ORDER BY candidate.created_at, candidate.id
                     """,
                     {
                         "household_space_id": scope.household_space_id,
                         "status": status,
                         "domain": domain,
+                        "family_member_id": family_member_id,
                     },
                 ).fetchall()
                 return [self._review_item(connection, row) for row in rows]

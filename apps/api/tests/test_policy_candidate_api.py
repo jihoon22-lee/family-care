@@ -45,6 +45,8 @@ _POLICY_DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000601")
 _TERMS_DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000602")
 _ACTOR_ID = UUID("00000000-0000-4000-8000-000000000701")
 _UNKNOWN_ID = UUID("00000000-0000-4000-8000-000000000799")
+_MEMBER_A_ID = UUID("00000000-0000-4000-8000-000000000801")
+_MEMBER_B_ID = UUID("00000000-0000-4000-8000-000000000802")
 
 _PRIVATE_MARKERS = (
     "synthetic-private-password",
@@ -176,6 +178,7 @@ class _FakeCandidateReviewService:
         self.parent_versions: dict[UUID, PolicyReviewItem] = {_PARENT_CANDIDATE_VERSION_ID: parent}
         self.seen_scopes: list[HouseholdScope] = []
         self.list_calls: list[tuple[HouseholdScope, str]] = []
+        self.list_member_ids: list[UUID | None] = []
         self.get_calls: list[tuple[HouseholdScope, UUID]] = []
         self.correction_targets: list[UUID] = []
         self.confirm_calls: list[tuple[HouseholdScope, UUID]] = []
@@ -208,13 +211,20 @@ class _FakeCandidateReviewService:
         *,
         scope: HouseholdScope,
         status: str = "NEEDS_REVIEW",
+        family_member_id: UUID | None = None,
         **_: Any,
     ) -> list[PolicyReviewItem]:
         self._scope(scope)
         self.list_calls.append((scope, status))
+        self.list_member_ids.append(family_member_id)
         if scope != SCOPE_A:
             return []
-        return [item for item in self.items.values() if item.status == status]
+        items = [item for item in self.items.values() if item.status == status]
+        if family_member_id == _MEMBER_A_ID:
+            return [items[0]]
+        if family_member_id == _MEMBER_B_ID:
+            return [items[1]]
+        return items
 
     def get_review_item(
         self,
@@ -370,6 +380,34 @@ def test_review_routes_list_and_get_are_scoped_and_value_free(
     assert fetched.json()["review_item_id"] == str(_REVIEW_ITEM_ID)
     assert fetched.json()["aggregate_id"] == str(_POLICY_ID)
     assert not _contains_forbidden_key(fetched.json())
+    assert all(scope == SCOPE_A for scope in fake_service.seen_scopes)
+
+
+def test_review_route_filters_policy_candidates_by_family_member(
+    client: TestClient,
+    fake_service: _FakeCandidateReviewService,
+) -> None:
+    member_a = client.get(
+        "/api/v1/review-items",
+        params={
+            "domain": "policy",
+            "status": "NEEDS_REVIEW",
+            "family_member_id": str(_MEMBER_A_ID),
+        },
+    )
+    member_b = client.get(
+        "/api/v1/review-items",
+        params={
+            "domain": "policy",
+            "status": "NEEDS_REVIEW",
+            "family_member_id": str(_MEMBER_B_ID),
+        },
+    )
+
+    assert member_a.status_code == member_b.status_code == 200
+    assert [item["review_item_id"] for item in member_a.json()] == [str(_REVIEW_ITEM_ID)]
+    assert [item["review_item_id"] for item in member_b.json()] == [str(_TERMS_REVIEW_ITEM_ID)]
+    assert fake_service.list_member_ids[-2:] == [_MEMBER_A_ID, _MEMBER_B_ID]
     assert all(scope == SCOPE_A for scope in fake_service.seen_scopes)
 
 

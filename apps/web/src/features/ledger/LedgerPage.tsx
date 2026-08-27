@@ -121,7 +121,11 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
                 </div>
               )}
             </section>
-            <CandidateReviewQueue items={data.reviewItems} onMutated={reload} />
+            <CandidateReviewQueue
+              items={data.reviewItems}
+              memberDisplayName={data.selectedMember.display_name}
+              onMutated={reload}
+            />
           </div>
         </>
       ) : null}

@@ -12,6 +12,7 @@ export interface SyntheticLedgerFixture {
   policies: PolicyResponse[];
   ridersByPolicy: Record<string, RiderResponse[]>;
   reviewItems: PolicyReviewItem[];
+  reviewItemsByMember?: Record<string, PolicyReviewItem[]>;
 }
 
 const SYNTHETIC_HASH = "a".repeat(64);
@@ -237,7 +238,12 @@ export function createMockApi(
     }
 
     if (url.pathname === "/api/v1/review-items") {
-      return jsonResponse(fixture.reviewItems);
+      const memberId = url.searchParams.get("family_member_id");
+      return jsonResponse(
+        memberId && fixture.reviewItemsByMember
+          ? (fixture.reviewItemsByMember[memberId] ?? [])
+          : fixture.reviewItems,
+      );
     }
 
     const inventoryMatch = url.pathname.match(

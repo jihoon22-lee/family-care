@@ -40,10 +40,16 @@ class CandidateReviewService:
         scope: HouseholdScope,
         status: str = "NEEDS_REVIEW",
         domain: str = "policy",
+        family_member_id: UUID | None = None,
     ) -> list[PolicyReviewItem]:
         if domain not in {"policy", "rider_clause", "coverage_rule"}:
             raise InvalidCandidateCorrection
-        return self.repository.list_review_items(scope, status=status, domain=domain)
+        return self.repository.list_review_items(
+            scope,
+            status=status,
+            domain=domain,
+            family_member_id=family_member_id,
+        )
 
     def get_review_item(
         self,

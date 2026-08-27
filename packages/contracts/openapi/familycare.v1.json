@@ -12226,6 +12226,23 @@
               "title": "Status",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "family_member_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family Member Id"
+            }
           }
         ],
         "responses": {
