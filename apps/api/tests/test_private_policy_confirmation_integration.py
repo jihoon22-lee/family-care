@@ -214,7 +214,7 @@ def _seed_second_member(database_url: str) -> None:
               content_sha256, physical_page, review_state
             ) VALUES (%s, %s, %s, %s, %s, 1, 'NEEDS_REVIEW')
             """,
-            (EVIDENCE_B_ID, HOUSEHOLD_ID, VERSION_B_ID, EXTRACTION_B_ID, "f" * 64),
+            (EVIDENCE_B_ID, HOUSEHOLD_ID, VERSION_B_ID, EXTRACTION_B_ID, "d" * 64),
         )
         connection.execute(
             """
