@@ -4,6 +4,25 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-27
+
+### Added
+
+- Evidence-bounded policy structuring, candidate confirmation, and family document inventory views for registered, incomplete, unpaired, and review-needed insurance documents.
+- Explicit document-kind intake and larger bounded private PDF imports for local encrypted analysis.
+
+### Changed
+
+- Candidate review and document inventory results are scoped to the selected family member, including successful documents that still need registration or classification.
+
+### Fixed
+
+- Recoverable PDF cross-reference deviations and invalid geometry no longer prevent otherwise usable documents from continuing through bounded analysis.
+
+### Security
+
+- Private document analysis remains outside the repository, with minimized Evidence inputs and no document content or personal identifiers in public fixtures and release metadata.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added
