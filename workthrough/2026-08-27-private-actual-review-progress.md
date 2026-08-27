@@ -49,13 +49,18 @@ File: `workthrough/2026-08-27-private-actual-review-progress.md`
 | --- | --- | --- | --- |
 | Family E | 6 readable PDFs reviewed | 3 policies / 94 coverages | All `UNKNOWN` pending current/renewal verification |
 | Family F | 8 readable PDFs reviewed; 1 nonfinal product explanation excluded | 4 certificate-backed policies / 160 coverages | All `UNKNOWN` pending current/renewal verification |
-| Family C | 17 PDFs + 1 image; 12 readable / 6 password-required | 2 readable certificate-backed policies / 19 coverages; 6 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
-| Family B | 18 PDFs; 15 readable / 3 password-required; one legacy-font label boundary | 6 readable certificate-backed policies / 92 coverages; 3 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
-| Family D | 21 PDFs; 18 readable / 3 password-required | 4 certificate-backed policies / 95 coverages; 2 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
-| Family A | 37 PDFs; 34 readable / 3 password-required; mixed-role and duplicate sources reviewed | 13 readable certificate-backed policies / 132 coverages; 3 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family C | 17 PDFs + 1 image; 15 readable / 3 password-required | 5 readable certificate-backed policies / 39 coverages; 3 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family B | 18 PDFs; 16 readable / 2 password-required; one legacy-font label boundary | 7 readable certificate-backed policies / 97 coverages; 2 encrypted policy candidates unpublished | All `UNKNOWN` pending current/renewal verification |
+| Family D | 21 readable PDFs; previously inaccessible supporting material classified separately | 6 certificate-backed policies / 109 coverages | All `UNKNOWN` pending current/renewal verification |
+| Family A | 37 readable PDFs; mixed-role and duplicate sources reviewed | 15 certificate-backed policies / 163 coverages | All `UNKNOWN` pending current/renewal verification |
 
-Password/font/raw-visual review remains for inaccessible boundaries across the
-family set. These follow-up items and current/renewal verification prevent the
+The root-verified six-digit birth date was tried only after an empty-password
+check and only in a temporary workspace outside Git. Three genuinely protected
+files opened, while seven files previously treated as password-required were
+corrected to restricted-but-readable PDFs. Temporary host and Worker files were
+removed after review. The resulting accessible aggregate is 40 policies and
+662 coverages; five certificate candidates remain password-required. Those
+boundaries, the legacy-font item, and current/renewal verification prevent the
 actual-review plan item from being checked off.
 
 ## Code Examples
@@ -86,7 +91,7 @@ progress update.
 
 ## Next Steps
 
-- Complete the remaining password/font/raw-visual boundaries outside the
-  repository.
+- Complete the five remaining password-required certificate candidates and
+  the legacy-font/raw-visual boundaries outside the repository.
 - Verify current and renewal status before revisiting any `UNKNOWN` result.
 - Keep the Task 5 actual-acceptance item open until those boundaries are met.
