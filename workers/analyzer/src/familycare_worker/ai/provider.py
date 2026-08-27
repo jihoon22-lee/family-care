@@ -6,7 +6,7 @@ import json
 import math
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol, cast
 from uuid import UUID
@@ -58,7 +58,7 @@ class EvidenceSlice:
     evidence_id: UUID
     document_version_id: UUID
     page: int
-    text: str
+    text: str = field(repr=False)
     bbox: tuple[float, float, float, float] | None
     document_kind: str = "policy"
 
