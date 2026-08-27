@@ -77,6 +77,22 @@ def _component(row: dict[str, Any]) -> InventoryComponent:
     )
 
 
+def _synthetic_component(row: dict[str, Any]) -> InventoryComponent:
+    """Project a processed batch item that has no reviewed component yet."""
+    return InventoryComponent(
+        id=None,
+        document_batch_item_id=cast(UUID, row["document_batch_item_id"]),
+        document_version_id=cast(UUID, row["document_version_id"]),
+        content_sha256=cast(str, row["content_sha256"]),
+        role=cast(DocumentRole, row["document_kind"]),
+        page_start=1,
+        page_end=int(row["page_count"]),
+        review_state="SUGGESTED",
+        processing_state="READY",
+        duplicate_state=_duplicate_state(row),
+    )
+
+
 _COMPONENT_SELECT = """
     SELECT
         component.id AS component_id,
@@ -95,8 +111,10 @@ _COMPONENT_SELECT = """
             JOIN document_batches AS same_batch ON same_batch.id = same_item.batch_id
             JOIN document_versions AS same_version
               ON same_version.id = same_item.processed_document_version_id
+             AND same_version.document_id = same_item.document_id
             WHERE same_batch.household_space_id = component.household_space_id
               AND same_batch.family_member_id = component.family_member_id
+              AND same_item.state = 'succeeded'
               AND same_version.content_sha256 = version.content_sha256
         ) AS same_member_source_count,
         EXISTS (
@@ -105,14 +123,79 @@ _COMPONENT_SELECT = """
             JOIN document_batches AS other_batch ON other_batch.id = other_item.batch_id
             JOIN document_versions AS other_version
               ON other_version.id = other_item.processed_document_version_id
+             AND other_version.document_id = other_item.document_id
             WHERE other_batch.household_space_id = component.household_space_id
               AND other_batch.family_member_id <> component.family_member_id
+              AND other_item.state = 'succeeded'
               AND other_version.content_sha256 = version.content_sha256
         ) AS has_cross_member_copy
     FROM insurance_document_components AS component
     JOIN document_versions AS version ON version.id = component.document_version_id
     JOIN document_batch_items AS batch_item
       ON batch_item.id = component.document_batch_item_id
+"""
+
+
+_SYNTHETIC_COMPONENT_SELECT = """
+    SELECT
+        item.id AS document_batch_item_id,
+        version.id AS document_version_id,
+        version.content_sha256,
+        item.document_kind,
+        version.page_count,
+        (
+            SELECT count(DISTINCT same_item.id)
+            FROM document_batch_items AS same_item
+            JOIN document_batches AS same_batch ON same_batch.id = same_item.batch_id
+            JOIN document_versions AS same_version
+              ON same_version.id = same_item.processed_document_version_id
+             AND same_version.document_id = same_item.document_id
+            WHERE same_batch.household_space_id = batch.household_space_id
+              AND same_batch.family_member_id = batch.family_member_id
+              AND same_item.state = 'succeeded'
+              AND same_version.content_sha256 = version.content_sha256
+        ) AS same_member_source_count,
+        EXISTS (
+            SELECT 1
+            FROM document_batch_items AS other_item
+            JOIN document_batches AS other_batch ON other_batch.id = other_item.batch_id
+            JOIN document_versions AS other_version
+              ON other_version.id = other_item.processed_document_version_id
+             AND other_version.document_id = other_item.document_id
+            WHERE other_batch.household_space_id = batch.household_space_id
+              AND other_batch.family_member_id <> batch.family_member_id
+              AND other_item.state = 'succeeded'
+              AND other_version.content_sha256 = version.content_sha256
+        ) AS has_cross_member_copy
+    FROM document_batch_items AS item
+    JOIN document_batches AS batch ON batch.id = item.batch_id
+    JOIN document_versions AS version
+      ON version.id = item.processed_document_version_id
+     AND version.document_id = item.document_id
+    WHERE batch.household_space_id = %s
+      AND batch.family_member_id = %s
+      AND item.state = 'succeeded'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM insurance_document_components AS active_component
+          WHERE active_component.household_space_id = batch.household_space_id
+            AND active_component.family_member_id = batch.family_member_id
+            AND active_component.document_batch_item_id = item.id
+            AND active_component.deleted_at IS NULL
+      )
+      AND NOT EXISTS (
+          SELECT 1
+          FROM policy_contracts AS active_policy
+          JOIN policy_parties AS active_party
+            ON active_party.policy_contract_id = active_policy.id
+           AND active_party.household_space_id = active_policy.household_space_id
+           AND active_party.family_member_id = batch.family_member_id
+           AND active_party.deleted_at IS NULL
+          WHERE active_policy.household_space_id = batch.household_space_id
+            AND active_policy.source_document_version_id = version.id
+            AND active_policy.deleted_at IS NULL
+      )
+    ORDER BY item.created_at, item.id
 """
 
 _SET_ITEM_SELECT = _COMPONENT_SELECT.replace(
@@ -262,6 +345,10 @@ class InsuranceDocumentRepository:
                     """,
                     (scope.household_space_id, member_id),
                 ).fetchall()
+                synthetic_rows = connection.execute(
+                    _SYNTHETIC_COMPONENT_SELECT,
+                    (scope.household_space_id, member_id),
+                ).fetchall()
                 unreadable_rows = connection.execute(
                     """
                     SELECT item.id AS document_batch_item_id, item.document_kind,
@@ -320,7 +407,10 @@ class InsuranceDocumentRepository:
             member_id,
             policies=policies,
             document_sets=document_sets,
-            unpaired_components=tuple(_component(row) for row in unpaired_rows),
+            unpaired_components=(
+                tuple(_component(row) for row in unpaired_rows)
+                + tuple(_synthetic_component(row) for row in synthetic_rows)
+            ),
             unreadable_sources=tuple(self._unreadable_source(row) for row in unreadable_rows),
         )
 

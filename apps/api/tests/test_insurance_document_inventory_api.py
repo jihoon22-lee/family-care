@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from uuid import UUID
 
 import pytest
@@ -11,6 +12,7 @@ from familycare_api.insurance_documents.domain import (
     InsuranceDocumentComponentRecord,
     InsuranceDocumentSetItemRecord,
     InsuranceDocumentSetRecord,
+    InventoryComponent,
     InventoryPolicy,
     InventorySet,
     UnreadableSource,
@@ -28,6 +30,8 @@ POLICY_ID = UUID("00000000-0000-4000-8000-000000000201")
 COMPONENT_ID = UUID("00000000-0000-4000-8000-000000000501")
 SET_ID = UUID("00000000-0000-4000-8000-000000000601")
 SET_ITEM_ID = UUID("00000000-0000-4000-8000-000000000701")
+UNPAIRED_ITEM_ID = UUID("00000000-0000-4000-8000-000000000951")
+UNPAIRED_VERSION_ID = UUID("00000000-0000-4000-8000-000000000952")
 
 
 class _InventoryService:
@@ -128,11 +132,33 @@ class _InventoryService:
         assert expected_version == 3
 
 
-def _client() -> TestClient:
+class _SyntheticInventoryService(_InventoryService):
+    def get_inventory(self, member_id: UUID):
+        inventory = super().get_inventory(member_id)
+        return replace(
+            inventory,
+            unpaired_components=(
+                InventoryComponent(
+                    id=None,
+                    document_batch_item_id=UNPAIRED_ITEM_ID,
+                    document_version_id=UNPAIRED_VERSION_ID,
+                    content_sha256="b" * 64,
+                    role="policy",
+                    page_start=1,
+                    page_end=4,
+                    review_state="SUGGESTED",
+                    processing_state="READY",
+                    duplicate_state="SAME_MEMBER_DUPLICATE",
+                ),
+            ),
+        )
+
+
+def _client(service_type: type = _InventoryService) -> TestClient:
     app = FastAPI()
     install_error_handlers(app)
     app.include_router(router)
-    app.dependency_overrides[get_insurance_document_service] = _InventoryService
+    app.dependency_overrides[get_insurance_document_service] = service_type
     return TestClient(app)
 
 
@@ -176,6 +202,25 @@ def test_inventory_get_is_member_scoped_no_store_and_path_free() -> None:
     ):
         assert forbidden not in serialized
     assert '"password":' not in serialized
+
+
+def test_inventory_get_serializes_synthetic_unpaired_component() -> None:
+    with _client(_SyntheticInventoryService) as client:
+        response = client.get(f"/api/v1/family-members/{MEMBER_ID}/insurance-document-inventory")
+
+    assert response.status_code == 200
+    assert response.json()["unpaired_components"] == [
+        {
+            "id": None,
+            "document_batch_item_id": str(UNPAIRED_ITEM_ID),
+            "role": "policy",
+            "page_start": 1,
+            "page_end": 4,
+            "review_state": "SUGGESTED",
+            "processing_state": "READY",
+            "duplicate_state": "SAME_MEMBER_DUPLICATE",
+        }
+    ]
 
 
 def test_component_request_rejects_reversed_page_range_and_extra_fields() -> None:

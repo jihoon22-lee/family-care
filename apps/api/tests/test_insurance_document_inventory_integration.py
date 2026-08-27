@@ -31,6 +31,9 @@ TERMS_BATCH_ITEM_ID = UUID("00000000-0000-4000-8000-000000000813")
 OTHER_MEMBER_ITEM_ID = UUID("00000000-0000-4000-8000-000000000814")
 LOCKED_ITEM_ID = UUID("00000000-0000-4000-8000-000000000815")
 POLICY_REISSUE_ITEM_ID = UUID("00000000-0000-4000-8000-000000000817")
+UNPAIRED_POLICY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000818")
+UNPAIRED_POLICY_COPY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000819")
+ACTIVE_POLICY_UNPAIRED_ITEM_ID = UUID("00000000-0000-4000-8000-000000000820")
 
 
 def _database_url() -> str:
@@ -168,6 +171,15 @@ def _seed(database_url: str) -> None:
               (%s, '00000000-0000-4000-8000-000000000821', %s, %s,
                'synthetic/inventory-terms.pdf', 'Sample Terms', 'terms',
                'succeeded', %s, clock_timestamp(), clock_timestamp()),
+              (%s, '00000000-0000-4000-8000-000000000821', %s, %s,
+               'synthetic/inventory-unpaired-policy.pdf', 'Sample Unpaired Policy',
+               'policy', 'succeeded', %s, clock_timestamp(), clock_timestamp()),
+              (%s, '00000000-0000-4000-8000-000000000821', %s, %s,
+               'synthetic/inventory-unpaired-policy-copy.pdf', 'Sample Unpaired Policy Copy',
+               'policy', 'succeeded', %s, clock_timestamp(), clock_timestamp()),
+              (%s, '00000000-0000-4000-8000-000000000821', %s, %s,
+               'synthetic/inventory-active-policy-copy.pdf', 'Sample Active Policy Copy',
+               'policy', 'succeeded', %s, clock_timestamp(), clock_timestamp()),
               (%s, '00000000-0000-4000-8000-000000000822', %s, %s,
                'synthetic/inventory-terms-copy.pdf', 'Sample Terms Copy', 'terms',
                'succeeded', %s, clock_timestamp(), clock_timestamp()),
@@ -187,6 +199,18 @@ def _seed(database_url: str) -> None:
                 TERMS_DOCUMENT_ID,
                 "e" * 64,
                 TERMS_VERSION_ID,
+                UNPAIRED_POLICY_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "8" * 64,
+                POLICY_REISSUE_VERSION_ID,
+                UNPAIRED_POLICY_COPY_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "7" * 64,
+                POLICY_REISSUE_VERSION_ID,
+                ACTIVE_POLICY_UNPAIRED_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "6" * 64,
+                POLICY_VERSION_ID,
                 OTHER_MEMBER_ITEM_ID,
                 TERMS_DOCUMENT_ID,
                 "f" * 64,
@@ -360,14 +384,43 @@ def test_postgresql_inventory_enforces_authority_scope_and_conflict_states() -> 
         for document in inventory.registered_policies[0].documents
         if document.role == "policy"
     )
-    assert policy_document.items[0].component.duplicate_state == "UNIQUE"
+    assert policy_document.items[0].component.duplicate_state == "SAME_MEMBER_DUPLICATE"
     assert inventory.unregistered_document_sets[0].primary_classification == "TERMS_ONLY"
     assert terms_component.id not in {item.id for item in inventory.unpaired_components}
+    assert POLICY_BATCH_ITEM_ID not in {
+        item.document_batch_item_id for item in inventory.unpaired_components
+    }
     assert overlap.id in {item.id for item in inventory.unpaired_components}
     projected_overlap = next(
         item for item in inventory.unpaired_components if item.id == overlap.id
     )
     assert projected_overlap.duplicate_state == "CROSS_MEMBER_COPY_POSSIBLE"
+    synthetic = [
+        item
+        for item in inventory.unpaired_components
+        if item.document_batch_item_id in {UNPAIRED_POLICY_ITEM_ID, UNPAIRED_POLICY_COPY_ITEM_ID}
+    ]
+    assert ACTIVE_POLICY_UNPAIRED_ITEM_ID not in {
+        item.document_batch_item_id for item in inventory.unpaired_components
+    }
+    assert len(synthetic) == 2
+    assert all(item.id is None for item in synthetic)
+    assert all(item.role == "policy" for item in synthetic)
+    assert all((item.page_start, item.page_end) == (1, 5) for item in synthetic)
+    assert all(item.review_state == "SUGGESTED" for item in synthetic)
+    assert all(item.processing_state == "READY" for item in synthetic)
+    assert all(item.duplicate_state == "CROSS_MEMBER_COPY_POSSIBLE" for item in synthetic)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        component_count = connection.execute(
+            """
+            SELECT count(*)
+            FROM insurance_document_components
+            WHERE document_batch_item_id IN (%s, %s)
+            """,
+            (UNPAIRED_POLICY_ITEM_ID, UNPAIRED_POLICY_COPY_ITEM_ID),
+        ).fetchone()
+    assert component_count is not None
+    assert component_count[0] == 0
 
     service.delete_document_set(document_set.id, expected_version=3)
     after_delete = service.get_inventory(MEMBER_A_ID)
