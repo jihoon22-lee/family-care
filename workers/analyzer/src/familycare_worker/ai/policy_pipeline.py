@@ -236,6 +236,8 @@ def run_policy_batch_pipeline(
             verifier_model=verifier_model,
             structurer_request_id=structurer_request_id,
         )
+        if classification in {"CONFIGURATION_ERROR", "RETRYABLE_PROVIDER_ERROR"}:
+            return _result(classification)
         candidates.append(candidate)
         classifications.append(classification)
     priority = {

@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
-from familycare_worker.ai.evidence_loader import EvidenceLoadError, _to_slices
+from familycare_worker.ai.evidence_loader import EvidenceLoadError, _member_terms, _to_slices
 
 DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000101")
 
@@ -31,6 +31,21 @@ def test_evidence_loader_normalizes_and_bounds_one_slice_per_page() -> None:
     assert len(slices[0].text) == 240
     assert slices[0].bbox is None
     assert all(item.document_version_id == DOCUMENT_VERSION_ID for item in slices)
+
+
+def test_member_terms_are_bounded_deduplicated_runtime_values() -> None:
+    assert _member_terms(
+        {
+            "display_name": "Family Member A",
+            "internal_alias": "family-member-a",
+        }
+    ) == ("Family Member A", "family-member-a")
+    assert _member_terms(
+        {
+            "display_name": "Family Member A",
+            "internal_alias": "Family Member A",
+        }
+    ) == ("Family Member A",)
 
 
 @pytest.mark.parametrize(

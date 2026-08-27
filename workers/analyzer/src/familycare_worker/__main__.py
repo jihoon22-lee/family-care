@@ -16,10 +16,13 @@ from familycare_worker.ai.event_structurer import (
     EVENT_STRUCTURER_SCHEMA_NAME,
     event_structurer_schema,
 )
+from familycare_worker.ai.evidence_loader import PolicyEvidenceLoader
 from familycare_worker.ai.provider import (
     DEFAULT_STRUCTURER_MODEL,
+    DEFAULT_VERIFIER_MODEL,
     OpenAiResponsesAdapter,
 )
+from familycare_worker.ai.schemas import openai_schema_registry
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.event_jobs import EventStructuringJobQueue
@@ -40,8 +43,14 @@ from familycare_worker.jobs import JobQueue
 from familycare_worker.ocr.engine import TesseractOcrEngine
 from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
+from familycare_worker.policy_candidates import PolicyCandidatePublisher
+from familycare_worker.policy_jobs import PolicyStructuringJobQueue
 from familycare_worker.repository import BatchRepository, ExtractionRepository
-from familycare_worker.runner import AnalysisJobRunner, EventStructuringJobRunner
+from familycare_worker.runner import (
+    AnalysisJobRunner,
+    EventStructuringJobRunner,
+    PolicyStructuringJobRunner,
+)
 
 LOGGER = logging.getLogger("familycare.worker")
 
@@ -151,7 +160,12 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     database_url = os.getenv("FAMILYCARE_DATABASE_URL")
     if not database_url:
         return None
-    provider = OpenAiResponsesAdapter({EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema()})
+    provider = OpenAiResponsesAdapter(
+        {
+            EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema(),
+            **openai_schema_registry(),
+        }
+    )
     event_runner = EventStructuringJobRunner(
         queue=EventStructuringJobQueue(database_url),
         provider=provider,
@@ -219,8 +233,26 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         on_password_required=secret_server.activate,
         on_password_discarded=secret_server.deactivate,
     )
+    policy_runner = PolicyStructuringJobRunner(
+        queue=PolicyStructuringJobQueue(database_url),
+        evidence_loader=PolicyEvidenceLoader(database_url),
+        provider=provider,
+        publisher=PolicyCandidatePublisher(database_url),
+        structurer_model=os.getenv(
+            "FAMILYCARE_AI_STRUCTURER_MODEL",
+            DEFAULT_STRUCTURER_MODEL,
+        ),
+        verifier_model=os.getenv(
+            "FAMILYCARE_AI_VERIFIER_MODEL",
+            DEFAULT_VERIFIER_MODEL,
+        ),
+    )
     receiver.start()
-    combined = FairJobRunner(events=base_runner, documents=batch_runner)
+    combined = FairJobRunner(
+        events=base_runner,
+        documents=batch_runner,
+        imports=policy_runner,
+    )
     return ManagedPrivateRunner(combined, batch_runner, receiver, registry)
 
 

@@ -23,6 +23,7 @@ _ROW_KEYS = frozenset(
         "physical_page",
     }
 )
+_MEMBER_KEYS = frozenset({"display_name", "internal_alias"})
 
 
 class EvidenceLoadError(RuntimeError):
@@ -30,6 +31,26 @@ class EvidenceLoadError(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__("EVIDENCE_LOAD_ERROR")
+
+
+class EvidenceRepositoryUnavailable(EvidenceLoadError):
+    """Represent database unavailability without including connection details."""
+
+    def __init__(self) -> None:
+        RuntimeError.__init__(self, "EVIDENCE_REPOSITORY_UNAVAILABLE")
+
+
+def _member_terms(row: Mapping[str, object]) -> tuple[str, ...]:
+    if set(row) != _MEMBER_KEYS:
+        raise EvidenceLoadError
+    result: list[str] = []
+    for field_name in ("display_name", "internal_alias"):
+        value = row[field_name]
+        if not isinstance(value, str) or value != value.strip() or not 2 <= len(value) <= 160:
+            raise EvidenceLoadError
+        if value not in result:
+            result.append(value)
+    return tuple(result)
 
 
 def _normalize_text(value: object) -> str:
@@ -201,11 +222,44 @@ class PolicyEvidenceLoader:
                     (household_space_id, document_version_id, extraction_id),
                 ).fetchall()
         except psycopg.Error:
-            raise EvidenceLoadError from None
+            raise EvidenceRepositoryUnavailable from None
         return _to_slices(
             rows,
             expected_document_version_id=document_version_id,
         )
 
+    def load_member_terms(
+        self,
+        *,
+        household_space_id: UUID,
+        family_member_id: UUID,
+    ) -> tuple[str, ...]:
+        if any(
+            not isinstance(value, UUID) or value.int == 0
+            for value in (household_space_id, family_member_id)
+        ):
+            raise EvidenceLoadError
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                row = connection.execute(
+                    """
+                    SELECT display_name, internal_alias
+                    FROM family_members
+                    WHERE id = %s
+                      AND household_space_id = %s
+                      AND deleted_at IS NULL
+                    """,
+                    (family_member_id, household_space_id),
+                ).fetchone()
+        except psycopg.Error:
+            raise EvidenceRepositoryUnavailable from None
+        if row is None:
+            raise EvidenceLoadError
+        return _member_terms(row)
 
-__all__ = ["EvidenceLoadError", "PolicyEvidenceLoader"]
+
+__all__ = [
+    "EvidenceLoadError",
+    "EvidenceRepositoryUnavailable",
+    "PolicyEvidenceLoader",
+]

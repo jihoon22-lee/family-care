@@ -164,6 +164,12 @@ Successful private batch persistence creates one bbox-free `Evidence` row for ev
 
 For later candidate structuring, the Worker can resolve only those scoped page rows whose Evidence hash matches the same DocumentVersion and whose Extraction is successful. It reads at most 500 ordered rows and emits at most 64 non-empty in-memory slices of 240 characters each. An `OCR_REQUIRED` page prefers its successful OCR layer and falls back to native text only when OCR text is empty; `TEXT_SUFFICIENT` pages use native extraction. These slices are not stored in a new table and are not returned by batch APIs or logs.
 
+### Private policy structuring jobs
+
+`policy_structuring_jobs`는 성공한 private `policy` batch item 하나와 DocumentVersion, successful Extraction, 선택된 FamilyMember, HouseholdSpace를 연결하는 별도 leased queue다. import/archive 성공은 provider 결과와 분리되며 timeout·rate limit·일시 장애만 최대 5회 bounded backoff로 재시도한다. 인증·응답 검증·Evidence 부재 오류는 영구 실패가 된다. job에는 source path, document text, provider payload를 저장하지 않는다.
+
+각 job은 하나의 `policy_aggregate_id`를 미리 예약한다. Worker가 만든 contract와 rider `AnalysisCandidateVersion`은 `structuring_job_id`와 provider candidate ID를 저장하고 모두 이 aggregate ID를 공유한다. candidate fields와 candidate Evidence, job 성공 전이는 한 transaction으로 저장된다. 초기 private page Evidence가 `NEEDS_REVIEW`이면 AI가 승인한 후보도 review 후보로 낮추며 policy, party, rider projection은 사용자 확인 전 생성하지 않는다.
+
 ## Policy boundary
 
 ### PolicyContract

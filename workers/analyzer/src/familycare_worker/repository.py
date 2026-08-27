@@ -889,6 +889,7 @@ class ExtractionRepository:
 
 _BATCH_WORKER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "OCR_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
+_POLICY_STRUCTURING_PIPELINE_VERSION = "policy-candidate-batch-v2"
 
 
 def _lock_owned_batch_item(
@@ -900,6 +901,7 @@ def _lock_owned_batch_item(
         """
         SELECT item.*,
                batch.household_space_id AS batch_household_space_id,
+               batch.family_member_id AS batch_family_member_id,
                item.lease_expires_at > clock_timestamp() AS lease_valid
         FROM document_batch_items AS item
         JOIN document_batches AS batch ON batch.id = item.batch_id
@@ -1380,6 +1382,31 @@ class BatchRepository:
                     document_id,
                 ),
             )
+            if item["document_kind"] == "policy":
+                family_member_id = item["batch_family_member_id"]
+                if not isinstance(family_member_id, UUID):
+                    raise DocumentStateConflict
+                structuring_job = connection.execute(
+                    """
+                    INSERT INTO policy_structuring_jobs (
+                        household_space_id, batch_item_id, family_member_id,
+                        document_version_id, extraction_id, state,
+                        pipeline_version, available_at, max_attempts
+                    ) VALUES (%s, %s, %s, %s, %s, 'queued', %s,
+                              clock_timestamp(), 5)
+                    RETURNING id
+                    """,
+                    (
+                        household_space_id,
+                        item_id,
+                        family_member_id,
+                        archive.document_version_id,
+                        extraction_id,
+                        _POLICY_STRUCTURING_PIPELINE_VERSION,
+                    ),
+                ).fetchone()
+                if structuring_job is None:
+                    raise DocumentStateConflict
             connection.execute(
                 """
                 UPDATE document_batch_items

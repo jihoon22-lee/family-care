@@ -6,10 +6,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import openai
 import pytest
 from familycare_worker.ai.provider import (
     OpenAiResponsesAdapter,
     ProviderConfigurationError,
+    ProviderRateLimitError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
     ProviderValidationError,
 )
 
@@ -21,12 +25,14 @@ class _Response:
 
 
 class _Responses:
-    def __init__(self, response: _Response | None = None) -> None:
-        self.response = response or _Response()
+    def __init__(self, response: _Response | BaseException | None = None) -> None:
+        self.response = response if response is not None else _Response()
         self.requests: list[dict[str, object]] = []
 
     def create(self, **kwargs: object) -> _Response:
         self.requests.append(dict(kwargs))
+        if isinstance(self.response, BaseException):
+            raise self.response
         return self.response
 
 
@@ -111,6 +117,8 @@ def test_adapter_uses_strict_non_stored_responses_without_key_echo(
     assert len(responses.requests) == 1
     request = responses.requests[0]
     assert request["store"] is False
+    assert request["timeout"] == 120.0
+    assert request["max_output_tokens"] == 20_000
     assert request["text"] == {
         "format": {
             "type": "json_schema",
@@ -144,3 +152,39 @@ def test_adapter_drops_malformed_provider_output_and_exception_detail(
 
     assert repr(error.value) == "ProviderValidationError('VALIDATION_ERROR')"
     assert marker not in repr(error.value)
+
+
+@pytest.mark.parametrize(
+    ("openai_error_name", "expected_error"),
+    [
+        ("APITimeoutError", ProviderTimeoutError),
+        ("RateLimitError", ProviderRateLimitError),
+        ("APIConnectionError", ProviderUnavailableError),
+        ("InternalServerError", ProviderUnavailableError),
+    ],
+)
+def test_adapter_preserves_retry_reason_without_exception_detail(
+    monkeypatch: Any,
+    openai_error_name: str,
+    expected_error: type[BaseException],
+) -> None:
+    class SyntheticOpenAiError(Exception):
+        pass
+
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic-api-key-marker")
+    monkeypatch.setattr(openai, openai_error_name, SyntheticOpenAiError)
+    responses = _Responses(SyntheticOpenAiError("synthetic private detail"))
+    adapter = OpenAiResponsesAdapter(
+        {"synthetic_schema": _schema()},
+        client_factory=lambda _: _Client(responses),
+    )
+
+    with pytest.raises(expected_error) as raised:
+        adapter.complete(
+            model="gpt-5.6-luna",
+            schema_name="synthetic_schema",
+            system_instruction="Return the strict synthetic schema.",
+            input_payload={"evidence": []},
+        )
+
+    assert "synthetic private detail" not in str(raised.value)

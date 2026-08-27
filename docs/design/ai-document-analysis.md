@@ -86,7 +86,9 @@ AI_VERIFIED | NEEDS_REVIEW
 
 Private policy ingestion의 후보 입력 loader는 household, DocumentVersion, successful Extraction, content hash가 모두 일치하는 bbox-free page Evidence만 사용한다. 물리 페이지 순서가 모호하거나 중복되면 요청을 만들지 않는다. 각 페이지 text는 공백을 정규화한 뒤 240자로 제한하고 전체 입력은 64개 slice를 넘지 않는다. Native 품질이 `OCR_REQUIRED`인 페이지에만 성공한 OCR layer를 우선하며, OCR text가 없으면 native layer로 제한적으로 fallback한다. 이 loader는 DB·메모리 내부 경계일 뿐이며 provider 연결 전에는 선택된 가족 표시값과 형식으로 식별 가능한 불필요한 증권번호·연락처를 추가로 제거해야 한다.
 
-Provider-bound minimizer는 runtime에서 전달된 FamilyMember 표시값과 내부 별칭, label이 붙은 policy/contract identifier, email, phone 형식을 `[REDACTED]`로 대체한다. 날짜와 가입금액처럼 구조화에 필요한 숫자는 blanket digit masking으로 제거하지 않는다. 최소화 뒤에도 각 slice는 240자를 넘지 않으며 `EvidenceSlice`의 `repr`은 text를 포함하지 않는다. 이 minimizer와 v2 schema는 현재 합성 test boundary까지 구현되었고 실제 provider job wiring은 별도 leased queue와 함께 수행한다.
+Provider-bound minimizer는 runtime에서 전달된 FamilyMember 표시값과 내부 별칭, label이 붙은 policy/contract identifier, email, phone 형식을 `[REDACTED]`로 대체한다. 날짜와 가입금액처럼 구조화에 필요한 숫자는 blanket digit masking으로 제거하지 않는다. 최소화 뒤에도 각 slice는 240자를 넘지 않으며 `EvidenceSlice`의 `repr`은 text를 포함하지 않는다.
+
+성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 
 ## Coverage rule DSL
 

@@ -7,7 +7,7 @@ from copy import deepcopy
 from typing import Any
 
 from familycare_worker.ai.policy_pipeline import run_policy_batch_pipeline
-from familycare_worker.ai.provider import ProviderResponse
+from familycare_worker.ai.provider import ProviderResponse, RetryableProviderError
 from familycare_worker.ai.schemas import openai_schema_registry
 
 from workers.analyzer.tests.fixtures.policy_ai_responses import (
@@ -176,6 +176,23 @@ def test_batch_pipeline_rejects_duplicate_candidate_identity_before_verification
     assert result.classification == "VALIDATION_ERROR"
     assert result.candidates == ()
     assert len(provider.calls) == 1
+
+
+def test_batch_pipeline_stops_after_a_retryable_verifier_failure() -> None:
+    class RetryableVerifierProvider(BatchProvider):
+        def complete(self, **kwargs: Any) -> ProviderResponse:
+            if "verifier" in str(kwargs["schema_name"]):
+                self.calls.append((str(kwargs["schema_name"]), kwargs["input_payload"]))
+                raise RetryableProviderError
+            return super().complete(**kwargs)
+
+    provider = RetryableVerifierProvider(_candidate_batch())
+
+    result = _run(provider)
+
+    assert result.classification == "RETRYABLE_PROVIDER_ERROR"
+    assert result.candidates == ()
+    assert len(provider.calls) == 2
 
 
 def test_openai_registry_exposes_strict_bounded_batch_schema() -> None:

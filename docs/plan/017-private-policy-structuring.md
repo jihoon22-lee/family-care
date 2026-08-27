@@ -42,12 +42,12 @@
 
 ## Task 3: Retryable policy-candidate job
 
-1. Add a leased `policy_structuring_jobs` table keyed to one policy `document_version_id` and extraction.
-2. Enqueue it atomically only for successful `policy` imports.
-3. Extend the structurer schema to a bounded candidate batch; verify candidates independently and retain only request IDs, validated fields, issues, and bounded Evidence.
-4. Before provider submission, remove selected-member display values and format-detected policy numbers/contact details that are unnecessary for structuring; never log the source or redacted text.
-5. Add a Worker-side publisher/job repository that persists the same candidate tables consumed by the API review use cases.
-6. Wire the job runner and policy schemas into the existing Worker process. Provider configuration/retry errors change only the structuring job, never the completed document batch.
+- [x] Add a leased `policy_structuring_jobs` table keyed to one policy `document_version_id` and extraction.
+- [x] Enqueue it atomically only for successful `policy` imports.
+- [x] Extend the structurer schema to a bounded candidate batch; verify candidates independently and retain only request IDs, validated fields, issues, and bounded Evidence.
+- [x] Before provider submission, remove selected-member display values and format-detected policy numbers/contact details that are unnecessary for structuring; never log the source or redacted text.
+- [x] Add a Worker-side publisher/job repository that persists the same candidate tables consumed by the API review use cases.
+- [x] Wire the job runner and policy schemas into the existing Worker process. Provider configuration/retry errors change only the structuring job, never the completed document batch.
 
 ## Task 4: Human confirmation and family ledger projection
 
