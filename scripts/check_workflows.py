@@ -79,6 +79,8 @@ def validate_ci(content: str) -> list[str]:
         "frozen pnpm install": "pnpm install --frozen-lockfile",
         "frozen uv sync": "uv sync --frozen",
         "integration marker": "pytest -m integration",
+        "dedicated test database URL": "FAMILYCARE_TEST_DATABASE_URL:",
+        "destructive test opt-in": 'FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"',
         "build-only containers": "push: false",
     }
     for label, fragment in required_fragments.items():
@@ -190,6 +192,8 @@ def validate_release(content: str) -> list[str]:
         "release identity audit": "scripts/release_audit.py",
         "release Compose smoke": "scripts/release_compose_smoke.py",
         "published digest verification": "scripts/verify_release_images.py",
+        "dedicated test database URL": "FAMILYCARE_TEST_DATABASE_URL:",
+        "destructive test opt-in": 'FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"',
     }
     for label, fragment in required_fragments.items():
         if fragment not in content:

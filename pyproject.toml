@@ -15,6 +15,7 @@ members = ["apps/api", "workers/analyzer"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers --import-mode=importlib -m 'not integration'"
+pythonpath = ["."]
 testpaths = ["apps/api/tests", "workers/analyzer/tests", "scripts/tests"]
 markers = [
     "integration: requires a local synthetic service such as PostgreSQL",
