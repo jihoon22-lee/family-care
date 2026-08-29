@@ -16,6 +16,7 @@ from uuid import UUID
 import pytest
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.errors import ApiBoundaryError, install_error_handlers
+from familycare_api.identity.context import AuthContext
 from familycare_api.policies.candidate_models import (
     CandidateConfirmationRequest,
     CandidateCorrectionRequest,
@@ -26,7 +27,7 @@ from familycare_api.policies.candidate_router import (
     get_candidate_review_service,
     router,
 )
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -44,6 +45,7 @@ _TERMS_EVIDENCE_ID = UUID("00000000-0000-4000-8000-000000000502")
 _POLICY_DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000601")
 _TERMS_DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000602")
 _ACTOR_ID = UUID("00000000-0000-4000-8000-000000000701")
+_SESSION_ID = UUID("00000000-0000-4000-8000-000000000702")
 _UNKNOWN_ID = UUID("00000000-0000-4000-8000-000000000799")
 _MEMBER_A_ID = UUID("00000000-0000-4000-8000-000000000801")
 _MEMBER_B_ID = UUID("00000000-0000-4000-8000-000000000802")
@@ -181,8 +183,11 @@ class _FakeCandidateReviewService:
         self.list_member_ids: list[UUID | None] = []
         self.get_calls: list[tuple[HouseholdScope, UUID]] = []
         self.correction_targets: list[UUID] = []
+        self.correction_actor_ids: list[UUID | None] = []
         self.confirm_calls: list[tuple[HouseholdScope, UUID]] = []
+        self.confirm_actor_ids: list[UUID | None] = []
         self.reject_calls: list[tuple[HouseholdScope, UUID]] = []
+        self.reject_actor_ids: list[UUID | None] = []
         self.published_rider_ids: list[UUID] = []
         self.informational_confirmations: list[UUID] = []
 
@@ -243,9 +248,11 @@ class _FakeCandidateReviewService:
         request: CandidateCorrectionRequest,
         review_item_id: UUID | None = None,
         policy_id: UUID | None = None,
+        actor_id: UUID | None = None,
         **_: Any,
     ) -> PolicyReviewItem:
         self._scope(scope)
+        self.correction_actor_ids.append(actor_id)
         identifier = policy_id or review_item_id
         if identifier is None or scope != SCOPE_A:
             raise _ReviewItemNotFound
@@ -283,8 +290,10 @@ class _FakeCandidateReviewService:
         scope: HouseholdScope,
         review_item_id: UUID,
         request: CandidateConfirmationRequest,
+        actor_id: UUID | None = None,
         **_: Any,
     ) -> PolicyReviewItem:
+        self.confirm_actor_ids.append(actor_id)
         self.confirm_calls.append((scope, review_item_id))
         item = self._item(scope, review_item_id)
         if request.expected_version != item.expected_version:
@@ -306,8 +315,10 @@ class _FakeCandidateReviewService:
         scope: HouseholdScope,
         review_item_id: UUID,
         request: CandidateRejectionRequest,
+        actor_id: UUID | None = None,
         **_: Any,
     ) -> PolicyReviewItem:
+        self.reject_actor_ids.append(actor_id)
         self.reject_calls.append((scope, review_item_id))
         item = self._item(scope, review_item_id)
         if request.expected_version != item.expected_version:
@@ -331,8 +342,15 @@ def app(fake_service: _FakeCandidateReviewService) -> FastAPI:
     install_error_handlers(application)
     application.state.household_scope = SCOPE_A
 
-    def resolve_scope() -> HouseholdScope:
-        return application.state.household_scope
+    def resolve_scope(request: Request) -> HouseholdScope:
+        context = AuthContext(
+            user_id=_ACTOR_ID,
+            household_space_id=application.state.household_scope.household_space_id,
+            session_id=_SESSION_ID,
+            needs_reauthentication=False,
+        )
+        request.state.auth_context = context
+        return HouseholdScope(context.household_space_id)
 
     def provide_service(scope: ScopeDependency) -> _FakeCandidateReviewService:
         fake_service.seen_scopes.append(scope)
@@ -438,6 +456,7 @@ def test_patch_correction_uses_path_field_and_creates_child_version(
         == "Sample Rider Corrected"
     )
     assert fake_service.correction_targets == [_POLICY_ID]
+    assert fake_service.correction_actor_ids == [_ACTOR_ID]
     assert (
         fake_service.parent_versions[_PARENT_CANDIDATE_VERSION_ID].model_dump(mode="json") == parent
     )
@@ -461,6 +480,27 @@ def test_review_item_patch_targets_one_candidate_even_when_policy_is_shared(
     assert response.status_code == 200
     _assert_no_store(response)
     assert fake_service.correction_targets == [_REVIEW_ITEM_ID]
+    assert fake_service.correction_actor_ids == [_ACTOR_ID]
+
+
+def test_typed_review_item_patch_forwards_authenticated_actor(
+    client: TestClient,
+    fake_service: _FakeCandidateReviewService,
+) -> None:
+    response = client.patch(
+        f"/api/v1/review-items/{_REVIEW_ITEM_ID}/fields/rider_name",
+        json={
+            "expected_version": 1,
+            "field_id": "rider_name",
+            "value": "Sample Rider Corrected",
+            "evidence_id": str(_EVIDENCE_ID),
+        },
+    )
+
+    assert response.status_code == 200
+    _assert_no_store(response)
+    assert fake_service.correction_targets == [_REVIEW_ITEM_ID]
+    assert fake_service.correction_actor_ids == [_ACTOR_ID]
 
 
 def test_patch_rejects_field_path_body_mismatch_without_calling_service(
@@ -548,6 +588,7 @@ def test_confirm_and_reject_require_expected_version_and_are_no_store(
     _assert_no_store(confirmed)
     assert confirmed.json()["status"] == "USER_CONFIRMED"
     assert fake_service.published_rider_ids == [_POLICY_ID]
+    assert fake_service.confirm_actor_ids == [_ACTOR_ID]
 
     rejected = client.post(
         f"/api/v1/review-items/{_TERMS_REVIEW_ITEM_ID}/reject",
@@ -556,6 +597,7 @@ def test_confirm_and_reject_require_expected_version_and_are_no_store(
     assert rejected.status_code == 200
     _assert_no_store(rejected)
     assert rejected.json()["status"] == "rejected"
+    assert fake_service.reject_actor_ids == [_ACTOR_ID]
 
 
 def test_terms_only_rider_can_be_confirmed_informationally_but_never_published(

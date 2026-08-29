@@ -97,6 +97,31 @@ def _bbox_from_row(row: dict[str, Any]) -> tuple[float, float, float, float] | N
     return cast(tuple[float, float, float, float], tuple(float(value) for value in present))
 
 
+def _select_policy_evidence(
+    rows: Sequence[dict[str, Any]],
+    field_ids: Sequence[str],
+    *,
+    document_version_id: UUID | None = None,
+) -> dict[str, Any] | None:
+    """Choose the lowest-ID policy Evidence for the first supported field."""
+
+    for field_id in field_ids:
+        matches = [
+            row
+            for row in rows
+            if row.get("field_id") == field_id
+            and row.get("document_kind") == "policy"
+            and isinstance(row.get("evidence_id"), UUID)
+            and isinstance(row.get("document_version_id"), UUID)
+            and (
+                document_version_id is None or row.get("document_version_id") == document_version_id
+            )
+        ]
+        if matches:
+            return min(matches, key=lambda row: cast(UUID, row["evidence_id"]).int)
+    return None
+
+
 class CandidateRepository:
     """Store and publish candidates with a household predicate on every query."""
 
@@ -383,7 +408,7 @@ class CandidateRepository:
         scope: HouseholdScope,
         *,
         request: CandidateCorrectionRequest,
-        actor_id: UUID | None,
+        actor_id: UUID,
         review_item_id: UUID | None = None,
         policy_id: UUID | None = None,
     ) -> PolicyReviewItem:
@@ -507,7 +532,7 @@ class CandidateRepository:
         *,
         expected_version: int,
         status: str,
-        actor_id: UUID | None,
+        actor_id: UUID,
         rejection_reason: str | None = None,
     ) -> PolicyReviewItem:
         try:
@@ -605,7 +630,7 @@ class CandidateRepository:
         current: dict[str, Any],
         *,
         status: str,
-        actor_id: UUID | None,
+        actor_id: UUID,
         rejection_reason: str | None = None,
         copy_payload: bool = False,
     ) -> UUID:
@@ -896,19 +921,31 @@ class CandidateRepository:
             (candidate_version_id,),
         ).fetchall()
         values = {cast(str, row["field_id"]): row["value"] for row in field_rows}
-        evidence = connection.execute(
+        evidence_rows = connection.execute(
             """
-            SELECT ce.evidence_id, ce.document_version_id, document.document_kind
+            SELECT ce.field_id, ce.evidence_id, ce.document_version_id,
+                   document.document_kind
             FROM analysis_candidate_evidence AS ce
             JOIN document_versions AS dv ON dv.id = ce.document_version_id
             JOIN documents AS document ON document.id = dv.document_id
             WHERE ce.candidate_version_id = %s
             ORDER BY ce.field_id, ce.evidence_id
-            LIMIT 1
             """,
             (candidate_version_id,),
-        ).fetchone()
-        if evidence is None or evidence["document_kind"] != "policy":
+        ).fetchall()
+        if version["candidate_kind"] == "policy_contract":
+            source_evidence = _select_policy_evidence(
+                evidence_rows,
+                ("product_name", "insurer"),
+            )
+        elif version["candidate_kind"] == "rider":
+            source_evidence = _select_policy_evidence(
+                evidence_rows,
+                ("rider_name", "rider_key"),
+            )
+        else:
+            return False
+        if source_evidence is None:
             return False
         if private_context is not None:
             mismatch = connection.execute(
@@ -935,7 +972,7 @@ class CandidateRepository:
                 raise CandidateRepositoryUnavailable
             if (
                 private_context["policy_aggregate_id"] != version["aggregate_id"]
-                or private_context["document_version_id"] != evidence["document_version_id"]
+                or private_context["document_version_id"] != source_evidence["document_version_id"]
                 or mismatch["has_mismatched_document"]
             ):
                 return False
@@ -943,6 +980,11 @@ class CandidateRepository:
             insurer = values.get("insurer")
             product = values.get("product_name")
             policy_status = values.get("policy_status", "unknown")
+            policy_status_evidence = _select_policy_evidence(
+                evidence_rows,
+                ("policy_status",),
+                document_version_id=cast(UUID, source_evidence["document_version_id"]),
+            )
             if (
                 not isinstance(insurer, str)
                 or not insurer
@@ -952,6 +994,8 @@ class CandidateRepository:
                 or policy_status not in {"active", "inactive", "expired", "cancelled", "unknown"}
             ):
                 return False
+            if policy_status != "unknown" and policy_status_evidence is None:
+                policy_status = "unknown"
             contract_date = _as_date(values.get("contract_start"))
             coverage_end = _as_date(values.get("contract_end"))
             policy = connection.execute(
@@ -967,8 +1011,8 @@ class CandidateRepository:
                 (
                     version["aggregate_id"],
                     household_space_id,
-                    evidence["document_version_id"],
-                    evidence["evidence_id"],
+                    source_evidence["document_version_id"],
+                    source_evidence["evidence_id"],
                     insurer,
                     _normalized_key(insurer),
                     product,
@@ -977,7 +1021,11 @@ class CandidateRepository:
                     contract_date,
                     coverage_end,
                     policy_status,
-                    evidence["evidence_id"] if policy_status != "unknown" else None,
+                    (
+                        policy_status_evidence["evidence_id"]
+                        if policy_status != "unknown" and policy_status_evidence is not None
+                        else None
+                    ),
                 ),
             ).fetchone()
             if policy is None:
@@ -998,7 +1046,7 @@ class CandidateRepository:
                         private_context["family_member_id"],
                         contract_date,
                         coverage_end,
-                        evidence["evidence_id"],
+                        source_evidence["evidence_id"],
                     ),
                 ).fetchone()
                 if party is None:
@@ -1008,6 +1056,11 @@ class CandidateRepository:
             rider_key = values.get("rider_key")
             benefit_type = values.get("benefit_type")
             rider_status = values.get("rider_status", "unknown")
+            rider_status_evidence = _select_policy_evidence(
+                evidence_rows,
+                ("rider_status",),
+                document_version_id=cast(UUID, source_evidence["document_version_id"]),
+            )
             policy = connection.execute(
                 """
                 SELECT id, source_document_version_id FROM policy_contracts
@@ -1017,7 +1070,7 @@ class CandidateRepository:
             ).fetchone()
             if (
                 policy is None
-                or policy["source_document_version_id"] != evidence["document_version_id"]
+                or policy["source_document_version_id"] != source_evidence["document_version_id"]
                 or not isinstance(rider_name, str)
                 or not rider_name
                 or not isinstance(rider_key, str)
@@ -1026,6 +1079,8 @@ class CandidateRepository:
                 or rider_status not in {"active", "inactive", "expired", "cancelled", "unknown"}
             ):
                 return False
+            if rider_status != "unknown" and rider_status_evidence is None:
+                rider_status = "unknown"
             amount = values.get("sum_assured")
             if isinstance(amount, bool) or (
                 amount is not None and not isinstance(amount, int | float)
@@ -1049,7 +1104,7 @@ class CandidateRepository:
                 (
                     household_space_id,
                     policy["id"],
-                    evidence["evidence_id"],
+                    source_evidence["evidence_id"],
                     rider_name,
                     _normalized_key(rider_key),
                     benefit_type,
@@ -1059,7 +1114,11 @@ class CandidateRepository:
                     _as_date(values.get("coverage_end")),
                     values.get("renewable"),
                     rider_status,
-                    evidence["evidence_id"] if rider_status != "unknown" else None,
+                    (
+                        rider_status_evidence["evidence_id"]
+                        if rider_status != "unknown" and rider_status_evidence is not None
+                        else None
+                    ),
                 ),
             ).fetchone()
             if rider is None:

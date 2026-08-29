@@ -67,7 +67,7 @@ class CandidateReviewService:
         *,
         scope: HouseholdScope,
         request: CandidateCorrectionRequest,
-        actor_id: UUID | None,
+        actor_id: UUID,
         review_item_id: UUID | None = None,
         policy_id: UUID | None = None,
     ) -> PolicyReviewItem:
@@ -91,7 +91,7 @@ class CandidateReviewService:
         scope: HouseholdScope,
         review_item_id: UUID,
         request: CandidateConfirmationRequest,
-        actor_id: UUID | None,
+        actor_id: UUID,
     ) -> PolicyReviewItem:
         return self.repository.transition(
             scope,
@@ -107,7 +107,7 @@ class CandidateReviewService:
         scope: HouseholdScope,
         review_item_id: UUID,
         request: CandidateRejectionRequest,
-        actor_id: UUID | None,
+        actor_id: UUID,
     ) -> PolicyReviewItem:
         return self.repository.transition(
             scope,
