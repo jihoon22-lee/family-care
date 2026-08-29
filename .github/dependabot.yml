@@ -9,10 +9,13 @@ updates:
       time: "09:00"
       timezone: Asia/Seoul
     groups:
-      development-dependencies:
+      dev:
         dependency-type: development
     ignore:
       - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "@types/node"
         update-types:
           - "version-update:semver-major"
     commit-message:
@@ -27,7 +30,7 @@ updates:
       time: "09:15"
       timezone: Asia/Seoul
     groups:
-      development-dependencies:
+      dev:
         dependency-type: development
     commit-message:
       prefix: build

@@ -13,11 +13,16 @@ DEPENDABOT_PATH = ROOT / ".github/dependabot.yml"
 REQUIRED_CI_JOBS = {"containers", "integration", "python", "repository-safety", "web"}
 REQUIRED_DEPENDABOT_IGNORES = {
     ("npm", "/", "typescript"): frozenset({"version-update:semver-major"}),
+    ("npm", "/", "@types/node"): frozenset({"version-update:semver-major"}),
     ("docker", "/infra/containers", "node"): frozenset({"version-update:semver-major"}),
     ("docker", "/infra/compose", "postgres"): frozenset({"version-update:semver-major"}),
     ("docker", "/infra/containers", "python"): frozenset(
         {"version-update:semver-minor", "version-update:semver-major"}
     ),
+}
+REQUIRED_DEPENDABOT_GROUPS = {
+    ("npm", "/"): frozenset({"dev"}),
+    ("pip", "/"): frozenset({"dev"}),
 }
 EXPECTED_ACTIONS = {
     "actions/checkout": ("3d3c42e5aac5ba805825da76410c181273ba90b1", "v7.0.1"),
@@ -132,11 +137,38 @@ def _dependabot_ignored_update_types(
     return policies
 
 
+def _dependabot_group_names(content: str) -> dict[tuple[str, str], frozenset[str]]:
+    """Extract update group names without accepting broad YAML behavior."""
+
+    groups: dict[tuple[str, str], frozenset[str]] = {}
+    package_pattern = re.compile(
+        r"(?ms)^  - package-ecosystem:\s*(?P<ecosystem>[^\s#]+)\s*$\n"
+        r"(?P<body>.*?)(?=^  - package-ecosystem:|\Z)"
+    )
+    for package_match in package_pattern.finditer(content):
+        ecosystem = package_match.group("ecosystem")
+        package_body = package_match.group("body")
+        directory_match = re.search(r"(?m)^    directory:\s*([^\s#]+)\s*$", package_body)
+        directory = directory_match.group(1).strip("\"'") if directory_match else ""
+        groups_match = re.search(
+            r"(?ms)^    groups:\s*$\n(?P<body>.*?)(?=^    [a-z][a-z0-9-]*:\s*|\Z)",
+            package_body,
+        )
+        if groups_match is None:
+            groups[(ecosystem, directory)] = frozenset()
+            continue
+        groups[(ecosystem, directory)] = frozenset(
+            re.findall(r"(?m)^      ([a-z][a-z0-9-]*):\s*$", groups_match.group("body"))
+        )
+    return groups
+
+
 def validate_dependabot(content: str) -> list[str]:
     """Require the documented semver ceilings for risky dependency majors/minors."""
 
     relative = DEPENDABOT_PATH.relative_to(ROOT)
     policies = _dependabot_ignored_update_types(content)
+    groups = _dependabot_group_names(content)
     errors: list[str] = []
     for (ecosystem, directory, dependency), expected in REQUIRED_DEPENDABOT_IGNORES.items():
         actual = policies.get((ecosystem, directory, dependency))
@@ -146,6 +178,13 @@ def validate_dependabot(content: str) -> list[str]:
             errors.append(
                 f"{relative}: {ecosystem} dependency {dependency!r} in {directory} must ignore "
                 f"{expected_text}; found {actual_text}"
+            )
+    for (ecosystem, directory), expected in REQUIRED_DEPENDABOT_GROUPS.items():
+        actual = groups.get((ecosystem, directory), frozenset())
+        if actual != expected:
+            errors.append(
+                f"{relative}: {ecosystem} in {directory} must use only group 'dev' "
+                "to keep generated commit subjects within policy"
             )
     return errors
 
