@@ -257,7 +257,38 @@ TMPDIR=/tmp uv run python scripts/private_acceptance.py \
 docker compose --env-file .env.private -f infra/compose/compose.yaml down
 ```
 
-기본 종료는 named volume을 삭제하지 않습니다. 일관된 backup 단위는 PostgreSQL volume, encrypted archive volume, 그리고 동일한 master key recovery copy입니다. Worker work와 secret-socket volume은 임시 상태이므로 backup 대상이 아닙니다. restore는 원본과 동일한 key를 먼저 복구하고 DB와 archive를 한 세트로 검증한 뒤 서비스를 시작해야 합니다. 이 가이드는 `down --volumes`, archive 삭제, key rotation을 자동 명령으로 제공하지 않습니다.
+기본 종료는 named volume을 삭제하지 않습니다. 다른 세션이 stack을 사용 중이면 위 명령을 실행하지 않고 소유 세션이 끝날 때까지 기다립니다. 일관된 backup 단위는 PostgreSQL custom dump, quiesced encrypted archive snapshot, 그리고 별도로 보관한 동일 master-key recovery copy입니다. Worker work와 secret-socket volume은 임시 상태이므로 backup 대상이 아닙니다.
+
+`scripts/private_runtime_backup.py`는 live DB나 named volume에서 snapshot을 만들지 않습니다. 운영자가 쓰기를 중지하고 저장소 밖에 준비한 custom-format dump와 flat archive snapshot을 하나의 검증 가능한 set으로 묶는 두 번째 단계 도구입니다. 실제 `pg_dump`, volume snapshot/copy, `pg_restore`, 서비스 전환은 현재 자동화하지 않으며 별도 승인과 복구 runbook이 필요합니다.
+
+CLI path는 shell argv로 받지 않습니다. 다음 변수의 값은 출력하거나 문서·shell command에 직접 쓰지 말고 local operator 환경에서 설정합니다.
+
+| Operation | Required environment paths |
+|---|---|
+| `capture` | `FAMILYCARE_BACKUP_DATABASE_DUMP`, `FAMILYCARE_BACKUP_ARCHIVE_SNAPSHOT_ROOT`, `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`, `FAMILYCARE_BACKUP_DESTINATION` |
+| `verify` | `FAMILYCARE_BACKUP_ROOT`, `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE` |
+| `materialize` | `FAMILYCARE_BACKUP_ROOT`, `FAMILYCARE_ARCHIVE_MASTER_KEY_FILE`, `FAMILYCARE_RESTORE_INPUT_DESTINATION` |
+
+각 path는 absolute이고 저장소 밖이어야 합니다. input dump와 archive snapshot은 regular mode `0600` file과 mode `0700` directory여야 하고, output parent도 mode `0700`이어야 합니다. capture와 materialize destination은 존재하지 않아야 합니다. master-key recovery copy 자체를 backup destination 안에 두지 않습니다.
+
+```bash
+TMPDIR=/tmp uv run python scripts/private_runtime_backup.py capture
+TMPDIR=/tmp uv run python scripts/private_runtime_backup.py verify
+TMPDIR=/tmp uv run python scripts/private_runtime_backup.py materialize
+```
+
+`capture` 성공 set은 mode-`0700` directory 안의 `database.pgcustom`, `archive.tar`, `manifest.json` 세 mode-`0600` file입니다. manifest에는 path와 object key가 없고 artifact hash·size·count·key version 및 key-derived HMAC만 있습니다. `verify`는 같은 recovery key와 artifact integrity를 확인합니다. `materialize`는 fresh destination에 DB dump와 archive input을 다시 만들 뿐 PostgreSQL을 복원하거나 app을 시작하지 않습니다. 출력은 고정 상태/error code뿐이며 실제 path를 출력하지 않습니다.
+
+Worker image의 `familycare-archive-audit`는 DB row와 encrypted archive file metadata를 read-only로 비교합니다. 실제 runtime에서 authoritative audit를 하려면 먼저 archive writer를 quiesce하고 DB는 read-only query가 가능한 상태로 유지해야 합니다. 현재 import·구조화·OCR 작업이 진행 중이거나 다른 세션이 Worker를 소유하면 실행하지 않습니다.
+
+```bash
+docker compose --env-file .env.private -f infra/compose/compose.yaml \
+  run --rm --no-deps worker familycare-archive-audit
+```
+
+audit JSON은 reference/object/match/missing/size-mismatch/unreferenced/temporary/unexpected count와 상태만 포함합니다. exit `0`은 clean, `1`은 findings, `2`는 configuration/database/filesystem error입니다. object key·path·ciphertext를 출력하거나 파일을 열어 복호화하지 않으며 삭제·격리 기능이 없습니다. findings가 있어도 임의 cleanup하지 말고 별도 보존 정책과 정확한 대상 승인 전까지 그대로 둡니다.
+
+restore는 원본과 동일한 key를 별도 recovery 저장소에서 먼저 복구하고 DB와 archive를 한 세트로 검증한 뒤에만 수행합니다. 이 가이드는 `down --volumes`, archive 삭제, key rotation, live snapshot 취득, 실제 `pg_restore`를 자동 명령으로 제공하지 않습니다. 이번 구현에서는 실제 private root, live DB/volume, 실제 backup/restore/audit을 실행하지 않았습니다.
 
 ### Local authentication
 

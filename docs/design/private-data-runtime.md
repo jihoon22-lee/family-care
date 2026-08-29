@@ -1,6 +1,6 @@
 # Private data and local runtime design
 
-- 상태: encrypted import·selective OCR·private import reliability는 `main` 병합, private Compose 정책·합성 permission smoke 구현, PR·실제 환경 acceptance 대기
+- 상태: encrypted import·selective OCR·private runtime은 구현·병합, offline backup-set packaging과 read-only archive audit 구현, 실제 snapshot/restore drill·자료 acceptance 일부 대기
 - 적용 단계: 암호 PDF batch, selective OCR, Phase 8 private-data acceptance
 - 실행 위치: 개인 PC의 WSL Docker Compose
 
@@ -57,7 +57,7 @@ API UID `10001`과 Worker UID `10002`는 supplementary GID `10003`을 공유하�
 9. archive를 쓰기 직전에 stop 상태와 item lease heartbeat를 확인하고, durable archive write 직후에도 다시 확인한다. 후자의 확인이 실패하면 DB metadata가 아직 archive를 참조하지 않으므로 새 ciphertext를 definite orphan으로 삭제한다.
 10. `mark_succeeded()` outcome이 불명확해진 뒤에는 ciphertext를 보존하고 password scope를 폐기한다. `batch_archive_commit_uncertain` 안정 이벤트만 남기며 archive object key나 private content를 로그에 기록하지 않는다.
 
-Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만큼 증가한다. 원본·DB·archive backup과 복구는 v0.1 운영 가이드에서 명령 단위로 분리한다.
+Archive는 고정 크기 volume을 미리 할당하지 않고 실제 문서만큼 증가한다. 일관된 backup 단위는 PostgreSQL custom dump, quiesced encrypted archive snapshot, 별도 보관한 동일 master-key recovery copy다. snapshot 생성과 실제 복구는 packaging·검증·materialization과 분리한다.
 
 ### Private PDF capacity
 
@@ -80,7 +80,9 @@ Archive write와 DB success transition 사이의 실패는 두 종류로 나눈�
 - DB persistence가 시작되기 전에 stop 또는 owned heartbeat가 실패하면 새 object는 definite orphan이다. Worker는 object key를 다시 구성해 정확히 그 ciphertext만 삭제하고, 원본 import source와 Google Drive 파일은 건드리지 않는다.
 - `mark_succeeded()`가 시작된 뒤 예외가 발생하면 DB가 이미 commit되었는지 알 수 없다. 이 경우 ciphertext를 삭제하면 committed `managed_archives` row가 가리키는 object를 잃을 수 있으므로 보존하고, password를 폐기한 뒤 `batch_archive_commit_uncertain`만 기록한다.
 
-보존된 encrypted orphan을 DB row와 archive metadata로 대조하고 보존·격리·삭제하는 reconciler와 운영 UI는 아직 구현하지 않았다. 이는 향후 repository/archive reconciler 작업의 책임이며, 현재 구현이 임의 삭제나 실제 자료 정리를 수행했다는 뜻이 아니다.
+`familycare-archive-audit`는 모든 `managed_archives` row의 object key·ciphertext size와 Worker archive root의 mode-`0600` regular object를 대조한다. DB 연결은 startup option과 transaction 양쪽에서 read-only이고 repeatable-read이며, filesystem은 `nofollow` metadata만 읽는다. 결과는 database reference, archive object, match, missing, size mismatch, unreferenced, temporary, unexpected 개수와 `clean`/`findings` 상태뿐이다. object key, path, ciphertext, 문서 metadata는 출력하지 않는다.
+
+이 audit는 exit `0` clean, `1` findings, `2` configuration/database/filesystem error를 사용한다. 어떤 결과도 자동 삭제·격리·보존 정책 실행 권한을 주지 않으며 audit 자체에는 삭제 API가 없다. Worker 쓰기가 진행 중이면 temporary entry 또는 snapshot race가 관찰될 수 있으므로 authoritative report는 archive writer를 quiesce한 뒤에만 만든다. 실제 archive에 대한 audit 실행, findings별 object 식별·승인, 격리·삭제와 운영 UI는 별도 운영 작업으로 남는다.
 
 ## Archive key
 
@@ -90,6 +92,18 @@ Archive write와 DB success transition 사이의 실패는 두 종류로 나눈�
 - 사용자가 별도로 보관하는 recovery copy는 앱이 직접 읽거나 동기화하지 않으며 Git·DB·container image에 들어가지 않는다.
 - master key가 없으면 archive를 새로 생성하거나 읽지 않고 fail closed한다.
 - key rotation은 old/new key를 동시에 검증하고 wrapped data key만 교체한 뒤 완료하는 별도 관리 작업이다.
+
+## Offline backup-set boundary
+
+`scripts/private_runtime_backup.py`는 live PostgreSQL이나 Compose volume을 직접 snapshot하지 않는다. 운영자가 writer를 quiesce하고 저장소 밖에 미리 만든 PostgreSQL custom-format dump와 flat encrypted archive snapshot만 입력으로 받는다. 실제 named-volume 취득, `pg_dump`, `pg_restore`, 서비스 전환은 이 도구 밖의 별도 승인 절차다.
+
+- `capture`는 absolute external input과 새 mode-`0700` destination만 허용한다. DB artifact는 `PGDMP` custom-format magic과 mode `0600`, archive root는 mode `0700`, object는 32자리 opaque key·mode `0600`·128 MiB 이하 regular file이어야 한다. 임시·예상 밖 entry, symlink, repository/overlap path, 기존 destination은 fail closed한다.
+- backup set은 mode-`0600` `database.pgcustom`, `archive.tar`, `manifest.json` 세 파일만 가진다. manifest는 artifact SHA-256·size·object count와 non-secret key version만 포함하고 object key·path는 포함하지 않는다. master key에서 domain-separated HMAC key를 파생해 manifest를 인증하지만 master-key bytes나 recovery copy를 set 안에 복사하지 않는다.
+- `verify`는 directory/file mode와 exact shape, manifest HMAC, dump magic, artifact hash·size, bounded flat tar member를 다시 확인한다. 다른 recovery key, 변조, replacement race는 안정적인 error code로 거부한다.
+- `materialize`는 검증한 DB dump와 archive objects를 저장소 밖의 완전히 새 destination에만 복사한다. 기존 경로를 덮어쓰지 않고 DB를 생성·복원하지 않으며 application service를 시작하지 않는다.
+- CLI는 path를 argv로 받지 않는다. local operator가 환경에서 지정한 path만 읽고 `BACKUP_CAPTURED`, `BACKUP_VERIFIED`, `RESTORE_INPUTS_MATERIALIZED` 또는 path-free error code만 출력한다.
+
+합성 custom-dump bytes와 실제 archive 암호화 구현으로 capture→verify→materialize→decrypt round trip을 검증했다. 이는 실제 PostgreSQL semantic restore, named-volume snapshot consistency, recovery time, 실제 자료 복호화 성공을 검증한 것이 아니다.
 
 ## Selective local OCR (merged; private acceptance pending)
 
@@ -149,6 +163,8 @@ v0.1에 포함하지 않음:
 - key file 부재·권한 오류·잘못된 key는 일반 문서 오류와 분리한다.
 - Docker restart 후 running job은 lease로 회수하고 같은 content/config의 성공 결과를 재사용한다.
 - import source와 원본 Google Drive 파일은 어떤 성공·실패·취소 경로에서도 수정·삭제하지 않는다.
+- backup capture/materialize 실패는 해당 호출이 새로 만든 destination만 정리하고 기존 source, backup set, DB, archive root, key를 수정하지 않는다.
+- archive audit finding은 count-only report로 끝나며 자동 삭제·격리·재시도하지 않는다.
 
 ## Tests
 
@@ -170,6 +186,10 @@ v0.1에 포함하지 않음:
 - restart 후 DB·archive 읽기와 running job recovery
 - service-worker/browser storage와 log leakage 검사
 - 실제 자료 acceptance 전후 Git safety scan
+- 합성 PostgreSQL custom dump와 encrypted archive의 authenticated backup capture·verify·fresh materialization·decrypt round trip
+- backup tamper, wrong key, repository/overlap path, symlink, incomplete archive, existing destination, post-verification replacement 거부
+- read-only archive audit의 clean/missing/size-mismatch/unreferenced/temporary/unexpected aggregate와 object key·path 비출력
+- database audit connection의 startup/transaction read-only 강제와 audit 전후 archive entry byte identity
 
 ## Invariants
 
@@ -181,3 +201,5 @@ v0.1에 포함하지 않음:
 6. native extraction과 OCR provenance는 각각 queryable한 별도 layer이고 OCR이 native block을 덮어쓰지 않는다.
 7. Tailscale과 app login 중 하나를 다른 하나의 대체물로 취급하지 않는다.
 8. 호스트 암호화와 swap 변경은 v0.1 완료 조건이 아니다.
+9. backup set은 DB dump와 encrypted archive snapshot만 담고 master-key recovery copy는 별도 보관한다.
+10. audit finding은 삭제 지시가 아니며 actual archive mutation에는 별도 식별·보존 정책·명시적 승인이 필요하다.

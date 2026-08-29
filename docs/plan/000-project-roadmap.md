@@ -27,7 +27,7 @@
 | Phase 5 — Event and Result PWA | Complete in synthetic boundary | Hybrid input, action-first results and bounded Evidence disclosure are implemented. |
 | Phase 6 — Claim Workflow | Complete in synthetic boundary | Checklist, manual submission state and outcome history are implemented. |
 | Phase 7 — Local Authentication | Complete in local boundary | Two equal local admins, server-side sessions, CSRF and private HTTPS login flow are implemented. |
-| Phase 8 — Private Local Acceptance | Implemented; device/data checks remain | Encrypted batch import, managed archive, selective OCR and WSL/Tailscale runtime are implemented; actual documents, Windows/mobile and other-device checks remain unverified. |
+| Phase 8 — Private Local Acceptance | Implemented; device/data/recovery checks remain | Encrypted batch import, managed archive, selective OCR, WSL/Tailscale runtime, offline backup-set packaging and count-only archive audit are implemented; actual restore drill, actual documents, Windows/mobile and other-device checks remain unverified. |
 | v0.1.0 — Container release | Complete | Release workflow run `32951939190`; Web/API/Worker images and GitHub Release published on 2026-08-26. |
 | v0.2.0 — Container release | Complete | Release workflow run `33090324105`; Web/API/Worker images and GitHub Release published on 2026-08-27. |
 
@@ -246,6 +246,8 @@ Import actual user-selected PDFs safely enough for personal use and verify the f
 - Tailscale private device access and local app login
 - actual-data acceptance using only user-specified external paths
 - log, temp, browser storage and Git leakage inspection
+- authenticated packaging and verification of pre-created DB/archive backup snapshots
+- read-only aggregate reconciliation of managed archive references and ciphertext metadata
 
 ### Explicit exclusions
 
@@ -264,6 +266,8 @@ Import actual user-selected PDFs safely enough for personal use and verify the f
 - actual document findings are recorded only as sanitized error categories and new synthetic regressions
 - existing projects, containers, ports and WSL configuration are not modified
 - unavailable mobile/document formats remain explicitly unverified
+- synthetic backup capture/verify/materialize/decrypt round trip passes without copying the master key
+- archive audit remains count-only and deletion-free; actual backup acquisition, restore and cleanup require separate approval
 
 ## Independently reviewable PR sequence
 
@@ -309,5 +313,5 @@ The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0
 - medical document management
 - broader proportional indemnity allocation automation
 - multi-household identity and invitations
-- public/Cloud Run deployment, backups and disaster recovery
+- public/Cloud Run deployment, live snapshot automation and disaster-recovery drills
 - host disk and swap encryption changes

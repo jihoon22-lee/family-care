@@ -83,6 +83,52 @@ def test_current_dependabot_satisfies_update_policy() -> None:
     assert validate_dependabot(current_dependabot()) == []
 
 
+def test_dependabot_policy_keeps_node_types_on_the_runtime_major() -> None:
+    content = current_dependabot()
+    marker = '      - dependency-name: "@types/node"'
+
+    assert marker in content
+
+    start = content.index(marker)
+    end = content.find("      - dependency-name:", start + len(marker))
+    if end == -1:
+        end = content.find("    commit-message:", start)
+    policy = content[start:end]
+    modified = (
+        content[:start]
+        + policy.replace("version-update:semver-major", "semver-major")
+        + content[end:]
+    )
+
+    errors = validate_dependabot(modified)
+    assert any(
+        "@types/node" in error and "version-update:semver-major" in error for error in errors
+    )
+
+
+@pytest.mark.parametrize("ecosystem", ["npm", "pip"])
+def test_dependabot_dev_group_keeps_generated_commit_subjects_short(
+    ecosystem: str,
+) -> None:
+    content = current_dependabot()
+    marker = f"  - package-ecosystem: {ecosystem}"
+    start = content.index(marker)
+    end = content.find("  - package-ecosystem:", start + len(marker))
+    if end == -1:
+        end = len(content)
+    package_policy = content[start:end]
+
+    assert "\n      dev:\n" in package_policy
+
+    modified_policy = package_policy.replace(
+        "\n      dev:\n", "\n      development-dependencies:\n"
+    )
+    modified = content[:start] + modified_policy + content[end:]
+    errors = validate_dependabot(modified)
+
+    assert any(ecosystem in error and "group 'dev'" in error for error in errors)
+
+
 @pytest.mark.parametrize(
     ("dependency", "expected_update_type"),
     [
