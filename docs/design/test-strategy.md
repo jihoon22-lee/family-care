@@ -97,7 +97,10 @@ TMPDIR=/tmp uv run pytest -m integration apps/api/tests workers/analyzer/tests -
 - Dockerfile build context
 - `.env`와 Git metadata 미포함
 - Web static cache header
+- Dockerfile의 정확한 stage 수·순서와 완전한 patch 태그: Node 24 Alpine, Python 3.14 slim, uv 0.12
 - Web runtime image pin `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`과 `scripts/check_containers.py` exact expectation
+
+`scripts/check_containers.py`는 Dockerfile을 image version의 단일 source of truth로 사용한다. 승인된 지원 계열 안의 Dependabot patch/minor 갱신은 별도 상수 수정 없이 허용하지만, `latest`, `node:24-alpine`, uv 0.13, Node 25, Python 3.15, stage 추가·누락·순서 변경은 명시적인 정책 변경 없이는 거부한다. 실제 PR CI는 이 정적 검사와 별도로 Web, API, Worker 이미지를 각각 build-only로 검증한다.
 
 ### Browser and PWA tests
 

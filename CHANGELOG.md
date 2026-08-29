@@ -14,6 +14,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - PostgreSQL integration tests now require a dedicated `FAMILYCARE_TEST_DATABASE_URL`, an exact destructive-test opt-in, and a connected database name containing a standalone `test` or `ci` marker before collection can proceed.
 - Suggested ready document sources without a component ID now require an explicit role and bounded page-range confirmation before a `USER_CONFIRMED` component is created.
 - Dependabot keeps `@types/node` on the Node 24 runtime major, uses a short `dev` group name that satisfies commit-subject policy, and applies the compatible `@types/react-dom` patch update.
+- Container builders now use Node `24.20.0-alpine` and uv `0.12.7`; Web development uses ESLint `10.9.1` and typescript-eslint `8.68.0` with the regenerated lockfile.
+- Container policy checks now validate ordered stages and fully specified tags within the approved Node 24, Python 3.14, and uv 0.12 lines instead of duplicating each patch value, while the nginx runtime remains fixed to its exact approved tag.
 
 ### Fixed
 
