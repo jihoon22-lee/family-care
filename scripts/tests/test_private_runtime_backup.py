@@ -279,6 +279,67 @@ def test_materialize_rechecks_the_archive_opened_after_verification(
     assert not destination.exists()
 
 
+def test_cli_uses_environment_paths_and_prints_only_fixed_status(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
+    backup_root = tmp_path / "synthetic-backup"
+    restore_root = tmp_path / "synthetic-restore-inputs"
+    shared = {"FAMILYCARE_ARCHIVE_MASTER_KEY_FILE": str(key_file)}
+
+    assert (
+        backup.main(
+            ["capture"],
+            environ={
+                **shared,
+                "FAMILYCARE_BACKUP_ARCHIVE_SNAPSHOT_ROOT": str(archive_root),
+                "FAMILYCARE_BACKUP_DATABASE_DUMP": str(database_dump),
+                "FAMILYCARE_BACKUP_DESTINATION": str(backup_root),
+            },
+        )
+        == 0
+    )
+    assert capsys.readouterr().out == "BACKUP_CAPTURED\n"
+
+    assert (
+        backup.main(
+            ["verify"],
+            environ={**shared, "FAMILYCARE_BACKUP_ROOT": str(backup_root)},
+        )
+        == 0
+    )
+    assert capsys.readouterr().out == "BACKUP_VERIFIED\n"
+
+    assert (
+        backup.main(
+            ["materialize"],
+            environ={
+                **shared,
+                "FAMILYCARE_BACKUP_ROOT": str(backup_root),
+                "FAMILYCARE_RESTORE_INPUT_DESTINATION": str(restore_root),
+            },
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "RESTORE_INPUTS_MATERIALIZED\n"
+    assert captured.err == ""
+    rendered = captured.out + captured.err
+    assert all(value not in rendered for value in shared.values())
+    assert all(str(path) not in rendered for path in (database_dump, archive_root, backup_root))
+
+
+def test_cli_sanitizes_missing_environment_configuration(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert backup.main(["capture"], environ={}) == 1
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "BACKUP_CONFIGURATION_ERROR\n"
+
+
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks are unavailable")
 def test_capture_rejects_symlinked_archive_objects(tmp_path: Path) -> None:
     database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)

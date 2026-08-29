@@ -19,7 +19,7 @@ import shutil
 import stat
 import sys
 import tarfile
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -954,50 +954,66 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="operation", required=True)
 
-    capture = subparsers.add_parser("capture", help="bundle already-quiesced backup inputs")
-    capture.add_argument("--database-dump", type=Path, required=True)
-    capture.add_argument("--archive-root", type=Path, required=True)
-    capture.add_argument("--master-key-file", type=Path, required=True)
-    capture.add_argument("--destination", type=Path, required=True)
-
-    verify = subparsers.add_parser("verify", help="verify one backup set")
-    verify.add_argument("--backup-root", type=Path, required=True)
-    verify.add_argument("--master-key-file", type=Path, required=True)
-
-    materialize = subparsers.add_parser(
+    subparsers.add_parser("capture", help="bundle already-quiesced backup inputs")
+    subparsers.add_parser("verify", help="verify one backup set")
+    subparsers.add_parser(
         "materialize",
         help="prepare fresh inputs for a separately approved restore",
     )
-    materialize.add_argument("--backup-root", type=Path, required=True)
-    materialize.add_argument("--master-key-file", type=Path, required=True)
-    materialize.add_argument("--destination", type=Path, required=True)
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def _environment_path(environ: Mapping[str, str], name: str) -> Path:
+    value = environ.get(name)
+    if not value:
+        _raise("BACKUP_CONFIGURATION_ERROR")
+    return Path(value)
+
+
+def main(
+    argv: Sequence[str] | None = None,
+    *,
+    environ: Mapping[str, str] | None = None,
+) -> int:
     """Run the offline operator interface with path-free status output."""
 
     arguments = _parser().parse_args(argv)
+    values = os.environ if environ is None else environ
     try:
         if arguments.operation == "capture":
             capture_backup_set(
-                database_dump=arguments.database_dump,
-                archive_root=arguments.archive_root,
-                master_key_file=arguments.master_key_file,
-                destination=arguments.destination,
+                database_dump=_environment_path(values, "FAMILYCARE_BACKUP_DATABASE_DUMP"),
+                archive_root=_environment_path(
+                    values,
+                    "FAMILYCARE_BACKUP_ARCHIVE_SNAPSHOT_ROOT",
+                ),
+                master_key_file=_environment_path(
+                    values,
+                    "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+                ),
+                destination=_environment_path(values, "FAMILYCARE_BACKUP_DESTINATION"),
             )
             print("BACKUP_CAPTURED")
         elif arguments.operation == "verify":
             verify_backup_set(
-                arguments.backup_root,
-                master_key_file=arguments.master_key_file,
+                _environment_path(values, "FAMILYCARE_BACKUP_ROOT"),
+                master_key_file=_environment_path(
+                    values,
+                    "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+                ),
             )
             print("BACKUP_VERIFIED")
         else:
             materialize_restore_inputs(
-                backup_root=arguments.backup_root,
-                master_key_file=arguments.master_key_file,
-                destination=arguments.destination,
+                backup_root=_environment_path(values, "FAMILYCARE_BACKUP_ROOT"),
+                master_key_file=_environment_path(
+                    values,
+                    "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+                ),
+                destination=_environment_path(
+                    values,
+                    "FAMILYCARE_RESTORE_INPUT_DESTINATION",
+                ),
             )
             print("RESTORE_INPUTS_MATERIALIZED")
     except BackupContractError as error:
