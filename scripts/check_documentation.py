@@ -22,15 +22,16 @@ RELEASE_EVIDENCE_HEADINGS = (
 )
 IMAGE_ROW_PATTERN = re.compile(
     r"(?m)^\|\s*(?P<label>Web|API|Worker)\s*\|\s*"
-    r"`ghcr\.io/<repository>-(?P<component>web|api|worker):0\.1\.0`\s*\|\s*"
-    r"`PENDING`\s*\|\s*"
-    r"`ghcr\.io/<repository>-(?P=component):sha-<12 lowercase hexadecimal characters>`\s*\|\s*"
-    r"`PENDING`\s*\|\s*$"
+    r"`ghcr\.io/(?P<repository>[a-z0-9][a-z0-9._/-]*)-(?P<component>web|api|worker):0\.1\.0`\s*\|\s*"
+    r"`(?P<version_digest>sha256:[0-9a-f]{64})`\s*\|\s*"
+    r"`ghcr\.io/(?P=repository)-(?P=component):sha-(?P<commit_prefix>[0-9a-f]{12})`\s*\|\s*"
+    r"`(?P<commit_digest>sha256:[0-9a-f]{64})`\s*\|\s*$"
 )
 DIGEST_FORMAT = "sha256:<64 lowercase hexadecimal characters>"
-REQUIRED_PENDING_FIELDS = frozenset(
+REQUIRED_RECORDED_FIELDS = frozenset(
     {
         "tag-workflow-run",
+        "tag-head-sha",
         "web-version-digest",
         "web-commit-digest",
         "api-version-digest",
@@ -38,6 +39,16 @@ REQUIRED_PENDING_FIELDS = frozenset(
         "worker-version-digest",
         "worker-commit-digest",
     }
+)
+WORKFLOW_RUN_PATTERN = re.compile(
+    r"(?m)^- `tag-workflow-run`: \[(?P<run_id>[0-9]+)\]"
+    r"\(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/actions/runs/(?P=run_id)\), `success`$"
+)
+HEAD_SHA_PATTERN = re.compile(r"(?m)^- `tag-head-sha`: `(?P<sha>[0-9a-f]{40})`$")
+GITHUB_RELEASE_PATTERN = re.compile(
+    r"(?m)^- GitHub Release metadata: \[`v0\.1\.0`\]"
+    r"\(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/releases/tag/v0\.1\.0\), "
+    r"published [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
 )
 PRIVATE_EVIDENCE_PATTERNS = (
     ("absolute-path", re.compile(r"(?i)(?:/mnt/|/home/|/tmp/|[A-Za-z]:\\|\\\\wsl\$)")),
@@ -49,11 +60,12 @@ PRIVATE_EVIDENCE_PATTERNS = (
 
 @dataclass(frozen=True)
 class ReleaseEvidence:
-    """Strict, non-sensitive shape of the pre-tag release evidence document."""
+    """Strict, non-sensitive shape of the completed release evidence document."""
 
     image_components: tuple[str, ...]
+    image_digest_pairs: tuple[tuple[str, str], ...]
     digest_format: str
-    pending_fields: frozenset[str]
+    recorded_fields: frozenset[str]
     statuses: frozenset[str]
     no_latest_tag: bool
     no_cloud_run: bool
@@ -168,7 +180,7 @@ def validate_document(path: Path, headings: tuple[str, ...]) -> list[str]:
 
 
 def parse_release_evidence(path: Path) -> ReleaseEvidence:
-    """Parse the pre-tag evidence shape without accepting private values or fake results."""
+    """Parse completed release evidence without accepting private values or fake results."""
 
     if not path.is_file():
         raise ValueError("evidence document is missing")
@@ -184,15 +196,56 @@ def parse_release_evidence(path: Path) -> ReleaseEvidence:
     image_labels = tuple(match.group("label").lower() for match in image_matches)
     if image_components != ("web", "api", "worker") or image_labels != image_components:
         raise ValueError("evidence image slots must be Web, API, Worker in order")
+    image_repositories = tuple(match.group("repository") for match in image_matches)
+    if len(set(image_repositories)) != 1:
+        raise ValueError("evidence image slots must share one repository prefix")
+    image_digest_pairs = tuple(
+        (match.group("version_digest"), match.group("commit_digest")) for match in image_matches
+    )
+    if any(version != commit for version, commit in image_digest_pairs):
+        raise ValueError("each version and commit image reference must share one digest")
+    commit_prefixes = tuple(match.group("commit_prefix") for match in image_matches)
+    if len(set(commit_prefixes)) != 1:
+        raise ValueError("evidence image slots must share one commit prefix")
 
     if f"`{DIGEST_FORMAT}`" not in text:
         raise ValueError("evidence must state the OCI digest format")
-    pending_fields = frozenset(
-        field for field in REQUIRED_PENDING_FIELDS if f"`{field}`: `PENDING`" in text
+    workflow_run_match = WORKFLOW_RUN_PATTERN.search(text)
+    head_sha_match = HEAD_SHA_PATTERN.search(text)
+    if workflow_run_match is None or head_sha_match is None:
+        raise ValueError("evidence must record a successful tag workflow and full head SHA")
+    if not head_sha_match.group("sha").startswith(commit_prefixes[0]):
+        raise ValueError("image commit tags must match the recorded head SHA")
+
+    recorded_digest_values: dict[str, str] = {}
+    for component, (version_digest, commit_digest) in zip(
+        image_components, image_digest_pairs, strict=True
+    ):
+        for suffix, expected in (
+            ("version-digest", version_digest),
+            ("commit-digest", commit_digest),
+        ):
+            field = f"{component}-{suffix}"
+            match = re.search(
+                rf"(?m)^- `{re.escape(field)}`: `(?P<digest>sha256:[0-9a-f]{{64}})`$",
+                text,
+            )
+            if match is None or match.group("digest") != expected:
+                raise ValueError(f"evidence must record the table digest for {field}")
+            recorded_digest_values[field] = match.group("digest")
+
+    recorded_fields = frozenset(
+        {
+            "tag-workflow-run",
+            "tag-head-sha",
+            *recorded_digest_values,
+        }
     )
-    if pending_fields != REQUIRED_PENDING_FIELDS:
-        missing = ", ".join(sorted(REQUIRED_PENDING_FIELDS - pending_fields))
-        raise ValueError(f"evidence must keep future fields pending: {missing}")
+    if recorded_fields != REQUIRED_RECORDED_FIELDS:
+        missing = ", ".join(sorted(REQUIRED_RECORDED_FIELDS - recorded_fields))
+        raise ValueError(f"evidence must contain completed release fields: {missing}")
+    if GITHUB_RELEASE_PATTERN.search(text) is None:
+        raise ValueError("evidence must record published GitHub Release metadata")
 
     statuses = frozenset(re.findall(r"\b(?:PASSED|FAILED|UNVERIFIED|PENDING)\b", text))
     required_statuses = frozenset({"PASSED", "FAILED", "UNVERIFIED", "PENDING"})
@@ -215,8 +268,9 @@ def parse_release_evidence(path: Path) -> ReleaseEvidence:
 
     return ReleaseEvidence(
         image_components=image_components,
+        image_digest_pairs=image_digest_pairs,
         digest_format=DIGEST_FORMAT,
-        pending_fields=pending_fields,
+        recorded_fields=recorded_fields,
         statuses=statuses,
         no_latest_tag=no_latest_tag,
         no_cloud_run=no_cloud_run,

@@ -1,8 +1,8 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: Phase 0·1 완료, Phase 2 core ledger 구현, Phase 2 candidate review~Phase 8 설계 승인
+- 상태: Phase 0~8 구현·합성 CI 완료, `v0.1.0`·`v0.2.0` 컨테이너 릴리스 완료, 실제 자료 acceptance 일부 미검증
 - 기준 설계: `docs/design/v0.1-product.md`
-- 목표 릴리스: `v0.1.0`
+- 목표 릴리스: 다음 버전 미지정
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
 ## Plan rules
@@ -20,30 +20,31 @@
 | Phase | Status | Evidence or target |
 |---|---|---|
 | Phase 0 — Project Foundation | Complete | PR #1, merge `0f632989df891ae944c012bfcce6c838009867a9`, required CI passed. |
-| Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation, PR #13 completion record, current main `8c6ceab`; no release tag or real-data acceptance. |
-| Phase 2 — Policy Ledger | Private acceptance in progress | Family, contract, party, actual Rider and Evidence implemented; family document review and insurance-document completeness view remain. |
-| Phase 3 — Clause Linking and Search | Approved design | TermsEdition, Clause, full-text search, Rider link, AI rule validation. |
-| Phase 4 — Coverage Decision Engine | Approved design | MedicalEvent, tri-state engine, fixed and indemnity calculation. |
-| Phase 5 — Event and Result PWA | Approved design | Hybrid input and action-first mobile result. |
-| Phase 6 — Claim Workflow | Approved design | Checklist and manually recorded submission/payment metadata. |
-| Phase 7 — Local Authentication | Approved design | Two equal local admins, server-side sessions and CSRF. |
-| Phase 8 — Private Local Acceptance | Approved design | Encrypted batch import, managed archive, selective OCR, WSL/Tailscale acceptance. |
-| v0.1.0 — Container release | Pending Phase 2~8 | Full regression, tag, Web/API/Worker GHCR publish. |
+| Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation and PR #13 completion record; synthetic ingestion regression remains in CI. |
+| Phase 2 — Policy Ledger | Implemented; private acceptance pending | Family, contract, party, Rider, candidate review, Evidence and insurance-document inventory are implemented; external family-by-family comparison remains. |
+| Phase 3 — Clause Linking and Search | Complete in synthetic boundary | TermsEdition, Clause, full-text search, Rider links and validated rule candidates are implemented. |
+| Phase 4 — Coverage Decision Engine | Complete in synthetic boundary | MedicalEvent, tri-state engine and fixed/indemnity calculation are implemented and regression-tested. |
+| Phase 5 — Event and Result PWA | Complete in synthetic boundary | Hybrid input, action-first results and bounded Evidence disclosure are implemented. |
+| Phase 6 — Claim Workflow | Complete in synthetic boundary | Checklist, manual submission state and outcome history are implemented. |
+| Phase 7 — Local Authentication | Complete in local boundary | Two equal local admins, server-side sessions, CSRF and private HTTPS login flow are implemented. |
+| Phase 8 — Private Local Acceptance | Implemented; device/data checks remain | Encrypted batch import, managed archive, selective OCR and WSL/Tailscale runtime are implemented; actual documents, Windows/mobile and other-device checks remain unverified. |
+| v0.1.0 — Container release | Complete | Release workflow run `32951939190`; Web/API/Worker images and GitHub Release published on 2026-08-26. |
+| v0.2.0 — Container release | Complete | Release workflow run `33090324105`; Web/API/Worker images and GitHub Release published on 2026-08-27. |
 
 ## Dependency flow
 
 ```text
 Phase 0 Foundation [complete]
   -> Phase 1 Synthetic PDF Ingestion [complete]
-  -> Phase 2 core Policy Ledger and candidate review [implemented]
-  -> Root-owned private family review and insurance-document inventory [in progress/planned]
-  -> Phase 3 Clause search, linking, and executable rule validation
-  -> Phase 4 MedicalEvent, tri-state decision, fixed/indemnity calculation
-  -> Phase 5 Hybrid input and action-first PWA
-  -> Phase 6 Claim checklist and outcome history
-  -> Phase 7 Two-admin authentication and session boundary
-  -> Phase 8 Encrypted private import, local OCR, WSL/Tailscale acceptance
-  -> v0.1.0 tag and GHCR images
+  -> Phase 2 Policy Ledger, candidate review and inventory [implemented]
+  -> Phase 3 Clause search, linking and rule validation [implemented]
+  -> Phase 4 MedicalEvent, tri-state decision and calculations [implemented]
+  -> Phase 5 Hybrid input and action-first PWA [implemented]
+  -> Phase 6 Claim checklist and outcome history [implemented]
+  -> Phase 7 Two-admin authentication and session boundary [implemented]
+  -> Phase 8 Encrypted import, local OCR and WSL/Tailscale runtime [implemented]
+  -> v0.1.0 and v0.2.0 GHCR releases [complete]
+  -> Root-owned private family comparison and remaining device checks [pending]
 ```
 
 AI adapters, encrypted archive, and OCR can be developed earlier with wholly synthetic fixtures, but actual private PDF use waits until the authenticated Phase 8 runtime boundary is present.
@@ -285,7 +286,9 @@ The detailed file/task plan is written only after the v0.1 design document is re
 
 Branch names contain no `codex/` prefix. Each PR uses one logical Conventional Commit purpose unless a small follow-up fix is needed during review.
 
-## v0.1.0 release gate
+## v0.1.0 release record
+
+The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0388a` was published. Release workflow run `32951939190` passed and published the three version/SHA image pairs and GitHub Release metadata recorded in `docs/release/v0.1.0-verification.md`. This does not close the separately listed actual-data and device boundaries.
 
 1. All Phase 2~8 feature PRs are merged with required CI success.
 2. Documentation, repository safety, Web, Python, PostgreSQL, contract, workflow and container checks pass on current main.
@@ -294,9 +297,9 @@ Branch names contain no `codex/` prefix. Each PR uses one logical Conventional C
 5. The synthetic login-to-claim browser E2E passes.
 6. Private-data acceptance and unverified formats/devices are recorded honestly.
 7. `CHANGELOG.md` has a `0.1.0` release section.
-8. Only then is `v0.1.0` created and pushed.
-9. The GHCR workflow publishes version and commit-SHA tags for all three images.
-10. GHCR success is reported as container release, not Cloud Run deployment.
+8. `v0.1.0` was then created and pushed.
+9. The GHCR workflow published version and commit-SHA tags for all three images.
+10. GHCR success is recorded as a container release, not Cloud Run deployment.
 
 ## Deferred after v0.1
 

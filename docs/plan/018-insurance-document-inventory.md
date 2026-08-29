@@ -1,6 +1,6 @@
 # Insurance Document Inventory Implementation Plan
 
-**Status:** Task 5 grouped verification in progress after actual family document review
+**Status:** Tasks 1–4 and synthetic grouped verification complete; Task 5 private family comparison items 6–7 remain
 
 **Goal:** Show each FamilyMember's certificate-backed policies and document completeness while keeping terms-only and product-explanation-only materials outside the enrolled policy ledger.
 
@@ -84,6 +84,14 @@
 5. [x] Revalidate the existing HTTPS login endpoint without changing credentials, sessions, port, or keys.
 6. [ ] Root reviews and links the already analyzed family inventories in the private runtime. No actual values enter commits, tests, logs, or the completion document.
 7. [ ] Compare every family summary against the root-owned external review, including certificate-backed policy count, paired terms, policy-only gaps, unregistered terms sets, product explanations, applications, unreadable sources, mixed bundles, duplicates, and status-unknown boundaries.
+
+## Post-release hardening
+
+1. [x] Add the existing authenticated component-creation endpoint to the handwritten Web client.
+2. [x] Require an explicit role and page range before turning an ID-less ready suggestion into a `USER_CONFIRMED` component; constrain both page inputs to the processed component boundary.
+3. [x] Reload the member inventory after creation and preserve the later explicit set-attachment step.
+4. [x] Retry transient polling network/5xx failures, clear recovered errors, and stop on 4xx or authentication failures.
+5. [x] Verify the source request contract and the full synthetic Chromium document-import flow.
 
 ## Required verification
 

@@ -1,6 +1,6 @@
 # Test strategy
 
-- 상태: Foundation·Phase 1 완료, v0.1 검증 기준 승인
+- 상태: Phase 0~8 구현 및 v0.1/v0.2 합성 release 검증 반영
 - 원칙: 최신 실행 증거 없는 완료 주장을 하지 않음
 
 ## Scope
@@ -78,6 +78,16 @@ SQLite로 PostgreSQL 행 잠금·전문검색 동작을 대체 검증하지 않�
 ### Integration tests
 
 합성 설정으로 API, PostgreSQL, Worker의 실제 경계를 검증합니다. 테스트는 독립 schema 또는 transaction을 사용하고 공개 CI에서 외부 AI·Drive를 호출하지 않습니다. AI adapter는 합성 structurer/verifier response를 사용해 동일한 schema, retry, publish 경계를 통과합니다.
+
+integration marker가 선택되면 root pytest hook는 fixture setup 전에 destructive database guard를 실행한다. `FAMILYCARE_DATABASE_URL`은 fallback으로 사용하지 않으며, 별도 `FAMILYCARE_TEST_DATABASE_URL`, 정확한 `FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB=true`, 접속 후 `current_database()` 이름의 standalone `test` 또는 `ci` marker가 모두 필요하다. 검증이 끝난 뒤에만 legacy fixture가 읽는 runtime URL을 test URL로 덮어쓴다.
+
+```bash
+FAMILYCARE_TEST_DATABASE_URL=postgresql+psycopg://familycare:synthetic-only@127.0.0.1:55439/familycare_review_test \
+FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB=true \
+TMPDIR=/tmp uv run pytest -m integration apps/api/tests workers/analyzer/tests -q
+```
+
+이 예시는 disposable 합성 test database의 형식일 뿐이다. shared 개발·private·운영 database나 이름 marker만 닮은 database를 재사용하지 않는다.
 
 ### Container tests
 
