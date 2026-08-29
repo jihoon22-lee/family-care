@@ -244,7 +244,10 @@ test("imports a synthetic encrypted batch without exposing file secrets", async 
     {
       family_member_id: MEMBER_ID,
       schema_version: "1",
-      source_ids: [SOURCE_ID_A, SOURCE_ID_B],
+      sources: [
+        { document_kind: "supporting", source_id: SOURCE_ID_A },
+        { document_kind: "supporting", source_id: SOURCE_ID_B },
+      ],
     },
   ]);
   expect(passwordBodies).toEqual([{ password: PASSWORD }]);

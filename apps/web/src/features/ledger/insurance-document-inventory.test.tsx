@@ -193,6 +193,20 @@ const ATTACHABLE_INVENTORY: MemberInsuranceDocumentInventoryResponse = {
   ],
 };
 
+const REVIEWABLE_INVENTORY: MemberInsuranceDocumentInventoryResponse = {
+  ...INVENTORY,
+  unpaired_components: [
+    component({
+      document_batch_item_id: "synthetic-batch-item-review-001",
+      id: null,
+      page_end: 7,
+      page_start: 1,
+      review_state: "SUGGESTED",
+      role: "supporting",
+    }),
+  ],
+};
+
 const ATTACHABLE_WITHOUT_SET_INVENTORY: MemberInsuranceDocumentInventoryResponse =
   {
     ...ATTACHABLE_INVENTORY,
@@ -314,6 +328,59 @@ describe("insurance document inventory", () => {
     expect(
       screen.queryByRole("button", { name: /문서 연결$/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("reviews a successful source into a user-confirmed role and page range", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(REVIEWABLE_INVENTORY))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            document_batch_item_id: "synthetic-batch-item-review-001",
+            id: "synthetic-component-reviewed-001",
+            page_end: 7,
+            page_start: 2,
+            review_state: "USER_CONFIRMED",
+            role: "terms",
+            version: 1,
+          },
+          201,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse(ATTACHABLE_INVENTORY));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+
+    expect(
+      await screen.findByText("가져오기 분류 제안: 보조자료"),
+    ).toBeInTheDocument();
+    const role = screen.getByRole("combobox", { name: "검수할 문서 역할" });
+    expect(role).toHaveValue("");
+    await user.selectOptions(role, "terms");
+    const pageStart = screen.getByRole("spinbutton", { name: "시작 페이지" });
+    const pageEnd = screen.getByRole("spinbutton", { name: "마지막 페이지" });
+    expect(pageStart).toHaveAttribute("max", "7");
+    expect(pageEnd).toHaveAttribute("max", "7");
+    await user.clear(pageStart);
+    await user.type(pageStart, "2");
+    await user.clear(pageEnd);
+    await user.type(pageEnd, "7");
+    await user.click(screen.getByRole("button", { name: "검수 내용 확정" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `/api/v1/family-members/${MEMBER_ID}/insurance-document-components`,
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      document_batch_item_id: "synthetic-batch-item-review-001",
+      page_end: 7,
+      page_start: 2,
+      review_state: "USER_CONFIRMED",
+      role: "terms",
+    });
   });
 
   it("attaches an unpaired component with USER_CONFIRMED and reloads the inventory", async () => {

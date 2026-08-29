@@ -343,6 +343,85 @@ describe("document import page", () => {
     );
   });
 
+  it("retries a transient polling failure and clears the error at terminal state", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response([MEMBER]))
+      .mockResolvedValueOnce(response([SOURCE]))
+      .mockResolvedValueOnce(response(batch("running", "running"), 202))
+      .mockResolvedValueOnce(response({ error_code: "UNKNOWN_ERROR" }, 500))
+      .mockResolvedValueOnce(response(batch("succeeded", "succeeded")));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<ImportPage />);
+    await user.click(
+      await screen.findByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "가져오기 시작" }));
+
+    expect(
+      await screen.findByText("완료", { exact: true }, { timeout: 3500 }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("stops polling after a non-retryable client error", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response([MEMBER]))
+      .mockResolvedValueOnce(response([SOURCE]))
+      .mockResolvedValueOnce(response(batch("running", "running"), 202))
+      .mockResolvedValueOnce(response({ error_code: "INVALID_REQUEST" }, 422))
+      .mockResolvedValue(response(batch("succeeded", "succeeded")));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<ImportPage />);
+    await user.click(
+      await screen.findByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "가져오기 시작" }));
+
+    expect(
+      await screen.findByRole("alert", undefined, { timeout: 2500 }),
+    ).toHaveTextContent("문서 가져오기를 처리하지 못했습니다");
+    await new Promise((resolve) => window.setTimeout(resolve, 1250));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("stops polling and clears private state when authentication expires", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response([MEMBER]))
+      .mockResolvedValueOnce(response([SOURCE]))
+      .mockResolvedValueOnce(response(batch("running", "running"), 202))
+      .mockResolvedValueOnce(
+        response({ error_code: "AUTHENTICATION_REQUIRED" }, 401),
+      )
+      .mockResolvedValue(response(batch("succeeded", "succeeded")));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<ImportPage />);
+    await user.click(
+      await screen.findByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "가져오기 시작" }));
+
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "가져오기 시작" },
+        { timeout: 2500 },
+      ),
+    ).toBeDisabled();
+    await new Promise((resolve) => window.setTimeout(resolve, 1250));
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(screen.queryByText("완료", { exact: true })).not.toBeInTheDocument();
+  });
+
   it("clears local batch selections when authentication expires", async () => {
     const fetchMock = vi
       .fn()

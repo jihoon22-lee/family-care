@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   attachInsuranceDocumentSetItem,
+  createInsuranceDocumentComponent,
   detachInsuranceDocumentSetItem,
 } from "./insurance-document-inventory";
 
@@ -21,6 +22,48 @@ afterEach(() => {
 });
 
 describe("insurance document inventory mutations", () => {
+  it("creates a user-confirmed page-range component with the generated request contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          document_batch_item_id: "synthetic-batch-item-001",
+          id: "synthetic-component-001",
+          page_end: 7,
+          page_start: 2,
+          review_state: "USER_CONFIRMED",
+          role: "terms",
+          version: 1,
+        },
+        201,
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createInsuranceDocumentComponent("synthetic-member-a", {
+      document_batch_item_id: "synthetic-batch-item-001",
+      page_end: 7,
+      page_start: 2,
+      review_state: "USER_CONFIRMED",
+      role: "terms",
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/family-members/synthetic-member-a/insurance-document-components",
+      expect.objectContaining({
+        body: JSON.stringify({
+          document_batch_item_id: "synthetic-batch-item-001",
+          page_end: 7,
+          page_start: 2,
+          review_state: "USER_CONFIRMED",
+          role: "terms",
+        }),
+        cache: "no-store",
+        credentials: "include",
+        method: "POST",
+      }),
+    );
+  });
+
   it("posts USER_CONFIRMED with the generated set-item request contract", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(
