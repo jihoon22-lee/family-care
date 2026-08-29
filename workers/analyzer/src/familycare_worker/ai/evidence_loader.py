@@ -14,6 +14,7 @@ from familycare_worker.jobs import psycopg_database_url
 _MAX_EVIDENCE_ROWS = 500
 _MAX_EVIDENCE_SLICES = 64
 _MAX_EVIDENCE_TEXT = 240
+_MAX_MEMBER_TERMS = 16
 _ROW_KEYS = frozenset(
     {
         "document_kind",
@@ -50,6 +51,25 @@ def _member_terms(row: Mapping[str, object]) -> tuple[str, ...]:
             raise EvidenceLoadError
         if value not in result:
             result.append(value)
+    return tuple(result)
+
+
+def _household_member_terms(rows: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
+    """Collect all active household aliases or fail before provider transmission."""
+
+    if not rows:
+        raise EvidenceLoadError
+    result: list[str] = []
+    normalized: set[str] = set()
+    for row in rows:
+        for value in _member_terms(row):
+            key = value.casefold()
+            if key in normalized:
+                continue
+            normalized.add(key)
+            result.append(value)
+            if len(result) > _MAX_MEMBER_TERMS:
+                raise EvidenceLoadError
     return tuple(result)
 
 
@@ -241,21 +261,27 @@ class PolicyEvidenceLoader:
             raise EvidenceLoadError
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-                row = connection.execute(
+                rows = connection.execute(
                     """
-                    SELECT display_name, internal_alias
-                    FROM family_members
-                    WHERE id = %s
-                      AND household_space_id = %s
-                      AND deleted_at IS NULL
+                    WITH selected AS (
+                        SELECT household_space_id
+                        FROM family_members
+                        WHERE id = %s
+                          AND household_space_id = %s
+                          AND deleted_at IS NULL
+                    )
+                    SELECT member.display_name, member.internal_alias
+                    FROM selected
+                    JOIN family_members AS member
+                      ON member.household_space_id = selected.household_space_id
+                    WHERE member.deleted_at IS NULL
+                    ORDER BY CASE WHEN member.id = %s THEN 0 ELSE 1 END, member.id
                     """,
-                    (family_member_id, household_space_id),
-                ).fetchone()
+                    (family_member_id, household_space_id, family_member_id),
+                ).fetchall()
         except psycopg.Error:
             raise EvidenceRepositoryUnavailable from None
-        if row is None:
-            raise EvidenceLoadError
-        return _member_terms(row)
+        return _household_member_terms(rows)
 
 
 __all__ = [

@@ -43,6 +43,22 @@ def test_minimizer_removes_runtime_member_and_format_identifiers_but_keeps_terms
     assert "가입금액" not in repr(minimized[0])
 
 
+def test_minimizer_removes_labelled_party_and_address_without_runtime_terms() -> None:
+    source = _evidence(
+        "계약자: External Party A 주소: Synthetic City Sample Road 101 "
+        "계약일 2026-01-01 가입금액 1000000 KRW"
+    )
+
+    minimized = minimize_evidence((source,), sensitive_terms=("Family Member A",))
+
+    text = minimized[0].text
+    assert "External Party A" not in text
+    assert "Synthetic City Sample Road 101" not in text
+    assert text.count("[REDACTED]") == 2
+    assert "2026-01-01" in text
+    assert "1000000 KRW" in text
+
+
 @pytest.mark.parametrize(
     ("evidence_count", "sensitive_terms"),
     [
