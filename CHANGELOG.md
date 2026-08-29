@@ -4,10 +4,16 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+### Added
+
+- Offline private-runtime backup-set tooling packages an already-created PostgreSQL custom dump and quiesced encrypted archive snapshot into an authenticated, path-free manifest, verifies the set, and materializes fresh restore inputs without invoking `pg_dump` or `pg_restore`.
+- The Worker now provides `familycare-archive-audit`, a read-only reconciliation command that compares managed-archive database references with ciphertext metadata and emits aggregate finding counts only.
+
 ### Changed
 
 - PostgreSQL integration tests now require a dedicated `FAMILYCARE_TEST_DATABASE_URL`, an exact destructive-test opt-in, and a connected database name containing a standalone `test` or `ci` marker before collection can proceed.
 - Suggested ready document sources without a component ID now require an explicit role and bounded page-range confirmation before a `USER_CONFIRMED` component is created.
+- Dependabot keeps `@types/node` on the Node 24 runtime major, uses a short `dev` group name that satisfies commit-subject policy, and applies the compatible `@types/react-dom` patch update.
 
 ### Fixed
 
@@ -18,6 +24,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 ### Security
 
 - Provider-bound policy Evidence redacts all active household member display names and aliases plus labelled identity fields; oversized identity sets fail closed before transmission.
+- Backup commands read private paths from environment variables instead of argv, never copy the archive master key, reject repository paths, symlinks, overlapping inputs, and existing destinations, and authenticate artifact hashes with a key-derived HMAC.
+- Archive reconciliation uses a read-only repeatable-read database transaction, does not open ciphertext contents, never deletes or quarantines entries, and excludes paths and object keys from output.
 
 ## [0.2.0] - 2026-08-27
 

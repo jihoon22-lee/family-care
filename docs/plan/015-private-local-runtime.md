@@ -8,7 +8,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 PR #27과 PR #28로 `main`에 merge되었다. 두 PR의 CI/post-merge 검증과 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline acceptance는 통과했다. 실제 보험 PDF·파생 데이터·OCR, Windows/mobile, 다른 실제 기기, `v0.1.0` tag/GHCR publish는 아직 pending이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 PR #27과 PR #28로 `main`에 merge되었다. 두 PR의 CI/post-merge 검증과 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline acceptance는 통과했다. pre-created snapshot용 offline backup-set packaging과 deletion-free archive audit도 합성 경계에서 구현했다. 실제 backup 취득·PostgreSQL restore drill·archive cleanup, 실제 보험 PDF·파생 데이터·OCR, Windows/mobile, 다른 실제 기기는 별도 acceptance이며 완료로 주장하지 않는다.
 
 **Architecture**
 
@@ -20,6 +20,8 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - `FAMILYCARE_IMPORT_ROOT`는 저장소 밖 absolute directory로 API와 Worker에 같은 read-only bind mount로 제공한다. API는 source catalog와 opaque ID 해석, Worker는 descriptor-safe intake를 수행한다. archive와 work는 Worker-only named volume의 container path이며, 저장소 밖 archive master-key file만 Worker에 read-only bind mount한다.
 - `FAMILYCARE_DOCUMENT_ROOT`는 Phase 1 synthetic-only root로 유지하며 private batch source로 사용하지 않는다.
 - archive master key는 Worker 전용 read-only 외부 absolute regular file이며 정확히 32 bytes, mode `0600`이어야 한다. Worker는 archive 복호화, PDF password scope, OCR, AI adapter를 소유하고 API는 HTTP 인증·계약·작업 생성과 secret socket client만 수행한다.
+- offline backup-set tool은 operator가 writer quiesce 뒤 저장소 밖에 미리 준비한 PostgreSQL custom dump와 encrypted archive snapshot만 packaging·verification·fresh materialization한다. master key는 set에 복사하지 않고 path는 argv나 output에 넣지 않으며 live DB/volume snapshot과 `pg_restore`를 실행하지 않는다.
+- Worker archive audit는 `managed_archives` object key·ciphertext size와 archive filesystem metadata를 read-only로 대조하고 aggregate count만 출력한다. audit finding은 삭제·격리 권한이 아니며 actual cleanup은 별도 정책과 승인이 필요하다.
 - import source와 Google Drive 원본은 어떤 성공·실패·취소 경로에서도 수정하거나 삭제하지 않는다.
 - 자동화된 검사와 PR/CI는 Tailscale 상태를 읽기 전용으로만 확인한다. PR merge 뒤 root acceptance에서도 기존 Serve 구성을 snapshot으로 보존하며, 필요한 경우에만 충돌 없는 전용 HTTPS endpoint를 추가할 수 있다. 이번 acceptance는 기존 mapping을 재사용했으며 기존 endpoint 교체, Funnel, route, SSH, key, up/down, logout 변경은 금지한다.
 - 애플리케이션 인증은 012의 두 관리자·Argon2id·hashed server session 계약을 사용한다. Tailscale 네트워크에 연결된 것만으로 인증된 것으로 취급하지 않는다.
@@ -33,6 +35,7 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 - pytest, pytest-cov가 아니라 기존 pytest invocation, Python TOML/YAML structural checks
 - Tailscale CLI의 read-only JSON/status output을 policy 검사와 post-merge acceptance에 사용한다. 기존 HTTPS Serve mapping을 보존한 채 Tailscale HTTPS acceptance를 통과했으며, 추가 mutation이나 Funnel은 사용하지 않았다.
 - GitHub Actions는 synthetic fixtures와 repository policy만 실행하며 실제 문서·비밀값·외부 AI는 사용하지 않는다.
+- backup/audit CI는 synthetic custom-dump bytes와 application-encrypted objects, fake read-only DB connection만 사용한다. 실제 database, archive volume, recovery key, private path는 사용하지 않는다.
 
 **Spec**
 
@@ -247,6 +250,15 @@ worker:
   Run the root PR gate from docs/plan/003-v0.1-implementation-index.md once, serially, immediately before opening the PR. This is a gate, not a reason to weaken private-runtime policy.
 - [ ] 2–5 min: Commit only this task as:
       test(runtime): add private acceptance checks
+
+### Operational readiness follow-up
+
+- [x] Add an offline `capture`/`verify`/`materialize` contract for an already-created PostgreSQL custom dump and quiesced flat encrypted archive snapshot. Require external absolute paths, mode `0700`/`0600`, new destinations, exact artifact names, bounded members, SHA-256 and key-derived manifest HMAC. Never copy the master key or invoke PostgreSQL commands.
+- [x] Keep all backup CLI paths in local environment variables rather than argv and emit fixed status/error codes without paths, object keys, key bytes, or document data.
+- [x] Add `familycare-archive-audit` with startup and transaction read-only PostgreSQL enforcement, bounded `nofollow` filesystem metadata scanning, count-only JSON and exit `0` clean / `1` findings / `2` error. Do not expose a delete or quarantine operation.
+- [x] Verify capture→verify→materialize→decrypt, tamper/wrong-key/path/symlink/race rejection, audit categories, output minimization, non-mutation and read-only SQL using only synthetic fixtures.
+- [ ] After every actual-data writer session is quiesced and the operator explicitly approves exact external targets, define and execute named-volume snapshot acquisition plus isolated PostgreSQL restore validation. Do not infer approval from the existence of this tooling.
+- [ ] Define retention, object identification, quarantine and physical deletion policy before acting on any archive audit finding. A non-zero finding count alone never authorizes mutation.
 
 ### Root PR gate
 
