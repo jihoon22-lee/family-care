@@ -12,14 +12,52 @@ COMPOSE_PATH = ROOT / "infra/compose/compose.yaml"
 ENV_PATH = ROOT / ".env.example"
 EXPECTED_SERVICES = {"api", "db", "web", "worker"}
 DOCKERFILES = {
-    "web": (ROOT / "infra/containers/web.Dockerfile", "node:24.19.0-alpine", "1.31.2-alpine3.23"),
-    "api": (ROOT / "infra/containers/api.Dockerfile", "python:3.14.7-slim", "uv:0.12.5"),
+    "web": ROOT / "infra/containers/web.Dockerfile",
+    "api": ROOT / "infra/containers/api.Dockerfile",
+    "worker": ROOT / "infra/containers/worker.Dockerfile",
+}
+_VERSION_PART = r"(?:0|[1-9][0-9]*)"
+IMAGE_REQUIREMENTS: dict[str, tuple[tuple[str, re.Pattern[str]], ...]] = {
+    "web": (
+        (
+            "fully pinned Node 24 Alpine tag",
+            re.compile(rf"node:24\.{_VERSION_PART}\.{_VERSION_PART}-alpine"),
+        ),
+        (
+            "approved nginx runtime tag",
+            re.compile(r"nginxinc/nginx-unprivileged:1\.31\.2-alpine3\.23"),
+        ),
+    ),
+    "api": (
+        (
+            "fully pinned uv 0.12 tag",
+            re.compile(rf"ghcr\.io/astral-sh/uv:0\.12\.{_VERSION_PART}"),
+        ),
+        (
+            "fully pinned Python 3.14 slim tag",
+            re.compile(rf"python:3\.14\.{_VERSION_PART}-slim"),
+        ),
+        (
+            "fully pinned Python 3.14 slim tag",
+            re.compile(rf"python:3\.14\.{_VERSION_PART}-slim"),
+        ),
+    ),
     "worker": (
-        ROOT / "infra/containers/worker.Dockerfile",
-        "python:3.14.7-slim",
-        "uv:0.12.5",
+        (
+            "fully pinned uv 0.12 tag",
+            re.compile(rf"ghcr\.io/astral-sh/uv:0\.12\.{_VERSION_PART}"),
+        ),
+        (
+            "fully pinned Python 3.14 slim tag",
+            re.compile(rf"python:3\.14\.{_VERSION_PART}-slim"),
+        ),
+        (
+            "fully pinned Python 3.14 slim tag",
+            re.compile(rf"python:3\.14\.{_VERSION_PART}-slim"),
+        ),
     ),
 }
+FROM_IMAGE_PATTERN = re.compile(r"(?mi)^FROM[ \t]+(?P<image>\S+)(?:[ \t]+AS[ \t]+\S+)?[ \t]*$")
 
 
 def final_stage(dockerfile: str) -> str:
@@ -29,7 +67,27 @@ def final_stage(dockerfile: str) -> str:
     return dockerfile[starts[-1] :] if starts else ""
 
 
-def validate_dockerfile(name: str, path: Path, required_images: tuple[str, ...]) -> list[str]:
+def validate_image_references(name: str, dockerfile: str) -> list[str]:
+    """Validate the ordered image stages against an approved pinned-tag policy."""
+
+    requirements = IMAGE_REQUIREMENTS.get(name)
+    if requirements is None:
+        return [f"no approved image policy is configured for {name!r}"]
+
+    images = tuple(match.group("image") for match in FROM_IMAGE_PATTERN.finditer(dockerfile))
+    if len(images) != len(requirements):
+        return [f"expected {len(requirements)} approved image stages, found {len(images)}"]
+
+    errors: list[str] = []
+    for index, (image, (description, pattern)) in enumerate(
+        zip(images, requirements, strict=True), start=1
+    ):
+        if pattern.fullmatch(image) is None:
+            errors.append(f"stage {index} image {image!r} must use a {description}")
+    return errors
+
+
+def validate_dockerfile(name: str, path: Path) -> list[str]:
     """Validate one Dockerfile's pinned inputs and unprivileged runtime."""
 
     relative = path.relative_to(ROOT)
@@ -46,9 +104,7 @@ def validate_dockerfile(name: str, path: Path, required_images: tuple[str, ...])
     for forbidden_source in (".env", ".git", "fixtures"):
         if forbidden_source in copy_lines:
             errors.append(f"{relative}: COPY must not include {forbidden_source}")
-    for image in required_images:
-        if image not in content:
-            errors.append(f"{relative}: exact image reference {image!r} is required")
+    errors.extend(f"{relative}: {error}" for error in validate_image_references(name, content))
 
     runtime = final_stage(content)
     user_match = re.search(r"(?mi)^USER\s+([^\s]+)", runtime)
@@ -90,8 +146,8 @@ def main() -> int:
     """Run all static container-definition checks."""
 
     errors: list[str] = []
-    for name, (path, *required_images) in DOCKERFILES.items():
-        errors.extend(validate_dockerfile(name, path, tuple(required_images)))
+    for name, path in DOCKERFILES.items():
+        errors.extend(validate_dockerfile(name, path))
     errors.extend(validate_compose())
 
     if errors:
