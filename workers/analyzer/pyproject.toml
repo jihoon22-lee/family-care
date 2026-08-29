@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 familycare-worker = "familycare_worker.__main__:main"
+familycare-archive-audit = "familycare_worker.archive.audit:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]
