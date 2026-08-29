@@ -27,6 +27,7 @@ docker compose version
 ### Setup
 
 ```bash
+cd /home/jihoon/projects/family-care
 cp .env.example .env
 corepack pnpm@11.22.0 install --frozen-lockfile
 TMPDIR=/tmp uv sync --all-packages --group dev
