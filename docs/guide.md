@@ -300,7 +300,7 @@ POST /api/v1/auth/sessions/{session_id}/revoke
 
 Tailscale은 private network 접근 경로일 뿐 app login을 대체하지 않습니다. Tailscale에 연결된 기기도 FamilyCare 로그인과 유효한 session cookie, state-changing 요청의 CSRF 검사를 통과해야 합니다.
 
-이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS 브라우저 흐름으로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 다른 실제 기기, 실제 private document acceptance는 아직 검증하지 않았습니다. PR #27과 #28의 merge 및 CI/post-merge 검증은 완료되었지만, `v0.1.0` tag/GHCR publish와 운영 배포는 별도 단계로 남아 있습니다.
+이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS 브라우저 흐름으로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 다른 실제 기기, 실제 private document acceptance는 아직 검증하지 않았습니다. PR #27과 #28의 merge 및 CI/post-merge 검증과 `v0.1.0`·`v0.2.0` GHCR 게시가 완료됐지만 운영 배포는 별도 단계로 남아 있습니다.
 
 ### Use the local synthetic document-analysis API
 
@@ -351,7 +351,7 @@ native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택�
 
 각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 테스트는 선택 page, provenance separation, cleanup, atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF acceptance를 대신하지 않습니다.
 
-encrypted batch와 selective OCR은 `main`에 병합되었습니다. private-runtime PR #27과 Tailscale inspection 보완 PR #28도 merge되었고, WSL Compose·Tailscale HTTPS·인증 브라우저 login/navigation/logout·synthetic OpenAI pipeline acceptance가 통과했습니다. 실제 private data와 OCR, mobile, Windows, 다른 기기, tag/GHCR publish는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다. 자세한 상태는 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 기록합니다.
+encrypted batch와 selective OCR은 `main`에 병합되었습니다. private-runtime PR #27과 Tailscale inspection 보완 PR #28도 merge되었고, WSL Compose·Tailscale HTTPS·인증 브라우저 login/navigation/logout·synthetic OpenAI pipeline acceptance가 통과했습니다. `v0.1.0`과 `v0.2.0` GHCR 게시도 완료됐습니다. 실제 private data와 OCR, mobile, Windows, 다른 기기는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다. 자세한 `v0.1.0` 상태는 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 기록합니다.
 
 종료:
 
@@ -446,6 +446,14 @@ TMPDIR=/tmp uv run alembic -c apps/api/alembic.ini current
 ```
 
 마이그레이션은 코드와 함께 검토합니다. 운영 데이터베이스 마이그레이션 절차는 Production Deployment 단계에서 별도 결정합니다.
+
+destructive integration suite는 runtime URL을 직접 사용하지 않습니다. disposable 합성 database를 따로 만들고 이름에 standalone `test` 또는 `ci` marker를 포함한 뒤 두 opt-in 변수를 함께 제공합니다. guard는 접속한 실제 database 이름을 확인하고 하나라도 맞지 않으면 test setup 전에 중단합니다.
+
+```bash
+FAMILYCARE_TEST_DATABASE_URL=postgresql+psycopg://familycare:synthetic-only@127.0.0.1:55439/familycare_review_test \
+FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB=true \
+TMPDIR=/tmp uv run pytest -m integration apps/api/tests workers/analyzer/tests -q
+```
 
 ## Contracts
 

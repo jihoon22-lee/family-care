@@ -4,6 +4,21 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+### Changed
+
+- PostgreSQL integration tests now require a dedicated `FAMILYCARE_TEST_DATABASE_URL`, an exact destructive-test opt-in, and a connected database name containing a standalone `test` or `ci` marker before collection can proceed.
+- Suggested ready document sources without a component ID now require an explicit role and bounded page-range confirmation before a `USER_CONFIRMED` component is created.
+
+### Fixed
+
+- Policy and Rider publication now choose deterministic field-specific source and status Evidence; an asserted status without exact status Evidence is stored as `unknown` instead of inheriting unrelated Evidence.
+- User candidate mutations now record the authenticated request actor and fail closed when its HouseholdSpace does not match the active scope.
+- Document-import polling now recovers from transient network and server failures while stopping on client and authentication errors.
+
+### Security
+
+- Provider-bound policy Evidence redacts all active household member display names and aliases plus labelled identity fields; oversized identity sets fail closed before transmission.
+
 ## [0.2.0] - 2026-08-27
 
 ### Added

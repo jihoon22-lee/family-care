@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import pytest
 
 from scripts.check_workflows import (
@@ -48,6 +50,29 @@ def test_workflow_policy_rejects_container_push() -> None:
     errors = validate_ci(modified)
     assert any("build-only containers" in error for error in errors)
     assert any("must not push" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("content_loader", "validator"),
+    [(current_ci, validate_ci), (current_release, validate_release)],
+)
+def test_database_workflow_requires_a_dedicated_destructive_test_boundary(
+    content_loader: Callable[[], str],
+    validator: Callable[[str], list[str]],
+) -> None:
+    content = content_loader()
+    modified = content.replace("FAMILYCARE_TEST_DATABASE_URL:", "REMOVED_TEST_DATABASE_URL:")
+    errors = validator(modified)
+
+    assert any("dedicated test database URL" in error for error in errors)
+
+    modified = content.replace(
+        "FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB:",
+        "REMOVED_DESTRUCTIVE_TEST_OPT_IN:",
+    )
+    errors = validator(modified)
+
+    assert any("destructive test opt-in" in error for error in errors)
 
 
 def test_current_release_satisfies_workflow_policy() -> None:

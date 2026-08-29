@@ -5,7 +5,12 @@ from __future__ import annotations
 from uuid import UUID
 
 import pytest
-from familycare_worker.ai.evidence_loader import EvidenceLoadError, _member_terms, _to_slices
+from familycare_worker.ai.evidence_loader import (
+    EvidenceLoadError,
+    _household_member_terms,
+    _member_terms,
+    _to_slices,
+)
 
 DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000101")
 
@@ -46,6 +51,39 @@ def test_member_terms_are_bounded_deduplicated_runtime_values() -> None:
             "internal_alias": "Family Member A",
         }
     ) == ("Family Member A",)
+
+
+def test_household_member_terms_cover_other_active_family_members() -> None:
+    rows = (
+        {
+            "display_name": "Family Member A",
+            "internal_alias": "family-member-a",
+        },
+        {
+            "display_name": "Family Member B",
+            "internal_alias": "family-member-b",
+        },
+    )
+
+    assert _household_member_terms(rows) == (
+        "Family Member A",
+        "family-member-a",
+        "Family Member B",
+        "family-member-b",
+    )
+
+
+def test_household_member_terms_fail_closed_when_the_redaction_set_is_too_large() -> None:
+    rows = tuple(
+        {
+            "display_name": f"Family Member {index}",
+            "internal_alias": f"family-member-{index}",
+        }
+        for index in range(9)
+    )
+
+    with pytest.raises(EvidenceLoadError):
+        _household_member_terms(rows)
 
 
 @pytest.mark.parametrize(

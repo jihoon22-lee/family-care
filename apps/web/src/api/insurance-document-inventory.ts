@@ -1,7 +1,9 @@
 import type {
+  ComponentCreateRequest,
   DocumentSetCreateRequest,
   DocumentSetItemCreateRequest,
   ExpectedItemVersionRequest,
+  InsuranceDocumentComponentResponse,
   InsuranceDocumentSetResponse,
   InsuranceDocumentSetItemMutationResponse,
   MemberInsuranceDocumentInventoryResponse,
@@ -37,6 +39,21 @@ export async function getInsuranceDocumentInventory(
   if (!isInventoryResponse(response))
     throw new ApiError("INVALID_RESPONSE", 502);
   return response;
+}
+
+export function createInsuranceDocumentComponent(
+  memberId: string,
+  request: ComponentCreateRequest,
+  signal?: AbortSignal,
+): Promise<InsuranceDocumentComponentResponse> {
+  return apiRequest<InsuranceDocumentComponentResponse>(
+    `/api/v1/family-members/${encodeURIComponent(memberId)}/insurance-document-components`,
+    {
+      body: JSON.stringify(request),
+      method: "POST",
+      signal,
+    },
+  );
 }
 
 export function attachInsuranceDocumentSetItem(

@@ -5,10 +5,11 @@ from __future__ import annotations
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.contracts.generated_business import PolicyCandidateFieldId
+from familycare_api.identity.context import AuthContext, Unauthenticated
 from familycare_api.policies.candidate_errors import InvalidCandidateCorrection
 from familycare_api.policies.candidate_models import (
     CandidateConfirmationRequest,
@@ -41,6 +42,16 @@ _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
 
 def _no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
+
+
+def _actor_id(request: Request, scope: HouseholdScope) -> UUID:
+    context = getattr(request.state, "auth_context", None)
+    if (
+        not isinstance(context, AuthContext)
+        or context.household_space_id != scope.household_space_id
+    ):
+        raise Unauthenticated
+    return context.user_id
 
 
 @router.get(
@@ -91,6 +102,7 @@ def correct_candidate_field(
     policy_id: UUID,
     field_id: PolicyCandidateFieldId,
     request: CandidateCorrectionRequest,
+    http_request: Request,
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
@@ -98,7 +110,12 @@ def correct_candidate_field(
     if request.field_id != field_id:
         raise InvalidCandidateCorrection
     _no_store(response)
-    return service.correct_field(scope=scope, policy_id=policy_id, request=request, actor_id=None)
+    return service.correct_field(
+        scope=scope,
+        policy_id=policy_id,
+        request=request,
+        actor_id=_actor_id(http_request, scope),
+    )
 
 
 @router.patch(
@@ -110,6 +127,7 @@ def correct_review_item_field(
     review_item_id: UUID,
     field_id: PolicyCandidateFieldId,
     request: CandidateCorrectionRequest,
+    http_request: Request,
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
@@ -123,7 +141,7 @@ def correct_review_item_field(
         scope=scope,
         review_item_id=review_item_id,
         request=request,
-        actor_id=None,
+        actor_id=_actor_id(http_request, scope),
     )
 
 
@@ -136,6 +154,7 @@ def correct_typed_review_item_field(
     review_item_id: UUID,
     field_id: PolicyCandidateFieldId,
     request: CandidateCorrectionRequest,
+    http_request: Request,
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
@@ -149,7 +168,7 @@ def correct_typed_review_item_field(
         scope=scope,
         review_item_id=review_item_id,
         request=request,
-        actor_id=None,
+        actor_id=_actor_id(http_request, scope),
     )
 
 
@@ -161,6 +180,7 @@ def correct_typed_review_item_field(
 def confirm_candidate(
     review_item_id: UUID,
     request: CandidateConfirmationRequest,
+    http_request: Request,
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
@@ -170,7 +190,7 @@ def confirm_candidate(
         scope=scope,
         review_item_id=review_item_id,
         request=request,
-        actor_id=None,
+        actor_id=_actor_id(http_request, scope),
     )
 
 
@@ -182,6 +202,7 @@ def confirm_candidate(
 def reject_candidate(
     review_item_id: UUID,
     request: CandidateRejectionRequest,
+    http_request: Request,
     response: Response,
     scope: ScopeDependency,
     service: ServiceDependency,
@@ -191,7 +212,7 @@ def reject_candidate(
         scope=scope,
         review_item_id=review_item_id,
         request=request,
-        actor_id=None,
+        actor_id=_actor_id(http_request, scope),
     )
 
 

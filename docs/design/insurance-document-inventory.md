@@ -1,6 +1,6 @@
 # Insurance document inventory design
 
-- 상태: 실제 가족 자료 검토 결과를 반영한 구현 대기
+- 상태: 구현 및 합성 API/Web/PostgreSQL 검증 완료, 실제 가족별 비교 acceptance 미완료
 - 적용 단계: Private policy structuring 후속
 - 선행 조건: FamilyMember, private document batch, PolicyContract, Evidence
 
@@ -112,6 +112,7 @@ content SHA-256이 같은 active DocumentVersion과 동일 page-range component 
 
 ```text
 GET /api/v1/family-members/{member_id}/insurance-document-inventory
+POST /api/v1/family-members/{member_id}/insurance-document-components
 POST /api/v1/family-members/{member_id}/insurance-document-sets
 POST /api/v1/insurance-document-sets/{set_id}/items
 DELETE /api/v1/insurance-document-set-items/{item_id}
@@ -172,6 +173,7 @@ MemberInsuranceDocumentInventory
 - 등록 보험 카드는 문서 role별 chip과 component/source 건수를 표시한다. 여러 역할이 한 파일에 있으면 `묶음 문서`를 표시한다.
 - 약관이 없으면 `약관 보완 필요`, 상품설명서가 없으면 중립적인 `상품설명서 없음`을 표시한다. 상품설명서는 필수가 아니므로 결함으로 단정하지 않는다.
 - 미등록 document set과 미연결 component는 등록 보험 카드와 시각적으로 분리하고 `가입 확인 안 됨`을 표시한다.
+- 처리 완료됐지만 component ID가 없는 `SUGGESTED` source는 사용자가 role과 기존 처리 page 범위 안의 1-based 시작·끝 page를 명시적으로 선택해야 `USER_CONFIRMED` component가 된다. intake 분류를 가입 authority나 기본 확인값으로 사용하지 않는다.
 - 사용자는 기존 import 화면으로 이동해 같은 가족 구성원에게 누락 문서를 추가하거나, 검토한 문서를 계약에 연결·해제할 수 있다.
 - unreadable 문서는 원래의 문서 역할을 유지한 채 재업로드/OCR 보완 표시를 추가하고 상품명이나 계약을 추정하지 않는다.
 

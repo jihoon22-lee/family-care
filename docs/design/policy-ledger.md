@@ -1,6 +1,6 @@
 # Policy ledger design
 
-- 상태: Phase 2 core ledger 구현 및 합성 PostgreSQL 검증 완료, candidate review 후속 PR 대기
+- 상태: 원장·candidate review 구현 및 합성 PostgreSQL 검증 완료, 실제 자료 acceptance 별도 진행
 - 적용 단계: Phase 2
 - 선행 조건: Phase 1 DocumentVersion과 Evidence contract
 
@@ -37,6 +37,8 @@ Rider는 원문 명칭과 정규화 key, 정액·실손 유형, 가입금액·�
 
 AI candidate와 사용자 수정은 `AnalysisCandidateVersion`으로 보존한다. `AI_VERIFIED`는 즉시 current projection에 publish할 수 있고 `NEEDS_REVIEW`는 exception queue에만 나타난다. `USER_CONFIRMED`는 사용자가 Evidence를 확인한 새 published version이다.
 
+원장 projection은 candidate의 임의 첫 Evidence를 재사용하지 않는다. Policy source는 `product_name` 뒤 `insurer`, Rider source는 `rider_name` 뒤 `rider_key` 순서의 field-specific policy Evidence를 결정론적으로 고르며, 같은 field에 여러 근거가 있으면 가장 작은 Evidence UUID를 사용한다. Policy/Rider status는 각각 정확한 `policy_status`/`rider_status` Evidence가 있을 때만 확정하고, 값만 있으나 그 근거가 없으면 `unknown`과 null status Evidence로 저장한다.
+
 ## API boundary
 
 대표 resource contract:
@@ -51,7 +53,7 @@ AI candidate와 사용자 수정은 `AnalysisCandidateVersion`으로 보존한�
 - `GET /api/v1/review-items?domain=policy`
 - `POST /api/v1/review-items/{id}/confirm|reject`
 
-서버는 session에서 HouseholdSpace를 결정한다. create/update는 expected version을 받고 stale write를 `409 VERSION_CONFLICT`로 거부한다. response는 실제 source path, archive object key, 증권번호를 포함하지 않는다.
+서버는 session에서 HouseholdSpace와 mutation actor를 결정한다. 인증 context의 HouseholdSpace가 active scope와 일치하지 않거나 actor UUID를 얻을 수 없으면 user correction·confirm·reject를 실행하지 않는다. create/update는 expected version을 받고 stale write를 `409 VERSION_CONFLICT`로 거부한다. response는 실제 source path, archive object key, 증권번호를 포함하지 않는다.
 
 ## Data flow
 
@@ -76,6 +78,8 @@ policy extraction
 5. user correction은 raw extraction과 AI candidate를 overwrite하지 않는다.
 6. deleted aggregate는 기본 query에서 제외되고 trash endpoint에서만 보인다.
 7. 모든 record access는 server-derived HouseholdSpace scope를 사용한다.
+8. user mutation audit actor는 인증 context에서만 오며 nullable 또는 client-provided actor를 허용하지 않는다.
+9. non-unknown Policy/Rider status에는 같은 candidate field의 status Evidence가 필요하다.
 
 ## Failure behavior
 
@@ -94,6 +98,8 @@ policy extraction
 - renewal status missing/expired/conflicting cases
 - AI_VERIFIED immediate publish and NEEDS_REVIEW exception queue
 - user correction version/audit and raw candidate preservation
+- field-specific source/status Evidence selection and missing-status fallback to `unknown`
+- authenticated mutation actor persistence and HouseholdSpace mismatch rejection
 - HouseholdSpace object-scope success/denial
 - optimistic concurrency, soft delete, trash and restore
 - response/log absence of source path, policy number and document text

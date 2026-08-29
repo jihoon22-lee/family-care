@@ -30,6 +30,12 @@ function safeErrorMessage(): string {
   return "문서 가져오기를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
+function isRetryablePollingError(reason: unknown): boolean {
+  return (
+    reason instanceof ApiError && (reason.status === 0 || reason.status >= 500)
+  );
+}
+
 function requestedMemberId(): string | undefined {
   const value = new URLSearchParams(window.location.search).get("member");
   return value || undefined;
@@ -125,6 +131,7 @@ export function ImportPage() {
       attempts += 1;
       try {
         const next = await getDocumentBatch(batch.batch_id, controller.signal);
+        setError(undefined);
         setBatch(next);
         if (!TERMINAL_STATES.has(next.state)) {
           timer = window.setTimeout(() => void poll(), 1000);
@@ -132,6 +139,9 @@ export function ImportPage() {
       } catch (reason) {
         if (!(reason instanceof DOMException && reason.name === "AbortError")) {
           handleError(reason);
+          if (isRetryablePollingError(reason)) {
+            timer = window.setTimeout(() => void poll(), 1000);
+          }
         }
       }
     };

@@ -21,6 +21,24 @@ _POLICY_IDENTIFIER_PATTERN = re.compile(
     r"\s*[:#]?\s*(?P<value>[A-Z0-9][A-Z0-9._/-]{4,})",
     re.IGNORECASE,
 )
+_IDENTITY_LABEL = (
+    r"계약자(?:명)?|피보험자(?:명)?|보험\s*수익자|수익자(?:명)?|성명|이름|"
+    r"주소|거주지|소재지|생년월일|주민등록번호|"
+    r"policyholder|insured\s+(?:person|name)|beneficiary(?:\s+name)?|"
+    r"full\s+name|customer\s+name|address|date\s+of\s+birth"
+)
+_FOLLOWING_FIELD_LABEL = (
+    rf"{_IDENTITY_LABEL}|보험사|상품명|계약일|보험기간|보장기간|보장개시일|"
+    r"보장종료일|계약상태|담보명|가입금액|통화|갱신여부|증권번호|계약번호|"
+    r"insurer|product(?:\s+name)?|contract\s+(?:date|status)|coverage\s+(?:start|end)|"
+    r"rider(?:\s+name)?|insured\s+amount|currency|renewable|policy\s+(?:number|no\.?|id)"
+)
+_LABELLED_IDENTITY_PATTERN = re.compile(
+    rf"(?P<label>(?<![가-힣A-Z])(?:{_IDENTITY_LABEL})(?![가-힣A-Z]))"
+    rf"\s*[:#]?\s*(?P<value>.{{2,160}}?)"
+    rf"(?=(?:[;|\r\n])|\s+(?:{_FOLLOWING_FIELD_LABEL})(?![가-힣A-Z])\s*[:#]?|$)",
+    re.IGNORECASE,
+)
 
 
 class EvidenceMinimizationError(RuntimeError):
@@ -34,6 +52,10 @@ def _redact(text: str, sensitive_terms: tuple[str, ...]) -> str:
     minimized = _EMAIL_PATTERN.sub(_REDACTED, text)
     minimized = _PHONE_PATTERN.sub(_REDACTED, minimized)
     minimized = _POLICY_IDENTIFIER_PATTERN.sub(
+        lambda match: f"{match.group('label')}: {_REDACTED}",
+        minimized,
+    )
+    minimized = _LABELLED_IDENTITY_PATTERN.sub(
         lambda match: f"{match.group('label')}: {_REDACTED}",
         minimized,
     )

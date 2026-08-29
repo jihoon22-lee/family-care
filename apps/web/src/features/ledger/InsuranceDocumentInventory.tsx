@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import type {
   InventoryComponentResponse,
@@ -10,6 +10,7 @@ import type {
 } from "../../api/generated";
 import {
   attachInsuranceDocumentSetItem,
+  createInsuranceDocumentComponent,
   createInsuranceDocumentSet,
   detachInsuranceDocumentSetItem,
 } from "../../api/insurance-document-inventory";
@@ -90,6 +91,17 @@ interface InventorySetTarget {
 
 type DetachHandler = (item: InventorySetItemResponse) => void;
 
+interface ComponentReviewInput {
+  pageEnd: number;
+  pageStart: number;
+  role: InventoryComponentResponse["role"];
+}
+
+type ComponentReviewHandler = (
+  component: InventoryComponentResponse,
+  input: ComponentReviewInput,
+) => void;
+
 function setTargets(
   data: MemberInsuranceDocumentInventoryResponse,
 ): InventorySetTarget[] {
@@ -116,7 +128,7 @@ function setTargets(
 }
 
 function mutationErrorMessage(): string {
-  return "문서 연결 상태를 변경하지 못했습니다. 현황을 다시 확인한 뒤 시도해 주세요.";
+  return "문서 검수·연결 상태를 변경하지 못했습니다. 현황을 다시 확인한 뒤 시도해 주세요.";
 }
 
 function pageLabel(component: InventoryComponentResponse): string {
@@ -359,9 +371,114 @@ function UnregisteredSetCard({
   );
 }
 
+function ComponentReviewControls({
+  component,
+  onConfirm,
+  pending,
+}: {
+  component: InventoryComponentResponse;
+  onConfirm: ComponentReviewHandler;
+  pending: boolean;
+}) {
+  const [role, setRole] = useState<InventoryComponentResponse["role"] | "">("");
+  const [pageStart, setPageStart] = useState(String(component.page_start));
+  const [pageEnd, setPageEnd] = useState(String(component.page_end));
+  const parsedPageStart = Number(pageStart);
+  const parsedPageEnd = Number(pageEnd);
+  const validPageRange =
+    /^\d+$/.test(pageStart) &&
+    /^\d+$/.test(pageEnd) &&
+    Number.isInteger(parsedPageStart) &&
+    Number.isInteger(parsedPageEnd) &&
+    parsedPageStart >= component.page_start &&
+    parsedPageEnd >= parsedPageStart &&
+    parsedPageEnd <= component.page_end;
+
+  function submit(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    if (!role || !validPageRange) return;
+    onConfirm(component, {
+      pageEnd: parsedPageEnd,
+      pageStart: parsedPageStart,
+      role,
+    });
+  }
+
+  return (
+    <form className="insurance-inventory-attach-controls" onSubmit={submit}>
+      <div>
+        <p className="insurance-inventory-unpaired-note">
+          가져오기 분류 제안: {ROLE_LABELS[component.role]}
+        </p>
+        <p className="insurance-inventory-unpaired-note">
+          실제 PDF를 확인해 역할과 1-based 페이지 범위를 직접 지정해 주세요.
+        </p>
+        <label>
+          <span>문서 역할</span>
+          <select
+            aria-label="검수할 문서 역할"
+            disabled={pending}
+            onChange={(event) =>
+              setRole(
+                event.target.value as InventoryComponentResponse["role"] | "",
+              )
+            }
+            required
+            value={role}
+          >
+            <option value="">역할 선택</option>
+            {Object.entries(ROLE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>시작 페이지</span>
+          <input
+            aria-label="시작 페이지"
+            disabled={pending}
+            inputMode="numeric"
+            max={component.page_end}
+            min={component.page_start}
+            onChange={(event) => setPageStart(event.target.value)}
+            required
+            type="number"
+            value={pageStart}
+          />
+        </label>
+        <label>
+          <span>마지막 페이지</span>
+          <input
+            aria-label="마지막 페이지"
+            disabled={pending}
+            inputMode="numeric"
+            max={component.page_end}
+            min={component.page_start}
+            onChange={(event) => setPageEnd(event.target.value)}
+            required
+            type="number"
+            value={pageEnd}
+          />
+        </label>
+      </div>
+      <button
+        aria-label="검수 내용 확정"
+        className="insurance-inventory-item-action insurance-inventory-attach-action"
+        disabled={pending || !role || !validPageRange}
+        type="submit"
+      >
+        {pending ? "저장 중…" : "검수 내용 확정"}
+      </button>
+    </form>
+  );
+}
+
 function UnpairedComponent({
   component,
   onAttach,
+  onConfirmReview,
   onSelectTarget,
   pending,
   selectedTargetId,
@@ -369,6 +486,7 @@ function UnpairedComponent({
 }: {
   component: InventoryComponentResponse;
   onAttach?: (component: InventoryComponentResponse) => void;
+  onConfirmReview?: ComponentReviewHandler;
   onSelectTarget?: (componentId: string, setId: string) => void;
   pending: boolean;
   selectedTargetId?: string;
@@ -423,9 +541,18 @@ function UnpairedComponent({
         <p className="insurance-inventory-unpaired-note">
           연결할 문서 묶음이 없습니다. 먼저 문서를 가져와 주세요.
         </p>
+      ) : component.document_batch_item_id &&
+        component.processing_state === "READY" &&
+        component.review_state === "SUGGESTED" &&
+        onConfirmReview ? (
+        <ComponentReviewControls
+          component={component}
+          onConfirm={onConfirmReview}
+          pending={pending}
+        />
       ) : (
         <p className="insurance-inventory-unpaired-note">
-          내부 구성요소가 없어 연결할 수 없습니다.
+          처리 이력을 확인할 수 없어 검수할 수 없습니다.
         </p>
       )}
     </li>
@@ -468,6 +595,7 @@ function InventoryContent({
   data,
   memberId,
   onAttach,
+  onConfirmReview,
   onDetach,
   onSelectTarget,
   pendingAction,
@@ -477,6 +605,7 @@ function InventoryContent({
   data: MemberInsuranceDocumentInventoryResponse;
   memberId: string;
   onAttach: (component: InventoryComponentResponse) => void;
+  onConfirmReview: ComponentReviewHandler;
   onDetach: DetachHandler;
   onSelectTarget: (componentId: string, setId: string) => void;
   pendingAction?: string;
@@ -607,8 +736,14 @@ function InventoryContent({
                   component={component}
                   key={component.id ?? `${component.role}-${index}`}
                   onAttach={onAttach}
+                  onConfirmReview={onConfirmReview}
                   onSelectTarget={onSelectTarget}
-                  pending={pendingAction === `attach:${component.id}`}
+                  pending={
+                    component.id
+                      ? pendingAction === `attach:${component.id}`
+                      : pendingAction ===
+                        `create:${component.document_batch_item_id}`
+                  }
                   selectedTargetId={
                     component.id ? selectedTargets[component.id] : undefined
                   }
@@ -702,6 +837,35 @@ export function InsuranceDocumentInventory({
     }
   }
 
+  async function confirmReview(
+    component: InventoryComponentResponse,
+    input: ComponentReviewInput,
+  ): Promise<void> {
+    if (
+      !data ||
+      component.id ||
+      !component.document_batch_item_id ||
+      component.processing_state !== "READY"
+    )
+      return;
+    setMutationError(undefined);
+    setPendingAction(`create:${component.document_batch_item_id}`);
+    try {
+      await createInsuranceDocumentComponent(data.member_id, {
+        document_batch_item_id: component.document_batch_item_id,
+        page_end: input.pageEnd,
+        page_start: input.pageStart,
+        review_state: "USER_CONFIRMED",
+        role: input.role,
+      });
+      reload();
+    } catch {
+      setMutationError(mutationErrorMessage());
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
+
   async function detach(item: InventorySetItemResponse): Promise<void> {
     if (!item.id) return;
     setMutationError(undefined);
@@ -766,7 +930,7 @@ export function InsuranceDocumentInventory({
         <p
           className="insurance-inventory-error"
           role="alert"
-          aria-label="문서 연결 오류"
+          aria-label="문서 현황 변경 오류"
         >
           {mutationError}
         </p>
@@ -776,6 +940,7 @@ export function InsuranceDocumentInventory({
           data={data}
           memberId={memberId ?? data.member_id}
           onAttach={attach}
+          onConfirmReview={confirmReview}
           onDetach={detach}
           onSelectTarget={selectTarget}
           pendingAction={pendingAction}

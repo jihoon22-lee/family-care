@@ -357,7 +357,7 @@ def _candidate_rows(database_url: str, scope: HouseholdScope) -> list[dict[str, 
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         return connection.execute(
             """
-            SELECT id, parent_version_id, version, status
+            SELECT id, parent_version_id, version, status, actor_id
             FROM analysis_candidate_versions
             WHERE household_space_id = %s
             ORDER BY version, id
@@ -427,6 +427,7 @@ def test_user_correction_creates_a_child_without_overwriting_the_parent(
     assert len(rows) == 2
     assert rows[0]["status"] == "NEEDS_REVIEW"
     assert rows[1]["parent_version_id"] == rows[0]["id"]
+    assert rows[1]["actor_id"] == SYNTHETIC_ADMIN_ID
 
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         parent_field = connection.execute(

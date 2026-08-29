@@ -1,5 +1,7 @@
 # Policy Candidate Review Implementation Plan
 
+**Status:** Implemented; post-release Evidence-lineage and authenticated-audit hardening verified with synthetic tests
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn synthetic document Evidence into versioned, reviewable policy candidates, publish only validated candidates to the policy ledger, and provide an accessible Web review queue that never treats a terms-only mention as an enrolled Rider.
@@ -730,6 +732,13 @@ git commit -m "feat: add policy candidate review"
 ```
 
 Then use the shared Root PR gate in `docs/plan/003-v0.1-implementation-index.md`: verify branch and commit range, push `feat/policy-candidate-review`, open one PR, wait for every required check, merge with a merge commit, fetch `main`, and rerun the focused policy-candidate contract/API/Web tests. Record the PR URL, Actions result, merge commit, and any inaccessible browser/private-data checks. Do not create a release tag.
+
+## Post-release hardening
+
+- [x] Select Policy source Evidence from `product_name` then `insurer`, and Rider source Evidence from `rider_name` then `rider_key`, with deterministic UUID tie-breaking.
+- [x] Require exact `policy_status` or `rider_status` Evidence before publishing a non-unknown status; otherwise persist `unknown` without status Evidence.
+- [x] Derive correction, confirmation, and rejection actors from the authenticated request context and reject HouseholdSpace mismatches before writing audit history.
+- [x] Cover the projection repository directly so unrelated candidate Evidence cannot silently become source or status lineage.
 
 ## Acceptance Matrix
 

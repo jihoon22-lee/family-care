@@ -34,18 +34,20 @@ jobs:
       postgres:
         image: postgres:18.6-alpine
         env:
-          POSTGRES_DB: familycare_release
+          POSTGRES_DB: familycare_release_ci
           POSTGRES_USER: familycare_release
           POSTGRES_PASSWORD: synthetic-release-only-password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U familycare_release -d familycare_release"
+          --health-cmd "pg_isready -U familycare_release -d familycare_release_ci"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
     env:
-      FAMILYCARE_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release
+      FAMILYCARE_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
+      FAMILYCARE_TEST_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
+      FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"
     steps:
       - name: Check out complete history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

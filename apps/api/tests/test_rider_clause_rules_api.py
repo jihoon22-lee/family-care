@@ -18,6 +18,7 @@ from familycare_api.clauses.rules import CoverageRuleVersion, CoverageRuleVersio
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.errors import ApiBoundaryError, install_error_handlers
+from familycare_api.identity.context import AuthContext
 from familycare_api.main import create_app
 from familycare_api.policies.candidate_models import (
     CandidateConfirmationRequest,
@@ -31,7 +32,7 @@ from familycare_api.policies.candidate_router import (
 from familycare_api.policies.candidate_router import (
     router as candidate_router,
 )
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -55,6 +56,8 @@ REVIEW_ID = UUID("00000000-0000-4000-8000-000000000501")
 RULE_REVIEW_ID = UUID("00000000-0000-4000-8000-000000000502")
 CHILD_CANDIDATE_ID = UUID("00000000-0000-4000-8000-000000000503")
 UNKNOWN_ID = UUID("00000000-0000-4000-8000-000000000599")
+ACTOR_ID = UUID("00000000-0000-4000-8000-000000000601")
+SESSION_ID = UUID("00000000-0000-4000-8000-000000000602")
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 PRIVATE_MARKERS = (
@@ -445,8 +448,15 @@ def app(
     application.include_router(clause_router_module.router)
     application.include_router(candidate_router)
 
-    def resolve_scope() -> HouseholdScope:
-        return SCOPE_A
+    def resolve_scope(request: Request) -> HouseholdScope:
+        context = AuthContext(
+            user_id=ACTOR_ID,
+            household_space_id=SCOPE_A.household_space_id,
+            session_id=SESSION_ID,
+            needs_reauthentication=False,
+        )
+        request.state.auth_context = context
+        return HouseholdScope(context.household_space_id)
 
     application.dependency_overrides[resolve_household_scope] = resolve_scope
     link_dependency = clause_router_module.get_rider_clause_link_service
