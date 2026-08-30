@@ -53,7 +53,7 @@ current snapshot을 같은 transaction에서 `SUPERSEDED`로 바꾸되 과거 �
 
 - package 내부 canonical subject key와 private family alias
 - 선택적 FamilyMember binding
-- binding 판정 `MATCH`, `UNKNOWN`, `CONFLICT`
+- binding 판정 `MATCH`, `NO_MATCH`, `UNKNOWN`과 독립적인 conflict flag
 - bounded reason code와 명시적 확인 provenance
 
 가족 별칭과 기존 FamilyMember의 문자열이 비슷하다는 이유로 자동 연결하지 않는다. 정확한
@@ -138,7 +138,7 @@ digest를 가진다. importer는 source alias 원문을 일반 로그에 쓰지 
 
 - alias digest와 private alias
 - optional DocumentVersion
-- `MATCH`, `UNKNOWN`, `CONFLICT` 상태
+- `MATCH`, `NO_MATCH`, `UNKNOWN` 판정과 독립적인 conflict flag
 - bounded reason code
 - binding에 사용한 content SHA-256·page-count 검증 결과
 

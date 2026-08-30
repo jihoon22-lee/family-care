@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Task 1 in progress; Tasks 2–8 pending
+**Status:** Tasks 1–2 complete; Task 3 in progress; Tasks 4–8 pending
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -15,7 +15,7 @@
 - Tests construct synthetic records such as `Family Member A`, `Sample Policy`, and `synthetic-policy-001`; no actual names, source aliases, amounts, paths, text, identifiers, or hashes enter Git, logs, snapshots, or fixtures.
 - The certificate-backed enrollment decision, terms document identity, terms-edition applicability, coverage-to-section mapping, and current contract status remain independent tri-state fields.
 - Imported facts and mappings are always `executable=false`. This plan does not publish a `CoverageRule`, calculate a benefit, or make a claim decision.
-- `PrivateKnowledgeSubject` owns the package family alias and optional `FamilyMember` binding. Contract rows reference the subject instead of repeating or guessing member identity.
+- `PrivateKnowledgeSubject` owns the package family alias and optional `FamilyMember` binding. Its decision remains `MATCH`/`NO_MATCH`/`UNKNOWN`, with conflict stored separately. Contract rows reference the subject instead of repeating or guessing member identity.
 - Existing `PolicyContract`, `Rider`, `TermsEdition`, `Clause`, and `CoverageRule` rows are not overwritten by import. Optional bindings require exact internal Evidence or explicit later confirmation.
 - Actual apply follows backup → dry run → expected-value comparison → disposable-database apply/verify → real apply → post-apply verification.
 
@@ -58,14 +58,14 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
 
 1. [x] Record the immutable-snapshot architecture, authority boundaries, package contract, validation rules, dry-run/apply lifecycle, query boundary, and operational apply gate.
 2. [x] Separate package family aliases from contracts through an explicit subject binding in this plan; update the design before schema implementation.
-3. [ ] Run documentation and diff checks, inspect the rendered plan for private values or placeholders, and commit the plan as a standalone review unit.
+3. [x] Run documentation and diff checks, inspect the rendered plan for private values or placeholders, and commit the plan as a standalone review unit.
 
 ## Task 2: Add the immutable relational catalog
 
 **Files:** `apps/api/migrations/versions/0018_private_knowledge_catalog.py`, `apps/api/tests/test_private_knowledge_migration.py`, `apps/api/tests/test_private_knowledge_migration_integration.py`.
 
-1. [ ] Write RED migration tests for revision `0018_private_knowledge_catalog` with down revision `0017_insurance_inventory`.
-2. [ ] Require the migration to create these tables in dependency order:
+1. [x] Write RED migration tests for revision `0018_private_knowledge_catalog` with down revision `0017_insurance_inventory`.
+2. [x] Require the migration to create these tables in dependency order:
    - `private_knowledge_import_runs`
    - `private_knowledge_subjects`
    - `private_knowledge_contracts`
@@ -77,12 +77,12 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
    - `private_knowledge_fact_citations`
    - `private_knowledge_coverage_terms_mappings`
    - `private_knowledge_document_bindings`
-3. [ ] Test household-scoped foreign keys, actor provenance, optional exact bindings, immutable source keys, source-record digests, bounded JSON projections, UTC timestamps, and unique canonical identity per import run.
-4. [ ] Test database checks for tri-state decisions, contract/component/benefit classifications, import states, nonnegative amounts and pages, SHA-256 shape, page ranges, and `executable = false`.
-5. [ ] Test a partial unique index allowing exactly one current applied snapshot per household and a unique `(household_space_id, package_digest_sha256)` idempotency key.
-6. [ ] Test that child rows cannot be soft-deleted or republished as operational rules and that nullable bindings use `ON DELETE RESTRICT`.
-7. [ ] Implement the forward-only additive migration and a dependency-safe downgrade used only by synthetic tests.
-8. [ ] Run migration unit tests, upgrade a disposable PostgreSQL database from base to head, verify constraints/indexes with catalog queries, and downgrade/upgrade the disposable database once.
+3. [x] Test household-scoped foreign keys, actor provenance, optional exact bindings, immutable source keys, source-record digests, bounded JSON projections, UTC timestamps, and unique canonical identity per import run.
+4. [x] Test database checks for tri-state decisions, contract/component/benefit classifications, import states, nonnegative amounts and pages, SHA-256 shape, page ranges, and `executable = false`.
+5. [x] Test a partial unique index allowing exactly one current applied snapshot per household and a unique `(household_space_id, package_digest_sha256)` idempotency key.
+6. [x] Test that child rows cannot be soft-deleted or republished as operational rules and that nullable bindings use `ON DELETE RESTRICT`.
+7. [x] Implement the forward-only additive migration and a dependency-safe downgrade used only by synthetic tests.
+8. [x] Run migration unit tests, upgrade a disposable PostgreSQL database from base to head, verify constraints/indexes with catalog queries, and downgrade/upgrade the disposable database once.
 
 ## Task 3: Validate and normalize the external package before DB access
 
