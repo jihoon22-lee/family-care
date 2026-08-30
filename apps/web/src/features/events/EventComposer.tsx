@@ -165,6 +165,7 @@ export function EventComposer({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setStatus("");
     if (!situation.trim()) {
       setError("현재 상황을 입력해 주세요.");
       return;
@@ -186,6 +187,7 @@ export function EventComposer({
   async function structure() {
     setWorking(true);
     setError("");
+    setStatus("");
     try {
       await onStructure?.(draft());
       setStatus(
@@ -203,6 +205,7 @@ export function EventComposer({
   async function analyze() {
     setWorking(true);
     setError("");
+    setStatus("");
     try {
       await onAnalyze?.(draft());
       setStatus("현재 입력으로 결과 확인을 요청했습니다.");
