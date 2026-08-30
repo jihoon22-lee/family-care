@@ -934,6 +934,8 @@ git commit -m "feat(contracts): publish coverage decision v2"
 
 ### Task 11: Render complete and non-empty result states in Web
 
+**Status:** completed
+
 **Files:**
 - Modify: `apps/web/src/features/results/ActionFirstResult.tsx`
 - Modify: `apps/web/src/features/results/ResultGroup.tsx`
@@ -953,7 +955,7 @@ git commit -m "feat(contracts): publish coverage decision v2"
 - Consumes: generated `CoverageDecisionResponse` v2 discriminated unions.
 - Produces: accessible catalog-completeness, fixed subtotal, indemnity, knowledge candidate, Evidence, and claim-readiness UI.
 
-- [ ] **Step 1: Write RED component tests**
+- [x] **Step 1: Write RED component tests**
 
 Test the following observable behavior with complete synthetic v2 fixtures:
 
@@ -971,7 +973,7 @@ Test the following observable behavior with complete synthetic v2 fixtures:
 - `LLM_PENDING` keeps verified results and immediate DB recommendations visible, then polling updates only the
   recommendation section; provider fallback remains usable and never becomes a full-page error.
 
-- [ ] **Step 2: Run RED Web tests**
+- [x] **Step 2: Run RED Web tests**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/results/result-page.test.tsx src/api/results.test.ts
@@ -979,7 +981,7 @@ corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/results/resu
 
 Expected: FAIL on the missing v2 UI and private source handling.
 
-- [ ] **Step 3: Implement action-first v2 UI**
+- [x] **Step 3: Implement action-first v2 UI**
 
 Use source discriminators rather than nullable-ID guessing:
 
@@ -997,7 +999,7 @@ Render `assistance.recommendations` outside every `MATCH | UNKNOWN | NO_MATCH` g
 candidate from a matching label or shared citation. Result polling uses `cache: "no-store"`, stops on
 `SEARCH_READY | LLM_READY`, and has a bounded timeout without creating another analysis request.
 
-- [ ] **Step 4: Run GREEN and complete Web checks**
+- [x] **Step 4: Run GREEN and complete Web checks**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/events/event-input.test.tsx src/features/results/result-page.test.tsx src/api/results.test.ts
@@ -1007,7 +1009,7 @@ git diff --check
 
 Expected: all Web format, lint, typecheck, unit tests, and build pass.
 
-- [ ] **Step 5: Commit the result experience**
+- [x] **Step 5: Commit the result experience**
 
 ```bash
 git add apps/web/src/features/results apps/web/src/api/results.test.ts

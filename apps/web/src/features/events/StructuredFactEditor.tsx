@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { EventFactField, EventFactView } from "./EventComposer";
 import styles from "./EventComposer.module.css";
 
@@ -65,12 +67,26 @@ export function StructuredFactEditor({
   facts: EventFactView[];
   onChange: (facts: EventFactView[]) => void;
 }) {
-  if (facts.length === 0) {
-    return (
-      <p className={styles.emptyFacts}>
-        자동 구조화 결과가 없습니다. 필요한 값은 직접 입력할 수 있습니다.
-      </p>
-    );
+  const [selectedField, setSelectedField] = useState<EventFactField | "">("");
+  const availableFields = (
+    Object.keys(FIELD_LABELS) as EventFactField[]
+  ).filter((fieldId) => !facts.some((fact) => fact.field_id === fieldId));
+
+  function addFact() {
+    if (!selectedField || !availableFields.includes(selectedField)) return;
+    onChange([
+      ...facts,
+      {
+        confidence: "high",
+        evidence_ids: [],
+        fact_id: `manual-${selectedField}`,
+        field_id: selectedField,
+        source: "user",
+        state: "missing",
+        value: null,
+      },
+    ]);
+    setSelectedField("");
   }
 
   return (
@@ -82,72 +98,106 @@ export function StructuredFactEditor({
         <p className={styles.kicker}>Editable candidates</p>
         <h3 id="structured-facts-title">구조화된 후보</h3>
       </div>
-      <div className={styles.factList}>
-        {facts.map((fact, index) => {
-          const label = FIELD_LABELS[fact.field_id];
-          const stateText = STATE_LABELS[fact.state];
-          const sourceText = SOURCE_LABELS[fact.source];
-          const inputId = `event-fact-${fact.fact_id || index}`;
-          return (
-            <article
-              className={styles.factCard}
-              key={fact.fact_id || `${fact.field_id}-${index}`}
-            >
-              <div className={styles.factMeta}>
-                <span>
-                  {sourceText} · {stateText}
-                </span>
-                <span>신뢰도 {fact.confidence}</span>
-              </div>
-              <label className={styles.field} htmlFor={inputId}>
-                <span>{label}</span>
-                {BOOLEAN_FIELDS.has(fact.field_id) ? (
-                  <select
-                    aria-label={label}
-                    id={inputId}
-                    value={
-                      fact.value === null
-                        ? ""
-                        : fact.value === true
-                          ? "true"
-                          : "false"
-                    }
-                    onChange={(event) =>
-                      onChange(
-                        facts.map((candidate, candidateIndex) =>
-                          candidateIndex === index
-                            ? updateFact(candidate, event.target.value)
-                            : candidate,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="">선택 필요</option>
-                    <option value="true">예</option>
-                    <option value="false">아니오</option>
-                  </select>
-                ) : (
-                  <input
-                    aria-label={label}
-                    id={inputId}
-                    type="text"
-                    value={displayValue(fact.value)}
-                    onChange={(event) =>
-                      onChange(
-                        facts.map((candidate, candidateIndex) =>
-                          candidateIndex === index
-                            ? updateFact(candidate, event.target.value)
-                            : candidate,
-                        ),
-                      )
-                    }
-                  />
-                )}
-              </label>
-            </article>
-          );
-        })}
+      <div className={styles.factAdd}>
+        <label className={styles.field}>
+          <span>직접 추가할 정보</span>
+          <select
+            aria-label="직접 추가할 정보"
+            value={selectedField}
+            onChange={(event) =>
+              setSelectedField(event.target.value as EventFactField | "")
+            }
+          >
+            <option value="">항목 선택</option>
+            {availableFields.map((fieldId) => (
+              <option key={fieldId} value={fieldId}>
+                {FIELD_LABELS[fieldId]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className={styles.secondaryButton}
+          disabled={!selectedField}
+          type="button"
+          onClick={addFact}
+        >
+          정보 추가
+        </button>
       </div>
+      {facts.length === 0 ? (
+        <p className={styles.emptyFacts}>
+          자동 구조화 결과가 없습니다. 필요한 값은 위에서 직접 추가할 수
+          있습니다.
+        </p>
+      ) : (
+        <div className={styles.factList}>
+          {facts.map((fact, index) => {
+            const label = FIELD_LABELS[fact.field_id];
+            const stateText = STATE_LABELS[fact.state];
+            const sourceText = SOURCE_LABELS[fact.source];
+            const inputId = `event-fact-${fact.fact_id || index}`;
+            return (
+              <article
+                className={styles.factCard}
+                key={fact.fact_id || `${fact.field_id}-${index}`}
+              >
+                <div className={styles.factMeta}>
+                  <span>
+                    {sourceText} · {stateText}
+                  </span>
+                  <span>신뢰도 {fact.confidence}</span>
+                </div>
+                <label className={styles.field} htmlFor={inputId}>
+                  <span>{label}</span>
+                  {BOOLEAN_FIELDS.has(fact.field_id) ? (
+                    <select
+                      aria-label={label}
+                      id={inputId}
+                      value={
+                        fact.value === null
+                          ? ""
+                          : fact.value === true
+                            ? "true"
+                            : "false"
+                      }
+                      onChange={(event) =>
+                        onChange(
+                          facts.map((candidate, candidateIndex) =>
+                            candidateIndex === index
+                              ? updateFact(candidate, event.target.value)
+                              : candidate,
+                          ),
+                        )
+                      }
+                    >
+                      <option value="">선택 필요</option>
+                      <option value="true">예</option>
+                      <option value="false">아니오</option>
+                    </select>
+                  ) : (
+                    <input
+                      aria-label={label}
+                      id={inputId}
+                      type="text"
+                      value={displayValue(fact.value)}
+                      onChange={(event) =>
+                        onChange(
+                          facts.map((candidate, candidateIndex) =>
+                            candidateIndex === index
+                              ? updateFact(candidate, event.target.value)
+                              : candidate,
+                          ),
+                        )
+                      }
+                    />
+                  )}
+                </label>
+              </article>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }

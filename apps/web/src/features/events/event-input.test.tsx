@@ -442,6 +442,76 @@ describe("hybrid medical event input", () => {
     ]);
   });
 
+  it("can add and user-confirm every extended v2 fact field", async () => {
+    const user = userEvent.setup();
+    let currentFacts: EventFactView[] = [];
+
+    function FactHarness() {
+      const [facts, setFacts] = useState<EventFactView[]>([]);
+      return (
+        <StructuredFactEditor
+          facts={facts}
+          onChange={(nextFacts) => {
+            currentFacts = nextFacts;
+            setFacts(nextFacts);
+          }}
+        />
+      );
+    }
+
+    render(<FactHarness />);
+    const fields = [
+      ["diagnosis_code", "진단 코드", "sample-diagnosis-code"],
+      ["procedure_code", "처치·수술 코드", "sample-procedure-code"],
+      ["anatomical_site_code", "신체 부위 코드", "sample-site-code"],
+      ["pathology_code", "병리 코드", "sample-pathology-code"],
+      ["treatment_setting", "치료 환경", "sample-setting"],
+      ["treatment_context", "치료 맥락", "sample-context"],
+    ] as const;
+
+    for (const [fieldId, label, value] of fields) {
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "직접 추가할 정보" }),
+        fieldId,
+      );
+      await user.click(screen.getByRole("button", { name: "정보 추가" }));
+      await user.type(screen.getByRole("textbox", { name: label }), value);
+    }
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "직접 추가할 정보" }),
+      "separately_billed_treatment",
+    );
+    await user.click(screen.getByRole("button", { name: "정보 추가" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "별도 결제 치료 여부" }),
+      "true",
+    );
+
+    expect(currentFacts).toHaveLength(7);
+    expect(currentFacts).toEqual(
+      expect.arrayContaining(
+        fields.map(([fieldId, , value]) =>
+          expect.objectContaining({
+            field_id: fieldId,
+            source: "user",
+            state: "confirmed",
+            value,
+          }),
+        ),
+      ),
+    );
+    expect(currentFacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field_id: "separately_billed_treatment",
+          source: "user",
+          state: "confirmed",
+          value: true,
+        }),
+      ]),
+    );
+  });
+
   it("blocks a negative, exponent, or currency-mismatched receipt line", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

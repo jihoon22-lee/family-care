@@ -36,16 +36,44 @@ const SYNTHETIC_EVENT: MedicalEventResponse = {
 };
 
 const SYNTHETIC_DECISION: CoverageDecisionResponse = {
+  analysis_completeness: "COMPLETE",
+  assistance: {
+    mode: "NONE",
+    model_label: null,
+    outcome_code: "NO_ASSISTANCE",
+    recommendations: [],
+    state: "SEARCH_READY",
+  },
   candidates: [],
+  catalog_coverage: {
+    benefit_coverage_count: 0,
+    blocked_coverage_count: 0,
+    contract_count: 0,
+    not_applicable_coverage_count: 0,
+    published_coverage_count: 0,
+  },
+  conditional_fixed_subtotals: [],
   engine_version: "synthetic-decision-engine-v1",
   evaluations: [],
   event_version: 1,
+  indemnity_summary: {
+    calculated_candidate_count: 0,
+    candidate_count: 0,
+    status: "NONE",
+    unresolved_candidate_count: 0,
+  },
+  knowledge_snapshot_version: {
+    catalog_import_run_id: null,
+    event_fact_schema_version: "medical-event-facts.v2",
+    rule_import_run_id: null,
+  },
   medical_event_id: EVENT_ID,
   policy_snapshot_at: "2026-08-25T09:00:00Z",
   rule_set_version: "synthetic-rule-set-v1",
   run_id: "00000000-0000-4000-8000-000000000401",
   stale: false,
-  schema_version: "1",
+  schema_version: "2",
+  source_failure_codes: [],
 };
 
 const SYNTHETIC_LINE: ReceiptLineResponse = {

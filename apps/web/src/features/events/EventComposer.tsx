@@ -92,6 +92,13 @@ function isEventFactField(value: string): value is EventFactField {
     "admission",
     "outpatient",
     "pharmacy",
+    "diagnosis_code",
+    "procedure_code",
+    "anatomical_site_code",
+    "pathology_code",
+    "treatment_setting",
+    "treatment_context",
+    "separately_billed_treatment",
   ].includes(value);
 }
 
