@@ -226,8 +226,8 @@ class PrivateKnowledgeCitationResponse(StrictModel):
     source_clause_id: UUID | None
     fact_id: UUID | None
     evidence_purpose: ReasonCode
-    page_start: int = Field(ge=1, le=500)
-    page_end: int = Field(ge=1, le=500)
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
 
     @model_validator(mode="after")
     def validate_page_range(self) -> Self:
@@ -631,8 +631,8 @@ class AssistanceCitationResponse(StrictModel):
     terms_section_id: UUID
     source_clause_id: UUID
     fact_id: UUID
-    page_start: int = Field(ge=1, le=500)
-    page_end: int = Field(ge=1, le=500)
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
 
     @model_validator(mode="after")
     def validate_page_range(self) -> Self:
@@ -731,7 +731,7 @@ class CoverageDecisionResponse(StrictModel):
     stale: bool
     analysis_completeness: Literal["COMPLETE", "PARTIAL", "UNAVAILABLE"]
     catalog_coverage: CatalogCoverageResponse
-    candidates: list[ClaimCandidateResponse] = Field(max_length=128)
+    candidates: list[ClaimCandidateResponse] = Field(max_length=10_000)
     evaluations: list[RuleEvaluationResponse] = Field(max_length=512)
     conditional_fixed_subtotals: list[ConditionalFixedSubtotalResponse] = Field(max_length=32)
     indemnity_summary: IndemnitySummaryResponse

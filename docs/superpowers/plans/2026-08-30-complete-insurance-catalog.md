@@ -144,7 +144,7 @@
     TMPDIR=/tmp uv run python scripts/check_workflows.py
     git diff --check
 
-- [x] Rebuild and recreate only the FamilyCare API and Web services, preserving the database, Worker, sessions, and archives.
-- [x] Verify readiness, six-member production query counts totaling 52, member isolation, no-store headers, and the primary catalog projection. No authenticated browser session was available, so the live counts were verified through the same production repository and the authenticated HTTP path through integration tests.
-- [x] Use the authenticated browser session for visual acceptance if available; otherwise record that browser-only validation remains unverified. The available browser was at the login screen and Windows app control could not attach from the WSL workspace, so browser-only acceptance remains unverified.
+- [x] Rebuild and recreate the FamilyCare API, Worker, and Web services while preserving the database, sessions, and archives.
+- [x] Verify readiness, six-member production query counts totaling 52, member isolation, no-store headers, and the primary catalog projection through the authenticated production HTTP path.
+- [x] Complete authenticated browser acceptance with a temporary app-issued session: verify the selected-member nine-contract catalog, result-button navigation, populated fixed/indemnity summaries, and all six member catalogs; then delete the temporary session and browser artifacts. The acceptance pass also found and fixed long-terms-page and complete-catalog response-bound regressions with synthetic tests.
 - [x] Review the final diff for private material, prepare a Conventional Commit, and report any PR/CI/merge boundary separately.

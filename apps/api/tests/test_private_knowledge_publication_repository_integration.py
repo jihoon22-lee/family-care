@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 import os
 from pathlib import Path
 from uuid import UUID
@@ -24,6 +26,8 @@ from familycare_api.private_knowledge.repository import (
 )
 
 from apps.api.tests.private_knowledge_fixtures import (
+    append_jsonl,
+    refresh_manifest,
     write_synthetic_private_knowledge_package,
 )
 from apps.api.tests.private_knowledge_publication_fixtures import (
@@ -47,7 +51,59 @@ def _database_url() -> str:
     return value.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
-def _seed_current_knowledge(tmp_path: Path) -> tuple[str, str]:
+def _add_contract_without_coverages(root: Path) -> None:
+    contract_path = root / "contracts.jsonl"
+    source_contract = json.loads(contract_path.read_text(encoding="utf-8").splitlines()[0])
+    empty_contract = copy.deepcopy(source_contract)
+    empty_contract["canonical_policy_id"] = "synthetic-policy-002"
+    empty_contract["product_name"] = "Sample Policy Without Coverages"
+    empty_contract["source_members"][0]["local_policy_id"] = "synthetic-local-policy-002"
+    empty_contract["terms_pairing"]["canonical_policy_id"] = "synthetic-policy-002"
+    empty_contract["row_reconciliation"].update(
+        {
+            "benefit_coverages": 0,
+            "canonical_components": 0,
+            "certificate_rows_detected": 0,
+        }
+    )
+    append_jsonl(root, "contracts.jsonl", empty_contract)
+
+    pairing_path = root / "policy-terms-pairings.jsonl"
+    source_pairing = json.loads(pairing_path.read_text(encoding="utf-8").splitlines()[0])
+    empty_pairing = copy.deepcopy(source_pairing)
+    empty_pairing["canonical_policy_id"] = "synthetic-policy-002"
+    append_jsonl(root, "policy-terms-pairings.jsonl", empty_pairing)
+
+    reconciliation_path = root / "reconciliation.json"
+    reconciliation = json.loads(reconciliation_path.read_text(encoding="utf-8"))
+    reconciliation.update(
+        {
+            "policy_count": 2,
+            "policy_terms_identity_match_count": 2,
+            "policy_terms_edition_match_count": 2,
+        }
+    )
+    reconciliation_path.write_text(
+        json.dumps(reconciliation, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    reconciliation_path.chmod(0o600)
+    refresh_manifest(root)
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["counts"] = reconciliation
+    manifest_path.write_text(
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    manifest_path.chmod(0o600)
+
+
+def _seed_current_knowledge(
+    tmp_path: Path,
+    *,
+    include_contract_without_coverages: bool = False,
+) -> tuple[str, str]:
     with psycopg.connect(_database_url()) as connection:
         database_name = connection.execute("SELECT current_database()").fetchone()
         assert database_name is not None
@@ -80,6 +136,8 @@ def _seed_current_knowledge(tmp_path: Path) -> tuple[str, str]:
         )
 
     knowledge_root = write_synthetic_private_knowledge_package(tmp_path / "knowledge-package")
+    if include_contract_without_coverages:
+        _add_contract_without_coverages(knowledge_root)
     knowledge_package = load_private_knowledge_package(
         knowledge_root,
         repository_root=tmp_path / "repository",
@@ -116,11 +174,12 @@ def _seed_current_knowledge(tmp_path: Path) -> tuple[str, str]:
             )
             SELECT import_run_id, household_space_id, id, 'MATCH', 'active',
                    DATE '2026-08-30', 'USER_CONFIRMED_CURRENT_ENROLLMENT',
-                   'SYNTHETIC_CURRENT_CONFIRMED', %s, clock_timestamp(), true, %s
+                   'SYNTHETIC_CURRENT_CONFIRMED', %s, clock_timestamp(), true,
+                   lpad(row_number() OVER (ORDER BY id)::text, 64, 'c')
             FROM private_knowledge_contracts
             WHERE import_run_id = %s
             """,
-            (ACTOR_ID, "c" * 64, applied.run_id),
+            (ACTOR_ID, applied.run_id),
         )
         row = connection.execute(
             """
@@ -275,6 +334,49 @@ def test_apply_rollback_idempotency_supersede_and_clause_drift(tmp_path: Path) -
     with pytest.raises(RulePublicationRepositoryError) as drifted:
         repository.verify_current(HOUSEHOLD_ID)
     assert drifted.value.code is RulePublicationRepositoryErrorCode.VERIFICATION_FAILED
+
+
+def test_apply_counts_only_contracts_represented_by_coverage_dispositions(
+    tmp_path: Path,
+) -> None:
+    knowledge_package_digest, knowledge_projection_digest = _seed_current_knowledge(
+        tmp_path,
+        include_contract_without_coverages=True,
+    )
+    package = _publication_package(
+        tmp_path,
+        knowledge_package_digest=knowledge_package_digest,
+        knowledge_projection_digest=knowledge_projection_digest,
+    )
+    repository = PostgresRulePublicationRepository(_database_url())
+    report = repository.prepare_dry_run(package, household_space_id=HOUSEHOLD_ID)
+
+    applied = repository.apply(
+        package,
+        household_space_id=HOUSEHOLD_ID,
+        actor_id=ACTOR_ID,
+        approved_report=report,
+    )
+
+    assert applied.counts.contract_count == 1
+    with psycopg.connect(_database_url()) as connection:
+        counts = connection.execute(
+            """
+            SELECT
+              (SELECT count(*) FROM private_knowledge_contracts
+               WHERE import_run_id = (
+                 SELECT knowledge_import_run_id
+                 FROM private_knowledge_rule_import_runs WHERE id = %s
+               )),
+              (SELECT count(*) FROM private_knowledge_coverages
+               WHERE import_run_id = (
+                 SELECT knowledge_import_run_id
+                 FROM private_knowledge_rule_import_runs WHERE id = %s
+               ))
+            """,
+            (applied.run_id, applied.run_id),
+        ).fetchone()
+    assert counts == (2, 1)
 
 
 def test_apply_rejects_changed_actor_baseline_after_approval(tmp_path: Path) -> None:

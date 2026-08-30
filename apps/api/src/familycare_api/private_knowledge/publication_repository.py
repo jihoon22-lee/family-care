@@ -1185,14 +1185,22 @@ class PostgresRulePublicationRepository:
         source_counts = connection.execute(
             """
             SELECT
-              (SELECT count(*) FROM private_knowledge_subjects
-               WHERE import_run_id = %(knowledge_run)s) AS subject_count,
-              (SELECT count(*) FROM private_knowledge_contracts
-               WHERE import_run_id = %(knowledge_run)s) AS contract_count,
-              (SELECT count(*) FROM private_knowledge_coverages
-               WHERE import_run_id = %(knowledge_run)s) AS coverage_count
+              count(DISTINCT contract.subject_id) AS subject_count,
+              count(DISTINCT coverage.knowledge_contract_id) AS contract_count,
+              count(*) AS coverage_count
+            FROM private_knowledge_coverage_execution_dispositions AS disposition
+            JOIN private_knowledge_coverages AS coverage
+              ON coverage.id = disposition.knowledge_coverage_id
+             AND coverage.import_run_id = %(knowledge_run)s
+            JOIN private_knowledge_contracts AS contract
+              ON contract.id = coverage.knowledge_contract_id
+             AND contract.import_run_id = coverage.import_run_id
+            WHERE disposition.rule_import_run_id = %(publication_run)s
             """,
-            {"knowledge_run": knowledge_run_id},
+            {
+                "knowledge_run": knowledge_run_id,
+                "publication_run": publication_run_id,
+            },
         ).fetchone()
         if source_counts is None:
             raise RulePublicationRepositoryError(

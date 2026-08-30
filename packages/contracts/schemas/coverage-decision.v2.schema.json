@@ -166,13 +166,11 @@
           "type": "string"
         },
         "page_end": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page End",
           "type": "integer"
         },
         "page_start": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page Start",
           "type": "integer"
@@ -1152,13 +1150,11 @@
           "type": "string"
         },
         "page_end": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page End",
           "type": "integer"
         },
         "page_start": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page Start",
           "type": "integer"
@@ -1374,7 +1370,7 @@
       "items": {
         "$ref": "#/$defs/ClaimCandidateResponse"
       },
-      "maxItems": 128,
+      "maxItems": 10000,
       "title": "Candidates",
       "type": "array"
     },

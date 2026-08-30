@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -100,12 +101,63 @@ def test_decision_schema_is_recursive_strict_and_bounded() -> None:
     objects = walk_objects(schema)
     assert objects
     assert all(item.get("additionalProperties") is False for item in objects)
-    assert schema["properties"]["candidates"]["maxItems"] == 128
+    assert schema["properties"]["candidates"]["maxItems"] == 10_000
     assert schema["properties"]["evaluations"]["maxItems"] == 512
     assert (
         schema["$defs"]["AnalysisAssistanceResponse"]["properties"]["recommendations"]["maxItems"]
         == 12
     )
+
+
+def test_private_citation_models_allow_long_policy_terms_pages() -> None:
+    from familycare_api.decisions.schemas import (
+        AssistanceCitationResponse,
+        PrivateKnowledgeCitationResponse,
+    )
+
+    terms_section_id = UUID("00000000-0000-4000-8000-000000009901")
+    source_clause_id = UUID("00000000-0000-4000-8000-000000009902")
+    fact_id = UUID("00000000-0000-4000-8000-000000009903")
+
+    private_citation = PrivateKnowledgeCitationResponse(
+        kind="PRIVATE_KNOWLEDGE_CITATION",
+        terms_section_id=terms_section_id,
+        source_clause_id=source_clause_id,
+        fact_id=fact_id,
+        evidence_purpose="SYNTHETIC_POLICY_TERMS",
+        page_start=777,
+        page_end=778,
+    )
+    assistance_citation = AssistanceCitationResponse(
+        kind="FACT_CITATION",
+        terms_section_id=terms_section_id,
+        source_clause_id=source_clause_id,
+        fact_id=fact_id,
+        page_start=777,
+        page_end=778,
+    )
+
+    assert (private_citation.page_start, private_citation.page_end) == (777, 778)
+    assert (assistance_citation.page_start, assistance_citation.page_end) == (777, 778)
+
+
+def test_decision_model_preserves_a_complete_member_catalog_over_128_candidates() -> None:
+    from familycare_api.decisions.schemas import CoverageDecisionResponse
+
+    example = load_json(EXAMPLE_PATH)
+    prototype = example["candidates"][0]
+    example["candidates"] = [
+        {
+            **copy.deepcopy(prototype),
+            "candidate_id": f"00000000-0000-4000-8000-{index + 1_000:012d}",
+        }
+        for index in range(199)
+    ]
+    example["catalog_coverage"]["benefit_coverage_count"] = 199
+
+    response = CoverageDecisionResponse.model_validate(example)
+
+    assert len(response.candidates) == 199
 
 
 def test_decision_evaluations_have_discriminated_lineage_and_exact_citations() -> None:
