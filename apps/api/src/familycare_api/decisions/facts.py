@@ -31,20 +31,31 @@ _DATE_FIELDS = frozenset(
         "PolicyContract.contract_end",
     }
 )
-_DECIMAL_FIELDS = frozenset({"Rider.insured_amount", "Receipt.confirmed_amount"})
+_DECIMAL_FIELDS = frozenset(
+    {"Rider.insured_amount", "Receipt.confirmed_amount", "Receipt.covered_amount"}
+)
 _INTEGER_FIELDS = frozenset({"MedicalEvent.admission_days", "ClaimHistory.counted_occurrence"})
+_BOOLEAN_FIELDS = frozenset({"MedicalEvent.separately_billed_treatment"})
 _KNOWN_FIELDS = frozenset(
     {
         "MedicalEvent.event_date",
         "MedicalEvent.visit_date",
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
+        "MedicalEvent.diagnosis_code",
+        "MedicalEvent.procedure_code",
+        "MedicalEvent.anatomical_site_code",
+        "MedicalEvent.pathology_code",
+        "MedicalEvent.treatment_setting",
+        "MedicalEvent.treatment_context",
+        "MedicalEvent.separately_billed_treatment",
         "PolicyContract.contract_start",
         "PolicyContract.contract_end",
         "Rider.status",
         "Rider.insured_amount",
         "ClaimHistory.counted_occurrence",
         "Receipt.confirmed_amount",
+        "Receipt.covered_amount",
     }
 )
 _CONFIRMATIONS = frozenset({"user", "ai_structured", "unconfirmed", "conflicting"})
@@ -165,6 +176,8 @@ def _normalize_value(value: object | None, field: str | None) -> object | None:
         isinstance(value, bool) or not isinstance(value, int) or value < 0
     ):
         raise FactNormalizationError("INVALID_INTEGER")
+    if qualified_field in _BOOLEAN_FIELDS and not isinstance(value, bool):
+        raise FactNormalizationError("INVALID_BOOLEAN")
     return value
 
 

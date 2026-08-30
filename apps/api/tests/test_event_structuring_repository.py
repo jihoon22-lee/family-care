@@ -6,7 +6,9 @@ from uuid import UUID
 
 import pytest
 from familycare_api.decisions.errors import DecisionRepositoryUnavailable
+from familycare_api.decisions.schemas import MedicalEventUpdateRequest
 from familycare_api.decisions.structuring_repository import _job, _merge_user_overrides
+from familycare_api.decisions.structuring_schemas import FactFieldId
 
 JOB_ID = UUID("00000000-0000-4000-8000-000000000101")
 EVENT_ID = UUID("00000000-0000-4000-8000-000000000102")
@@ -117,3 +119,55 @@ def test_user_override_preserves_ai_parent_data_and_removes_answered_question() 
     assert questions == []
     assert changed == ("condition_class", "pharmacy")
     assert conflict is True
+
+
+def test_private_rule_fields_are_user_confirmed_and_boolean_is_strict() -> None:
+    private_fields: dict[FactFieldId, str | bool | None] = {
+        "diagnosis_code": "synthetic_code_a",
+        "procedure_code": "synthetic_code_b",
+        "anatomical_site_code": "synthetic_site_a",
+        "pathology_code": "synthetic_path_a",
+        "treatment_setting": "synthetic_setting",
+        "treatment_context": "synthetic_context",
+        "separately_billed_treatment": True,
+    }
+
+    request = MedicalEventUpdateRequest.model_validate(
+        {
+            "expected_version": 1,
+            "structured_facts": [
+                {"field_id": field_id, "value": value} for field_id, value in private_fields.items()
+            ],
+        }
+    )
+    facts, questions, changed, conflict = _merge_user_overrides({}, [], private_fields)
+
+    assert {item.field_id for item in request.structured_facts or []} == set(private_fields)
+    assert set(changed) == set(private_fields)
+    assert questions == []
+    assert conflict is False
+    assert all(fact["source"] == "user" for fact in facts.values())
+    assert all(fact["state"] == "confirmed" for fact in facts.values())
+
+    with pytest.raises(ValueError):
+        MedicalEventUpdateRequest.model_validate(
+            {
+                "expected_version": 1,
+                "structured_facts": [
+                    {
+                        "field_id": "separately_billed_treatment",
+                        "value": "true",
+                    }
+                ],
+            }
+        )
+
+    with pytest.raises(ValueError):
+        MedicalEventUpdateRequest.model_validate(
+            {
+                "expected_version": 1,
+                "structured_facts": [
+                    {"field_id": "diagnosis_code", "value": "NOT_NORMALIZED"},
+                ],
+            }
+        )

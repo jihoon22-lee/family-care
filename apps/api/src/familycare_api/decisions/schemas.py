@@ -24,6 +24,7 @@ from familycare_api.decisions.structuring_schemas import (
     FactFieldId,
     OptionalQuestionResponse,
     StructuredFactResponse,
+    is_valid_structured_fact_value,
 )
 
 FactScalar = str | int | Decimal | date | None
@@ -293,20 +294,9 @@ def _require_event_fields(facts: dict[str, FactInput]) -> None:
 def _require_structured_facts(facts: list[StructuredFactInput]) -> None:
     if not facts or len({item.field_id for item in facts}) != len(facts):
         raise ValueError("structured fact fields must be unique")
-    boolean_fields = {"admission", "outpatient", "pharmacy"}
     for item in facts:
-        if item.field_id in boolean_fields:
-            if item.value is not None and not isinstance(item.value, bool):
-                raise ValueError("invalid structured boolean fact")
-        elif item.value is not None and not isinstance(item.value, str):
-            raise ValueError("invalid structured text fact")
-        if item.field_id in {"event_date", "visit_date"} and item.value is not None:
-            if not isinstance(item.value, str):
-                raise ValueError("invalid structured date fact")
-            try:
-                date.fromisoformat(item.value)
-            except ValueError:
-                raise ValueError("invalid structured date fact") from None
+        if not is_valid_structured_fact_value(item.field_id, item.value):
+            raise ValueError("invalid structured fact value")
 
 
 __all__ = [

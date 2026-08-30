@@ -464,6 +464,8 @@ git commit -m "feat(private-knowledge): publish reviewed rules"
 
 ### Task 6: Add trusted event facts and private rule runtime
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/src/familycare_api/decisions/knowledge_domain.py`
 - Create: `apps/api/src/familycare_api/decisions/knowledge_facts.py`
@@ -507,11 +509,11 @@ class DeterministicKnowledgeDecisionEngine:
     ) -> KnowledgeDecisionResult: ...
 ```
 
-- [ ] **Step 1: Write RED fact-normalization tests**
+- [x] **Step 1: Write RED fact-normalization tests**
 
 Use fabricated phrases unrelated to actual cases. Assert Unicode normalization plus exact token-sequence matching, deterministic priority, identical-value de-duplication, conflicting-value `CONFLICTING`, and no substring/fuzzy/regex match. Explicit user structured facts override a derived value and preserve conflict audit.
 
-- [ ] **Step 2: Write RED rule-engine tables**
+- [x] **Step 2: Write RED rule-engine tables**
 
 Test one coverage each for all authority gates, required aggregation, missing/conflicting/AI-suggested fact, inactive/event-date status, exclusion, waiting, reduction, frequency history, invalid citation, fixed calculation, indemnity missing receipt data, mixed currency, and one-coverage failure isolation.
 
@@ -530,7 +532,7 @@ assert evaluate(case_b).indemnity_summary.status == "UNKNOWN"
 
 The literal values are wholly synthetic and deliberately unrelated to actual data.
 
-- [ ] **Step 3: Run RED tests**
+- [x] **Step 3: Run RED tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_facts.py apps/api/tests/test_private_knowledge_engine.py apps/api/tests/test_rule_dsl.py -q
@@ -538,7 +540,7 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_facts.py apps/ap
 
 Expected: new tests fail because the knowledge fact/runtime modules and v2 fields are absent.
 
-- [ ] **Step 4: Extend the field registry and implement exact normalization**
+- [x] **Step 4: Extend the field registry and implement exact normalization**
 
 Add these qualified fields with strict kinds:
 
@@ -562,11 +564,11 @@ Extend `FactFieldId`, repository allowlists, request validation, and generated s
 `treatment_setting`, `treatment_context`, and `separately_billed_treatment`. User overrides are stored
 as source `user`, state `confirmed`; AI/provider suggestions remain source `ai` until edited.
 
-- [ ] **Step 5: Implement deterministic knowledge evaluation and calculation**
+- [x] **Step 5: Implement deterministic knowledge evaluation and calculation**
 
 Reuse the compiled data-only expression shape, but keep private citations as `KnowledgeCitation` rather than fabricating operational `Evidence`. Calculate each coverage independently using Decimal. Sum only `MATCH + CALCULATED` fixed results per currency, count unresolved candidates, and return indemnity separately. Runtime must not make network or model calls.
 
-- [ ] **Step 6: Run GREEN, mutation review, and commit**
+- [x] **Step 6: Run GREEN, mutation review, and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_facts.py apps/api/tests/test_private_knowledge_engine.py apps/api/tests/test_rule_dsl.py apps/api/tests/test_decision_operators.py apps/api/tests/test_event_structuring_repository.py apps/api/tests/test_event_structuring_contracts.py -q

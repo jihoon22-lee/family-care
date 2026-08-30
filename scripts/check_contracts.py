@@ -223,6 +223,13 @@ STRUCTURING_FACT_FIELD_IDS = [
     "admission",
     "outpatient",
     "pharmacy",
+    "diagnosis_code",
+    "procedure_code",
+    "anatomical_site_code",
+    "pathology_code",
+    "treatment_setting",
+    "treatment_context",
+    "separately_billed_treatment",
 ]
 STRUCTURING_FACT_SOURCES = ["user", "ai", "system"]
 STRUCTURING_FACT_STATES = ["confirmed", "ambiguous", "missing", "conflict"]
