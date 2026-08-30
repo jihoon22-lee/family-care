@@ -167,12 +167,17 @@ MemberInsuranceDocumentInventory
 
 ## UI behavior
 
-기존 가족별 원장 route를 유지하고 원장 상단에 `보험·문서 현황`을 추가한다.
+기존 가족별 원장 route를 유지한다. 원장 최상단의 전체 가입 보험 분석은 current private
+knowledge snapshot을 읽고, 이 문서의 inventory는 그 아래에서 앱 내부 업로드·Evidence
+연결 작업 현황을 보여 준다. inventory의 등록 보험 수를 가족의 전체 가입 보험 수로
+표현하지 않는다.
 
-- 요약 카드는 `증권 근거 보험`, `증권+약관`, `증권만`, `미연결 약관`, `상품설명서`, `판독 필요`를 보여 준다.
+- inventory 요약 카드는 `앱 근거 연결 보험`, `증권+약관`, `증권만`, `미연결 약관`, `상품설명서`, `판독 필요`를 보여 준다.
 - 등록 보험 카드는 문서 role별 chip과 component/source 건수를 표시한다. 여러 역할이 한 파일에 있으면 `묶음 문서`를 표시한다.
 - 약관이 없으면 `약관 보완 필요`, 상품설명서가 없으면 중립적인 `상품설명서 없음`을 표시한다. 상품설명서는 필수가 아니므로 결함으로 단정하지 않는다.
-- 미등록 document set과 미연결 component는 등록 보험 카드와 시각적으로 분리하고 `가입 확인 안 됨`을 표시한다.
+- 미등록 document set과 미연결 component는 등록 보험 카드와 시각적으로 분리하고
+  `앱 계약 연결 대기`를 표시한다. 이 상태는 사용자의 실제 가입 여부를 부정하지 않고
+  운영 원장과의 연결 상태만 설명한다.
 - 처리 완료됐지만 component ID가 없는 `SUGGESTED` source는 사용자가 role과 기존 처리 page 범위 안의 1-based 시작·끝 page를 명시적으로 선택해야 `USER_CONFIRMED` component가 된다. intake 분류를 가입 authority나 기본 확인값으로 사용하지 않는다.
 - 사용자는 기존 import 화면으로 이동해 같은 가족 구성원에게 누락 문서를 추가하거나, 검토한 문서를 계약에 연결·해제할 수 있다.
 - unreadable 문서는 원래의 문서 역할을 유지한 채 재업로드/OCR 보완 표시를 추가하고 상품명이나 계약을 추정하지 않는다.
@@ -192,6 +197,8 @@ MemberInsuranceDocumentInventory
 11. 실제 문서와 파생 본문은 저장소, fixture, test, log에 들어가지 않는다.
 12. 성공 batch item과 component의 DocumentVersion lineage는 `processed_document_version_id`로 고정하며 임의 최신 version으로 바꾸지 않는다.
 13. 암호 필요·OCR 필요 자료는 가짜 component로 만들지 않고 path-free `unreadable_sources`로 표시한다.
+14. inventory의 미연결 상태는 실제 가입 여부의 `NO_MATCH` 근거가 아니며 전체 가입 보험
+    catalog의 계약을 숨기거나 비가입으로 바꾸지 않는다.
 
 ## Verification
 

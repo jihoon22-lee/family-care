@@ -5,6 +5,7 @@ import { CandidateReviewQueue } from "./CandidateReviewQueue";
 import { FamilyMemberPicker } from "./FamilyMemberPicker";
 import { InsuranceDocumentInventory } from "./InsuranceDocumentInventory";
 import { PolicySummaryCard } from "./PolicySummaryCard";
+import { PrivateInsuranceCatalog } from "./PrivateInsuranceCatalog";
 import { useLedger } from "./useLedger";
 
 function errorCopy(error: ApiError): string {
@@ -91,6 +92,8 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
             </div>
           </section>
 
+          <PrivateInsuranceCatalog memberId={data.selectedMember.id} />
+
           <InsuranceDocumentInventory memberId={data.selectedMember.id} />
 
           <div className="ledger-columns">
@@ -100,13 +103,14 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
             >
               <div className="folio-heading">
                 <span>Policy folio</span>
-                <h2 id="policy-ledger-title">확인된 계약</h2>
+                <h2 id="policy-ledger-title">청구 근거 연결 계약</h2>
               </div>
               {data.policies.length === 0 ? (
                 <div className="empty-state compact">
-                  <h3>확인된 계약이 없습니다.</h3>
+                  <h3>청구 근거 연결 계약이 없습니다.</h3>
                   <p>
-                    증권 분석이 끝나면 근거가 확인된 계약이 이곳에 표시됩니다.
+                    전체 가입 보험은 위 분석 목록에 표시되며, 내부 Evidence
+                    연결이 완료된 계약만 이 영역에 표시됩니다.
                   </p>
                 </div>
               ) : (

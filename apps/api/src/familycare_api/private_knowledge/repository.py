@@ -16,6 +16,14 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
+from familycare_api.private_knowledge.confirmations import (
+    AppliedConfirmationSet,
+    ConfirmationDryRunReport,
+    ConfirmationError,
+    ConfirmationErrorCode,
+    LoadedConfirmationManifest,
+    canonical_confirmation_report_digest,
+)
 from familycare_api.private_knowledge.errors import PrivateKnowledgePackageError
 from familycare_api.private_knowledge.package import (
     PrivateKnowledgePackage,
@@ -140,6 +148,18 @@ def _advisory_lock_key(household_space_id: UUID) -> int:
 def _label_counts(values: list[str]) -> tuple[LabelKeyCount, ...]:
     counts = Counter(values)
     return tuple(LabelKeyCount(key=key, count=count) for key, count in sorted(counts.items()))
+
+
+def _confirmation_baseline_digest(payload: object) -> str:
+    return hashlib.sha256(
+        b"familycare-private-confirmation-baseline-v1\x00" + _canonical_json(payload)
+    ).hexdigest()
+
+
+def _confirmation_record_digest(payload: object) -> str:
+    return hashlib.sha256(
+        b"familycare-private-confirmation-record-v1\x00" + _canonical_json(payload)
+    ).hexdigest()
 
 
 class PostgresPrivateKnowledgeRepository:
@@ -486,7 +506,13 @@ class PostgresPrivateKnowledgeRepository:
               (
                 (SELECT count(*) FROM private_knowledge_subjects
                  WHERE import_run_id = %(run)s
-                   AND (family_member_id IS NOT NULL OR binding_decision <> 'UNKNOWN')) +
+                   AND (
+                     (binding_decision = 'MATCH'
+                      AND (family_member_id IS NULL
+                           OR binding_confirmed_by IS NULL
+                           OR binding_confirmed_at IS NULL))
+                     OR (binding_decision <> 'MATCH' AND family_member_id IS NOT NULL)
+                   )) +
                 (SELECT count(*) FROM private_knowledge_contracts
                  WHERE import_run_id = %(run)s
                    AND (policy_contract_id IS NOT NULL
@@ -726,6 +752,375 @@ class PostgresPrivateKnowledgeRepository:
                 PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
             )
         return int(row["violations"])
+
+    @staticmethod
+    def _build_confirmation_report(
+        connection: psycopg.Connection[dict[str, Any]],
+        manifest: LoadedConfirmationManifest,
+    ) -> ConfirmationDryRunReport:
+        run = connection.execute(
+            """
+            SELECT id, package_digest_sha256
+            FROM private_knowledge_import_runs
+            WHERE household_space_id = %s
+              AND state = 'APPLIED'
+              AND is_current
+            """,
+            (manifest.household_space_id,),
+        ).fetchone()
+        if run is None:
+            raise ConfirmationError(ConfirmationErrorCode.CURRENT_SNAPSHOT_NOT_FOUND)
+        if run["package_digest_sha256"] != manifest.package_digest_sha256:
+            raise ConfirmationError(ConfirmationErrorCode.PACKAGE_DIGEST_MISMATCH)
+        run_id = cast(UUID, run["id"])
+
+        actor = connection.execute(
+            """
+            SELECT 1
+            FROM app_users
+            WHERE id = %s AND household_space_id = %s AND is_active
+            """,
+            (manifest.confirmed_by, manifest.household_space_id),
+        ).fetchone()
+        if actor is None:
+            raise ConfirmationError(ConfirmationErrorCode.ACTOR_NOT_FOUND)
+
+        member_ids = [row.family_member_id for row in manifest.subjects]
+        members = connection.execute(
+            """
+            SELECT id
+            FROM family_members
+            WHERE household_space_id = %s
+              AND deleted_at IS NULL
+              AND id = ANY(%s::uuid[])
+            """,
+            (manifest.household_space_id, member_ids),
+        ).fetchall()
+        if {row["id"] for row in members} != set(member_ids):
+            raise ConfirmationError(ConfirmationErrorCode.FAMILY_MEMBER_NOT_FOUND)
+
+        subjects = connection.execute(
+            """
+            SELECT source_subject_key, family_member_id, binding_decision,
+                   binding_confirmed_by, binding_confirmed_at
+            FROM private_knowledge_subjects
+            WHERE import_run_id = %s
+            ORDER BY source_subject_key
+            """,
+            (run_id,),
+        ).fetchall()
+        desired_subjects = {
+            row.source_subject_key: row.family_member_id for row in manifest.subjects
+        }
+        if {row["source_subject_key"] for row in subjects} != set(desired_subjects):
+            raise ConfirmationError(ConfirmationErrorCode.SUBJECT_SET_MISMATCH)
+
+        contracts = connection.execute(
+            """
+            SELECT contract.id,
+                   contract.source_record_json ->> 'canonical_policy_id'
+                     AS canonical_policy_id,
+                   confirmation.decision, confirmation.confirmed_status,
+                   confirmation.status_as_of, confirmation.authority,
+                   confirmation.reason_code, confirmation.confirmed_by,
+                   confirmation.confirmation_digest_sha256
+            FROM private_knowledge_contracts AS contract
+            LEFT JOIN private_knowledge_contract_confirmations AS confirmation
+              ON confirmation.knowledge_contract_id = contract.id
+             AND confirmation.import_run_id = contract.import_run_id
+             AND confirmation.is_current
+            WHERE contract.import_run_id = %s
+            ORDER BY canonical_policy_id
+            """,
+            (run_id,),
+        ).fetchall()
+        desired_contracts = {row.canonical_policy_id: row for row in manifest.contracts}
+        if {row["canonical_policy_id"] for row in contracts} != set(desired_contracts):
+            raise ConfirmationError(ConfirmationErrorCode.CONTRACT_SET_MISMATCH)
+
+        binding_change_count = sum(
+            1
+            for row in subjects
+            if not (
+                row["family_member_id"] == desired_subjects[row["source_subject_key"]]
+                and row["binding_decision"] == "MATCH"
+                and row["binding_confirmed_by"] == manifest.confirmed_by
+                and row["binding_confirmed_at"] is not None
+            )
+        )
+        confirmation_insert_count = 0
+        confirmation_supersede_count = 0
+        for row in contracts:
+            desired = desired_contracts[row["canonical_policy_id"]]
+            current_matches = (
+                row["decision"] == desired.decision
+                and row["confirmed_status"] == desired.confirmed_status
+                and row["status_as_of"] == manifest.status_as_of
+                and row["authority"] == manifest.authority
+                and row["reason_code"] == desired.reason_code
+                and row["confirmed_by"] == manifest.confirmed_by
+            )
+            if not current_matches:
+                confirmation_insert_count += 1
+                if row["decision"] is not None:
+                    confirmation_supersede_count += 1
+
+        baseline_payload = {
+            "run_id": str(run_id),
+            "package_digest_sha256": manifest.package_digest_sha256,
+            "actor_id": str(manifest.confirmed_by),
+            "subjects": [
+                {
+                    "source_subject_key": row["source_subject_key"],
+                    "family_member_id": (
+                        str(row["family_member_id"])
+                        if row["family_member_id"] is not None
+                        else None
+                    ),
+                    "binding_decision": row["binding_decision"],
+                    "binding_confirmed_by": (
+                        str(row["binding_confirmed_by"])
+                        if row["binding_confirmed_by"] is not None
+                        else None
+                    ),
+                    "binding_confirmed_at": (
+                        row["binding_confirmed_at"].isoformat()
+                        if row["binding_confirmed_at"] is not None
+                        else None
+                    ),
+                }
+                for row in subjects
+            ],
+            "contracts": [
+                {
+                    "canonical_policy_id": row["canonical_policy_id"],
+                    "decision": row["decision"],
+                    "confirmed_status": row["confirmed_status"],
+                    "status_as_of": (
+                        row["status_as_of"].isoformat() if row["status_as_of"] is not None else None
+                    ),
+                    "authority": row["authority"],
+                    "reason_code": row["reason_code"],
+                    "confirmed_by": (
+                        str(row["confirmed_by"]) if row["confirmed_by"] is not None else None
+                    ),
+                    "confirmation_digest_sha256": row["confirmation_digest_sha256"],
+                }
+                for row in contracts
+            ],
+        }
+        operation: Literal["APPLY", "NO_OP"] = (
+            "NO_OP" if binding_change_count == 0 and confirmation_insert_count == 0 else "APPLY"
+        )
+        provisional = ConfirmationDryRunReport(
+            schema_version="private-knowledge-confirmation-dry-run.v1",
+            manifest_digest_sha256=manifest.manifest_digest_sha256,
+            package_digest_sha256=manifest.package_digest_sha256,
+            household_space_id=manifest.household_space_id,
+            current_run_id=run_id,
+            baseline_digest_sha256=_confirmation_baseline_digest(baseline_payload),
+            operation=operation,
+            subject_count=len(subjects),
+            contract_count=len(contracts),
+            binding_change_count=binding_change_count,
+            confirmation_insert_count=confirmation_insert_count,
+            confirmation_supersede_count=confirmation_supersede_count,
+            report_digest_sha256="0" * 64,
+        )
+        return provisional.model_copy(
+            update={"report_digest_sha256": canonical_confirmation_report_digest(provisional)}
+        )
+
+    def prepare_confirmation_dry_run(
+        self,
+        manifest: LoadedConfirmationManifest,
+    ) -> ConfirmationDryRunReport:
+        """Validate exact member and contract sets without database mutation."""
+
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.isolation_level = IsolationLevel.REPEATABLE_READ
+                connection.read_only = True
+                with connection.transaction():
+                    self._require_transaction_mode(connection)
+                    report = self._build_confirmation_report(connection, manifest)
+                    self._require_unassigned_transaction_id(connection)
+                    return report
+        except ConfirmationError:
+            raise
+        except psycopg.Error:
+            raise ConfirmationError(ConfirmationErrorCode.DATABASE_UNAVAILABLE) from None
+        except KeyError, TypeError, ValueError:
+            raise ConfirmationError(ConfirmationErrorCode.VERIFICATION_FAILED) from None
+
+    def apply_confirmations(
+        self,
+        manifest: LoadedConfirmationManifest,
+        *,
+        approved_report: ConfirmationDryRunReport,
+    ) -> AppliedConfirmationSet:
+        """Atomically bind every subject and append changed confirmations."""
+
+        if (
+            approved_report.report_digest_sha256
+            != canonical_confirmation_report_digest(approved_report)
+            or approved_report.manifest_digest_sha256 != manifest.manifest_digest_sha256
+            or approved_report.package_digest_sha256 != manifest.package_digest_sha256
+            or approved_report.household_space_id != manifest.household_space_id
+        ):
+            raise ConfirmationError(ConfirmationErrorCode.APPROVAL_INVALID)
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.isolation_level = IsolationLevel.REPEATABLE_READ
+                with connection.transaction():
+                    self._require_apply_transaction_mode(connection)
+                    connection.execute(
+                        """
+                        LOCK TABLE private_knowledge_import_runs,
+                                   private_knowledge_subjects,
+                                   private_knowledge_contracts,
+                                   private_knowledge_contract_confirmations,
+                                   family_members, app_users
+                        IN SHARE ROW EXCLUSIVE MODE
+                        """
+                    )
+                    connection.execute(
+                        "SELECT pg_advisory_xact_lock(%s)",
+                        (_advisory_lock_key(manifest.household_space_id),),
+                    )
+                    current_report = self._build_confirmation_report(connection, manifest)
+                    if current_report != approved_report:
+                        raise ConfirmationError(ConfirmationErrorCode.STALE_DRY_RUN)
+
+                    for subject in manifest.subjects:
+                        connection.execute(
+                            """
+                            UPDATE private_knowledge_subjects
+                               SET family_member_id = %s,
+                                   binding_decision = 'MATCH',
+                                   binding_conflict = false,
+                                   binding_reason_code = 'USER_EXACT_BINDING',
+                                   binding_confirmed_by = %s,
+                                   binding_confirmed_at = clock_timestamp()
+                             WHERE import_run_id = %s
+                               AND source_subject_key = %s
+                               AND NOT (
+                                 family_member_id = %s
+                                 AND binding_decision = 'MATCH'
+                                 AND binding_confirmed_by = %s
+                                 AND binding_confirmed_at IS NOT NULL
+                               )
+                            """,
+                            (
+                                subject.family_member_id,
+                                manifest.confirmed_by,
+                                approved_report.current_run_id,
+                                subject.source_subject_key,
+                                subject.family_member_id,
+                                manifest.confirmed_by,
+                            ),
+                        )
+
+                    contract_rows = connection.execute(
+                        """
+                        SELECT contract.id,
+                               contract.source_record_json ->> 'canonical_policy_id'
+                                 AS canonical_policy_id,
+                               confirmation.id AS confirmation_id,
+                               confirmation.decision,
+                               confirmation.confirmed_status,
+                               confirmation.status_as_of,
+                               confirmation.authority,
+                               confirmation.reason_code,
+                               confirmation.confirmed_by,
+                               confirmation.confirmation_digest_sha256
+                        FROM private_knowledge_contracts AS contract
+                        LEFT JOIN private_knowledge_contract_confirmations AS confirmation
+                          ON confirmation.knowledge_contract_id = contract.id
+                         AND confirmation.import_run_id = contract.import_run_id
+                         AND confirmation.is_current
+                        WHERE contract.import_run_id = %s
+                        """,
+                        (approved_report.current_run_id,),
+                    ).fetchall()
+                    contracts_by_key = {row["canonical_policy_id"]: row for row in contract_rows}
+                    for desired in manifest.contracts:
+                        current = contracts_by_key[desired.canonical_policy_id]
+                        current_matches = (
+                            current["decision"] == desired.decision
+                            and current["confirmed_status"] == desired.confirmed_status
+                            and current["status_as_of"] == manifest.status_as_of
+                            and current["authority"] == manifest.authority
+                            and current["reason_code"] == desired.reason_code
+                            and current["confirmed_by"] == manifest.confirmed_by
+                        )
+                        if current_matches:
+                            continue
+                        previous_digest = current["confirmation_digest_sha256"]
+                        if current["confirmation_id"] is not None:
+                            connection.execute(
+                                """
+                                UPDATE private_knowledge_contract_confirmations
+                                   SET is_current = false,
+                                       superseded_at = clock_timestamp()
+                                 WHERE id = %s AND is_current
+                                """,
+                                (current["confirmation_id"],),
+                            )
+                        confirmation_digest = _confirmation_record_digest(
+                            {
+                                "run_id": str(approved_report.current_run_id),
+                                "canonical_policy_id": desired.canonical_policy_id,
+                                "decision": desired.decision,
+                                "confirmed_status": desired.confirmed_status,
+                                "status_as_of": manifest.status_as_of.isoformat(),
+                                "authority": manifest.authority,
+                                "reason_code": desired.reason_code,
+                                "confirmed_by": str(manifest.confirmed_by),
+                                "previous_confirmation_digest_sha256": previous_digest,
+                            }
+                        )
+                        connection.execute(
+                            """
+                            INSERT INTO private_knowledge_contract_confirmations (
+                              import_run_id, household_space_id,
+                              knowledge_contract_id, decision, confirmed_status,
+                              status_as_of, authority, reason_code, confirmed_by,
+                              confirmation_digest_sha256
+                            ) VALUES (
+                              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                            )
+                            """,
+                            (
+                                approved_report.current_run_id,
+                                manifest.household_space_id,
+                                current["id"],
+                                desired.decision,
+                                desired.confirmed_status,
+                                manifest.status_as_of,
+                                manifest.authority,
+                                desired.reason_code,
+                                manifest.confirmed_by,
+                                confirmation_digest,
+                            ),
+                        )
+
+                    verified = self._build_confirmation_report(connection, manifest)
+                    if verified.operation != "NO_OP":
+                        raise ConfirmationError(ConfirmationErrorCode.VERIFICATION_FAILED)
+                    return AppliedConfirmationSet(
+                        run_id=approved_report.current_run_id,
+                        package_digest_sha256=manifest.package_digest_sha256,
+                        subject_count=verified.subject_count,
+                        contract_count=verified.contract_count,
+                        current_confirmation_count=verified.contract_count,
+                    )
+        except ConfirmationError:
+            raise
+        except psycopg.Error:
+            raise ConfirmationError(ConfirmationErrorCode.APPLY_FAILED) from None
+        except KeyError, TypeError, ValueError:
+            raise ConfirmationError(ConfirmationErrorCode.VERIFICATION_FAILED) from None
 
     def read_baseline(self, household_space_id: UUID) -> KnowledgeDatabaseBaseline:
         try:
@@ -1000,9 +1395,16 @@ class PostgresPrivateKnowledgeRepository:
         counts: dict[str, int] = {}
         records: dict[str, list[object]] = {}
         for field_name, table_name in _KNOWLEDGE_TABLES:
+            projection = "to_jsonb(item) - 'source_record_json'"
+            if table_name == "private_knowledge_subjects":
+                projection += (
+                    " - 'family_member_id' - 'binding_decision'"
+                    " - 'binding_conflict' - 'binding_reason_code'"
+                    " - 'binding_confirmed_by' - 'binding_confirmed_at'"
+                )
             rows = connection.execute(
                 f"""
-                SELECT to_jsonb(item) - 'source_record_json' AS record
+                SELECT {projection} AS record
                 FROM {table_name} AS item
                 WHERE item.import_run_id = %s
                 ORDER BY item.id

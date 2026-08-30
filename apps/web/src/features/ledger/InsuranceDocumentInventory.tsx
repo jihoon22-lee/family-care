@@ -111,7 +111,7 @@ function setTargets(
         displayLabel: policy.product_display,
         documentSetId: policy.document_set_id ?? undefined,
         key: policy.document_set_id ?? `policy:${policy.policy_id}`,
-        label: `등록된 보험 · ${policy.insurer_display} · ${policy.product_display}`,
+        label: `앱 근거 연결 계약 · ${policy.insurer_display} · ${policy.product_display}`,
         policyId: policy.policy_id,
         version: policy.document_set_version ?? undefined,
       },
@@ -121,7 +121,7 @@ function setTargets(
     displayLabel: documentSet.display_label,
     documentSetId: documentSet.id,
     key: documentSet.id,
-    label: `가입 확인 안 됨 · ${documentSet.display_label}`,
+    label: `앱 계약 연결 대기 · ${documentSet.display_label}`,
     version: documentSet.version,
   }));
   return [...registered, ...unregistered];
@@ -324,7 +324,9 @@ function UnregisteredSetCard({
             <small>{documentSet.display_label}</small>
           ) : null}
         </div>
-        <span className="insurance-inventory-unconfirmed">가입 확인 안 됨</span>
+        <span className="insurance-inventory-unconfirmed">
+          앱 계약 연결 대기
+        </span>
       </header>
       <div className="insurance-inventory-unregistered-meta">
         <span>{CLASSIFICATION_LABELS[documentSet.primary_classification]}</span>
@@ -499,7 +501,7 @@ function UnpairedComponent({
     <li className="insurance-inventory-unpaired-item">
       <div className="insurance-inventory-role-heading">
         <strong>{ROLE_LABELS[component.role]}</strong>
-        <span>가입 확인 안 됨</span>
+        <span>앱 계약 연결 대기</span>
       </div>
       <ComponentMeta component={component} />
       {componentId &&
@@ -620,7 +622,7 @@ function InventoryContent({
         aria-label="보험 문서 요약"
       >
         <SummaryCard
-          label="증권 근거 보험"
+          label="앱 근거 연결 보험"
           value={data.summary.certificate_backed_policies}
         />
         <SummaryCard
@@ -662,13 +664,13 @@ function InventoryContent({
         <div className="insurance-inventory-section-heading">
           <div>
             <span>Certificate-backed</span>
-            <h2 id="insurance-inventory-registered-title">등록된 보험</h2>
+            <h2 id="insurance-inventory-registered-title">앱 근거 연결 계약</h2>
           </div>
           <strong>{data.registered_policies.length}건</strong>
         </div>
         {data.registered_policies.length === 0 ? (
           <p className="insurance-inventory-empty">
-            증권 근거가 확인된 보험이 없습니다.
+            앱 내부 Evidence 연결이 완료된 계약이 없습니다.
           </p>
         ) : (
           <div className="insurance-inventory-policy-list">
@@ -894,10 +896,10 @@ export function InsuranceDocumentInventory({
       <div className="insurance-inventory-heading">
         <div>
           <span>Document completeness</span>
-          <h2 id="insurance-inventory-title">보험·문서 현황</h2>
+          <h2 id="insurance-inventory-title">앱 업로드·문서 연결 현황</h2>
           <p>
-            증권으로 가입이 확인된 보험과, 아직 계약에 연결되지 않은 자료를
-            분리해 표시합니다.
+            전체 가입 보험 수가 아니라 앱에 업로드된 문서와 청구용 Evidence의
+            연결 작업 상태를 표시합니다.
           </p>
         </div>
       </div>

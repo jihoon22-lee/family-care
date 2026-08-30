@@ -3,20 +3,29 @@
   "contract": {
     "id": "00000000-0000-4000-8000-000000001901",
     "subject_id": "00000000-0000-4000-8000-000000001902",
+    "family_member_id": "00000000-0000-4000-8000-000000001908",
+    "subject_binding_decision": "MATCH",
     "family_alias": "Family Member A",
     "insurer_display": "Sample Insurer",
     "product_display": "Sample Policy",
     "contract_start": "2024-01-01",
     "contract_end": null,
     "certificate_decision": "MATCH",
-    "current_status": "unknown",
+    "contract_document_completeness": "CERTIFICATE_AND_TERMS",
+    "current_status": "active",
+    "current_status_decision": "MATCH",
+    "current_status_authority": "USER_CONFIRMED_CURRENT_ENROLLMENT",
+    "current_status_as_of": "2026-08-30",
     "coverage_count": 1,
     "enrollment_match_count": 1,
     "enrollment_no_match_count": 0,
     "enrollment_unknown_count": 0,
     "document_identity_decision": "MATCH",
     "edition_applicability_decision": "UNKNOWN",
-    "terms_overall_decision": "UNKNOWN"
+    "terms_overall_decision": "UNKNOWN",
+    "terms_source_count": 1,
+    "semantic_section_count": 1,
+    "semantic_fact_count": 1
   },
   "coverages": [
     {

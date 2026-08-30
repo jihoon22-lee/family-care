@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Never
 from uuid import UUID
 
+from familycare_api.private_knowledge.confirmations import (
+    ConfirmationError,
+    ConfirmationErrorCode,
+    apply_confirmation_manifest,
+    load_confirmation_manifest,
+    prepare_confirmation_dry_run,
+)
 from familycare_api.private_knowledge.errors import PrivateKnowledgePackageError
 from familycare_api.private_knowledge.package import load_private_knowledge_package
 from familycare_api.private_knowledge.reconciliation import (
@@ -34,6 +41,8 @@ _HOUSEHOLD_ID = "FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID"
 _ACTOR_ID = "FAMILYCARE_PRIVATE_KNOWLEDGE_ACTOR_ID"
 _APPROVAL_DIGEST = "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST"
 _DATABASE_URL = "FAMILYCARE_DATABASE_URL"
+_CONFIRMATION_MANIFEST_PATH = "FAMILYCARE_PRIVATE_CONFIRMATION_MANIFEST_PATH"
+_CONFIRMATION_REPORT_PATH = "FAMILYCARE_PRIVATE_CONFIRMATION_REPORT_PATH"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -111,6 +120,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("dry-run")
     subparsers.add_parser("apply")
     subparsers.add_parser("verify")
+    subparsers.add_parser("confirmation-dry-run")
+    subparsers.add_parser("confirmation-apply")
+    subparsers.add_parser("confirmation-verify")
     return parser
 
 
@@ -137,6 +149,26 @@ def _print_counts(
     print(" ".join(fields))
 
 
+def _print_confirmation_counts(
+    *,
+    status: str,
+    subjects: int,
+    contracts: int,
+    run_id: UUID | None = None,
+    binding_changes: int | None = None,
+    confirmation_changes: int | None = None,
+) -> None:
+    fields = [f"status={status}"]
+    if run_id is not None:
+        fields.append(f"run_id={run_id}")
+    fields.extend((f"subjects={subjects}", f"contracts={contracts}"))
+    if binding_changes is not None:
+        fields.append(f"binding_changes={binding_changes}")
+    if confirmation_changes is not None:
+        fields.append(f"confirmation_changes={confirmation_changes}")
+    print(" ".join(fields))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
@@ -149,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _print_counts(status="VALIDATED", counts=package_entity_counts(package))
         elif args.command == "dry-run":
             repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
-            report = prepare_private_knowledge_dry_run(
+            knowledge_report = prepare_private_knowledge_dry_run(
                 package_root=_path_environment(_PACKAGE_ROOT),
                 report_path=_path_environment(_REPORT_PATH),
                 repository_root=repository_root,
@@ -157,12 +189,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 baseline_reader=repository,
             )
             _print_counts(
-                status=f"DRY_RUN_{report.operation}",
-                counts=report.expected_current_counts,
+                status=f"DRY_RUN_{knowledge_report.operation}",
+                counts=knowledge_report.expected_current_counts,
             )
         elif args.command == "apply":
             repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
-            applied = apply_private_knowledge_snapshot(
+            knowledge_applied = apply_private_knowledge_snapshot(
                 package_root=_path_environment(_PACKAGE_ROOT),
                 report_path=_path_environment(_REPORT_PATH),
                 repository_root=repository_root,
@@ -173,10 +205,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             _print_counts(
                 status="APPLIED",
-                run_id=applied.run_id,
-                counts=applied.counts,
+                run_id=knowledge_applied.run_id,
+                counts=knowledge_applied.counts,
             )
-        else:
+        elif args.command == "verify":
             repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
             verified = repository.verify_current(_uuid_environment(_HOUSEHOLD_ID))
             _print_counts(
@@ -184,9 +216,60 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_id=verified.run_id,
                 counts=verified.counts,
             )
+        elif args.command == "confirmation-dry-run":
+            repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
+            confirmation_report = prepare_confirmation_dry_run(
+                manifest_path=_path_environment(_CONFIRMATION_MANIFEST_PATH),
+                report_path=_path_environment(_CONFIRMATION_REPORT_PATH),
+                repository_root=repository_root,
+                expected_household_space_id=_uuid_environment(_HOUSEHOLD_ID),
+                repository=repository,
+            )
+            _print_confirmation_counts(
+                status=f"CONFIRMATION_DRY_RUN_{confirmation_report.operation}",
+                subjects=confirmation_report.subject_count,
+                contracts=confirmation_report.contract_count,
+                run_id=confirmation_report.current_run_id,
+                binding_changes=confirmation_report.binding_change_count,
+                confirmation_changes=confirmation_report.confirmation_insert_count,
+            )
+        elif args.command == "confirmation-apply":
+            repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
+            confirmation_applied = apply_confirmation_manifest(
+                manifest_path=_path_environment(_CONFIRMATION_MANIFEST_PATH),
+                report_path=_path_environment(_CONFIRMATION_REPORT_PATH),
+                repository_root=repository_root,
+                expected_household_space_id=_uuid_environment(_HOUSEHOLD_ID),
+                approved_report_digest_sha256=_approval_digest(),
+                repository=repository,
+            )
+            _print_confirmation_counts(
+                status="CONFIRMATIONS_APPLIED",
+                subjects=confirmation_applied.subject_count,
+                contracts=confirmation_applied.contract_count,
+                run_id=confirmation_applied.run_id,
+            )
+        else:
+            repository = PostgresPrivateKnowledgeRepository(_required_environment(_DATABASE_URL))
+            manifest = load_confirmation_manifest(
+                _path_environment(_CONFIRMATION_MANIFEST_PATH),
+                repository_root=repository_root,
+            )
+            if manifest.household_space_id != _uuid_environment(_HOUSEHOLD_ID):
+                raise ConfirmationError(ConfirmationErrorCode.MANIFEST_SCOPE_MISMATCH)
+            verification_report = repository.prepare_confirmation_dry_run(manifest)
+            if verification_report.operation != "NO_OP":
+                raise ConfirmationError(ConfirmationErrorCode.VERIFICATION_FAILED)
+            _print_confirmation_counts(
+                status="CONFIRMATIONS_VERIFIED",
+                subjects=verification_report.subject_count,
+                contracts=verification_report.contract_count,
+                run_id=verification_report.current_run_id,
+            )
         return 0
     except (
         PrivateKnowledgeCliError,
+        ConfirmationError,
         PrivateKnowledgePackageError,
         PrivateKnowledgeReconciliationError,
         PrivateKnowledgeRepositoryError,

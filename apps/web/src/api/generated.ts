@@ -1415,21 +1415,34 @@ export interface KnowledgeContractDetailResponse {
 
 export interface KnowledgeContractListItemResponse {
   certificate_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  contract_document_completeness:
+    | "CERTIFICATE_AND_TERMS"
+    | "CERTIFICATE_ONLY"
+    | "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS"
+    | "UNVERIFIED";
   contract_end: string | null;
   contract_start: string | null;
   coverage_count: number;
   current_status: "active" | "inactive" | "lapsed" | "terminated" | "unknown";
+  current_status_as_of: string | null;
+  current_status_authority: "USER_CONFIRMED_CURRENT_ENROLLMENT" | null;
+  current_status_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
   document_identity_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
   edition_applicability_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
   enrollment_match_count: number;
   enrollment_no_match_count: number;
   enrollment_unknown_count: number;
   family_alias: string;
+  family_member_id: string | null;
   id: string;
   insurer_display: string;
   product_display: string;
+  semantic_fact_count: number;
+  semantic_section_count: number;
+  subject_binding_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
   subject_id: string;
   terms_overall_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  terms_source_count: number;
 }
 
 export interface KnowledgeContractPageResponse {

@@ -13,6 +13,7 @@ from familycare_api.private_knowledge import package as package_module
 from familycare_api.private_knowledge.errors import PackageErrorCode, PrivateKnowledgePackageError
 from familycare_api.private_knowledge.package import (
     canonical_package_digest,
+    contract_certificate_decision,
     load_private_knowledge_package,
 )
 
@@ -60,6 +61,23 @@ def test_valid_package_is_lossless_deterministic_and_reference_closed(tmp_path: 
     manifest_path.chmod(0o600)
     reordered = _load(root, tmp_path / "repository")
     assert reordered.package_digest_sha256 == package.package_digest_sha256
+
+
+def test_certificate_document_match_is_independent_from_unresolved_coverage_rows(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    package = _load(root, tmp_path / "repository")
+    contract = package.contracts[0].value
+    unresolved = contract.model_copy(
+        update={
+            "row_reconciliation": contract.row_reconciliation.model_copy(
+                update={"unresolved_enrollment_rows": 1}
+            )
+        }
+    )
+
+    assert contract_certificate_decision(unresolved) == "MATCH"
 
 
 def test_loaded_package_integrity_rejects_in_memory_projection_change(

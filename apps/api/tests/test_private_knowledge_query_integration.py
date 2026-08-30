@@ -29,6 +29,8 @@ from apps.api.tests.test_private_knowledge_apply_integration import (
 
 pytestmark = pytest.mark.integration
 
+FAMILY_MEMBER_ID = UUID("00000000-0000-4000-8000-000000001971")
+
 
 def test_query_projection_is_complete_bounded_and_household_isolated(
     tmp_path: Path,
@@ -36,12 +38,51 @@ def test_query_projection_is_complete_bounded_and_household_isolated(
     _seed()
     _, package = _package(tmp_path)
     writer = PostgresPrivateKnowledgeRepository(_database_url())
-    writer.apply_snapshot(
+    applied = writer.apply_snapshot(
         package,
         household_space_id=HOUSEHOLD_ID,
         actor_id=ACTOR_ID,
         approved_report=_report(writer, package),
     )
+    with psycopg.connect(_database_url()) as connection:
+        connection.execute(
+            """
+            INSERT INTO family_members (
+              id, household_space_id, display_name, internal_alias
+            ) VALUES (
+              %s, %s, 'Family Member A', 'synthetic-family-member-a'
+            )
+            """,
+            (FAMILY_MEMBER_ID, HOUSEHOLD_ID),
+        )
+        connection.execute(
+            """
+            UPDATE private_knowledge_subjects
+               SET family_member_id = %s,
+                   binding_decision = 'MATCH',
+                   binding_reason_code = 'USER_CONFIRMED_EXACT',
+                   binding_confirmed_by = %s,
+                   binding_confirmed_at = clock_timestamp()
+             WHERE import_run_id = %s
+            """,
+            (FAMILY_MEMBER_ID, ACTOR_ID, applied.run_id),
+        )
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_contract_confirmations (
+              import_run_id, household_space_id, knowledge_contract_id,
+              decision, confirmed_status, status_as_of, authority, reason_code,
+              confirmed_by, confirmation_digest_sha256
+            )
+            SELECT import_run_id, household_space_id, id,
+                   'MATCH', 'active', DATE '2026-08-30',
+                   'USER_CONFIRMED_CURRENT_ENROLLMENT',
+                   'USER_ATTESTED_CURRENT', %s, %s
+              FROM private_knowledge_contracts
+             WHERE import_run_id = %s
+            """,
+            (ACTOR_ID, "d" * 64, applied.run_id),
+        )
     reader = PostgresPrivateKnowledgeQueryRepository(_database_url())
     scope = HouseholdScope(HOUSEHOLD_ID)
 
@@ -54,6 +95,28 @@ def test_query_projection_is_complete_bounded_and_household_isolated(
     assert len(page.items) == 1
     assert page.next_cursor is None
     contract = page.items[0]
+    assert contract.family_member_id == FAMILY_MEMBER_ID
+    assert contract.subject_binding_decision == "MATCH"
+    assert contract.current_status == "active"
+    assert contract.current_status_decision == "MATCH"
+    assert contract.current_status_as_of is not None
+    assert contract.contract_document_completeness == "CERTIFICATE_AND_TERMS"
+    member_page = reader.list_contracts(
+        scope,
+        limit=50,
+        after=None,
+        family_member_id=FAMILY_MEMBER_ID,
+    )
+    assert member_page is not None
+    assert tuple(item.id for item in member_page.items) == (contract.id,)
+    unrelated_member_page = reader.list_contracts(
+        scope,
+        limit=50,
+        after=None,
+        family_member_id=UUID("00000000-0000-4000-8000-000000001972"),
+    )
+    assert unrelated_member_page is not None
+    assert unrelated_member_page.items == ()
     detail = reader.get_contract(
         scope,
         contract.id,
@@ -69,6 +132,26 @@ def test_query_projection_is_complete_bounded_and_household_isolated(
     assert len(detail.terms_sections[0].facts[0].citations) == 1
     assert detail.next_section_cursor is None
     assert reader.list_contracts(scope, limit=50, after=contract.id).items == ()
+
+    with psycopg.connect(_database_url()) as connection:
+        connection.execute(
+            """
+            UPDATE private_knowledge_contracts
+               SET certificate_decision = 'UNKNOWN'
+             WHERE id = %s AND import_run_id = %s
+            """,
+            (contract.id, current.run_id),
+        )
+    certificate_review_page = reader.list_contracts(
+        scope,
+        limit=50,
+        after=None,
+        family_member_id=FAMILY_MEMBER_ID,
+    )
+    assert certificate_review_page is not None
+    assert certificate_review_page.items[0].contract_document_completeness == (
+        "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS"
+    )
 
     other_scope = HouseholdScope(UUID("00000000-0000-4000-8000-000000001999"))
     assert reader.current(other_scope) is None
@@ -99,7 +182,8 @@ def test_query_projection_is_complete_bounded_and_household_isolated(
         connection.execute(
             """
             UPDATE private_knowledge_subjects
-            SET binding_decision = 'NO_MATCH'
+            SET binding_confirmed_by = NULL,
+                binding_confirmed_at = NULL
             WHERE import_run_id = %s
             """,
             (current.run_id,),

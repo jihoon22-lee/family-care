@@ -232,10 +232,10 @@ describe("insurance document inventory", () => {
     renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
 
     expect(
-      await screen.findByRole("heading", { name: "보험·문서 현황" }),
+      await screen.findByRole("heading", { name: "앱 업로드·문서 연결 현황" }),
     ).toBeInTheDocument();
     for (const label of [
-      "증권 근거 보험",
+      "앱 근거 연결 보험",
       "증권+약관",
       "증권만",
       "미연결 약관",
@@ -245,7 +245,7 @@ describe("insurance document inventory", () => {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     expect(
-      screen.getByRole("heading", { name: "등록된 보험" }),
+      screen.getByRole("heading", { name: "앱 근거 연결 계약" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Sample Policy")).toBeInTheDocument();
     expect(screen.getByText("묶음 문서")).toBeInTheDocument();
@@ -256,7 +256,7 @@ describe("insurance document inventory", () => {
     expect(
       screen.getByRole("heading", { name: "가입 확인 안 된 문서" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("가입 확인 안 됨").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("앱 계약 연결 대기").length).toBeGreaterThan(0);
     expect(screen.getByText("Sample Terms Bundle")).toBeInTheDocument();
     expect(screen.getAllByText("암호 해제 필요").length).toBeGreaterThan(0);
     expect(screen.getByText("보험증권 문서")).toBeInTheDocument();
@@ -292,7 +292,7 @@ describe("insurance document inventory", () => {
       await screen.findByRole("alert", { name: /문서 현황/ }),
     ).toHaveTextContent(/문서 현황.*불러오지 못했/);
     expect(
-      screen.getByRole("heading", { name: "확인된 계약" }),
+      screen.getByRole("heading", { name: "청구 근거 연결 계약" }),
     ).toBeInTheDocument();
   });
 
@@ -462,7 +462,7 @@ describe("insurance document inventory", () => {
 
     expect(
       await screen.findByRole("option", {
-        name: /등록된 보험.*Sample Policy/,
+        name: /앱 근거 연결 계약.*Sample Policy/,
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /약관.*문서 연결$/ }));

@@ -12,6 +12,16 @@
           "title": "Certificate Decision",
           "type": "string"
         },
+        "contract_document_completeness": {
+          "enum": [
+            "CERTIFICATE_AND_TERMS",
+            "CERTIFICATE_ONLY",
+            "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS",
+            "UNVERIFIED"
+          ],
+          "title": "Contract Document Completeness",
+          "type": "string"
+        },
         "contract_end": {
           "anyOf": [
             {
@@ -50,6 +60,39 @@
             "unknown"
           ],
           "title": "Current Status",
+          "type": "string"
+        },
+        "current_status_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current Status As Of"
+        },
+        "current_status_authority": {
+          "anyOf": [
+            {
+              "const": "USER_CONFIRMED_CURRENT_ENROLLMENT",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current Status Authority"
+        },
+        "current_status_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Current Status Decision",
           "type": "string"
         },
         "document_identity_decision": {
@@ -91,6 +134,18 @@
           "title": "Family Alias",
           "type": "string"
         },
+        "family_member_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Family Member Id"
+        },
         "id": {
           "format": "uuid",
           "title": "Id",
@@ -108,6 +163,25 @@
           "title": "Product Display",
           "type": "string"
         },
+        "semantic_fact_count": {
+          "minimum": 0,
+          "title": "Semantic Fact Count",
+          "type": "integer"
+        },
+        "semantic_section_count": {
+          "minimum": 0,
+          "title": "Semantic Section Count",
+          "type": "integer"
+        },
+        "subject_binding_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Subject Binding Decision",
+          "type": "string"
+        },
         "subject_id": {
           "format": "uuid",
           "title": "Subject Id",
@@ -121,25 +195,40 @@
           ],
           "title": "Terms Overall Decision",
           "type": "string"
+        },
+        "terms_source_count": {
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Terms Source Count",
+          "type": "integer"
         }
       },
       "required": [
         "id",
         "subject_id",
+        "family_member_id",
+        "subject_binding_decision",
         "family_alias",
         "insurer_display",
         "product_display",
         "contract_start",
         "contract_end",
         "certificate_decision",
+        "contract_document_completeness",
         "current_status",
+        "current_status_decision",
+        "current_status_authority",
+        "current_status_as_of",
         "coverage_count",
         "enrollment_match_count",
         "enrollment_no_match_count",
         "enrollment_unknown_count",
         "document_identity_decision",
         "edition_applicability_decision",
-        "terms_overall_decision"
+        "terms_overall_decision",
+        "terms_source_count",
+        "semantic_section_count",
+        "semantic_fact_count"
       ],
       "title": "KnowledgeContractListItemResponse",
       "type": "object"

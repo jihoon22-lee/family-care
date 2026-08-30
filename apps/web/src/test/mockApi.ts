@@ -246,6 +246,14 @@ export function createMockApi(
       );
     }
 
+    if (url.pathname === "/api/v1/private-knowledge/current/contracts") {
+      return jsonResponse({
+        items: [],
+        next_cursor: null,
+        schema_version: "1",
+      });
+    }
+
     const inventoryMatch = url.pathname.match(
       /^\/api\/v1\/family-members\/([^/]+)\/insurance-document-inventory$/,
     );

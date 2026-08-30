@@ -7,6 +7,10 @@ from uuid import UUID
 
 import pytest
 from familycare_api.private_knowledge import cli
+from familycare_api.private_knowledge.confirmations import (
+    AppliedConfirmationSet,
+    ConfirmationDryRunReport,
+)
 from familycare_api.private_knowledge.repository import KnowledgeSnapshotSummary
 
 from apps.api.tests.private_knowledge_fixtures import (
@@ -24,6 +28,8 @@ _PRIVATE_ENVIRONMENT = (
     "FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_ACTOR_ID",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST",
+    "FAMILYCARE_PRIVATE_CONFIRMATION_MANIFEST_PATH",
+    "FAMILYCARE_PRIVATE_CONFIRMATION_REPORT_PATH",
 )
 
 
@@ -153,3 +159,68 @@ def test_verify_outputs_only_opaque_run_and_counts(
     assert f"run_id={RUN_ID}" in captured.out
     assert "contracts=1" in captured.out
     assert "private-dsn" not in captured.out
+
+
+def test_confirmation_commands_use_protected_environment_inputs_and_safe_counts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_environment(monkeypatch)
+    private_root = tmp_path / "private"
+    private_root.mkdir(mode=0o700)
+    manifest_path = private_root / "confirmation.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    manifest_path.chmod(0o600)
+    report_path = private_root / "confirmation-report.json"
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://private-dsn")
+    monkeypatch.setenv("FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID", str(HOUSEHOLD_ID))
+    monkeypatch.setenv("FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST", "d" * 64)
+    monkeypatch.setenv("FAMILYCARE_PRIVATE_CONFIRMATION_MANIFEST_PATH", str(manifest_path))
+    monkeypatch.setenv("FAMILYCARE_PRIVATE_CONFIRMATION_REPORT_PATH", str(report_path))
+
+    report = ConfirmationDryRunReport(
+        schema_version="private-knowledge-confirmation-dry-run.v1",
+        manifest_digest_sha256="a" * 64,
+        package_digest_sha256="b" * 64,
+        household_space_id=HOUSEHOLD_ID,
+        current_run_id=RUN_ID,
+        baseline_digest_sha256="c" * 64,
+        operation="APPLY",
+        subject_count=6,
+        contract_count=52,
+        binding_change_count=6,
+        confirmation_insert_count=52,
+        confirmation_supersede_count=0,
+        report_digest_sha256="d" * 64,
+    )
+    applied = AppliedConfirmationSet(
+        run_id=RUN_ID,
+        package_digest_sha256="b" * 64,
+        subject_count=6,
+        contract_count=52,
+        current_confirmation_count=52,
+    )
+
+    class _Repository:
+        def __init__(self, database_url: str) -> None:
+            assert database_url == "postgresql://private-dsn"
+
+    monkeypatch.setattr(cli, "PostgresPrivateKnowledgeRepository", _Repository)
+    monkeypatch.setattr(cli, "prepare_confirmation_dry_run", lambda **_: report)
+    monkeypatch.setattr(cli, "apply_confirmation_manifest", lambda **_: applied)
+
+    assert cli.main(["confirmation-dry-run"]) == 0
+    dry_run = capsys.readouterr()
+    assert dry_run.err == ""
+    assert "status=CONFIRMATION_DRY_RUN_APPLY" in dry_run.out
+    assert "subjects=6" in dry_run.out
+    assert "contracts=52" in dry_run.out
+
+    assert cli.main(["confirmation-apply"]) == 0
+    applied_output = capsys.readouterr()
+    assert applied_output.err == ""
+    assert "status=CONFIRMATIONS_APPLIED" in applied_output.out
+    assert "contracts=52" in applied_output.out
+    for private_value in (str(manifest_path), str(report_path), "private-dsn"):
+        assert private_value not in dry_run.out + applied_output.out

@@ -89,6 +89,7 @@ class PostgresPrivateKnowledgeQueryRepository:
         *,
         limit: int,
         after: UUID | None,
+        family_member_id: UUID | None = None,
     ) -> KnowledgeContractPageResponse | None:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -102,6 +103,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                         connection,
                         run_id=run_id,
                         after=after,
+                        family_member_id=family_member_id,
                         limit=limit + 1,
                     )
                     has_more = len(rows) > limit
@@ -198,8 +200,13 @@ class PostgresPrivateKnowledgeQueryRepository:
               (
                 (SELECT count(*) FROM private_knowledge_subjects
                  WHERE import_run_id = %(run)s
-                   AND (family_member_id IS NOT NULL
-                        OR binding_decision <> 'UNKNOWN')) +
+                   AND (
+                     (binding_decision = 'MATCH'
+                      AND (family_member_id IS NULL
+                           OR binding_confirmed_by IS NULL
+                           OR binding_confirmed_at IS NULL))
+                     OR (binding_decision <> 'MATCH' AND family_member_id IS NOT NULL)
+                   )) +
                 (SELECT count(*) FROM private_knowledge_contracts
                  WHERE import_run_id = %(run)s
                    AND (policy_contract_id IS NOT NULL
@@ -236,6 +243,7 @@ class PostgresPrivateKnowledgeQueryRepository:
         limit: int,
         after: UUID | None = None,
         contract_id: UUID | None = None,
+        family_member_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         filters = ["contract.import_run_id = %(run)s"]
         parameters: dict[str, object] = {"run": run_id, "limit": limit}
@@ -245,14 +253,39 @@ class PostgresPrivateKnowledgeQueryRepository:
         if contract_id is not None:
             filters.append("contract.id = %(contract)s")
             parameters["contract"] = contract_id
+        if family_member_id is not None:
+            filters.append("subject.family_member_id = %(family_member)s")
+            filters.append("subject.binding_decision = 'MATCH'")
+            parameters["family_member"] = family_member_id
         where = " AND ".join(filters)
         return connection.execute(
             f"""
             SELECT
               contract.id, contract.subject_id, subject.family_alias,
+              subject.family_member_id, subject.binding_decision
+                AS subject_binding_decision,
               contract.insurer_display, contract.product_display,
               contract.contract_start, contract.contract_end,
-              contract.certificate_decision, contract.current_status,
+              contract.certificate_decision,
+              CASE
+                WHEN contract.certificate_decision = 'MATCH'
+                     AND coalesce(assignment.terms_source_count, 0) > 0
+                  THEN 'CERTIFICATE_AND_TERMS'
+                WHEN contract.certificate_decision = 'MATCH'
+                  THEN 'CERTIFICATE_ONLY'
+                WHEN coalesce(assignment.terms_source_count, 0) > 0
+                  THEN 'CERTIFICATE_REVIEW_REQUIRED_AND_TERMS'
+                ELSE 'UNVERIFIED'
+              END AS contract_document_completeness,
+              CASE
+                WHEN confirmation.decision = 'MATCH'
+                  THEN confirmation.confirmed_status
+                ELSE contract.current_status
+              END AS current_status,
+              coalesce(confirmation.decision, 'UNKNOWN')
+                AS current_status_decision,
+              confirmation.authority AS current_status_authority,
+              confirmation.status_as_of AS current_status_as_of,
               count(coverage.id) AS coverage_count,
               count(coverage.id) FILTER (
                 WHERE coverage.enrollment_decision = 'MATCH'
@@ -268,7 +301,13 @@ class PostgresPrivateKnowledgeQueryRepository:
               coalesce(assignment.edition_applicability_decision, 'UNKNOWN')
                 AS edition_applicability_decision,
               coalesce(assignment.overall_decision, 'UNKNOWN')
-                AS terms_overall_decision
+                AS terms_overall_decision,
+              coalesce(assignment.terms_source_count, 0)
+                AS terms_source_count,
+              coalesce(semantic.semantic_section_count, 0)
+                AS semantic_section_count,
+              coalesce(semantic.semantic_fact_count, 0)
+                AS semantic_fact_count
             FROM private_knowledge_contracts AS contract
             JOIN private_knowledge_subjects AS subject
               ON subject.id = contract.subject_id
@@ -278,18 +317,49 @@ class PostgresPrivateKnowledgeQueryRepository:
              AND coverage.import_run_id = contract.import_run_id
             LEFT JOIN LATERAL (
               SELECT document_identity_decision,
-                     edition_applicability_decision, overall_decision
-              FROM private_knowledge_terms_assignments
-              WHERE import_run_id = contract.import_run_id
-                AND knowledge_contract_id = contract.id
-              ORDER BY id
+                     edition_applicability_decision, overall_decision,
+                     count(source.id) AS terms_source_count
+              FROM private_knowledge_terms_assignments AS assignment
+              LEFT JOIN private_knowledge_terms_assignment_sources AS source
+                ON source.terms_assignment_id = assignment.id
+               AND source.import_run_id = assignment.import_run_id
+              WHERE assignment.import_run_id = contract.import_run_id
+                AND assignment.knowledge_contract_id = contract.id
+              GROUP BY assignment.id
+              ORDER BY assignment.id
               LIMIT 1
             ) AS assignment ON true
+            LEFT JOIN LATERAL (
+              SELECT
+                count(DISTINCT section.id) AS semantic_section_count,
+                count(DISTINCT fact.id) AS semantic_fact_count
+              FROM private_knowledge_terms_assignments AS semantic_assignment
+              JOIN private_knowledge_terms_assignment_sources AS source
+                ON source.terms_assignment_id = semantic_assignment.id
+               AND source.import_run_id = semantic_assignment.import_run_id
+              JOIN private_knowledge_terms_sections AS section
+                ON section.import_run_id = source.import_run_id
+               AND section.terms_source_alias_digest_sha256 =
+                   source.source_alias_digest_sha256
+              LEFT JOIN private_knowledge_facts AS fact
+                ON fact.import_run_id = section.import_run_id
+               AND fact.terms_section_id = section.id
+              WHERE semantic_assignment.import_run_id = contract.import_run_id
+                AND semantic_assignment.knowledge_contract_id = contract.id
+            ) AS semantic ON true
+            LEFT JOIN private_knowledge_contract_confirmations AS confirmation
+              ON confirmation.knowledge_contract_id = contract.id
+             AND confirmation.import_run_id = contract.import_run_id
+             AND confirmation.is_current
             WHERE {where}
             GROUP BY contract.id, subject.id,
                      assignment.document_identity_decision,
                      assignment.edition_applicability_decision,
-                     assignment.overall_decision
+                     assignment.overall_decision,
+                     assignment.terms_source_count,
+                     semantic.semantic_section_count,
+                     semantic.semantic_fact_count,
+                     confirmation.id
             ORDER BY contract.id
             LIMIT %(limit)s
             """,

@@ -70,12 +70,14 @@ class PrivateKnowledgeQueryService:
         *,
         limit: int,
         after: UUID | None,
+        family_member_id: UUID | None = None,
     ) -> KnowledgeContractPageResponse:
         try:
             result = self.repository.list_contracts(
                 self.scope,
                 limit=limit,
                 after=after,
+                family_member_id=family_member_id,
             )
         except PrivateKnowledgeQueryRepositoryError:
             raise PrivateKnowledgeUnavailable from None

@@ -19,7 +19,6 @@ FORBIDDEN_FIELDS = {
     "content_sha256",
     "document_version_id",
     "evidence_id",
-    "family_member_id",
     "household_space_id",
     "package_digest",
     "password",

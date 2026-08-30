@@ -921,6 +921,231 @@ button:focus-visible {
   font-weight: 500;
 }
 
+.private-insurance-catalog {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+  margin: 36px 0 48px;
+  padding: 28px;
+  border: 1px solid #9fb7c6;
+  border-top: 5px solid var(--confirmed);
+  background:
+    linear-gradient(135deg, rgb(8 127 109 / 8%), transparent 42%),
+    rgb(251 252 253 / 94%);
+}
+
+.private-catalog-heading,
+.private-catalog-contract > header,
+.private-catalog-sections article > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+}
+
+.private-catalog-heading {
+  align-items: end;
+}
+
+.private-catalog-heading h2 {
+  margin: 4px 0 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 500;
+  letter-spacing: -0.04em;
+}
+
+.private-catalog-heading p:not(.eyebrow) {
+  max-width: 680px;
+  margin: 12px 0 0;
+  color: var(--quiet);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.private-catalog-heading > strong {
+  flex: 0 0 auto;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+
+.private-catalog-contracts {
+  display: grid;
+  gap: 12px;
+}
+
+.private-catalog-contract {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid #b9c8d2;
+  background: white;
+}
+
+.private-catalog-contract > header {
+  align-items: start;
+}
+
+.private-catalog-contract > header p {
+  margin: 0 0 5px;
+  color: var(--quiet);
+  font-size: 0.72rem;
+}
+
+.private-catalog-contract > header h3 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.45rem;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.private-catalog-contract > header > span {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid rgb(8 127 109 / 35%);
+  border-radius: 999px;
+  color: var(--confirmed);
+  background: rgb(8 127 109 / 7%);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.private-catalog-contract-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.private-catalog-contract-facts span {
+  padding: 5px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  color: var(--quiet);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.private-catalog-contract > button {
+  justify-self: start;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.private-catalog-contract > button:hover,
+.private-catalog-contract > button[aria-expanded="true"] {
+  color: white;
+  background: var(--ink);
+}
+
+.private-catalog-analysis {
+  display: grid;
+  gap: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.private-catalog-analysis h4,
+.private-catalog-analysis h5 {
+  margin: 0;
+}
+
+.private-catalog-analysis h4 {
+  margin-bottom: 12px;
+  font-size: 0.9rem;
+}
+
+.private-catalog-coverages,
+.private-catalog-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 10px;
+}
+
+.private-catalog-coverages article,
+.private-catalog-sections article {
+  min-width: 0;
+  padding: 14px;
+  border-left: 3px solid var(--evidence-blue);
+  background: rgb(36 107 254 / 5%);
+}
+
+.private-catalog-coverages p,
+.private-catalog-sections p {
+  margin: 7px 0 0;
+  color: var(--quiet);
+  font-size: 0.75rem;
+  line-height: 1.55;
+}
+
+.private-catalog-sections {
+  grid-template-columns: 1fr;
+}
+
+.private-catalog-sections article > header {
+  align-items: baseline;
+}
+
+.private-catalog-sections article > header span {
+  flex: 0 0 auto;
+  color: var(--quiet);
+  font-size: 0.68rem;
+}
+
+.private-catalog-sections dl {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.private-catalog-sections dl > div {
+  display: grid;
+  grid-template-columns: minmax(86px, 0.2fr) 1fr;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(36 107 254 / 16%);
+}
+
+.private-catalog-sections dt {
+  color: var(--evidence-blue);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.private-catalog-sections dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.private-catalog-sections dd p {
+  margin: 0;
+  color: var(--ink);
+}
+
+.private-catalog-sections dd small {
+  display: block;
+  margin-top: 5px;
+  color: var(--quiet);
+  font-size: 0.66rem;
+}
+
+.private-catalog-caution {
+  padding: 8px 10px;
+  border-left: 3px solid var(--caution);
+  color: #8a4c0d !important;
+  background: rgb(217 133 0 / 8%);
+}
+
 .insurance-inventory {
   display: grid;
   gap: 28px;
@@ -1884,6 +2109,26 @@ blockquote {
   .insurance-inventory {
     gap: 22px;
     padding-top: 22px;
+  }
+
+  .private-insurance-catalog {
+    padding: 20px 16px;
+  }
+
+  .private-catalog-heading,
+  .private-catalog-contract > header,
+  .private-catalog-sections article > header {
+    display: grid;
+    align-items: start;
+  }
+
+  .private-catalog-contract > header > span {
+    justify-self: start;
+  }
+
+  .private-catalog-sections dl > div {
+    grid-template-columns: 1fr;
+    gap: 5px;
   }
 
   .insurance-inventory-summary {
