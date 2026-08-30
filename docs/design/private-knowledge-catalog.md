@@ -46,12 +46,27 @@ knowledge snapshot으로 저장하고, 현재 snapshot만 조회 projection에 �
 같은 HouseholdSpace와 package digest 조합은 unique다. 새 snapshot을 적용할 때 이전
 current snapshot을 같은 transaction에서 `SUPERSEDED`로 바꾸되 과거 행은 삭제하지 않는다.
 
+### Knowledge subject
+
+`PrivateKnowledgeSubject`는 package의 비식별 family alias를 snapshot 안에서 한 번만 보존하고
+모든 계약이 이를 참조하게 한다.
+
+- package 내부 canonical subject key와 private family alias
+- 선택적 FamilyMember binding
+- binding 판정 `MATCH`, `UNKNOWN`, `CONFLICT`
+- bounded reason code와 명시적 확인 provenance
+
+가족 별칭과 기존 FamilyMember의 문자열이 비슷하다는 이유로 자동 연결하지 않는다. 정확한
+외부 binding manifest 또는 인증된 사용자의 확인이 없으면 `UNKNOWN`으로 남긴다. 이 분리는
+같은 사람의 여러 계약을 한 번에 검토하게 하고, 잘못 추정한 가족 연결이 계약별로 반복되는
+것을 막는다.
+
 ### Knowledge contract
 
 `KnowledgeContract`는 증권 검토 결과 한 계약을 snapshot 안에서 보존한다.
 
 - package 내부 canonical key
-- 비식별 family alias와 선택적 FamilyMember binding
+- PrivateKnowledgeSubject 참조
 - 보험사·상품 표시값
 - 계약 시작·종료일
 - 현재 상태와 후보 상태
