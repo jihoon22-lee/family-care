@@ -30,6 +30,8 @@
 
 ### Task 1: Complete the event-submit regression fix
 
+**Status:** completed
+
 **Files:**
 - Modify: `apps/web/src/features/events/NewEventPage.tsx`
 - Modify: `apps/web/src/features/events/EventComposer.tsx`
@@ -39,7 +41,7 @@
 - Consumes: existing `MedicalEventUpdateRequest`, `updateMedicalEvent`, and `analyzeMedicalEvent` clients.
 - Produces: `updateInput(event, draft)` that omits `structured_facts` for an empty draft and event actions that clear stale status before a new request.
 
-- [ ] **Step 1: Preserve the already-observed RED evidence**
+- [x] **Step 1: Preserve the already-observed RED evidence**
 
 The focused tests must name the two production breaks:
 
@@ -56,7 +58,7 @@ it("clears a stale success message when a later save fails", async () => {
 
 The first test was observed failing with `structured_facts: []` and zero analyze requests; the second was observed with both success and error visible.
 
-- [ ] **Step 2: Run the focused GREEN test**
+- [x] **Step 2: Run the focused GREEN test**
 
 Run:
 
@@ -66,7 +68,7 @@ corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/events/event
 
 Expected: all tests in `event-input.test.tsx` pass with no warning.
 
-- [ ] **Step 3: Review the minimal production change**
+- [x] **Step 3: Review the minimal production change**
 
 The implementation must remain equivalent to:
 
@@ -84,7 +86,7 @@ async function action() {
 }
 ```
 
-- [ ] **Step 4: Run Web type and formatting checks for the changed files**
+- [x] **Step 4: Run Web type and formatting checks for the changed files**
 
 Run:
 
@@ -96,7 +98,7 @@ git diff --check
 
 Expected: all commands exit 0.
 
-- [ ] **Step 5: Commit the regression fix**
+- [x] **Step 5: Commit the regression fix**
 
 ```bash
 git add apps/web/src/features/events/EventComposer.tsx \
@@ -107,6 +109,8 @@ git commit -m "fix(events): reach analysis without structured facts"
 
 ### Task 2: Add publication and event-date status persistence
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/migrations/versions/0020_private_knowledge_publications.py`
 - Create: `apps/api/tests/test_private_knowledge_publication_migration.py`
@@ -116,7 +120,7 @@ git commit -m "fix(events): reach analysis without structured facts"
 - Consumes: revision `0019_private_confirmations` and the exact IDs in `private_knowledge_import_runs`, contracts, coverages, sections, clauses, facts, and AppUser.
 - Produces: append-only status-interval and publication tables with same-run/same-household constraints.
 
-- [ ] **Step 1: Write the migration-shape RED tests**
+- [x] **Step 1: Write the migration-shape RED tests**
 
 The recording-operations test must require exactly these new tables in dependency order:
 
@@ -132,14 +136,14 @@ EXPECTED_TABLES = [
     "private_knowledge_calculation_citations",
 ]
 
-assert migration.revision == "0020_private_knowledge_publications"
+assert migration.revision == "0020_private_publications"
 assert migration.down_revision == "0019_private_confirmations"
 assert list(operations.tables) == EXPECTED_TABLES
 ```
 
 Require composite foreign keys back to the exact knowledge run and household, one current publication run per household, one disposition per coverage per publication run, unique rule/normalizer keys, user reviewer provenance, SHA-256 checks, JSON-object/array checks, bounded pages, and `ON DELETE RESTRICT`.
 
-- [ ] **Step 2: Run RED migration tests**
+- [x] **Step 2: Run RED migration tests**
 
 Run:
 
@@ -147,9 +151,9 @@ Run:
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_migration.py -q
 ```
 
-Expected: FAIL because revision `0020_private_knowledge_publications` does not exist.
+Expected: FAIL because revision `0020_private_publications` does not exist.
 
-- [ ] **Step 3: Implement the additive migration**
+- [x] **Step 3: Implement the additive migration**
 
 The important database checks must include:
 
@@ -165,7 +169,7 @@ sa.CheckConstraint("effective_through >= effective_from")
 
 `private_knowledge_rule_import_runs` must store package/manifest/baseline/report/projection digests, state, counts, reviewer, timestamps, and current/superseded state. Rule and calculation JSON columns must be strict JSON objects; exact phrase values are allowed only in the private database table and never in public fixtures or output.
 
-- [ ] **Step 4: Write and run PostgreSQL constraint tests**
+- [x] **Step 4: Write and run PostgreSQL constraint tests**
 
 The integration test must insert a wholly synthetic current snapshot, then prove:
 
@@ -182,7 +186,7 @@ with pytest.raises(psycopg.errors.CheckViolation):
 
 Run the repository integration database harness with only the two new migration tests. Expected: upgrade → constraints → downgrade → upgrade all pass.
 
-- [ ] **Step 5: Run focused static checks and commit**
+- [x] **Step 5: Run focused static checks and commit**
 
 ```bash
 TMPDIR=/tmp uv run ruff format --check apps/api/migrations/versions/0020_private_knowledge_publications.py apps/api/tests/test_private_knowledge_publication_migration.py apps/api/tests/test_private_knowledge_publication_migration_integration.py
