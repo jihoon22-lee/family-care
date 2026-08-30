@@ -16,6 +16,8 @@ from psycopg.types.json import Jsonb
 from familycare_api.clauses.rules import CoverageRuleVersion
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.decisions.assistance import AnalysisAssistanceNotFound
+from familycare_api.decisions.assistance_repository import AnalysisAssistanceRepository
 from familycare_api.decisions.domain import (
     ClaimCandidate,
     ClaimHistoryFact,
@@ -67,11 +69,13 @@ class DecisionRepository:
         history_reader: ClaimHistoryReader | None = None,
         knowledge_repository: PostgresKnowledgeDecisionRepository | None = None,
         knowledge_engine: DeterministicKnowledgeDecisionEngine | None = None,
+        assistance_repository: AnalysisAssistanceRepository | None = None,
     ) -> None:
         self.database_url = _database_url(database_url)
         self.history_reader = history_reader
         self.knowledge_repository = knowledge_repository or PostgresKnowledgeDecisionRepository()
         self.knowledge_engine = knowledge_engine or DeterministicKnowledgeDecisionEngine()
+        self.assistance_repository = assistance_repository or AnalysisAssistanceRepository()
 
     def create_medical_event(
         self,
@@ -488,7 +492,18 @@ class DecisionRepository:
                     ),
                 )
                 self._persist_result(connection, scope, combined)
-                return combined
+                assistance = None
+                try:
+                    with connection.transaction():
+                        assistance = self.assistance_repository.create_search_projection(
+                            connection,
+                            scope,
+                            event,
+                            combined.run_id,
+                        )
+                except psycopg.Error, ValueError:
+                    assistance = None
+                return replace(combined, assistance=assistance)
         except MedicalEventNotFound:
             raise
         except psycopg.Error:
@@ -1096,6 +1111,14 @@ class DecisionRepository:
             _medical_event(event_row),
             run,
         )
+        try:
+            assistance = self.assistance_repository.get_latest(
+                connection,
+                scope,
+                cast(UUID, run["id"]),
+            )
+        except AnalysisAssistanceNotFound:
+            assistance = None
         return DecisionRunResult(
             run_id=cast(UUID, run["id"]),
             medical_event_id=cast(UUID, run["medical_event_id"]),
@@ -1127,6 +1150,7 @@ class DecisionRepository:
             event_fact_schema_version=cast(
                 str, run.get("event_fact_schema_version", "medical-event-facts.v2")
             ),
+            assistance=assistance,
         )
 
 

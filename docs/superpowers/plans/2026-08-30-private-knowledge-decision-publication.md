@@ -654,7 +654,7 @@ git add apps/api/src/familycare_api/decisions apps/api/tests/test_private_knowle
 git commit -m "feat(decisions): combine knowledge results"
 ```
 
-### Task 8: Add member-scoped structured recommendations and job persistence
+### Task 8: Add member-scoped structured recommendations and job persistence `completed`
 
 **Files:**
 - Create: `apps/api/migrations/versions/0022_analysis_assistance.py`
@@ -686,7 +686,7 @@ class AnalysisAssistanceRepository:
     ) -> AnalysisAssistance: ...
 ```
 
-- [ ] **Step 1: Write migration RED tests**
+- [x] **Step 1: Write migration RED tests**
 
 Require revision `0022_analysis_assistance` after `0021_private_knowledge_decisions` and these tables:
 
@@ -704,7 +704,7 @@ one job per event-version/candidate digest, immutable result runs, unique rank p
 and `ON DELETE RESTRICT`. It stores provider/model/config identifiers and sanitized outcome codes but no key,
 prompt, response, query, situation, fact value, raw statement, source path, or private source alias.
 
-- [ ] **Step 2: Run the migration RED tests**
+- [x] **Step 2: Run the migration RED tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_analysis_assistance_migration.py -q
@@ -712,13 +712,13 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_analysis_assistance_migration.py -
 
 Expected: FAIL because revision `0022_analysis_assistance` is absent.
 
-- [ ] **Step 3: Implement migration and PostgreSQL constraint tests**
+- [x] **Step 3: Implement migration and PostgreSQL constraint tests**
 
 Write integration tests proving duplicate digests, attempt `2`, cross-household coverage/section/citation, and
 recommendations without a same-run enrolled coverage are rejected. Exercise upgrade → downgrade → upgrade on
 the disposable PostgreSQL harness.
 
-- [ ] **Step 4: Write structured-search RED tests**
+- [x] **Step 4: Write structured-search RED tests**
 
 Seed wholly synthetic current private knowledge for two members and two households. Require search to use only:
 
@@ -732,7 +732,7 @@ Assert a relevant mapped section is returned with a bounded excerpt and page cit
 another household, stale snapshot, unenrolled coverage, unmapped section, and zero-token query are absent.
 The result type has no eligibility, amount, or claim-ready field.
 
-- [ ] **Step 5: Run RED search tests**
+- [x] **Step 5: Run RED search tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_analysis_assistance_search.py apps/api/tests/test_analysis_assistance_repository.py -q
@@ -740,14 +740,14 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_analysis_assistance_search.py apps
 
 Expected: FAIL on the missing domain/repository and analyze integration.
 
-- [ ] **Step 6: Implement immediate search and deduplicated job creation**
+- [x] **Step 6: Implement immediate search and deduplicated job creation**
 
 `DecisionRepository.analyze_medical_event()` stores deterministic results first, then creates one immutable
 `STRUCTURED_SEARCH` assistance run and one deduplicated queued job in the same transaction. Repeated result GET
 does not mutate or enqueue. Re-analyzing the same event/candidate digest reuses the job; an edited event gets a
 new digest and job. Search parameters and private values must never be logged.
 
-- [ ] **Step 7: Run focused checks and commit**
+- [x] **Step 7: Run focused checks and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_analysis_assistance_migration.py apps/api/tests/test_analysis_assistance_migration_integration.py apps/api/tests/test_analysis_assistance_search.py apps/api/tests/test_analysis_assistance_repository.py apps/api/tests/test_private_knowledge_decision_integration.py -q

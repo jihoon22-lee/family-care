@@ -19,6 +19,7 @@ from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 
 if TYPE_CHECKING:
+    from familycare_api.decisions.assistance import AnalysisAssistance
     from familycare_api.decisions.knowledge_domain import KnowledgeDecisionResult
 
 TriState = Literal["MATCH", "NO_MATCH", "UNKNOWN"]
@@ -358,6 +359,7 @@ class DecisionRunResult:
     knowledge_rule_import_run_id: UUID | None = None
     knowledge_status_projection_digest: str | None = None
     event_fact_schema_version: str = "medical-event-facts.v2"
+    assistance: AnalysisAssistance | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"succeeded", "partial", "failed"}:
