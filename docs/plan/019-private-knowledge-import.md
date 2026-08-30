@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–2 complete; Task 3 in progress; Tasks 4–8 pending
+**Status:** Tasks 1–3 complete; Task 4 in progress; Tasks 5–8 pending
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -71,6 +71,7 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
    - `private_knowledge_contracts`
    - `private_knowledge_coverages`
    - `private_knowledge_terms_assignments`
+   - `private_knowledge_terms_assignment_sources`
    - `private_knowledge_terms_sections`
    - `private_knowledge_source_clauses`
    - `private_knowledge_facts`
@@ -88,15 +89,15 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
 
 **Files:** `apps/api/src/familycare_api/private_knowledge/__init__.py`, `models.py`, `package.py`, `errors.py`, `apps/api/tests/private_knowledge_fixtures.py`, `apps/api/tests/test_private_knowledge_package.py`, `apps/api/tests/test_private_knowledge_privacy.py`.
 
-1. [ ] Build a synthetic `private-analysis-package.sol-v2` fixture writer that creates the required eight role files, a canonical manifest, correct byte sizes and SHA-256 values, directory mode `0700`, and file mode `0600`.
-2. [ ] Write RED happy-path tests that load contracts, subjects, enrolled components, independent terms assignments, sections, clauses, facts, citations, and mappings without dropping any validated source field.
-3. [ ] Write RED failure tests for a repository-contained root, relative root, symlink root/file, nonregular file, wrong modes, duplicate or unexpected manifest entry, hash/size mismatch, schema drift, file/row/byte limit overflow, duplicate canonical key, broken reference, invalid enum/date/currency/amount/page/hash, and executable input.
-4. [ ] Write RED reconciliation tests proving declared file/record counts and cross-file hierarchy exactly equal the normalized package.
-5. [ ] Write RED privacy tests proving `PrivateKnowledgePackageError` contains only a stable reason code, file role, and row number; it must not echo a JSON value, source alias, path, hash, diagnosis, DSN, or statement.
-6. [ ] Implement strict Pydantic models with `extra="forbid"`, bounded strings/arrays/maps, finite numbers, and explicit `MATCH`/`NO_MATCH`/`UNKNOWN` semantics.
-7. [ ] Implement descriptor-safe reads: validate metadata before open, open without following symlinks, compare `fstat`, read within limits, verify bytes, and reject any post-validation replacement.
-8. [ ] Canonicalize each accepted record, calculate its row digest, preserve the bounded source record for lossless import, and calculate one deterministic package digest independent of filesystem ordering.
-9. [ ] Run the focused unit/privacy tests and static checks for this module.
+1. [x] Build a synthetic `private-analysis-package.sol-v2` fixture writer that creates the required eight role files, a canonical manifest, correct byte sizes and SHA-256 values, directory mode `0700`, and file mode `0600`.
+2. [x] Write RED happy-path tests that load contracts, subjects, enrolled components, independent terms assignments, sections, clauses, facts, citations, and mappings without dropping any validated source field.
+3. [x] Write RED failure tests for a repository-contained root, relative root, symlink root/file, nonregular file, wrong modes, duplicate or unexpected manifest entry, hash/size mismatch, schema drift, file/row/byte limit overflow, duplicate canonical key, broken reference, invalid enum/date/currency/amount/page/hash, and executable input.
+4. [x] Write RED reconciliation tests proving declared file/record counts and cross-file hierarchy exactly equal the normalized package.
+5. [x] Write RED privacy tests proving `PrivateKnowledgePackageError` contains only a stable reason code, file role, and row number; it must not echo a JSON value, source alias, path, hash, diagnosis, DSN, or statement.
+6. [x] Implement strict Pydantic models with `extra="forbid"`, bounded strings/arrays/maps, finite numbers, and explicit `MATCH`/`NO_MATCH`/`UNKNOWN` semantics.
+7. [x] Implement descriptor-safe reads: validate metadata before open, open without following symlinks, compare `fstat`, read within limits, verify bytes, and reject any post-validation replacement.
+8. [x] Canonicalize each accepted record, calculate its row digest, preserve the bounded source record for lossless import, and calculate one deterministic package digest independent of filesystem ordering.
+9. [x] Run the focused unit/privacy tests and static checks for this module.
 
 ## Task 4: Produce a read-only reconciliation report
 

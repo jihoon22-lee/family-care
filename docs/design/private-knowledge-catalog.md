@@ -104,6 +104,11 @@ Evidence lineage가 정확히 일치할 때만 `MATCH`이며, 문자열 유사�
 - overall review decision
 - 선택된 terms alias와 reason code
 
+assignment 본체는 계약별 판정을 한 번 저장하고, 선택된 terms alias는
+`PrivateKnowledgeTermsAssignmentSource`에 0개 이상 순서대로 저장한다. 따라서 약관 미선택,
+단일 선택, 복수 선택을 같은 모델에서 손실 없이 표현한다. 선택 alias에 구조화된 section이
+없어도 assignment는 유효하며 section mapping만 `UNKNOWN`으로 남는다.
+
 문서 동일성이 `MATCH`여도 판본 적용성이 `UNKNOWN`이면 약관 검색 후보로만 사용할 수 있고,
 Rider-Clause 또는 CoverageRule의 실행 근거가 될 수 없다. assignment는 약관 존재를 가입
 사실로 바꾸지 않는다.
@@ -127,6 +132,10 @@ catalog publish는 DB Extraction의 원문을 다시 읽고 citation hash를 검
 `KnowledgeCoverageTermsMapping`은 EnrolledCoverage와 terms section 후보의 연결을 저장한다.
 가입, 문서 동일성, 판본 적용성, section mapping을 각각 보존한다. 모든 축이 `MATCH`이고
 내부 Evidence binding까지 유효할 때만 기존 `RiderClauseLink` 후보를 만들 수 있다.
+
+`NOT_APPLICABLE`은 판정 3값에 섞지 않는다. non-benefit 구성요소처럼 section mapping 대상이
+아닌 경우 `mapping_applicability=NOT_APPLICABLE`과 `section_mapping_decision=UNKNOWN`을 함께
+저장한다. 적용 대상인 보장은 `APPLICABLE`, 적용성 자체가 미확인인 경우 `UNKNOWN`이다.
 
 ## Evidence references and bindings
 
@@ -165,6 +174,10 @@ manifest에 선언된 모든 파일도 hash와 size를 확인한다. importer는
 directory, mode `0700`, regular mode-`0600` file만 허용하고 symlink, repository 내부,
 중복 manifest entry, unexpected mutable replacement를 거부한다. 최대 파일 수·개별 크기·총
 크기·JSONL 행 수·중첩 배열 길이를 제한한다.
+
+manifest가 선언한 분석 보고서·감사·dry-run 보조 파일은 알려진 supplementary 이름만
+허용하고 hash·size·mode는 동일하게 검증하되 DB source row로 import하지 않는다. 위 8개
+data role은 항상 필수이며, 선언되지 않은 파일과 알 수 없는 supplementary 이름은 거부한다.
 
 ## Deterministic validation
 

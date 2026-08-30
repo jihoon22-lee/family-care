@@ -469,8 +469,6 @@ def upgrade() -> None:
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
         _foreign_uuid("knowledge_contract_id", "private_knowledge_contracts.id"),
         sa.Column("source_assignment_key", sa.String(length=240), nullable=False),
-        sa.Column("terms_source_alias", sa.String(length=500), nullable=False),
-        _sha256("terms_source_alias_digest_sha256"),
         sa.Column("document_identity_decision", sa.String(length=16), nullable=False),
         sa.Column("edition_applicability_decision", sa.String(length=16), nullable=False),
         sa.Column("overall_decision", sa.String(length=16), nullable=False),
@@ -485,6 +483,11 @@ def upgrade() -> None:
         sa.Column("operational_binding_reason_code", sa.String(length=64), nullable=False),
         *_source_record_columns(),
         _timestamp("created_at"),
+        sa.UniqueConstraint(
+            "id",
+            "import_run_id",
+            name="uq_private_knowledge_assignments_id_run",
+        ),
         sa.ForeignKeyConstraint(
             ["knowledge_contract_id", "import_run_id"],
             ["private_knowledge_contracts.id", "private_knowledge_contracts.import_run_id"],
@@ -496,12 +499,8 @@ def upgrade() -> None:
         _tri_state("overall_decision", "private_knowledge_assignments"),
         _tri_state("operational_binding_decision", "private_knowledge_assignments"),
         sa.CheckConstraint(
-            "btrim(source_assignment_key) <> '' AND btrim(terms_source_alias) <> ''",
+            "btrim(source_assignment_key) <> ''",
             name="ck_private_knowledge_assignments_identity_nonempty",
-        ),
-        sa.CheckConstraint(
-            "terms_source_alias_digest_sha256 ~ '^[0-9a-f]{64}$'",
-            name="ck_private_knowledge_assignments_alias_digest",
         ),
         sa.CheckConstraint(
             "jsonb_typeof(reason_codes_json) = 'array'",
@@ -527,6 +526,57 @@ def upgrade() -> None:
         "private_knowledge_terms_assignments",
         ["import_run_id", "knowledge_contract_id", "id"],
         unique=False,
+    )
+
+    op.create_table(
+        "private_knowledge_terms_assignment_sources",
+        _uuid("id", primary_key=True),
+        _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("terms_assignment_id", "private_knowledge_terms_assignments.id"),
+        sa.Column("source_alias", sa.String(length=500), nullable=False),
+        _sha256("source_alias_digest_sha256"),
+        sa.Column("selection_ordinal", sa.Integer(), nullable=False),
+        _jsonb("selected_evidence_json", default="'{}'::jsonb"),
+        *_source_record_columns(),
+        _timestamp("created_at"),
+        sa.ForeignKeyConstraint(
+            ["terms_assignment_id", "import_run_id"],
+            [
+                "private_knowledge_terms_assignments.id",
+                "private_knowledge_terms_assignments.import_run_id",
+            ],
+            name="fk_private_knowledge_assignment_sources_assignment_run",
+            ondelete="RESTRICT",
+        ),
+        sa.CheckConstraint(
+            "btrim(source_alias) <> ''",
+            name="ck_private_knowledge_assignment_sources_alias_nonempty",
+        ),
+        sa.CheckConstraint(
+            "source_alias_digest_sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_private_knowledge_assignment_sources_alias_digest",
+        ),
+        sa.CheckConstraint(
+            "selection_ordinal >= 1",
+            name="ck_private_knowledge_assignment_sources_ordinal",
+        ),
+        sa.CheckConstraint(
+            "jsonb_typeof(selected_evidence_json) = 'object'",
+            name="ck_private_knowledge_assignment_sources_evidence_object",
+        ),
+        *_source_record_checks("private_knowledge_assignment_sources"),
+    )
+    op.create_index(
+        "uq_private_knowledge_assignment_sources_ordinal",
+        "private_knowledge_terms_assignment_sources",
+        ["import_run_id", "terms_assignment_id", "selection_ordinal"],
+        unique=True,
+    )
+    op.create_index(
+        "uq_private_knowledge_assignment_sources_alias",
+        "private_knowledge_terms_assignment_sources",
+        ["import_run_id", "terms_assignment_id", "source_alias_digest_sha256"],
+        unique=True,
     )
 
     op.create_table(
@@ -781,6 +831,9 @@ def upgrade() -> None:
             nullable=True,
         ),
         sa.Column("source_mapping_key", sa.String(length=300), nullable=False),
+        sa.Column("mapping_applicability", sa.String(length=24), nullable=False),
+        sa.Column("selected_terms_source_alias", sa.String(length=500), nullable=True),
+        _sha256("selected_terms_source_alias_digest_sha256", nullable=True),
         sa.Column("enrollment_decision", sa.String(length=16), nullable=False),
         sa.Column("document_identity_decision", sa.String(length=16), nullable=False),
         sa.Column("edition_applicability_decision", sa.String(length=16), nullable=False),
@@ -819,6 +872,10 @@ def upgrade() -> None:
         _tri_state("section_mapping_decision", "private_knowledge_mappings"),
         _tri_state("overall_decision", "private_knowledge_mappings"),
         sa.CheckConstraint(
+            "mapping_applicability IN ('APPLICABLE', 'NOT_APPLICABLE', 'UNKNOWN')",
+            name="ck_private_knowledge_mappings_applicability",
+        ),
+        sa.CheckConstraint(
             "btrim(source_mapping_key) <> ''",
             name="ck_private_knowledge_mappings_key_nonempty",
         ),
@@ -827,11 +884,27 @@ def upgrade() -> None:
             name="ck_private_knowledge_mappings_reason_codes_array",
         ),
         sa.CheckConstraint(
+            "((selected_terms_source_alias IS NULL AND "
+            "selected_terms_source_alias_digest_sha256 IS NULL) OR "
+            "(selected_terms_source_alias IS NOT NULL "
+            "AND btrim(selected_terms_source_alias) <> '' "
+            "AND selected_terms_source_alias_digest_sha256 ~ '^[0-9a-f]{64}$'))",
+            name="ck_private_knowledge_mappings_selected_alias",
+        ),
+        sa.CheckConstraint(
             "(overall_decision <> 'MATCH' OR (terms_section_id IS NOT NULL "
+            "AND mapping_applicability = 'APPLICABLE' "
+            "AND selected_terms_source_alias IS NOT NULL "
             "AND enrollment_decision = 'MATCH' AND document_identity_decision = 'MATCH' "
             "AND edition_applicability_decision = 'MATCH' "
             "AND section_mapping_decision = 'MATCH'))",
             name="ck_private_knowledge_mappings_match_axes",
+        ),
+        sa.CheckConstraint(
+            "(mapping_applicability <> 'NOT_APPLICABLE' OR (terms_section_id IS NULL "
+            "AND selected_terms_source_alias IS NULL "
+            "AND section_mapping_decision = 'UNKNOWN' AND overall_decision = 'UNKNOWN'))",
+            name="ck_private_knowledge_mappings_not_applicable",
         ),
         sa.CheckConstraint(
             "executable = false",
@@ -931,6 +1004,7 @@ def downgrade() -> None:
             "private_knowledge_contracts",
             "private_knowledge_coverages",
             "private_knowledge_terms_assignments",
+            "private_knowledge_terms_assignment_sources",
             "private_knowledge_terms_sections",
             "private_knowledge_source_clauses",
             "private_knowledge_facts",

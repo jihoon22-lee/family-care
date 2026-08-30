@@ -109,6 +109,7 @@ def test_revision_and_table_dependency_order_are_additive() -> None:
         "private_knowledge_contracts",
         "private_knowledge_coverages",
         "private_knowledge_terms_assignments",
+        "private_knowledge_terms_assignment_sources",
         "private_knowledge_terms_sections",
         "private_knowledge_source_clauses",
         "private_knowledge_facts",
@@ -252,11 +253,16 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
     facts = operations.tables["private_knowledge_facts"]
     citations = operations.tables["private_knowledge_fact_citations"]
     mappings = operations.tables["private_knowledge_coverage_terms_mappings"]
+    assignment_sources = operations.tables["private_knowledge_terms_assignment_sources"]
 
     assert foreign_keys(assignments) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
         "knowledge_contract_id": ("private_knowledge_contracts.id", "RESTRICT"),
         "terms_edition_id": ("terms_editions.id", "RESTRICT"),
+    }
+    assert foreign_keys(assignment_sources) == {
+        "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "terms_assignment_id": ("private_knowledge_terms_assignments.id", "RESTRICT"),
     }
     assert foreign_keys(sections) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
@@ -294,6 +300,20 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
         "overall_decision",
     ):
         assert decision in mappings.columns
+    assert {
+        "source_alias",
+        "source_alias_digest_sha256",
+        "selection_ordinal",
+        "selected_evidence_json",
+    } <= set(assignment_sources.columns.keys())
+    assert {
+        "mapping_applicability",
+        "selected_terms_source_alias",
+        "selected_terms_source_alias_digest_sha256",
+    } <= set(mappings.columns.keys())
+    assert "mapping_applicability IN ('APPLICABLE', 'NOT_APPLICABLE', 'UNKNOWN')" in checks(
+        mappings
+    )
     assert {"source_clause_key", "page_start", "page_end", "source_text_sha256"} <= set(
         clauses.columns.keys()
     )
@@ -342,6 +362,17 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
             (
                 "private_knowledge_contracts.id",
                 "private_knowledge_contracts.import_run_id",
+            ),
+        )
+    }
+    assert composite_foreign_keys(
+        operations.tables["private_knowledge_terms_assignment_sources"]
+    ) == {
+        (
+            ("terms_assignment_id", "import_run_id"),
+            (
+                "private_knowledge_terms_assignments.id",
+                "private_knowledge_terms_assignments.import_run_id",
             ),
         )
     }
@@ -462,6 +493,7 @@ def test_unique_source_identity_and_query_indexes_cover_every_entity() -> None:
         "uq_private_knowledge_contracts_source",
         "uq_private_knowledge_coverages_source",
         "uq_private_knowledge_assignments_source",
+        "uq_private_knowledge_assignment_sources_ordinal",
         "uq_private_knowledge_sections_source",
         "uq_private_knowledge_clauses_source",
         "uq_private_knowledge_facts_source",
@@ -491,6 +523,7 @@ def test_downgrade_drops_tables_in_reverse_dependency_order() -> None:
                 "private_knowledge_contracts",
                 "private_knowledge_coverages",
                 "private_knowledge_terms_assignments",
+                "private_knowledge_terms_assignment_sources",
                 "private_knowledge_terms_sections",
                 "private_knowledge_source_clauses",
                 "private_knowledge_facts",
