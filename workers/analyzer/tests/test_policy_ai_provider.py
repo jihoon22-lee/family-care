@@ -9,6 +9,7 @@ from typing import Any
 import openai
 import pytest
 from familycare_worker.ai.provider import (
+    EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME,
     OpenAiResponsesAdapter,
     ProviderConfigurationError,
     ProviderRateLimitError,
@@ -129,6 +130,48 @@ def test_adapter_uses_strict_non_stored_responses_without_key_echo(
     }
     assert "synthetic-api-key-marker" not in repr(request)
     assert "synthetic-api-key-marker" not in repr(result)
+
+
+def test_recommender_schema_uses_1200_tokens_and_accepts_bounded_override(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic-api-key-marker")
+    responses = _Responses()
+    adapter = OpenAiResponsesAdapter(
+        {EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME: _schema()},
+        client_factory=lambda _: _Client(responses),
+    )
+
+    adapter.complete(
+        model="synthetic-model-v1",
+        schema_name=EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME,
+        system_instruction="Return the strict synthetic schema.",
+        input_payload={"evidence": []},
+    )
+
+    assert responses.requests[0]["max_output_tokens"] == 1_200
+
+    overridden_responses = _Responses()
+    overridden = OpenAiResponsesAdapter(
+        {EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME: _schema()},
+        output_token_limits={EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME: 4_000},
+        client_factory=lambda _: _Client(overridden_responses),
+    )
+    overridden.complete(
+        model="synthetic-model-v1",
+        schema_name=EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME,
+        system_instruction="Return the strict synthetic schema.",
+        input_payload={"evidence": []},
+    )
+    assert overridden_responses.requests[0]["max_output_tokens"] == 4_000
+
+
+def test_recommender_schema_refuses_output_limit_above_hard_maximum() -> None:
+    with pytest.raises(ProviderConfigurationError):
+        OpenAiResponsesAdapter(
+            {EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME: _schema()},
+            output_token_limits={EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME: 4_001},
+        )
 
 
 def test_adapter_drops_malformed_provider_output_and_exception_detail(

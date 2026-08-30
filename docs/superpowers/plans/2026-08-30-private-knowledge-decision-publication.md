@@ -758,7 +758,7 @@ git add apps/api/migrations/versions/0022_analysis_assistance.py apps/api/src/fa
 git commit -m "feat(decisions): add structured recommendations"
 ```
 
-### Task 9: Add one-call LLM assistance with zero-retry fallback
+### Task 9: Add one-call LLM assistance with zero-retry fallback `completed`
 
 **Files:**
 - Create: `workers/analyzer/src/familycare_worker/ai/recommender.py`
@@ -785,7 +785,7 @@ def recommend_clauses(
 ) -> RecommendationResult: ...
 ```
 
-- [ ] **Step 1: Write strict-schema and privacy RED tests**
+- [x] **Step 1: Write strict-schema and privacy RED tests**
 
 Require at most 12 request-local candidate tokens, a 240-character maximum excerpt, bounded event situation,
 and only safe labels/page/citation kind. Reject DB UUIDs, unknown tokens, invented citations, duplicate ranks,
@@ -793,13 +793,13 @@ decision fields, payable amounts, claim readiness, raw provider content, and ext
 persisted rows, errors, and logs contain none of the event text, excerpt markers, provider payload, API key, path,
 policy number, household/member ID, or raw response.
 
-- [ ] **Step 2: Write provider cost-boundary RED tests**
+- [x] **Step 2: Write provider cost-boundary RED tests**
 
 Extend `OpenAiResponsesAdapter` with a validated per-schema output-token limit. Existing structurer/verifier
 schemas retain current limits; the recommender schema defaults to `1_200` and refuses values above `4_000`.
 Assert `store=False`, one request, bounded timeout, strict JSON schema, and no automatic retry.
 
-- [ ] **Step 3: Write job-routing RED tests**
+- [x] **Step 3: Write job-routing RED tests**
 
 Test all paths with fakes only:
 
@@ -811,7 +811,7 @@ same claimed job again -> calls remain 1
 event/digest changed -> a different job may call once
 ```
 
-- [ ] **Step 4: Run RED worker tests**
+- [x] **Step 4: Run RED worker tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_recommender.py workers/analyzer/tests/test_recommendation_jobs.py workers/analyzer/tests/test_recommendation_privacy.py workers/analyzer/tests/test_policy_ai_provider.py -q
@@ -819,20 +819,20 @@ TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_recommender.py workers/ana
 
 Expected: FAIL because the recommender and queue runner are absent.
 
-- [ ] **Step 5: Implement one-call Worker refinement**
+- [x] **Step 5: Implement one-call Worker refinement**
 
 The Worker loads only the already-selected local candidates, assigns request-local opaque tokens, calls the
 configured provider once, validates the strict response, and appends a sanitized `LLM_ASSISTED` run. Missing
 configuration or every provider error completes the job with the existing search run and a stable fallback code.
 Do not retry, and do not make provider success a prerequisite for deterministic decision or result retrieval.
 
-- [ ] **Step 6: Integrate the fair runner without starving existing queues**
+- [x] **Step 6: Integrate the fair runner without starving existing queues**
 
 Register recommendation jobs as a bounded fair-runner lane. Existing document, event-structuring, import, and
 policy jobs retain their current behavior. `FAMILYCARE_AI_ASSISTANCE_MODEL` is runtime configuration; its value
 is stored only as a bounded model label. Never read or expose the key outside `OpenAiResponsesAdapter`.
 
-- [ ] **Step 7: Run focused checks and commit**
+- [x] **Step 7: Run focused checks and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest workers/analyzer/tests/test_recommender.py workers/analyzer/tests/test_recommendation_jobs.py workers/analyzer/tests/test_recommendation_privacy.py workers/analyzer/tests/test_policy_ai_provider.py workers/analyzer/tests/test_event_structuring_pipeline.py workers/analyzer/tests/test_policy_structuring_runner.py -q

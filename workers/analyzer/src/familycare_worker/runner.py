@@ -23,7 +23,20 @@ from familycare_worker.ai.provider import (
     DEFAULT_VERIFIER_MODEL,
     AiProvider,
     EvidenceSlice,
+    ProviderConfigurationError,
+    ProviderRateLimitError,
     ProviderResponse,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+    ProviderValidationError,
+)
+from familycare_worker.ai.recommender import (
+    DEFAULT_ASSISTANCE_MODEL,
+    RecommendationCandidate,
+    RecommendationFact,
+    RecommendationRequest,
+    RecommendationValidationError,
+    recommend_clauses,
 )
 from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.event_jobs import (
@@ -69,6 +82,13 @@ from familycare_worker.policy_jobs import (
     PolicyStructuringQueue,
     PolicyStructuringQueueUnavailable,
     map_policy_structuring_error,
+)
+from familycare_worker.recommendation_jobs import (
+    InvalidRecommendationWork,
+    RecommendationJobRecord,
+    RecommendationQueue,
+    RecommendationQueueUnavailable,
+    RecommendationWorkItem,
 )
 from familycare_worker.repository import (
     DocumentStateConflict,
@@ -396,6 +416,128 @@ class EventStructuringJobRunner:
             self.queue.fail_job(job_id, worker_id, error_code)
         except StructuringJobNotFound, StructuringJobStateConflict, psycopg.Error:
             return
+
+
+class RecommendationJobRunner:
+    """Refine one local recommendation job with at most one provider call."""
+
+    def __init__(
+        self,
+        *,
+        queue: RecommendationQueue,
+        provider: AiProvider,
+        model: str = DEFAULT_ASSISTANCE_MODEL,
+        provider_label: str = "openai",
+        config_version: str = "event-clause-recommendations.v1",
+    ) -> None:
+        if not all(
+            isinstance(value, str) and bool(value.strip()) and len(value) <= maximum
+            for value, maximum in (
+                (model, 120),
+                (provider_label, 64),
+                (config_version, 64),
+            )
+        ):
+            raise ValueError("invalid recommendation runner configuration")
+        self.queue = queue
+        self.provider = provider
+        self.model = model
+        self.provider_label = provider_label
+        self.config_version = config_version
+
+    def run_once(self, worker_id: str) -> bool:
+        """Claim once, never retry a provider call, and retain local search on failure."""
+
+        try:
+            job = self.queue.claim_next_job(worker_id)
+        except RecommendationQueueUnavailable:
+            return False
+        if job is None:
+            return False
+        work: RecommendationWorkItem | None = None
+        try:
+            work = self.queue.load_work(job)
+            if not work.targets:
+                self._safe_fallback(job, work, "NO_PENDING_TARGETS")
+                return True
+            request = _recommendation_request(work)
+        except InvalidRecommendationWork, ValueError, RecommendationQueueUnavailable:
+            self._safe_fallback(job, work, "LOCAL_CANDIDATES_INVALID")
+            return True
+
+        try:
+            result = recommend_clauses(
+                request=request,
+                provider=self.provider,
+                model=self.model,
+            )
+        except ProviderConfigurationError:
+            self._safe_fallback(job, work, "PROVIDER_NOT_CONFIGURED")
+            return True
+        except ProviderTimeoutError:
+            self._safe_fallback(job, work, "PROVIDER_TIMEOUT")
+            return True
+        except ProviderRateLimitError:
+            self._safe_fallback(job, work, "PROVIDER_RATE_LIMIT")
+            return True
+        except ProviderUnavailableError:
+            self._safe_fallback(job, work, "PROVIDER_UNAVAILABLE")
+            return True
+        except ProviderValidationError, RecommendationValidationError:
+            self._safe_fallback(job, work, "PROVIDER_INVALID_RESPONSE")
+            return True
+
+        try:
+            self.queue.complete_with_llm(
+                job,
+                work,
+                result,
+                provider_label=self.provider_label,
+                model_label=self.model,
+                config_version=self.config_version,
+            )
+        except InvalidRecommendationWork, RecommendationQueueUnavailable:
+            return True
+        return True
+
+    def _safe_fallback(
+        self,
+        job: RecommendationJobRecord,
+        work: RecommendationWorkItem | None,
+        outcome_code: str,
+    ) -> None:
+        try:
+            self.queue.complete_with_fallback(job, work, outcome_code)
+        except InvalidRecommendationWork, RecommendationQueueUnavailable:
+            return
+
+
+def _recommendation_request(work: RecommendationWorkItem) -> RecommendationRequest:
+    target = work.targets[0]
+    return RecommendationRequest(
+        situation=work.situation[:800],
+        facts=tuple(
+            RecommendationFact(
+                field_id=field_id,
+                value=value,
+                confirmation=confirmation,
+            )
+            for field_id, value, confirmation in work.facts
+        ),
+        candidates=tuple(
+            RecommendationCandidate(
+                token=f"candidate-{index:02d}",
+                contract_label=item.contract_label,
+                coverage_label=item.coverage_label,
+                clause_label=item.clause_label,
+                excerpt=item.excerpt,
+                page_start=item.page_start,
+                page_end=item.page_end,
+                citation_kind=item.citation_kind,
+            )
+            for index, item in enumerate(target.recommendations, start=1)
+        ),
+    )
 
 
 def _default_workspace_factory(root: Path) -> Workspace:

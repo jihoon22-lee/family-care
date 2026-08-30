@@ -290,6 +290,8 @@ def upgrade() -> None:
         sa.Column("page_end", sa.Integer(), nullable=False),
         sa.Column("citation_kind", sa.String(length=40), nullable=False),
         sa.Column("reason_code", sa.String(length=64), nullable=False),
+        sa.Column("explanation_code", sa.String(length=64), nullable=True),
+        sa.Column("question_code", sa.String(length=64), nullable=True),
         _timestamp("created_at"),
         sa.UniqueConstraint(
             "analysis_assistance_run_id",
@@ -425,6 +427,16 @@ def upgrade() -> None:
             name="ck_analysis_recommendations_citation_kind",
         ),
         _reason_code("reason_code", "ck_analysis_recommendations_reason"),
+        _reason_code(
+            "explanation_code",
+            "ck_analysis_recommendations_explanation",
+            nullable=True,
+        ),
+        _reason_code(
+            "question_code",
+            "ck_analysis_recommendations_question",
+            nullable=True,
+        ),
     )
     op.create_index(
         "ix_analysis_recommendations_run",

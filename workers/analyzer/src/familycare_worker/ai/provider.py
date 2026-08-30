@@ -15,6 +15,9 @@ import openai
 
 _MAX_EVIDENCE_TEXT = 240
 MAX_PROVIDER_OUTPUT_TOKENS = 20_000
+EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME = "event_clause_recommendations_v1"
+DEFAULT_RECOMMENDER_OUTPUT_TOKENS = 1_200
+MAX_RECOMMENDER_OUTPUT_TOKENS = 4_000
 PROVIDER_REQUEST_TIMEOUT_SECONDS = 120.0
 DEFAULT_STRUCTURER_MODEL = "gpt-5.6-luna"
 DEFAULT_VERIFIER_MODEL = "gpt-5.6-terra"
@@ -182,13 +185,36 @@ class OpenAiResponsesAdapter:
         self,
         schema_registry: Mapping[str, Mapping[str, object]],
         *,
+        output_token_limits: Mapping[str, int] | None = None,
         client_factory: ClientFactory = _default_client_factory,
     ) -> None:
         if not schema_registry or _forbidden_keys(schema_registry):
             raise ProviderConfigurationError
+        requested_limits = dict(output_token_limits or {})
+        if set(requested_limits) - set(schema_registry):
+            raise ProviderConfigurationError
+        resolved_limits: dict[str, int] = {}
+        for name in schema_registry:
+            value = requested_limits.get(
+                name,
+                (
+                    DEFAULT_RECOMMENDER_OUTPUT_TOKENS
+                    if name == EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME
+                    else MAX_PROVIDER_OUTPUT_TOKENS
+                ),
+            )
+            maximum = (
+                MAX_RECOMMENDER_OUTPUT_TOKENS
+                if name == EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME
+                else MAX_PROVIDER_OUTPUT_TOKENS
+            )
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
+                raise ProviderConfigurationError
+            resolved_limits[name] = value
         self._schemas = MappingProxyType(
             {name: MappingProxyType(dict(schema)) for name, schema in schema_registry.items()}
         )
+        self._output_token_limits = MappingProxyType(resolved_limits)
         self._client_factory = client_factory
 
     def complete(
@@ -216,7 +242,7 @@ class OpenAiResponsesAdapter:
                 model=model,
                 instructions=system_instruction,
                 input=json.dumps(input_payload, sort_keys=True, separators=(",", ":")),
-                max_output_tokens=MAX_PROVIDER_OUTPUT_TOKENS,
+                max_output_tokens=self._output_token_limits[schema_name],
                 text={
                     "format": {
                         "type": "json_schema",
@@ -268,8 +294,11 @@ __all__ = [
     "AiProvider",
     "DEFAULT_STRUCTURER_MODEL",
     "DEFAULT_VERIFIER_MODEL",
+    "DEFAULT_RECOMMENDER_OUTPUT_TOKENS",
     "EvidenceSlice",
+    "EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME",
     "MAX_PROVIDER_OUTPUT_TOKENS",
+    "MAX_RECOMMENDER_OUTPUT_TOKENS",
     "OpenAiResponsesAdapter",
     "ProviderBoundaryError",
     "ProviderConfigurationError",

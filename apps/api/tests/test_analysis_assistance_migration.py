@@ -230,6 +230,8 @@ def test_recommendations_are_bounded_and_same_run_enrolled_citations() -> None:
         "page_end",
         "citation_kind",
         "reason_code",
+        "explanation_code",
+        "question_code",
         "created_at",
     } <= set(table.columns.keys())
     assert table_checks["ck_analysis_recommendations_rank"] == "rank >= 1 AND rank <= 12"
