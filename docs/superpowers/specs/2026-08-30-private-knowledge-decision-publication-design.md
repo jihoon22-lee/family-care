@@ -1,6 +1,6 @@
 # Private Knowledge Decision Publication Design
 
-- 상태: 사용자 검토 대기
+- 상태: 사용자 승인 완료, 구현 진행
 - 범위: current private knowledge snapshot을 deterministic event decision과 benefit calculation에 연결
 - 선행 설계: `docs/design/private-knowledge-catalog.md`,
   `docs/design/coverage-decision-engine.md`, `docs/design/event-result-pwa.md`
@@ -46,16 +46,23 @@ endpoint에 도달하지 못하는 별도 Web 결함이 있다. 이 결함은 pu
    source digest lineage를 남긴다.
 7. 실제 규칙 package, 사건 acceptance data, backup과 report는 저장소 밖의 보호된 경로에서만
    처리하고 외부 model API에 보내지 않는다.
+8. runtime에 외부 LLM provider가 구성되어 있으면 사건과 locally selected clause 후보를 최소화해
+   LLM 보조 추천을 만들고, provider가 없거나 실패하면 구조화 DB 검색 추천을 즉시 제공한다.
+9. verified decision과 assistance recommendation을 분리해 LLM 또는 검색 결과가 가입·자격·금액의
+   실행 권위로 승격되지 않게 한다.
 
 ## 3. Non-goals
 
 - 약관에 존재하는 담보를 증권 가입 담보로 추정하지 않는다.
 - private knowledge catalog 전체를 기존 `PolicyContract`와 `Rider` 테이블에 복제하지 않는다.
 - 문구·상품명·담보명 유사도나 free-text 검색 결과를 자격 판정으로 사용하지 않는다.
+- LLM 또는 검색 추천을 `MATCH`, `NO_MATCH`, 지급 확정이나 정액 보험금으로 번역하지 않는다.
 - AI가 제안한 사건 fact나 규칙 초안을 사람의 승인 없이 실행 권위로 승격하지 않는다.
 - `MATCH`를 지급 확정, 청구 승인 또는 최종 보험금으로 표현하지 않는다.
 - 정액형 조건부 합계와 실손형 추정값을 하나의 총액으로 합치지 않는다.
 - 이 단계에서 보험사 청구 API나 외부 보험 조회 연동을 추가하지 않는다.
+- v1에서 browser나 DB에 외부 API key를 저장하는 설정 UI를 추가하지 않는다. provider 등록은
+  Worker 전용 runtime environment로 유지하고 UI에는 사용 가능 여부와 실제 사용 mode만 노출한다.
 
 ## 4. Chosen architecture
 
@@ -78,6 +85,10 @@ MedicalEvent version
        -> fixed conditional totals by currency
        -> separate indemnity status
        -> catalog execution completeness
+  -> bounded recommendation search over the same member's enrolled catalog
+       -> provider available: one strict-schema LLM rerank/explanation call
+       -> provider absent/failure: deterministic structured-search ranking
+  -> separate assistance projection; never an eligibility authority
 ```
 
 기존 운영 테이블의 non-null Rider 외래키를 nullable polymorphic reference로 바꾸지 않는다.
@@ -99,6 +110,10 @@ private coverage를 모두 `Rider`와 `CoverageRule`로 복제하면 기존 engi
 coverage label과 semantic fact를 검색하면 구현은 빠르지만 동일 단어가 정의, 면책, 예시,
 지급사유에서 서로 다른 의미를 갖는다. 검색 결과만으로 가입 여부, 적용 판본, required rule,
 계산 기준을 증명할 수 없으므로 선택하지 않는다.
+
+검색 자체는 버리지 않는다. 동일한 member에 실제 가입된 coverage와 연결된 section/fact만 대상으로
+후보를 좁히고, page citation과 rank reason을 가진 `STRUCTURED_SEARCH` 추천으로 사용한다. 이 추천은
+판정 stream과 분리되므로 publication이 미완료여도 사용자가 검토할 약관 후보를 볼 수 있다.
 
 #### C. append-only verified publication layer
 
@@ -261,11 +276,24 @@ transaction을 무효화하지 않는다. run status는 `SUCCEEDED`, `PARTIAL`, 
 hash와 byte size로 고정한다.
 
 - `coverage-dispositions.jsonl`
+- `contract-status-intervals.jsonl`
+- `fact-normalizers.jsonl`
 - `rule-publications.jsonl`
 - `rule-citations.jsonl`
 - `calculation-publications.jsonl`
 - `calculation-citations.jsonl`
 - `reconciliation.json`
+
+`contract-status-intervals.jsonl`은 point-in-time current confirmation과 별도로 user-confirmed
+또는 exact reviewed-document authority가 직접 포괄하는 기간만 담는다. 빈 배열은 허용하지만
+current confirmation이나 계약 시작·종료일에서 더 넓은 interval을 자동 생성하지 않는다.
+
+`fact-normalizers.jsonl`은 자연어 전체를 규칙 operand로 사용하지 않기 위한 검토 경계다.
+각 행은 exact normalized token sequence, 허용된 event field path, normalized code/boolean,
+priority와 `USER_CONFIRMED` review provenance를 가진다. regex, fuzzy score, substring heuristic,
+임의 code 또는 외부 model 호출은 허용하지 않는다. 같은 field에 서로 다른 값이 동시에
+일치하면 값을 고르지 않고 `CONFLICTING`으로 만든다. 실제 phrase와 normalized value는 private
+package와 database 안에만 보존하고 저장소 fixture와 일반 로그에 기록하지 않는다.
 
 reader는 absolute external mode-`0700` directory와 mode-`0600` regular file만 허용한다.
 symlink, repository 내부 path, 예상하지 않은 파일, hash/size mismatch, duplicate key, unknown
@@ -395,6 +423,49 @@ knowledge catalog가 있지만 publication run이 없거나 일부 coverage가 `
 codes, blocked coverage count를 반환한다. 개별 private value나 내부 exception은 reason text에
 넣지 않는다.
 
+### 11.1 Analysis assistance modes
+
+deterministic evaluation 뒤에는 별도 recommendation stream을 만든다. 이 stream은 다음 mode만
+사용한다.
+
+- `LLM_ASSISTED`: local search가 선택한 bounded 후보를 구성된 provider가 strict schema로
+  재정렬하고 설명했다.
+- `STRUCTURED_SEARCH`: provider가 구성되지 않았거나 호출이 실패해 local PostgreSQL ranking을
+  그대로 사용했다.
+- `NONE`: 검색 가능한 current catalog 또는 usable query token이 없다.
+
+local search는 current snapshot, exact FamilyMember subject binding, 증권 enrollment `MATCH`,
+coverage-to-section mapping, section/fact/clause citation 범위를 모두 강제한다. coverage label,
+section heading, reviewed semantic fact와 clause text에서 normalized token overlap과 PostgreSQL
+rank를 계산한다. 다른 member, 다른 household, 미가입 coverage, old snapshot은 후보가 될 수 없다.
+
+추천은 `recommendation_id`, safe contract/coverage label, bounded excerpt, physical page, opaque
+clause/section citation, local rank, stable reason code를 가진다. `eligibility_result`, payable amount,
+claim-ready flag는 갖지 않는다. 화면과 API는 verified `candidates[]`와 `recommendations[]`를 다른
+section과 type으로 유지한다.
+
+### 11.2 Provider job and cost boundary
+
+API는 analyze transaction에서 structured-search 결과를 즉시 저장하고 assistance job을 event
+version과 decision run digest로 deduplicate한다. Worker만 `OPENAI_API_KEY`를 읽는다. key가 없으면
+외부 호출 없이 job을 `STRUCTURED_SEARCH`로 완료한다. key가 있으면 다음 입력만 한 번 전송한다.
+
+- bounded event situation과 user-confirmed/AI-suggested fact projection
+- local search가 먼저 고른 최대 12개 candidate의 request-local opaque token
+- 각 candidate의 safe label, 최대 240자 excerpt, page와 citation kind
+
+DB UUID, 가족 이름, policy number, source alias/path, document binary/image, 전체 section, unrelated
+contract는 전송하지 않는다. 응답은 supplied opaque token의 순서, bounded explanation code와
+missing-fact question만 허용한다. unknown token, invented citation, decision/amount field와 schema
+밖 출력은 거부한다. raw prompt/response는 저장하거나 logging하지 않고 provider request ID,
+model/config version과 sanitized outcome만 보존한다.
+
+한 event version과 candidate digest에는 external call을 최대 1회만 허용하고 자동 retry하지 않는다.
+assistant schema의 `max_output_tokens` 기본값은 1,200, hard maximum은 4,000이다. timeout, rate limit,
+auth, invalid response가 발생해도 이미 저장한 `STRUCTURED_SEARCH` 추천을 유지하며 provider 오류
+본문은 사용자나 log에 노출하지 않는다. 실제 provider smoke test는 합성 입력으로만 수행하고
+사용자가 승인한 작업별 호출 상한을 넘지 않는다.
+
 ## 12. API contract v2
 
 기존 `coverage-decision.v1`은 과거 호환 schema로 보존하고, event analyze/result endpoint를
@@ -409,6 +480,7 @@ v2 envelope에는 다음을 추가한다.
 - `conditional_fixed_subtotals[]`
 - separate `indemnity_summary`
 - bounded source failure reason codes
+- `assistance`: mode, state, model label, fallback reason code와 bounded `recommendations[]`
 
 candidate source는 다음 union이다.
 
@@ -433,6 +505,11 @@ claim workflow는 기존 operational candidate만 즉시 시작할 수 있다. p
 별도 claim snapshot schema가 구현될 때까지 `claim_start_ready=false`로 표시하되, 이를 지급
 자격 부정으로 번역하지 않는다.
 
+assistance state는 `READY`, `REFINING`, `FAILED`가 아니라 `SEARCH_READY`, `LLM_PENDING`,
+`LLM_READY`의 closed vocabulary를 사용한다. provider failure는 `SEARCH_READY`와 sanitized
+fallback reason으로 표현해 usable 검색 결과를 실패 화면으로 숨기지 않는다. result reload는 같은
+event version의 latest assistance projection만 읽고 새 외부 호출을 만들지 않는다.
+
 ## 13. Web behavior
 
 Event composer는 저장과 분석 상태를 명확히 분리한다.
@@ -451,11 +528,17 @@ Event composer는 저장과 분석 상태를 명확히 분리한다.
 5. `MATCH`, `UNKNOWN`, `NO_MATCH` candidate group
 6. contract/coverage별 계산 trace와 clause/page Evidence
 7. 앱 내부 legacy document-linking audit
+8. 별도 `관련 약관 추천` section과 `LLM 보조`/`DB 검색` mode label
 
 가입 catalog가 존재하지만 published rule이 0개이면 `해당 보험 없음`을 표시하지 않는다.
 `가입 담보는 확인됐지만 실행 규칙 검토가 완료되지 않음`과 blocked count를 표시한다. legacy
 inventory의 password/OCR/page-limit 이력은 `이전 업로드 처리 기록`으로 표시하고 current
 knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
+
+추천 card에는 `검토 후보이며 지급 판정이 아님`을 항상 표시하고 page citation을 제공한다.
+`LLM_PENDING` 동안 이미 계산된 verified 결과와 DB 검색 추천을 즉시 렌더링하며 polling으로
+`LLM_READY`가 되면 recommendation section만 교체한다. provider key, provider request ID, raw
+failure detail과 prompt는 browser에 보내지 않는다.
 
 ## 14. Failure and consistency behavior
 
@@ -466,6 +549,9 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 - event fact 누락·AI 제안·상충: dependent rule `UNKNOWN`
 - calculation input 부족: eligibility result를 유지하고 calculation만 `UNKNOWN`
 - one source runtime failure: 다른 source 결과를 보존하고 run `PARTIAL`
+- provider 미구성: 외부 call 0회, `STRUCTURED_SEARCH`
+- provider timeout/rate/auth/schema failure: retry 0회, 기존 검색 추천과 sanitized fallback code 유지
+- repeated result reload 또는 동일 event analyze: 동일 digest external call을 중복 생성하지 않음
 - mixed currency: currency별 subtotal, cross-currency total 없음
 - concurrent event edit: optimistic version conflict, 분석하지 않음
 - commit outcome uncertainty: digest로 조회해 결과 확인, mutation 자동 retry 금지
@@ -479,8 +565,11 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
    statement, token, DSN 또는 SQL을 쓰지 않는다.
 5. 모든 query와 FK는 server-derived HouseholdSpace를 강제한다.
 6. publication과 calculation document를 code로 평가하지 않는다.
-7. external model API는 실제 문서 분석, rule publication과 actual acceptance에서 사용하지 않는다.
-8. actual apply는 backup과 승인된 dry-run digest 없이는 실행하지 않는다.
+7. external model API는 actual document ingestion, rule publication과 protected acceptance manifest에
+   사용하지 않는다. runtime event assistance만 bounded user situation과 locally selected excerpt를
+   Worker에서 전송할 수 있다.
+8. API key는 Worker environment에만 있고 DB, API response, browser, prompt, log와 Git에 없다.
+9. actual apply는 backup과 승인된 dry-run digest 없이는 실행하지 않는다.
 
 ## 16. Test strategy
 
@@ -496,6 +585,11 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 - tri-state required aggregation, exclusion, wait, reduction와 frequency
 - Decimal precision, rounding, mixed currency와 trace
 - fixed/indemnity summary 분리
+- same-member/current-snapshot/enrolled-coverage search scope와 deterministic ranking
+- LLM response가 supplied token만 재정렬할 수 있고 decision/amount/invented citation은 거부되는지
+- provider key 없음, timeout, rate limit, auth와 malformed response의 zero-retry fallback
+- same event/candidate digest 중복 분석이 external call을 한 번만 만드는지
+- assistant output token limit, bounded payload와 prompt/response/log 비보존
 
 ### Synthetic acceptance scenarios
 
@@ -507,6 +601,9 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 - 결정적 exclusion이 있을 때만 NO_MATCH
 - current confirmation 또는 applicable terms edition이 없을 때 empty result가 아닌 PARTIAL
 - 한 knowledge publication 평가 실패에도 legacy result가 보존됨
+- provider 없음에도 동일 사건의 관련 약관 후보와 citation이 `STRUCTURED_SEARCH`로 반환됨
+- synthetic provider가 local 후보를 재정렬하면 verified result는 그대로이고 assistance mode만
+  `LLM_ASSISTED`로 바뀜
 
 실제 사용자 acceptance 사례는 저장소 밖 protected manifest에서만 실행한다. 검증 보고에는
 식별자, 진단, 약관명과 금액 대신 다음 aggregate만 기록한다.
@@ -524,6 +621,7 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 - event create/update/analyze/result and browser result rendering
 - authenticated household isolation, no-store와 response bounds
 - stale event/knowledge/rule version behavior
+- assistance job claim/dedupe, provider-free fallback와 fake-provider upgrade
 - real runtime API and browser acceptance when an authenticated session is available
 
 ## 17. Implementation sequence
@@ -532,12 +630,14 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 2. migration과 strict publication package model을 TDD로 구현한다.
 3. validation, reconciliation, dry-run/apply/verify와 privacy tests를 구현한다.
 4. private knowledge rule runtime과 persistence를 구현한다.
-5. v2 API schema를 추가하고 generated contracts를 갱신한다.
-6. Web result UI와 explicit partial/empty states를 구현한다.
-7. wholly synthetic multi-coverage acceptance를 통과시킨다.
-8. 외부 actual package를 coverage disposition까지 전수 대사하고 규칙 초안을 만든다.
-9. 사용자에게 count-only dry-run과 review summary를 제시해 exact digest 승인을 받는다.
-10. backup -> disposable restore -> actual apply -> runtime/browser verification을 수행한다.
+5. member-scoped structured recommendation search와 assistance job persistence를 구현한다.
+6. fake provider로 one-call LLM rerank, strict validation과 zero-retry fallback을 구현한다.
+7. v2 API schema를 추가하고 generated contracts를 갱신한다.
+8. Web result UI와 explicit partial/empty/recommendation states를 구현한다.
+9. wholly synthetic multi-coverage와 dual-mode assistance acceptance를 통과시킨다.
+10. 외부 actual package를 coverage disposition까지 전수 대사하고 규칙 초안을 만든다.
+11. 사용자에게 count-only dry-run과 review summary를 제시해 exact digest 승인을 받는다.
+12. backup -> disposable restore -> actual apply -> runtime/browser verification을 수행한다.
 
 ## 18. Completion boundary
 
@@ -549,6 +649,10 @@ knowledge catalog의 문서 완전성이나 가입 여부와 섞지 않는다.
 - result endpoint가 legacy와 private candidates, partial completeness와 stale identity를 반환한다.
 - fixed candidate를 독립 계산하고 currency별 conditional subtotal을 제공한다.
 - indemnity가 receipt 조건에 따라 별도 계산되며 fixed subtotal에 포함되지 않는다.
+- provider가 없으면 외부 호출 없이 citation-backed DB 검색 추천을 반환한다.
+- provider가 있으면 event/candidate digest당 최대 한 번만 strict LLM 보조를 수행하고 실패 시 DB
+  추천을 보존한다.
+- verified candidate와 recommendation이 API, persistence와 UI에서 명확히 분리된다.
 - 합성 two-coverage와 four-coverage scenarios가 정확한 candidate/count/trace를 재현한다.
 - actual protected acceptance가 count, per-coverage decision, conditional subtotal과 citation 기준을
   만족한다.
