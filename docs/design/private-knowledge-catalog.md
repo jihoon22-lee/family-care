@@ -292,6 +292,26 @@ Evidence 연결과 청구 실행 준비가 끝난 일부 계약을 다루는 운
 가족별 필터에는 앱의 다른 가족 API와 동일한 opaque `family_member_id`만 노출하며,
 실제 이름·생년월일·외부 Drive ID·package alias는 binding 식별자로 사용하거나 응답하지 않는다.
 
+## Verified publication and event decision boundary
+
+catalog import의 모든 semantic fact는 계속 `executable=false`다. 실행 권위는 exact current snapshot에
+묶인 별도 `private-knowledge-rule-publication.sol-v1` package에만 있다. package는 모든 coverage의
+`PUBLISHED | BLOCKED | NOT_APPLICABLE` disposition, 사건일 status interval, allowlisted rule와
+calculation document, exact section/clause/fact/page citation을 포함한다. dry-run은 snapshot digest,
+confirmation, disposition closure, citation lineage와 count를 검증하며 apply는 append-only current
+publication을 만든다. 같은 package의 재적용은 `NO_OP`이고 과거 package 재활성화는 차단한다.
+
+event analysis는 operational 원장과 publication-backed private catalog를 독립 평가해 v2 응답에서만
+합친다. private candidate/evaluation/calculation은 별도 immutable table에 저장되며 다른 household의
+행이나 운영 Rider ID로 바뀌지 않는다. catalog coverage count는 전체 가입 지식 범위,
+published/blocked count는 실행 준비 범위를 뜻한다. 고정형 conditional subtotal과 실손 unresolved
+summary는 분리하고 모든 evaluation은 exact private citation을 가져야 한다.
+
+합성 PostgreSQL acceptance는 package apply -> exact subject/current confirmation -> publication apply ->
+event create/update -> combined analyze -> immutable reload를 통과한다. 두 fixed 담보 및 네 fixed 담보와
+별도 indemnity `UNKNOWN`, idempotent apply, cross-household 0행을 검증했다. 이는 실제 보호 package나
+실제 보험금 결과 acceptance를 대신하지 않는다.
+
 ## CLI boundary
 
 운영 CLI는 private path를 argv로 받지 않고 환경변수로만 읽는다. 저장소 보호 경계는 호출자가

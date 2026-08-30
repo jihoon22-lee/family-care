@@ -192,7 +192,7 @@ FieldPath = Annotated[
 def _wire_decimal(value: Decimal) -> str:
     if not value.is_finite() or value < 0:
         raise ValueError("decision amount must be a finite non-negative decimal")
-    return format(value, "f")
+    return format(value.normalize(), "f")
 
 
 class OperationalEvidenceCitationResponse(StrictModel):
@@ -298,9 +298,9 @@ class OperationalEvaluationResponse(EvaluationBaseResponse):
             result=value.result,
             required=value.required,
             reason_code=value.reason_code,
-            fact_paths=list(value.fact_paths),
-            missing_fields=list(value.missing_fields),
-            conflicting_fields=list(value.conflicting_fields),
+            fact_paths=sorted(value.fact_paths),
+            missing_fields=sorted(value.missing_fields),
+            conflicting_fields=sorted(value.conflicting_fields),
             citations=[
                 OperationalEvidenceCitationResponse.from_domain(item) for item in value.evidence
             ],
@@ -324,9 +324,9 @@ class PrivateKnowledgeEvaluationResponse(EvaluationBaseResponse):
             result=value.result,
             required=value.required,
             reason_code=value.reason_code,
-            fact_paths=list(value.fact_paths),
-            missing_fields=list(value.missing_fields),
-            conflicting_fields=list(value.conflicting_fields),
+            fact_paths=sorted(value.fact_paths),
+            missing_fields=sorted(value.missing_fields),
+            conflicting_fields=sorted(value.conflicting_fields),
             citations=[
                 PrivateKnowledgeCitationResponse.from_domain(item) for item in value.citations
             ],

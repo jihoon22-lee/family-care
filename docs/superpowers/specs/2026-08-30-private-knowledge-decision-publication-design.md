@@ -1,6 +1,6 @@
 # Private Knowledge Decision Publication Design
 
-- 상태: 사용자 승인 완료, 구현 진행
+- 상태: 합성 publication/decision/assistance와 v2 UI 구현·수용 완료; 실제 보호 package/runtime acceptance 진행 전
 - 범위: current private knowledge snapshot을 deterministic event decision과 benefit calculation에 연결
 - 선행 설계: `docs/design/private-knowledge-catalog.md`,
   `docs/design/coverage-decision-engine.md`, `docs/design/event-result-pwa.md`
@@ -604,6 +604,11 @@ failure detail과 prompt는 browser에 보내지 않는다.
 - provider 없음에도 동일 사건의 관련 약관 후보와 citation이 `STRUCTURED_SEARCH`로 반환됨
 - synthetic provider가 local 후보를 재정렬하면 verified result는 그대로이고 assistance mode만
   `LLM_ASSISTED`로 바뀜
+
+위 합성 수용은 disposable PostgreSQL 18에서 하나의 test로 실행한다. 첫 RED는 저장 직후와 immutable
+reload 사이 decimal scale 및 operational fact-path ordering 차이를 검출했고, wire projection을
+canonicalize한 뒤 GREEN이 되었다. missing-key 경로는 provider client 생성 0회, fake success와 fake
+timeout은 각각 provider 호출 1회이며 실제 네트워크 호출은 0회다.
 
 실제 사용자 acceptance 사례는 저장소 밖 protected manifest에서만 실행한다. 검증 보고에는
 식별자, 진단, 약관명과 금액 대신 다음 aggregate만 기록한다.

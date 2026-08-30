@@ -1,6 +1,6 @@
 # Coverage decision engine design
 
-- 상태: v0.1 대화 설계 승인 완료, Phase 5 rule publication boundary와 PR7 benefit-calculation boundary 반영; deterministic execution 문서
+- 상태: operational 및 private knowledge deterministic 실행, v2 결과와 선택적 assistance 구현 완료; 실제 보호 자료 acceptance 대기
 - 적용 단계: Phase 6 — Coverage Decision Engine
 - 상위 기준: `docs/design/v0.1-product.md`
 
@@ -26,6 +26,24 @@ PR6는 이 설계의 결정론적 실행 경계를 구현했습니다. `0007_cov
 PR7은 PR6의 `ClaimCandidate`와 published executable CoverageRule을 입력으로 받아 계산 경계를 추가했습니다. `0008_benefit_calculations`는 `0007_coverage_decision_engine` 뒤에 수동 `ReceiptLine`, 계산 header, immutable step row를 추가하고, direct `psycopg` repository가 server-derived `HouseholdScope`로 조회·저장합니다. 계산은 `Decimal`/통화/반올림 규칙을 사용하며, rule version과 Evidence ID를 결과에 보존합니다. 하나의 유효한 rule/evidence chain을 선택할 수 있는 후보만 계산 projection으로 저장하고, 같은 입력·규칙·engine cutoff의 trace는 재사용하며, 계산에 영향을 주는 변경은 새 version row와 step 집합으로 남깁니다.
 
 ClaimHistory projection은 아직 연결되지 않았으며 현재 repository port는 빈 history를 반환합니다. 따라서 history가 필요한 결정 규칙은 0회로 추정하지 않고 `UNKNOWN`으로 남습니다. 기본 `HouseholdScope` resolver는 Phase 7 인증 전까지 fail-closed이므로, 실제 로그인 없이 운영 route를 사용한다고 해석하면 안 됩니다. PR7의 계산 결과도 지급 확정이나 보험사 지급 보장이 아니라 조건부 청구 검토 자료입니다.
+
+## Private knowledge v2 execution status
+
+`0020_private_publications`부터 `0022_analysis_assistance`까지의 additive 경계는 current private
+knowledge snapshot을 기존 운영 원장과 별도 stream으로 평가한다. 증권 가입, current confirmation,
+사건일 status interval, 약관 identity/edition/mapping, coverage disposition, rule와 calculation
+publication이 모두 닫힌 담보만 실행한다. 약관에 조항이 있다는 사실이나 검색 유사도는 가입 또는
+`MATCH` 근거가 아니다.
+
+결과 v2는 source-discriminated candidate/evaluation, exact clause/page citation, catalog completeness,
+통화별 조건부 정액 subtotal과 별도 실손 summary를 반환한다. 정액 subtotal은
+`MATCH + CALCULATED`만 더하고 실손 `UNKNOWN`을 섞지 않는다. 저장 직후 응답과 immutable result
+재조회는 금액 문자열과 fact-path ordering을 canonicalize해 동일한 verified projection을 제공한다.
+
+분석 뒤 member-scoped structured search는 관련 약관 검토 후보를 즉시 만든다. Worker key가 있으면
+이미 선택된 bounded token만 한 번 재정렬·설명할 수 있고, key가 없거나 호출이 실패하면 DB 검색을
+그대로 유지한다. 이 assistance projection은 candidate, evaluation, calculation, subtotal을 수정할
+권위가 없다.
 
 ## Inputs
 
@@ -258,6 +276,9 @@ MedicalEvent fact
 - household-scoped receipt CRUD, expected-version conflict, soft delete, calculation response contract
 - strict `benefit-calculation.v1` schema/example와 file/path/diagnosis/raw-note privacy boundary
 - synthetic PostgreSQL calculation persistence와 immutable step/result reanalysis
+- complete synthetic package -> confirmation -> publication -> event -> combined result round trip
+- 두 정액 및 네 정액+실손 미확정 시나리오의 담보별 계산, subtotal과 exact citation
+- provider 미설정·합성 성공·합성 timeout에서 동일한 verified projection과 DB fallback 유지
 
 ## Deferred decisions
 

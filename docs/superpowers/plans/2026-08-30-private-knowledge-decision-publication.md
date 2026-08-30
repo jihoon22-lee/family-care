@@ -1032,7 +1032,7 @@ git commit -m "feat(web): show complete insurance decisions"
 - Consumes: complete synthetic catalog, publication package, confirmations, status intervals, event, receipts, analyze/result API, and Web contract.
 - Produces: one reproducible no-external-service acceptance proof and current documentation.
 
-- [ ] **Step 1: Write the acceptance RED test before the final wiring change**
+- [x] **Step 1: Write the acceptance RED test before the final wiring change**
 
 The test performs:
 
@@ -1052,15 +1052,19 @@ The same synthetic flow must prove both assistance paths without a network reque
 `LLM_ASSISTED`; provider failure retains the same DB recommendations. Verified candidates, calculations, and
 subtotals must be byte-for-byte equal across assistance modes.
 
-- [ ] **Step 2: Run acceptance and fix only the missing wiring**
+- [x] **Step 2: Run acceptance and fix only the missing wiring**
 
 ```bash
-TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_acceptance.py -q
+FAMILYCARE_TEST_DATABASE_URL=<disposable-test-db> \
+FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB=true \
+TMPDIR=/tmp uv run pytest -m integration \
+  apps/api/tests/test_private_knowledge_decision_acceptance.py -q
 ```
 
-Expected RED: the first still-unwired boundary fails. Implement only that boundary and rerun until GREEN.
+Observed RED: immutable reload changed decimal scale and operational fact-path ordering. Canonical v2 wire
+serialization fixed only that boundary. The same disposable PostgreSQL test then passed with zero network calls.
 
-- [ ] **Step 3: Run all focused groups serially**
+- [x] **Step 3: Run all focused groups serially**
 
 ```bash
 corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/events/event-input.test.tsx src/features/results/result-page.test.tsx
@@ -1068,6 +1072,10 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_migr
 ```
 
 - [ ] **Step 4: Run the full required repository gate**
+
+Run this gate once in the final runtime-verification turn instead of repeating it before and after the protected
+apply. Task 12 used the already-green Web Task 11 gate plus the focused Python, acceptance, documentation,
+repository-safety, formatting and diff checks.
 
 ```bash
 python3 scripts/check_documentation.py
@@ -1085,7 +1093,7 @@ git diff --check
 
 Expected: every command exits 0. A skipped real-browser or external-data check is recorded separately and is not converted into a pass.
 
-- [ ] **Step 5: Review privacy and commit synthetic completion**
+- [x] **Step 5: Review privacy and commit synthetic completion**
 
 Inspect the full diff for actual names, event phrases, diagnoses, amounts, source aliases, paths, IDs, hashes, DSNs, SQL output, and extracted text. Then:
 
