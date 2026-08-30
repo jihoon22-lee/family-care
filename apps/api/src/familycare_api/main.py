@@ -30,6 +30,7 @@ from familycare_api.identity.router import router as identity_router
 from familycare_api.insurance_documents.router import router as insurance_document_router
 from familycare_api.policies.candidate_router import router as policy_candidate_router
 from familycare_api.policies.router import router as policy_ledger_router
+from familycare_api.private_knowledge.router import router as private_knowledge_router
 
 
 def _synthetic_ingestion_enabled() -> bool:
@@ -109,6 +110,7 @@ def create_app(
     app.include_router(coverage_decision_router)
     app.include_router(structuring_job_router)
     app.include_router(evidence_router)
+    app.include_router(private_knowledge_router)
     app.include_router(medical_event_claim_router)
     app.include_router(claim_router)
 

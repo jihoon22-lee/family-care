@@ -40,6 +40,11 @@ AuthBoundaryErrorCode = Literal[
     "REAUTHENTICATION_REQUIRED",
     "SESSION_NOT_FOUND",
 ]
+PrivateKnowledgeBoundaryErrorCode = Literal[
+    "PRIVATE_KNOWLEDGE_NOT_FOUND",
+    "PRIVATE_KNOWLEDGE_TOO_LARGE",
+    "PRIVATE_KNOWLEDGE_UNAVAILABLE",
+]
 ApiErrorCode = (
     ErrorCode
     | PolicyErrorCode
@@ -48,6 +53,7 @@ ApiErrorCode = (
     | DecisionBoundaryErrorCode
     | ClaimBoundaryErrorCode
     | AuthBoundaryErrorCode
+    | PrivateKnowledgeBoundaryErrorCode
 )
 
 

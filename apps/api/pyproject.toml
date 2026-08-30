@@ -15,6 +15,7 @@ dependencies = [
 
 [project.scripts]
 familycare-admin = "familycare_api.identity.cli:main"
+familycare-private-knowledge = "familycare_api.private_knowledge.cli:main"
 
 [build-system]
 requires = ["hatchling==1.32.0"]

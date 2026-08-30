@@ -1,0 +1,114 @@
+{
+  "schema_version": "1",
+  "contract": {
+    "id": "00000000-0000-4000-8000-000000001901",
+    "subject_id": "00000000-0000-4000-8000-000000001902",
+    "family_alias": "Family Member A",
+    "insurer_display": "Sample Insurer",
+    "product_display": "Sample Policy",
+    "contract_start": "2024-01-01",
+    "contract_end": null,
+    "certificate_decision": "MATCH",
+    "current_status": "unknown",
+    "coverage_count": 1,
+    "enrollment_match_count": 1,
+    "enrollment_no_match_count": 0,
+    "enrollment_unknown_count": 0,
+    "document_identity_decision": "MATCH",
+    "edition_applicability_decision": "UNKNOWN",
+    "terms_overall_decision": "UNKNOWN"
+  },
+  "coverages": [
+    {
+      "id": "00000000-0000-4000-8000-000000001903",
+      "display_name": "Synthetic Hospital Benefit",
+      "component_role": "RIDER",
+      "component_classification": "BENEFIT_COVERAGE",
+      "enrollment_decision": "MATCH",
+      "benefit_type": "FIXED",
+      "insured_amount": "10000.0000",
+      "currency": "KRW",
+      "coverage_start": "2024-01-01",
+      "coverage_end": null,
+      "renewal_state": "UNKNOWN",
+      "current_status": "unknown"
+    }
+  ],
+  "terms_assignments": [
+    {
+      "id": "00000000-0000-4000-8000-000000001904",
+      "document_identity_decision": "MATCH",
+      "edition_applicability_decision": "UNKNOWN",
+      "overall_decision": "UNKNOWN",
+      "reason_codes": [
+        "SYNTHETIC_EDITION_DATE_UNCONFIRMED"
+      ],
+      "selected_source_count": 1
+    }
+  ],
+  "coverage_mappings": [
+    {
+      "coverage_id": "00000000-0000-4000-8000-000000001903",
+      "terms_section_id": "00000000-0000-4000-8000-000000001905",
+      "mapping_applicability": "APPLICABLE",
+      "enrollment_decision": "MATCH",
+      "document_identity_decision": "MATCH",
+      "edition_applicability_decision": "UNKNOWN",
+      "section_mapping_decision": "MATCH",
+      "overall_decision": "UNKNOWN",
+      "reason_codes": [
+        "SYNTHETIC_SECTION_MATCH",
+        "SYNTHETIC_EDITION_DATE_UNCONFIRMED"
+      ],
+      "executable": false
+    }
+  ],
+  "terms_sections": [
+    {
+      "id": "00000000-0000-4000-8000-000000001905",
+      "heading": "Synthetic Benefit Section",
+      "page_start": 2,
+      "page_end": 2,
+      "review_state": "DIRECT_REVIEWED",
+      "section_summary": "Synthetic summary of a reviewed sample section.",
+      "confidence": "high",
+      "found_categories": [
+        "payment_reason"
+      ],
+      "missing_categories": [
+        "edition_effective_date"
+      ],
+      "warnings": [
+        "Synthetic edition date requires confirmation."
+      ],
+      "facts": [
+        {
+          "id": "00000000-0000-4000-8000-000000001906",
+          "fact_type": "PAYMENT_TRIGGER",
+          "statement": "Synthetic payment condition for the sample benefit.",
+          "conditions": {
+            "details_ko": [
+              "Synthetic condition detail."
+            ],
+            "decision_impact": "establishes_payment_trigger",
+            "confidence": "high",
+            "unresolved_reference": false
+          },
+          "numeric_terms": [
+            "Synthetic fixed amount"
+          ],
+          "review_state": "DIRECT_REVIEWED",
+          "executable": false,
+          "citations": [
+            {
+              "page_start": 2,
+              "page_end": 2,
+              "clause_label": "Synthetic clause 1",
+              "clause_title": "Sample payment condition"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

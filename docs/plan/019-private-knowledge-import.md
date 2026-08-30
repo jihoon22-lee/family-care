@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–4 complete; Task 5 in progress; Tasks 6–8 pending
+**Status:** Tasks 1–6 complete; Task 7 in progress; Task 8 pending
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -30,7 +30,9 @@ def load_private_knowledge_package(
     repository_root: Path,
 ) -> PrivateKnowledgePackage: ...
 
+
 def canonical_package_digest(package: PrivateKnowledgePackage) -> str: ...
+
 
 class PostgresPrivateKnowledgeRepository:
     def read_baseline(self, household_space_id: UUID) -> KnowledgeDatabaseBaseline: ...
@@ -43,6 +45,7 @@ class PostgresPrivateKnowledgeRepository:
         approved_report: KnowledgeDryRunReport,
     ) -> AppliedKnowledgeSnapshot: ...
     def verify_current(self, household_space_id: UUID) -> KnowledgeSnapshotSummary: ...
+
 
 def build_dry_run_report(
     package: PrivateKnowledgePackage,
@@ -117,37 +120,37 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
 
 **Files:** `apps/api/src/familycare_api/private_knowledge/repository.py`, `service.py`, `apps/api/tests/test_private_knowledge_apply.py`, `apps/api/tests/test_private_knowledge_integration.py`.
 
-1. [ ] Write RED PostgreSQL tests proving apply rejects a changed package digest, report digest, database baseline, household, actor, entity count, unresolved conflict, executable row, and cross-household binding.
-2. [ ] Write RED tests proving the same package digest returns the existing applied run without inserting children and a new package supersedes exactly one prior current run.
-3. [ ] Write RED rollback tests that inject a failure after each entity group and prove the old current snapshot remains selected with no partial new snapshot.
-4. [ ] Implement one transaction that advisory-locks the household import scope, recomputes the baseline, validates the approval, inserts import run/subjects/contracts/coverages/assignments/sections/clauses/facts/citations/mappings/bindings, compares persisted counts, supersedes the previous run, and selects the new run current.
-5. [ ] Store package records only through parameterized SQL and validated JSON adapters. Never evaluate a stored condition, expression, template, SQL fragment, or provider payload.
-6. [ ] Implement commit-uncertainty recovery by querying the household/package unique key; do not blindly retry a mutation.
-7. [ ] Implement `verify_current` to re-count all child tables, validate parent/child referential closure, recompute decision matrices and row digests, confirm one current run, and return a bounded summary.
-8. [ ] Run focused apply/rollback/idempotency tests twice against a disposable PostgreSQL database.
+1. [x] Write RED PostgreSQL tests proving apply rejects a changed package digest, report digest, database baseline, household, actor, entity count, unresolved conflict, executable row, and cross-household binding.
+2. [x] Write RED tests proving the same package digest returns the existing applied run without inserting children and a new package supersedes exactly one prior current run.
+3. [x] Write RED rollback tests that inject a failure after each entity group and prove the old current snapshot remains selected with no partial new snapshot.
+4. [x] Implement one transaction that advisory-locks the household import scope, recomputes the baseline, validates the approval, inserts import run/subjects/contracts/coverages/assignments/sections/clauses/facts/citations/mappings/bindings, compares persisted counts, supersedes the previous run, and selects the new run current.
+5. [x] Store package records only through parameterized SQL and validated JSON adapters. Never evaluate a stored condition, expression, template, SQL fragment, or provider payload.
+6. [x] Implement commit-uncertainty recovery by querying the household/package unique key; do not blindly retry a mutation.
+7. [x] Implement `verify_current` to re-count all child tables, validate parent/child referential closure, recompute decision matrices and row digests, confirm one current run, and return a bounded summary.
+8. [x] Run focused apply/rollback/idempotency tests twice against a disposable PostgreSQL database.
 
 ## Task 6: Add the private CLI and bounded read API
 
 **Files:** `apps/api/src/familycare_api/private_knowledge/cli.py`, `schemas.py`, `router.py`, `apps/api/src/familycare_api/main.py`, `apps/api/pyproject.toml`, `apps/api/tests/test_private_knowledge_cli.py`, `apps/api/tests/test_private_knowledge_api.py`, `apps/api/tests/test_private_knowledge_contracts.py`, `packages/contracts/schemas/private-knowledge.v1.schema.json`, `packages/contracts/examples/private-knowledge.v1.json`, `packages/contracts/openapi/familycare.v1.json`, `apps/api/src/familycare_api/contracts/generated_business.py`, `apps/web/src/api/generated.ts`, `scripts/check_contracts.py`, `packages/contracts/README.md`.
 
-1. [ ] Write RED CLI tests for missing/invalid environment, validate, dry-run, apply, verify, stale approval, output-file mode, stable exit codes, sanitized stdout/stderr, and no command-line private path/DSN/actor arguments.
-2. [ ] Add `familycare-private-knowledge = "familycare_api.private_knowledge.cli:main"` and implement commands that construct dependencies only after package validation.
-3. [ ] Write RED authenticated API tests for:
+1. [x] Write RED CLI tests for missing/invalid environment, validate, dry-run, apply, verify, stale approval, output-file mode, stable exit codes, sanitized stdout/stderr, and no command-line private path/DSN/actor arguments.
+2. [x] Add `familycare-private-knowledge = "familycare_api.private_knowledge.cli:main"` and implement commands that construct dependencies only after package validation.
+3. [x] Write RED authenticated API tests for:
    - `GET /api/v1/private-knowledge/current`
    - `GET /api/v1/private-knowledge/current/contracts`
    - `GET /api/v1/private-knowledge/current/contracts/{contract_id}`
-4. [ ] Require HouseholdScope, bounded cursor pagination, stable internal IDs, independent decision fields, fact citations, `executable=false`, `Cache-Control: no-store`, and `404` for another household.
-5. [ ] Exclude package paths, source/document aliases, raw source records, policy numbers, source hashes, full statements from list responses, database IDs for optional cross-system bindings, credentials, and provider payloads. Expose a bounded semantic statement only in authenticated contract detail with its citation metadata.
-6. [ ] Add a versioned transport-neutral JSON Schema and wholly synthetic example, include the router in the app, regenerate OpenAPI/Python/TypeScript artifacts with repository generators, and extend contract/privacy drift checks.
-7. [ ] Run focused CLI/API/contract/privacy tests and validate the committed generated artifacts are deterministic.
+4. [x] Require HouseholdScope, bounded cursor pagination, stable internal IDs, independent decision fields, fact citations, `executable=false`, `Cache-Control: no-store`, and `404` for another household.
+5. [x] Exclude package paths, source/document aliases, raw source records, policy numbers, source hashes, full statements from list responses, database IDs for optional cross-system bindings, credentials, and provider payloads. Expose a bounded semantic statement only in authenticated contract detail with its citation metadata.
+6. [x] Add a versioned transport-neutral JSON Schema and wholly synthetic example, include the router in the app, regenerate OpenAPI/Python/TypeScript artifacts with repository generators, and extend contract/privacy drift checks.
+7. [x] Run focused CLI/API/contract/privacy tests and validate the committed generated artifacts are deterministic.
 
 ## Task 7: Complete synthetic and repository verification
 
 **Files:** all files changed by Tasks 1–6, `docs/design/private-knowledge-catalog.md`, `docs/plan/019-private-knowledge-import.md`.
 
-1. [ ] Run the complete synthetic package flow twice: validate → dry-run → approve exact digest → apply → verify → idempotent apply.
-2. [ ] Review the full diff for enrollment authority, terms-edition independence, subject binding, household scope, row preservation, digest/stale checks, transaction rollback, query bounds, logging, cache, and absence of actual data.
-3. [ ] Run the required repository verification serially:
+1. [x] Run the complete synthetic package flow twice: validate → dry-run → approve exact digest → apply → verify → idempotent apply.
+2. [x] Review the full diff for enrollment authority, terms-edition independence, subject binding, household scope, row preservation, digest/stale checks, transaction rollback, query bounds, logging, cache, and absence of actual data.
+3. [x] Run the required repository verification serially:
 
 ```bash
 python3 scripts/check_documentation.py
@@ -163,7 +166,7 @@ TMPDIR=/tmp uv run python scripts/check_workflows.py
 git diff --check
 ```
 
-4. [ ] Re-run the migration and private-knowledge PostgreSQL integration groups after the full suite so their latest evidence is explicit.
+4. [x] Re-run the migration and private-knowledge PostgreSQL integration groups after the full suite so their latest evidence is explicit.
 5. [ ] Commit the tested implementation in reviewable Conventional Commit units and request a final code review before operational apply.
 
 ## Task 8: Apply the reviewed package to the real FamilyCare database

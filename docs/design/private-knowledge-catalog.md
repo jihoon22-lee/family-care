@@ -1,6 +1,6 @@
 # Private insurance knowledge catalog design
 
-- 상태: 설계 승인, 구현 진행 중
+- 상태: 구현 완료, 전체 저장소·실제 런타임 검증 진행 중
 - 적용 단계: private policy structuring과 document inventory 이후
 - 권위 경계: 증권 가입 사실, 약관 적용성, 의미 사실, 실행 규칙을 서로 다른 상태로 보존
 
@@ -39,6 +39,7 @@ knowledge snapshot으로 저장하고, 현재 snapshot만 조회 projection에 �
 - 분석 권위와 importer version
 - `VALIDATED`, `APPLIED`, `SUPERSEDED`, `REJECTED` 상태
 - 검증한 전체 manifest, manifest와 reconciliation의 bounded count projection
+- 적용 당시 entity count와 독립 판정 행렬의 검증 projection
 - 적용 actor와 시각
 - 현재 snapshot 여부
 
@@ -160,6 +161,11 @@ digest를 가진다. importer는 source alias 원문을 일반 로그에 쓰지 
 보험사, 상품, page 범위의 유사성만으로 `MATCH`를 만들지 않는다. 내부 Evidence UUID 연결도
 같은 DocumentVersion, physical page, content hash를 모두 확인한다.
 
+선택적 FamilyMember·AppUser·PolicyContract·Rider·TermsEdition·Evidence binding 행에는 import
+run과 같은 `household_space_id`를 중복 보존하고 복합 외래키로 강제한다. Evidence binding은
+같은 household와 DocumentVersion을 가리키는 exact Evidence가 함께 있어야 `MATCH`가 될 수
+있다. 따라서 다른 가구의 유효한 UUID를 알고 있어도 knowledge snapshot에 연결할 수 없다.
+
 ## Package contract
 
 지원하는 첫 package schema는 `private-analysis-package.sol-v2`다. importer가 다음 파일을
@@ -212,8 +218,9 @@ external package
   -> open apply transaction
   -> lock current import run
   -> insert immutable snapshot rows
-  -> compare persisted counts with approved report
+  -> compare persisted counts and decision matrices with approved report
   -> atomically make snapshot current
+  -> verify row digests, parent-child closure, non-executable flags, and bindings
 ```
 
 apply는 dry-run report digest와 package digest를 함께 요구한다. dry-run 이후 패키지나 DB
@@ -223,15 +230,20 @@ baseline이 바뀌면 `STALE_DRY_RUN`으로 거부한다. 현재 snapshot과 같
 재활성화가 필요하면 별도 activation-history 설계와 명시적 승인을 거친다.
 
 snapshot write는 한 transaction이다. 실패 시 새 snapshot 행은 전부 rollback되고 이전
-current snapshot은 유지된다. commit 결과가 불명확하면 자동 재적용하지 않고 package digest로
-DB를 조회해 결과를 판별한다.
+current snapshot은 유지된다. 적용 시 승인 보고서의 entity count와 가입·보장유형·약관 동일성·
+판본 적용성·mapping 적용성·현재 상태 행렬을 저장한다. `verify`는 현재 indexed column에서 이
+행렬을 다시 계산하고, 모든 source record digest와 같은 snapshot 내부 부모-자식 연결 폐쇄성,
+실행 가능 행 0건, 미확인 operational binding 0건을 함께 확인한다. commit 결과가 불명확하면
+자동 재적용하지 않고 package digest로 DB를 조회해 결과를 판별한다.
 
 ## Compatibility and query boundary
 
-첫 단계의 API는 current snapshot의 count·alias·계약·구성요소·약관 assignment·semantic fact
-projection을 HouseholdScope로 조회한다. source path, document alias, statement 전체를 목록
-응답에 무제한 노출하지 않는다. 상세 fact 응답은 인증된 household 안에서 bounded citation과
-함께 제공하며 `Cache-Control: no-store`를 사용한다.
+첫 단계의 API는 `GET /api/v1/private-knowledge/current`, `GET
+/api/v1/private-knowledge/current/contracts`, `GET
+/api/v1/private-knowledge/current/contracts/{contract_id}`로 current snapshot의 count·alias·계약·
+구성요소·약관 assignment·semantic fact projection을 HouseholdScope로 조회한다. source path,
+document alias, statement 전체를 목록 응답에 무제한 노출하지 않는다. 상세 fact 응답은 인증된
+household 안에서 bounded citation과 함께 제공하며 `Cache-Control: no-store`를 사용한다.
 
 기존 policy/rider API는 즉시 바꾸지 않는다. 호환 projection은 다음 조건을 모두 만족하는
 항목만 기존 원장에 publish한다.
@@ -304,7 +316,8 @@ stdout에는 상태, digest prefix가 아닌 opaque run ID, count, stable reason
 - UNKNOWN enrollment, unknown benefit type, non-benefit component preservation
 - executable true rejection
 - idempotent second apply and stale dry-run rejection
-- prior current snapshot preservation on failed apply and explicit supersede
+- every entity-stage rollback preserving the prior current snapshot and explicit supersede
+- indexed decision-matrix drift and source-record digest drift detection
 - HouseholdSpace isolation and no-store bounded API projection
 - log/stdout absence of private values, paths, aliases, DSN, statements
 - migration upgrade/downgrade shape and PostgreSQL constraints

@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATHS = (
     ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json",
     ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json",
+    ROOT / "packages/contracts/schemas/private-knowledge.v1.schema.json",
 )
 DEFAULT_OUTPUT = ROOT / "apps/api/src/familycare_api/contracts/generated_business.py"
 

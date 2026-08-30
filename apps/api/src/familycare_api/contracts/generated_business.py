@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 __all__ = [
     "AggregateId",
@@ -26,6 +26,15 @@ __all__ = [
     "EvidenceReviewState",
     "FamilyMemberId",
     "FamilyMemberRecord",
+    "KnowledgeContractDetailResponse",
+    "KnowledgeContractListItemResponse",
+    "KnowledgeCoverageMappingResponse",
+    "KnowledgeCoverageResponse",
+    "KnowledgeFactCitationResponse",
+    "KnowledgeFactConditionsResponse",
+    "KnowledgeFactResponse",
+    "KnowledgeTermsAssignmentResponse",
+    "KnowledgeTermsSectionResponse",
     "PartyRole",
     "PolicyApiErrorCode",
     "PolicyCandidate",
@@ -260,6 +269,123 @@ class FamilyMemberRecord(TypedDict):
     id: FamilyMemberId
     internal_alias: str
     version: PositiveVersion
+
+
+class KnowledgeContractDetailResponse(TypedDict):
+    contract: KnowledgeContractListItemResponse
+    coverage_mappings: list[KnowledgeCoverageMappingResponse]
+    coverages: list[KnowledgeCoverageResponse]
+    schema_version: Literal["1"]
+    terms_assignments: list[KnowledgeTermsAssignmentResponse]
+    terms_sections: list[KnowledgeTermsSectionResponse]
+
+
+class KnowledgeContractListItemResponse(TypedDict):
+    certificate_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    contract_end: str | None
+    contract_start: str | None
+    coverage_count: int
+    current_status: Literal["active", "inactive", "lapsed", "terminated", "unknown"]
+    document_identity_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    edition_applicability_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    enrollment_match_count: int
+    enrollment_no_match_count: int
+    enrollment_unknown_count: int
+    family_alias: str
+    id: str
+    insurer_display: str
+    product_display: str
+    subject_id: str
+    terms_overall_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+
+
+class KnowledgeCoverageMappingResponse(TypedDict):
+    coverage_id: str
+    document_identity_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    edition_applicability_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    enrollment_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    executable: Literal[False]
+    mapping_applicability: Literal["APPLICABLE", "NOT_APPLICABLE", "UNKNOWN"]
+    overall_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    reason_codes: list[str]
+    section_mapping_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    terms_section_id: str | None
+
+
+class KnowledgeCoverageResponse(TypedDict):
+    benefit_type: Literal["FIXED", "INDEMNITY", "NOT_APPLICABLE", "UNKNOWN"]
+    component_classification: Literal["BENEFIT_COVERAGE", "NON_BENEFIT_CONTRACT_COMPONENT"]
+    component_role: Literal["MAIN_CONTRACT", "RIDER"]
+    coverage_end: str | None
+    coverage_start: str | None
+    currency: NotRequired[str | None]
+    current_status: Literal["active", "inactive", "lapsed", "terminated", "unknown"]
+    display_name: str
+    enrollment_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    id: str
+    insured_amount: str | None
+    renewal_state: Literal["NO", "NOT_APPLICABLE", "UNKNOWN", "YES"]
+
+
+class KnowledgeFactCitationResponse(TypedDict):
+    clause_label: NotRequired[str | None]
+    clause_title: NotRequired[str | None]
+    page_end: int
+    page_start: int
+
+
+class KnowledgeFactConditionsResponse(TypedDict):
+    confidence: Literal["high", "medium"]
+    decision_impact: str
+    details_ko: list[str]
+    unresolved_reference: bool
+
+
+class KnowledgeFactResponse(TypedDict):
+    citations: list[KnowledgeFactCitationResponse]
+    conditions: KnowledgeFactConditionsResponse
+    executable: Literal[False]
+    fact_type: Literal[
+        "AMOUNT",
+        "CROSS_REFERENCE",
+        "DEFINITION",
+        "EXCLUSION",
+        "FREQUENCY",
+        "OTHER",
+        "PAYMENT_TRIGGER",
+        "REDUCTION",
+        "RENEWAL",
+        "REQUIRED_DOCUMENT",
+        "TERMINATION",
+        "WAITING_PERIOD",
+    ]
+    id: str
+    numeric_terms: list[str]
+    review_state: Literal["DIRECT_REVIEWED", "NEEDS_REVIEW", "UNKNOWN", "USER_CONFIRMED"]
+    statement: str
+
+
+class KnowledgeTermsAssignmentResponse(TypedDict):
+    document_identity_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    edition_applicability_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    id: str
+    overall_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    reason_codes: list[str]
+    selected_source_count: int
+
+
+class KnowledgeTermsSectionResponse(TypedDict):
+    confidence: Literal["high", "medium"]
+    facts: list[KnowledgeFactResponse]
+    found_categories: list[str]
+    heading: str
+    id: str
+    missing_categories: list[str]
+    page_end: int
+    page_start: int
+    review_state: Literal["DIRECT_REVIEWED", "NEEDS_REVIEW", "UNKNOWN", "USER_CONFIRMED"]
+    section_summary: str
+    warnings: list[str]
 
 
 class PolicyCandidate(TypedDict):

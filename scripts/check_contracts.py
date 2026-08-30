@@ -31,6 +31,28 @@ CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.s
 CANDIDATE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-candidate.v1.json"
 CLAUSE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/clause-search.v1.schema.json"
 CLAUSE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/clause-search.v1.json"
+PRIVATE_KNOWLEDGE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/private-knowledge.v1.schema.json"
+PRIVATE_KNOWLEDGE_EXAMPLE_PATH = ROOT / "packages/contracts/examples/private-knowledge.v1.json"
+PRIVATE_KNOWLEDGE_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "archive_key",
+    "content_sha256",
+    "document_version_id",
+    "evidence_id",
+    "family_member_id",
+    "household_space_id",
+    "package_digest",
+    "password",
+    "policy_contract_id",
+    "policy_number",
+    "raw_pdf",
+    "rider_id",
+    "source_alias",
+    "source_path",
+    "source_record",
+    "source_record_digest_sha256",
+    "source_text_sha256",
+}
 RIDER_CLAUSE_RULES_SCHEMA_PATH = (
     ROOT / "packages/contracts/schemas/rider-clause-rules.v1.schema.json"
 )
@@ -345,6 +367,20 @@ _WEB_GENERATOR = _load_web_generator()
 generate_web = _WEB_GENERATOR.generate
 
 
+def _load_private_knowledge_generator() -> Any:
+    """Load the deterministic private-knowledge schema generator."""
+
+    try:
+        module = import_module("scripts.generate_private_knowledge_contract")
+    except ModuleNotFoundError:  # pragma: no cover - direct-script execution path
+        module = import_module("generate_private_knowledge_contract")
+    return module
+
+
+_PRIVATE_KNOWLEDGE_GENERATOR = _load_private_knowledge_generator()
+render_private_knowledge_schema = _PRIVATE_KNOWLEDGE_GENERATOR.render_schema
+
+
 def render_openapi() -> str:
     """Render the canonical OpenAPI document deterministically."""
 
@@ -408,6 +444,9 @@ def validate_openapi() -> list[str]:
         "/api/v1/policies/{policy_id}/restore",
         "/api/v1/policies/{policy_id}/riders",
         "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
+        "/api/v1/private-knowledge/current",
+        "/api/v1/private-knowledge/current/contracts",
+        "/api/v1/private-knowledge/current/contracts/{contract_id}",
         "/api/v1/review-items",
         "/api/v1/review-items/{review_item_id}",
         "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
@@ -961,6 +1000,117 @@ def _forbidden_clause_keys(value: Any, path: str = "$") -> list[str]:
         for child_path, key in _nested_keys(value, path)
         if key.lower() in CLAUSE_FORBIDDEN_FIELDS
     ]
+
+
+def _forbidden_private_knowledge_keys(value: Any, path: str = "$") -> list[str]:
+    """Return private-knowledge fields that must never cross the read API."""
+
+    return [
+        child_path
+        for child_path, key in _nested_keys(value, path)
+        if key.lower() in PRIVATE_KNOWLEDGE_FORBIDDEN_FIELDS
+    ]
+
+
+def validate_private_knowledge_contract() -> list[str]:
+    """Validate the generated detail schema and wholly synthetic example."""
+
+    try:
+        schema = load_json(PRIVATE_KNOWLEDGE_SCHEMA_PATH)
+        example = load_json(PRIVATE_KNOWLEDGE_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
+        errors.append("private-knowledge schema must use JSON Schema draft 2020-12")
+    if (
+        PRIVATE_KNOWLEDGE_SCHEMA_PATH.read_text(encoding="utf-8")
+        != render_private_knowledge_schema()
+    ):
+        errors.append("private-knowledge schema is stale")
+    if schema.get("additionalProperties") is not False:
+        errors.append("private-knowledge schema must reject additional properties")
+    if not all(
+        object_schema.get("additionalProperties") is False
+        for object_schema in _object_schemas(schema)
+    ):
+        errors.append("private-knowledge object definitions must reject additional properties")
+    if _forbidden_private_knowledge_keys(schema):
+        errors.append("private-knowledge schema contains a forbidden field")
+    if _forbidden_private_knowledge_keys(example):
+        errors.append("private-knowledge example contains a forbidden field")
+
+    required = {
+        "schema_version",
+        "contract",
+        "coverages",
+        "terms_assignments",
+        "coverage_mappings",
+        "terms_sections",
+    }
+    if set(schema.get("required", [])) != required:
+        errors.append("private-knowledge required properties are inconsistent")
+    properties = schema.get("properties", {})
+    expected_bounds = {
+        "coverages": 2_000,
+        "terms_assignments": 8,
+        "coverage_mappings": 2_000,
+        "terms_sections": 2_000,
+    }
+    for field, maximum in expected_bounds.items():
+        if properties.get(field, {}).get("maxItems") != maximum:
+            errors.append(f"private-knowledge {field} bound changed")
+
+    definitions = schema.get("$defs", {})
+    contract = definitions.get("KnowledgeContractListItemResponse", {}).get("properties", {})
+    mapping = definitions.get("KnowledgeCoverageMappingResponse", {}).get("properties", {})
+    fact = definitions.get("KnowledgeFactResponse", {}).get("properties", {})
+    tri_states = ["MATCH", "NO_MATCH", "UNKNOWN"]
+    for owner, fields in (
+        (
+            contract,
+            (
+                "certificate_decision",
+                "document_identity_decision",
+                "edition_applicability_decision",
+                "terms_overall_decision",
+            ),
+        ),
+        (
+            mapping,
+            (
+                "enrollment_decision",
+                "document_identity_decision",
+                "edition_applicability_decision",
+                "section_mapping_decision",
+                "overall_decision",
+            ),
+        ),
+    ):
+        for field in fields:
+            if owner.get(field, {}).get("enum") != tri_states:
+                errors.append(f"private-knowledge {field} tri-state changed")
+    if mapping.get("mapping_applicability", {}).get("enum") != [
+        "APPLICABLE",
+        "NOT_APPLICABLE",
+        "UNKNOWN",
+    ]:
+        errors.append("private-knowledge mapping applicability changed")
+    if mapping.get("executable", {}).get("const") is not False:
+        errors.append("private-knowledge mappings must remain non-executable")
+    if fact.get("executable", {}).get("const") is not False:
+        errors.append("private-knowledge facts must remain non-executable")
+
+    errors.extend(
+        f"private-knowledge example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+    if example.get("schema_version") != "1":
+        errors.append("private-knowledge example schema_version must be 1")
+    if "synthetic" not in json.dumps(example, sort_keys=True).lower():
+        errors.append("private-knowledge example must be visibly synthetic")
+    return errors
 
 
 def _forbidden_rider_clause_rules_keys(value: Any, path: str = "$") -> list[str]:
@@ -2000,6 +2150,7 @@ def main() -> int:
         *validate_policy_contract(),
         *validate_policy_candidate_contract(),
         *validate_clause_search_contract(),
+        *validate_private_knowledge_contract(),
         *validate_rider_clause_rules_contract(),
         *validate_decision_contract(),
         *validate_benefit_calculation_contract(),
@@ -2014,6 +2165,7 @@ def main() -> int:
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "encrypted document batch, selective OCR, insurance-document-inventory.v1, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
+        "private-knowledge.v1, "
         "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
         "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"
     )
