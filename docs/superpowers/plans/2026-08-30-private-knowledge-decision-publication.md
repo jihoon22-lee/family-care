@@ -271,6 +271,8 @@ git commit -m "feat(decisions): persist private knowledge results"
 
 ### Task 4: Validate the protected rule-publication package
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/src/familycare_api/private_knowledge/publication_models.py`
 - Create: `apps/api/src/familycare_api/private_knowledge/publication_package.py`
@@ -294,7 +296,7 @@ def canonical_rule_publication_digest(package: RulePublicationPackage) -> str: .
 
 - Consumes: `validate_rule_document()` from the existing data-only DSL and exact external canonical coverage/section/clause/fact keys.
 
-- [ ] **Step 1: Write a wholly synthetic fixture writer and happy-path RED test**
+- [x] **Step 1: Write a wholly synthetic fixture writer and happy-path RED test**
 
 The fixture must create these required role files plus a manifest:
 
@@ -314,7 +316,7 @@ PUBLICATION_DATA_FILES = (
 The happy path uses `Family Member A`, `synthetic-policy-001`,
 `synthetic-coverage-001`, `synthetic-section-001`, and a fabricated medical category. It asserts literal counts, exact references, `USER_CONFIRMED`, and a deterministic package digest.
 
-- [ ] **Step 2: Run RED package tests**
+- [x] **Step 2: Run RED package tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_package.py -q
@@ -322,7 +324,7 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_pack
 
 Expected: FAIL on missing module/function.
 
-- [ ] **Step 3: Implement strict Pydantic models and descriptor-safe loading**
+- [x] **Step 3: Implement strict Pydantic models and descriptor-safe loading**
 
 Models must use `ConfigDict(extra="forbid", frozen=True, strict=True)`. Exact-token normalizers have this contract:
 
@@ -352,7 +354,7 @@ class ContractStatusIntervalRecord(StrictPublicationModel):
 
 The loader must reject relative/repository paths, wrong directory/file modes, symlinks, unexpected/missing files, hash/size mismatch, replacement after validation, invalid UTF-8/JSONL, duplicates, broken references, incomplete disposition closure, unsupported DSL, arbitrary executable strings, missing citations, and reconciliation drift.
 
-- [ ] **Step 4: Write failure and privacy tests**
+- [x] **Step 4: Write failure and privacy tests**
 
 Each error exposes only:
 
@@ -366,7 +368,7 @@ PublicationPackageError(
 
 Parameterized tests must prove the exception string excludes a synthetic private phrase, source key, path, JSON value, hash, event text, amount, DSN, and SQL fragment.
 
-- [ ] **Step 5: Run focused checks and commit**
+- [x] **Step 5: Run focused checks and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_package.py apps/api/tests/test_private_knowledge_publication_privacy.py -q

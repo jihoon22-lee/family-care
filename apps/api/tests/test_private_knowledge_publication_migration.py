@@ -149,6 +149,9 @@ def test_status_intervals_require_exact_contract_household_and_user_authority() 
         ),
     }
     table_checks = checks(table)
+    authority_checks = " ".join(table_checks)
+    assert "USER_CONFIRMED_EVENT_DATE" in authority_checks
+    assert "REVIEWED_STATUS_DOCUMENT" in authority_checks
     assert "decision IN ('MATCH', 'NO_MATCH', 'UNKNOWN')" in table_checks
     assert "review_state = 'USER_CONFIRMED'" in table_checks
     assert any("effective_through" in value and "effective_from" in value for value in table_checks)
@@ -277,6 +280,12 @@ def test_rule_and_calculation_citations_keep_exact_run_page_and_clause_lineage()
         assert any(
             "citation_digest_sha256" in value and "[0-9a-f]{64}" in value for value in table_checks
         )
+        assert any(
+            "source_text_sha256" in value and "[0-9a-f]{64}" in value for value in table_checks
+        )
+        assert any(
+            "evidence_purpose IN" in value and "ELIGIBILITY" in value for value in table_checks
+        )
         assert (
             (
                 parent_column,
@@ -297,6 +306,14 @@ def test_rule_and_calculation_citations_keep_exact_run_page_and_clause_lineage()
             (
                 "private_knowledge_terms_sections.id",
                 "private_knowledge_terms_sections.import_run_id",
+            ),
+            "RESTRICT",
+        ) in composite_foreign_keys(table)
+        assert (
+            ("fact_id", "knowledge_import_run_id"),
+            (
+                "private_knowledge_facts.id",
+                "private_knowledge_facts.import_run_id",
             ),
             "RESTRICT",
         ) in composite_foreign_keys(table)

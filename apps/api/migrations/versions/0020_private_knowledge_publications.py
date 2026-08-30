@@ -166,7 +166,7 @@ def upgrade() -> None:
             name="ck_private_knowledge_status_intervals_dates",
         ),
         sa.CheckConstraint(
-            "authority IN ('USER_CONFIRMED_EVENT_DATE_STATUS', 'DIRECT_REVIEWED_STATUS_EVIDENCE')",
+            "authority IN ('USER_CONFIRMED_EVENT_DATE', 'REVIEWED_STATUS_DOCUMENT')",
             name="ck_private_knowledge_status_intervals_authority",
         ),
         _review_check("private_knowledge_status_intervals"),
@@ -452,8 +452,11 @@ def upgrade() -> None:
         _uuid("household_space_id"),
         _uuid("terms_section_id"),
         _nullable_uuid("source_clause_id"),
+        _nullable_uuid("fact_id"),
+        sa.Column("evidence_purpose", sa.String(length=24), nullable=False),
         sa.Column("page_start", sa.Integer(), nullable=False),
         sa.Column("page_end", sa.Integer(), nullable=False),
+        _sha256("source_text_sha256"),
         _sha256("citation_digest_sha256"),
         _timestamp("created_at"),
         sa.ForeignKeyConstraint(
@@ -490,9 +493,28 @@ def upgrade() -> None:
             name="fk_private_knowledge_rule_citations_clause_run",
             ondelete="RESTRICT",
         ),
+        sa.ForeignKeyConstraint(
+            ["fact_id", "knowledge_import_run_id"],
+            [
+                "private_knowledge_facts.id",
+                "private_knowledge_facts.import_run_id",
+            ],
+            name="fk_private_knowledge_rule_citations_fact_run",
+            ondelete="RESTRICT",
+        ),
+        sa.CheckConstraint(
+            "evidence_purpose IN ('ELIGIBILITY', 'DEFINITION', 'EXCLUSION', "
+            "'WAITING', 'REDUCTION', 'FREQUENCY', 'AMOUNT', 'RENEWAL', "
+            "'INDEMNITY', 'LIMIT', 'DEDUCTIBLE')",
+            name="ck_private_knowledge_rule_citations_purpose",
+        ),
         sa.CheckConstraint(
             "page_start >= 1 AND page_end >= page_start",
             name="ck_private_knowledge_rule_citations_pages",
+        ),
+        _digest_check(
+            "source_text_sha256",
+            "private_knowledge_rule_citations",
         ),
         _digest_check("citation_digest_sha256", "private_knowledge_rule_citations"),
     )
@@ -581,8 +603,11 @@ def upgrade() -> None:
         _uuid("household_space_id"),
         _uuid("terms_section_id"),
         _nullable_uuid("source_clause_id"),
+        _nullable_uuid("fact_id"),
+        sa.Column("evidence_purpose", sa.String(length=24), nullable=False),
         sa.Column("page_start", sa.Integer(), nullable=False),
         sa.Column("page_end", sa.Integer(), nullable=False),
+        _sha256("source_text_sha256"),
         _sha256("citation_digest_sha256"),
         _timestamp("created_at"),
         sa.ForeignKeyConstraint(
@@ -619,9 +644,28 @@ def upgrade() -> None:
             name="fk_private_knowledge_calculation_citations_clause_run",
             ondelete="RESTRICT",
         ),
+        sa.ForeignKeyConstraint(
+            ["fact_id", "knowledge_import_run_id"],
+            [
+                "private_knowledge_facts.id",
+                "private_knowledge_facts.import_run_id",
+            ],
+            name="fk_private_knowledge_calculation_citations_fact_run",
+            ondelete="RESTRICT",
+        ),
+        sa.CheckConstraint(
+            "evidence_purpose IN ('ELIGIBILITY', 'DEFINITION', 'EXCLUSION', "
+            "'WAITING', 'REDUCTION', 'FREQUENCY', 'AMOUNT', 'RENEWAL', "
+            "'INDEMNITY', 'LIMIT', 'DEDUCTIBLE')",
+            name="ck_private_knowledge_calculation_citations_purpose",
+        ),
         sa.CheckConstraint(
             "page_start >= 1 AND page_end >= page_start",
             name="ck_private_knowledge_calculation_citations_pages",
+        ),
+        _digest_check(
+            "source_text_sha256",
+            "pk_calc_citations",
         ),
         _digest_check(
             "citation_digest_sha256",
