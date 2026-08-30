@@ -153,6 +153,19 @@ class OperationalReconciliationCounts(StrictReconciliationModel):
     operational_publish_blocked_coverages: NonNegativeInt
 
 
+class KnowledgeDecisionCounts(StrictReconciliationModel):
+    """Decision matrices that must still match the normalized persisted rows."""
+
+    enrollment_decisions: TriStateCounts
+    benefit_types: BenefitTypeCounts
+    terms_document_identity: TriStateCounts
+    terms_edition_applicability: TriStateCounts
+    terms_overall_review: TriStateCounts
+    mapping_source_decisions: SourceMappingDecisionCounts
+    mapping_applicability: MappingApplicabilityCounts
+    current_statuses: CurrentStatusCounts
+
+
 class KnowledgeDryRunReport(StrictReconciliationModel):
     schema_version: Literal["private-knowledge-dry-run.v1"]
     package_schema_version: Literal["private-analysis-package.sol-v2"]
@@ -175,6 +188,21 @@ class KnowledgeDryRunReport(StrictReconciliationModel):
     snapshot_conflict_count: NonNegativeInt
     apply_block_count: NonNegativeInt
     report_digest_sha256: Sha256
+
+
+def report_decision_counts(report: KnowledgeDryRunReport) -> KnowledgeDecisionCounts:
+    """Extract the immutable snapshot decision expectations from a dry run."""
+
+    return KnowledgeDecisionCounts(
+        enrollment_decisions=report.enrollment_decisions,
+        benefit_types=report.benefit_types,
+        terms_document_identity=report.terms_document_identity,
+        terms_edition_applicability=report.terms_edition_applicability,
+        terms_overall_review=report.terms_overall_review,
+        mapping_source_decisions=report.mapping_source_decisions,
+        mapping_applicability=report.mapping_applicability,
+        current_statuses=report.current_statuses,
+    )
 
 
 def _canonical_json(value: object) -> bytes:
@@ -248,7 +276,7 @@ def _tri_state_counts(values: list[str]) -> TriStateCounts:
     )
 
 
-def _package_entity_counts(package: PrivateKnowledgePackage) -> KnowledgeEntityCounts:
+def package_entity_counts(package: PrivateKnowledgePackage) -> KnowledgeEntityCounts:
     return KnowledgeEntityCounts(
         subjects=len(package.subject_aliases),
         contracts=len(package.contracts),
@@ -298,7 +326,7 @@ def build_dry_run_report(
 ) -> KnowledgeDryRunReport:
     """Build a deterministic count-only report without mutating the database."""
 
-    input_counts = _package_entity_counts(package)
+    input_counts = package_entity_counts(package)
     known = package.package_digest_sha256 in baseline.known_package_digests
     target_already_current = baseline.current_package_digest_sha256 == package.package_digest_sha256
     if target_already_current:

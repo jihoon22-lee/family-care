@@ -93,50 +93,50 @@ def test_postgresql_enforces_current_run_lineage_and_non_executable_facts() -> N
         connection.execute(
             """
             INSERT INTO private_knowledge_subjects (
-              id, import_run_id, source_subject_key, family_alias,
+              id, import_run_id, household_space_id, source_subject_key, family_alias,
               family_alias_digest_sha256, binding_decision, binding_conflict,
               binding_reason_code, source_record_json, source_record_digest_sha256
             ) VALUES (
-              %s, %s, 'synthetic-subject-001', 'Family Member A', %s,
+              %s, %s, %s, 'synthetic-subject-001', 'Family Member A', %s,
               'UNKNOWN', false, 'NO_EXACT_BINDING', '{}'::jsonb, %s
             )
             """,
-            (SUBJECT_ID, RUN_A_ID, "1" * 64, "2" * 64),
+            (SUBJECT_ID, RUN_A_ID, HOUSEHOLD_ID, "1" * 64, "2" * 64),
         )
 
         with pytest.raises(psycopg.errors.ForeignKeyViolation), connection.transaction():
             connection.execute(
                 """
                     INSERT INTO private_knowledge_contracts (
-                      import_run_id, subject_id, source_contract_key,
+                      import_run_id, household_space_id, subject_id, source_contract_key,
                       insurer_display, product_display, certificate_decision,
                       current_status, operational_binding_decision,
                       operational_binding_reason_code,
                       source_record_json, source_record_digest_sha256
                     ) VALUES (
-                      %s, %s, 'synthetic-policy-cross-run',
+                      %s, %s, %s, 'synthetic-policy-cross-run',
                       'Sample Insurer', 'Sample Policy', 'MATCH', 'unknown',
                       'UNKNOWN', 'NO_EXACT_BINDING', '{}'::jsonb, %s
                     )
                     """,
-                (RUN_B_ID, SUBJECT_ID, "3" * 64),
+                (RUN_B_ID, HOUSEHOLD_ID, SUBJECT_ID, "3" * 64),
             )
 
         connection.execute(
             """
             INSERT INTO private_knowledge_contracts (
-              id, import_run_id, subject_id, source_contract_key,
+              id, import_run_id, household_space_id, subject_id, source_contract_key,
               insurer_display, product_display, certificate_decision,
               current_status, operational_binding_decision,
               operational_binding_reason_code,
               source_record_json, source_record_digest_sha256
             ) VALUES (
-              %s, %s, %s, 'synthetic-policy-001',
+              %s, %s, %s, %s, 'synthetic-policy-001',
               'Sample Insurer', 'Sample Policy', 'MATCH', 'unknown',
               'UNKNOWN', 'NO_EXACT_BINDING', '{}'::jsonb, %s
             )
             """,
-            (CONTRACT_ID, RUN_A_ID, SUBJECT_ID, "4" * 64),
+            (CONTRACT_ID, RUN_A_ID, HOUSEHOLD_ID, SUBJECT_ID, "4" * 64),
         )
         connection.execute(
             """
@@ -190,17 +190,18 @@ def test_postgresql_enforces_current_run_lineage_and_non_executable_facts() -> N
             connection.execute(
                 """
                     INSERT INTO private_knowledge_document_bindings (
-                      import_run_id, source_alias, source_alias_digest_sha256,
+                      import_run_id, household_space_id,
+                      source_alias, source_alias_digest_sha256,
                       binding_decision, binding_conflict, binding_reason_code,
                       content_digest_decision, page_count_decision,
                       document_kind_decision,
                       source_record_json, source_record_digest_sha256
                     ) VALUES (
-                      %s, 'Synthetic Source', %s, 'MATCH', false, 'EXACT_MATCH',
+                      %s, %s, 'Synthetic Source', %s, 'MATCH', false, 'EXACT_MATCH',
                       'MATCH', 'MATCH', 'MATCH', '{}'::jsonb, %s
                     )
                     """,
-                (RUN_A_ID, "8" * 64, "9" * 64),
+                (RUN_A_ID, HOUSEHOLD_ID, "8" * 64, "9" * 64),
             )
 
         counts = connection.execute(

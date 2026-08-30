@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -59,6 +60,27 @@ def test_valid_package_is_lossless_deterministic_and_reference_closed(tmp_path: 
     manifest_path.chmod(0o600)
     reordered = _load(root, tmp_path / "repository")
     assert reordered.package_digest_sha256 == package.package_digest_sha256
+
+
+def test_loaded_package_integrity_rejects_in_memory_projection_change(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    package = _load(root, tmp_path / "repository")
+    changed_contract = replace(
+        package.contracts[0],
+        value=package.contracts[0].value.model_copy(
+            update={"product_name": "Changed Sample Policy"}
+        ),
+    )
+    changed_package = replace(package, contracts=(changed_contract,))
+
+    with pytest.raises(PrivateKnowledgePackageError) as changed:
+        package_module.validate_loaded_private_knowledge_package(changed_package)
+
+    assert changed.value.code is PackageErrorCode.FILE_CHANGED
+    assert changed.value.file_role == "contracts.jsonl"
+    assert changed.value.row_number == 1
 
 
 @pytest.mark.parametrize(

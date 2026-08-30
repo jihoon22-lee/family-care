@@ -93,6 +93,12 @@ def _tri_state(column: str, prefix: str) -> sa.CheckConstraint:
 def upgrade() -> None:
     """Add the private knowledge catalog without changing the operational ledger."""
 
+    op.create_index(
+        "uq_private_knowledge_target_app_user_scope",
+        "app_users",
+        ["id", "household_space_id"],
+        unique=True,
+    )
     op.create_table(
         "private_knowledge_import_runs",
         _uuid("id", primary_key=True),
@@ -112,6 +118,8 @@ def upgrade() -> None:
         _jsonb("manifest_counts_json", default="'{}'::jsonb"),
         _jsonb("manifest_json"),
         _jsonb("reconciliation_counts_json", default="'{}'::jsonb"),
+        _jsonb("entity_counts_json", default="'{}'::jsonb"),
+        _jsonb("decision_counts_json", default="'{}'::jsonb"),
         _sha256("baseline_digest_sha256", nullable=True),
         _sha256("report_digest_sha256", nullable=True),
         _foreign_uuid("applied_by", "app_users.id", nullable=True),
@@ -119,6 +127,17 @@ def upgrade() -> None:
         _timestamp("applied_at", nullable=True),
         _timestamp("superseded_at", nullable=True),
         _timestamp("created_at"),
+        sa.UniqueConstraint(
+            "id",
+            "household_space_id",
+            name="uq_private_knowledge_runs_id_household",
+        ),
+        sa.ForeignKeyConstraint(
+            ["applied_by", "household_space_id"],
+            ["app_users.id", "app_users.household_space_id"],
+            name="fk_private_knowledge_runs_actor_household",
+            ondelete="RESTRICT",
+        ),
         sa.CheckConstraint(
             "package_schema_version = 'private-analysis-package.sol-v2'",
             name="ck_private_knowledge_runs_schema_version",
@@ -156,6 +175,14 @@ def upgrade() -> None:
             name="ck_private_knowledge_runs_reconciliation_counts_object",
         ),
         sa.CheckConstraint(
+            "jsonb_typeof(entity_counts_json) = 'object'",
+            name="ck_private_knowledge_runs_entity_counts_object",
+        ),
+        sa.CheckConstraint(
+            "jsonb_typeof(decision_counts_json) = 'object'",
+            name="ck_private_knowledge_runs_decision_counts_object",
+        ),
+        sa.CheckConstraint(
             "((is_current = true AND state = 'APPLIED' AND applied_by IS NOT NULL "
             "AND applied_at IS NOT NULL AND superseded_at IS NULL) OR is_current = false)",
             name="ck_private_knowledge_runs_current_state",
@@ -190,13 +217,42 @@ def upgrade() -> None:
         ["household_space_id", "created_at", "id"],
         unique=False,
     )
+    for index_name, table_name, columns in (
+        (
+            "uq_private_knowledge_target_family_member_scope",
+            "family_members",
+            ["id", "household_space_id"],
+        ),
+        (
+            "uq_private_knowledge_target_policy_scope",
+            "policy_contracts",
+            ["id", "household_space_id"],
+        ),
+        (
+            "uq_private_knowledge_target_rider_scope",
+            "riders",
+            ["id", "household_space_id"],
+        ),
+        (
+            "uq_private_knowledge_target_terms_scope",
+            "terms_editions",
+            ["id", "household_space_id"],
+        ),
+        (
+            "uq_private_knowledge_target_evidence_scope",
+            "evidence",
+            ["id", "household_space_id", "document_version_id"],
+        ),
+    ):
+        op.create_index(index_name, table_name, columns, unique=True)
 
     op.create_table(
         "private_knowledge_subjects",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("household_space_id", "household_spaces.id"),
         sa.Column("source_subject_key", sa.String(length=160), nullable=False),
-        sa.Column("family_alias", sa.String(length=160), nullable=False),
+        sa.Column("family_alias", sa.String(length=240), nullable=False),
         _sha256("family_alias_digest_sha256"),
         _foreign_uuid("family_member_id", "family_members.id", nullable=True),
         sa.Column(
@@ -220,6 +276,27 @@ def upgrade() -> None:
             "id",
             "import_run_id",
             name="uq_private_knowledge_subjects_id_run",
+        ),
+        sa.ForeignKeyConstraint(
+            ["import_run_id", "household_space_id"],
+            [
+                "private_knowledge_import_runs.id",
+                "private_knowledge_import_runs.household_space_id",
+            ],
+            name="fk_private_knowledge_subjects_run_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["family_member_id", "household_space_id"],
+            ["family_members.id", "family_members.household_space_id"],
+            name="fk_private_knowledge_subjects_member_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["binding_confirmed_by", "household_space_id"],
+            ["app_users.id", "app_users.household_space_id"],
+            name="fk_private_knowledge_subjects_actor_household",
+            ondelete="RESTRICT",
         ),
         _tri_state("binding_decision", "private_knowledge_subjects"),
         sa.CheckConstraint(
@@ -259,10 +336,11 @@ def upgrade() -> None:
         "private_knowledge_contracts",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("household_space_id", "household_spaces.id"),
         _foreign_uuid("subject_id", "private_knowledge_subjects.id"),
         sa.Column("source_contract_key", sa.String(length=200), nullable=False),
         sa.Column("insurer_display", sa.String(length=240), nullable=False),
-        sa.Column("product_display", sa.String(length=320), nullable=False),
+        sa.Column("product_display", sa.String(length=800), nullable=False),
         sa.Column("contract_start", sa.Date(), nullable=True),
         sa.Column("contract_end", sa.Date(), nullable=True),
         sa.Column(
@@ -299,6 +377,21 @@ def upgrade() -> None:
             ["subject_id", "import_run_id"],
             ["private_knowledge_subjects.id", "private_knowledge_subjects.import_run_id"],
             name="fk_private_knowledge_contracts_subject_run",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["import_run_id", "household_space_id"],
+            [
+                "private_knowledge_import_runs.id",
+                "private_knowledge_import_runs.household_space_id",
+            ],
+            name="fk_private_knowledge_contracts_run_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["policy_contract_id", "household_space_id"],
+            ["policy_contracts.id", "policy_contracts.household_space_id"],
+            name="fk_private_knowledge_contracts_policy_household",
             ondelete="RESTRICT",
         ),
         _tri_state("certificate_decision", "private_knowledge_contracts"),
@@ -352,9 +445,10 @@ def upgrade() -> None:
         "private_knowledge_coverages",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("household_space_id", "household_spaces.id"),
         _foreign_uuid("knowledge_contract_id", "private_knowledge_contracts.id"),
         sa.Column("source_coverage_key", sa.String(length=240), nullable=False),
-        sa.Column("display_name", sa.String(length=500), nullable=False),
+        sa.Column("display_name", sa.String(length=800), nullable=False),
         sa.Column("component_role", sa.String(length=24), nullable=False),
         sa.Column("component_classification", sa.String(length=48), nullable=False),
         sa.Column("enrollment_decision", sa.String(length=16), nullable=False),
@@ -391,6 +485,21 @@ def upgrade() -> None:
             ["knowledge_contract_id", "import_run_id"],
             ["private_knowledge_contracts.id", "private_knowledge_contracts.import_run_id"],
             name="fk_private_knowledge_coverages_contract_run",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["import_run_id", "household_space_id"],
+            [
+                "private_knowledge_import_runs.id",
+                "private_knowledge_import_runs.household_space_id",
+            ],
+            name="fk_private_knowledge_coverages_run_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["rider_id", "household_space_id"],
+            ["riders.id", "riders.household_space_id"],
+            name="fk_private_knowledge_coverages_rider_household",
             ondelete="RESTRICT",
         ),
         _tri_state("enrollment_decision", "private_knowledge_coverages"),
@@ -472,6 +581,7 @@ def upgrade() -> None:
         "private_knowledge_terms_assignments",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("household_space_id", "household_spaces.id"),
         _foreign_uuid("knowledge_contract_id", "private_knowledge_contracts.id"),
         sa.Column("source_assignment_key", sa.String(length=240), nullable=False),
         sa.Column("document_identity_decision", sa.String(length=16), nullable=False),
@@ -497,6 +607,21 @@ def upgrade() -> None:
             ["knowledge_contract_id", "import_run_id"],
             ["private_knowledge_contracts.id", "private_knowledge_contracts.import_run_id"],
             name="fk_private_knowledge_assignments_contract_run",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["import_run_id", "household_space_id"],
+            [
+                "private_knowledge_import_runs.id",
+                "private_knowledge_import_runs.household_space_id",
+            ],
+            name="fk_private_knowledge_assignments_run_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["terms_edition_id", "household_space_id"],
+            ["terms_editions.id", "terms_editions.household_space_id"],
+            name="fk_private_knowledge_assignments_terms_household",
             ondelete="RESTRICT",
         ),
         _tri_state("document_identity_decision", "private_knowledge_assignments"),
@@ -538,7 +663,7 @@ def upgrade() -> None:
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
         _foreign_uuid("terms_assignment_id", "private_knowledge_terms_assignments.id"),
-        sa.Column("source_alias", sa.String(length=500), nullable=False),
+        sa.Column("source_alias", sa.String(length=800), nullable=False),
         _sha256("source_alias_digest_sha256"),
         sa.Column("selection_ordinal", sa.Integer(), nullable=False),
         _jsonb("selected_evidence_json", default="'{}'::jsonb"),
@@ -589,7 +714,7 @@ def upgrade() -> None:
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
         sa.Column("source_section_key", sa.String(length=240), nullable=False),
-        sa.Column("terms_source_alias", sa.String(length=500), nullable=False),
+        sa.Column("terms_source_alias", sa.String(length=800), nullable=False),
         _sha256("terms_source_alias_digest_sha256"),
         sa.Column("section_kind", sa.String(length=64), nullable=False),
         sa.Column("heading", sa.String(length=800), nullable=False),
@@ -641,7 +766,7 @@ def upgrade() -> None:
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
         _foreign_uuid("terms_section_id", "private_knowledge_terms_sections.id"),
         sa.Column("source_clause_key", sa.String(length=280), nullable=False),
-        sa.Column("clause_label", sa.String(length=240), nullable=True),
+        sa.Column("clause_label", sa.String(length=800), nullable=True),
         sa.Column("title", sa.String(length=800), nullable=True),
         sa.Column("page_start", sa.Integer(), nullable=False),
         sa.Column("page_end", sa.Integer(), nullable=False),
@@ -929,7 +1054,7 @@ def upgrade() -> None:
         ),
         sa.Column("source_mapping_key", sa.String(length=300), nullable=False),
         sa.Column("mapping_applicability", sa.String(length=24), nullable=False),
-        sa.Column("selected_terms_source_alias", sa.String(length=500), nullable=True),
+        sa.Column("selected_terms_source_alias", sa.String(length=800), nullable=True),
         _sha256("selected_terms_source_alias_digest_sha256", nullable=True),
         sa.Column("enrollment_decision", sa.String(length=16), nullable=False),
         sa.Column("document_identity_decision", sa.String(length=16), nullable=False),
@@ -1026,7 +1151,8 @@ def upgrade() -> None:
         "private_knowledge_document_bindings",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
-        sa.Column("source_alias", sa.String(length=500), nullable=False),
+        _foreign_uuid("household_space_id", "household_spaces.id"),
+        sa.Column("source_alias", sa.String(length=800), nullable=False),
         _sha256("source_alias_digest_sha256"),
         _foreign_uuid("document_version_id", "document_versions.id", nullable=True),
         _foreign_uuid("evidence_id", "evidence.id", nullable=True),
@@ -1045,6 +1171,25 @@ def upgrade() -> None:
         sa.Column("document_kind_decision", sa.String(length=16), nullable=False),
         *_source_record_columns(),
         _timestamp("created_at"),
+        sa.ForeignKeyConstraint(
+            ["import_run_id", "household_space_id"],
+            [
+                "private_knowledge_import_runs.id",
+                "private_knowledge_import_runs.household_space_id",
+            ],
+            name="fk_private_knowledge_document_bindings_run_household",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["evidence_id", "household_space_id", "document_version_id"],
+            [
+                "evidence.id",
+                "evidence.household_space_id",
+                "evidence.document_version_id",
+            ],
+            name="fk_private_knowledge_doc_bindings_evidence_scope",
+            ondelete="RESTRICT",
+        ),
         _tri_state("binding_decision", "private_knowledge_document_bindings"),
         _tri_state("content_digest_decision", "private_knowledge_document_bindings"),
         _tri_state("page_count_decision", "private_knowledge_document_bindings"),
@@ -1067,8 +1212,10 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "((binding_decision = 'MATCH' AND document_version_id IS NOT NULL "
+            "AND evidence_id IS NOT NULL "
             "AND content_digest_decision = 'MATCH' AND page_count_decision = 'MATCH' "
-            "AND document_kind_decision = 'MATCH') OR binding_decision <> 'MATCH')",
+            "AND document_kind_decision = 'MATCH') OR (binding_decision <> 'MATCH' "
+            "AND document_version_id IS NULL AND evidence_id IS NULL))",
             name="ck_private_knowledge_document_bindings_exact_match",
         ),
         sa.CheckConstraint(
@@ -1112,3 +1259,12 @@ def downgrade() -> None:
         ]
     ):
         op.drop_table(table_name)
+    for index_name, table_name in (
+        ("uq_private_knowledge_target_evidence_scope", "evidence"),
+        ("uq_private_knowledge_target_terms_scope", "terms_editions"),
+        ("uq_private_knowledge_target_rider_scope", "riders"),
+        ("uq_private_knowledge_target_policy_scope", "policy_contracts"),
+        ("uq_private_knowledge_target_app_user_scope", "app_users"),
+        ("uq_private_knowledge_target_family_member_scope", "family_members"),
+    ):
+        op.drop_index(index_name, table_name=table_name, if_exists=True)

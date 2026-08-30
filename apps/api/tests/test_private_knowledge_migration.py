@@ -141,6 +141,8 @@ def test_import_run_is_household_scoped_idempotent_and_count_only() -> None:
         "manifest_counts_json",
         "manifest_json",
         "reconciliation_counts_json",
+        "entity_counts_json",
+        "decision_counts_json",
         "baseline_digest_sha256",
         "report_digest_sha256",
         "validated_at",
@@ -162,6 +164,8 @@ def test_import_run_is_household_scoped_idempotent_and_count_only() -> None:
     assert "package_schema_version = 'private-analysis-package.sol-v2'" in run_checks
     assert "jsonb_typeof(manifest_counts_json) = 'object'" in run_checks
     assert "jsonb_typeof(reconciliation_counts_json) = 'object'" in run_checks
+    assert "jsonb_typeof(entity_counts_json) = 'object'" in run_checks
+    assert "jsonb_typeof(decision_counts_json) = 'object'" in run_checks
     assert any("is_current" in value and "APPLIED" in value for value in run_checks)
 
 
@@ -173,16 +177,19 @@ def test_subject_contract_and_coverage_keep_authorities_separate() -> None:
 
     assert foreign_keys(subjects) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "household_space_id": ("household_spaces.id", "RESTRICT"),
         "family_member_id": ("family_members.id", "RESTRICT"),
         "binding_confirmed_by": ("app_users.id", "RESTRICT"),
     }
     assert foreign_keys(contracts) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "household_space_id": ("household_spaces.id", "RESTRICT"),
         "subject_id": ("private_knowledge_subjects.id", "RESTRICT"),
         "policy_contract_id": ("policy_contracts.id", "RESTRICT"),
     }
     assert foreign_keys(coverages) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "household_space_id": ("household_spaces.id", "RESTRICT"),
         "knowledge_contract_id": ("private_knowledge_contracts.id", "RESTRICT"),
         "rider_id": ("riders.id", "RESTRICT"),
     }
@@ -247,6 +254,32 @@ def test_subject_contract_and_coverage_keep_authorities_separate() -> None:
     )
 
 
+def test_private_text_columns_accept_every_value_allowed_by_package_models() -> None:
+    _, operations = run_upgrade()
+
+    assert operations.tables["private_knowledge_subjects"].c.family_alias.type.length == 240
+    assert operations.tables["private_knowledge_contracts"].c.product_display.type.length == 800
+    assert operations.tables["private_knowledge_coverages"].c.display_name.type.length == 800
+    assert (
+        operations.tables["private_knowledge_terms_assignment_sources"].c.source_alias.type.length
+        == 800
+    )
+    assert (
+        operations.tables["private_knowledge_terms_sections"].c.terms_source_alias.type.length
+        == 800
+    )
+    assert operations.tables["private_knowledge_source_clauses"].c.clause_label.type.length == 800
+    assert (
+        operations.tables[
+            "private_knowledge_coverage_terms_mappings"
+        ].c.selected_terms_source_alias.type.length
+        == 800
+    )
+    assert (
+        operations.tables["private_knowledge_document_bindings"].c.source_alias.type.length == 800
+    )
+
+
 def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
     _, operations = run_upgrade()
     assignments = operations.tables["private_knowledge_terms_assignments"]
@@ -260,6 +293,7 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
 
     assert foreign_keys(assignments) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "household_space_id": ("household_spaces.id", "RESTRICT"),
         "knowledge_contract_id": ("private_knowledge_contracts.id", "RESTRICT"),
         "terms_edition_id": ("terms_editions.id", "RESTRICT"),
     }
@@ -356,7 +390,7 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
 def test_cross_entity_references_cannot_cross_import_runs() -> None:
     _, operations = run_upgrade()
 
-    assert composite_foreign_keys(operations.tables["private_knowledge_contracts"]) == {
+    assert composite_foreign_keys(operations.tables["private_knowledge_contracts"]) >= {
         (
             ("subject_id", "import_run_id"),
             (
@@ -365,7 +399,7 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
             ),
         )
     }
-    assert composite_foreign_keys(operations.tables["private_knowledge_coverages"]) == {
+    assert composite_foreign_keys(operations.tables["private_knowledge_coverages"]) >= {
         (
             ("knowledge_contract_id", "import_run_id"),
             (
@@ -374,7 +408,7 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
             ),
         )
     }
-    assert composite_foreign_keys(operations.tables["private_knowledge_terms_assignments"]) == {
+    assert composite_foreign_keys(operations.tables["private_knowledge_terms_assignments"]) >= {
         (
             ("knowledge_contract_id", "import_run_id"),
             (
@@ -461,12 +495,75 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
     }
 
 
+def test_optional_operational_bindings_cannot_cross_households() -> None:
+    _, operations = run_upgrade()
+
+    subjects = operations.tables["private_knowledge_subjects"]
+    contracts = operations.tables["private_knowledge_contracts"]
+    coverages = operations.tables["private_knowledge_coverages"]
+    assignments = operations.tables["private_knowledge_terms_assignments"]
+    bindings = operations.tables["private_knowledge_document_bindings"]
+    runs = operations.tables["private_knowledge_import_runs"]
+    for table in (subjects, contracts, coverages, assignments, bindings):
+        assert "household_space_id" in table.columns
+
+    assert (
+        ("applied_by", "household_space_id"),
+        ("app_users.id", "app_users.household_space_id"),
+    ) in composite_foreign_keys(runs)
+    assert (
+        ("import_run_id", "household_space_id"),
+        (
+            "private_knowledge_import_runs.id",
+            "private_knowledge_import_runs.household_space_id",
+        ),
+    ) in composite_foreign_keys(subjects)
+    assert (
+        ("family_member_id", "household_space_id"),
+        ("family_members.id", "family_members.household_space_id"),
+    ) in composite_foreign_keys(subjects)
+    assert (
+        ("binding_confirmed_by", "household_space_id"),
+        ("app_users.id", "app_users.household_space_id"),
+    ) in composite_foreign_keys(subjects)
+    assert (
+        ("policy_contract_id", "household_space_id"),
+        ("policy_contracts.id", "policy_contracts.household_space_id"),
+    ) in composite_foreign_keys(contracts)
+    assert (
+        ("rider_id", "household_space_id"),
+        ("riders.id", "riders.household_space_id"),
+    ) in composite_foreign_keys(coverages)
+    assert (
+        ("terms_edition_id", "household_space_id"),
+        ("terms_editions.id", "terms_editions.household_space_id"),
+    ) in composite_foreign_keys(assignments)
+    assert (
+        ("evidence_id", "household_space_id", "document_version_id"),
+        (
+            "evidence.id",
+            "evidence.household_space_id",
+            "evidence.document_version_id",
+        ),
+    ) in composite_foreign_keys(bindings)
+
+    assert {
+        "uq_private_knowledge_target_family_member_scope",
+        "uq_private_knowledge_target_app_user_scope",
+        "uq_private_knowledge_target_policy_scope",
+        "uq_private_knowledge_target_rider_scope",
+        "uq_private_knowledge_target_terms_scope",
+        "uq_private_knowledge_target_evidence_scope",
+    } <= set(operations.indexes)
+
+
 def test_document_binding_requires_exact_axes_for_match() -> None:
     _, operations = run_upgrade()
     table = operations.tables["private_knowledge_document_bindings"]
 
     assert foreign_keys(table) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "household_space_id": ("household_spaces.id", "RESTRICT"),
         "document_version_id": ("document_versions.id", "RESTRICT"),
         "evidence_id": ("evidence.id", "RESTRICT"),
     }

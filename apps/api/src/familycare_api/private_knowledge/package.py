@@ -981,3 +981,100 @@ def load_private_knowledge_package(
         reconciliation=reconciliation,
     )
     return package
+
+
+def _validate_loaded_record_group[ModelT: BaseModel](
+    records: Sequence[ValidatedRecord[ModelT]],
+    *,
+    model_type: type[ModelT],
+    file_role: str,
+) -> None:
+    for row_number, record in enumerate(records, start=1):
+        if _sha256(_canonical_json(record.source_record)) != record.source_record_digest_sha256:
+            raise _error(
+                PackageErrorCode.FILE_CHANGED,
+                file_role=file_role,
+                row_number=row_number,
+            )
+        try:
+            projected = model_type.model_validate(record.source_record)
+        except ValidationError:
+            raise _error(
+                PackageErrorCode.FILE_CHANGED,
+                file_role=file_role,
+                row_number=row_number,
+            ) from None
+        if projected != record.value:
+            raise _error(
+                PackageErrorCode.FILE_CHANGED,
+                file_role=file_role,
+                row_number=row_number,
+            )
+
+
+def validate_loaded_private_knowledge_package(package: PrivateKnowledgePackage) -> None:
+    """Recheck an already loaded package before a database mutation."""
+
+    if package.schema_version != SCHEMA_VERSION:
+        raise _error(PackageErrorCode.FILE_CHANGED, file_role=MANIFEST_NAME)
+    manifest_projection = _manifest_projection(package.manifest)
+    if (
+        _sha256(_canonical_json(manifest_projection)) != package.manifest_digest_sha256
+        or canonical_package_digest(package) != package.package_digest_sha256
+    ):
+        raise _error(PackageErrorCode.FILE_CHANGED, file_role=MANIFEST_NAME)
+
+    _validate_loaded_record_group(
+        package.contracts,
+        model_type=ContractRecord,
+        file_role="contracts.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.coverages,
+        model_type=CoverageRecord,
+        file_role="coverage-components.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.pairings,
+        model_type=PairingRecord,
+        file_role="policy-terms-pairings.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.mappings,
+        model_type=MappingRecord,
+        file_role="coverage-terms-mappings.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.sections,
+        model_type=TermsSectionRecord,
+        file_role="terms-sections.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.clauses,
+        model_type=ClauseRecord,
+        file_role="clause-evidence-index.jsonl",
+    )
+    _validate_loaded_record_group(
+        package.semantic_reviews,
+        model_type=SemanticReviewRecord,
+        file_role="terms-semantic-review.jsonl",
+    )
+    _validate_references(
+        contracts=package.contracts,
+        coverages=package.coverages,
+        pairings=package.pairings,
+        mappings=package.mappings,
+        sections=package.sections,
+        clauses=package.clauses,
+        semantic_reviews=package.semantic_reviews,
+    )
+    derived = _derived_counts(
+        contracts=package.contracts,
+        coverages=package.coverages,
+        pairings=package.pairings,
+        mappings=package.mappings,
+        sections=package.sections,
+        clauses=package.clauses,
+        semantic_reviews=package.semantic_reviews,
+    )
+    _validate_reconciliation(package.manifest, package.reconciliation, derived)
