@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–6 and final-review hardening complete; Task 7 verification in progress; Task 8 pending
+**Status:** Tasks 1–8 complete; integration is tracked by PR #39 with merge gated on required CI
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -167,7 +167,7 @@ git diff --check
 ```
 
 4. [x] Re-run the migration and private-knowledge PostgreSQL integration groups after the full suite so their latest evidence is explicit.
-5. [ ] Commit the tested implementation in reviewable Conventional Commit units and request a final code review before operational apply.
+5. [x] Commit the tested implementation in reviewable Conventional Commit units and request a final code review before operational apply.
 
 ### Final-review hardening completed before operational apply
 
@@ -183,15 +183,15 @@ git diff --check
 
 **Files:** no actual package, report, backup, query output, or private values are added to the repository.
 
-1. [ ] Reconfirm the target FamilyCare containers, PostgreSQL database, current migration, household, operator, free disk/memory, active sessions, and ownership without stopping any other session's process or container.
-2. [ ] Create a timestamped custom-format PostgreSQL backup outside Git, set mode `0600`, calculate its SHA-256, and verify it with `pg_restore --list`.
-3. [ ] Validate the actual package locally and record only sanitized aggregate counts and the validation result.
-4. [ ] Run real DB dry-run, compare every package count, decision matrix, create/no-op/conflict/block count, baseline digest, and expected post-apply count against the externally reviewed reconciliation. Stop on any mismatch.
-5. [ ] Restore the backup into a disposable database, upgrade it to migration head, apply the exact approved package/report, run `verify`, and compare every expected count.
-6. [ ] Apply the same package and approved report to the real database once; if commit result is uncertain, identify the outcome by package digest rather than retrying.
-7. [ ] Run post-apply verification for one current snapshot, all table/FK counts, all row digests, independent decision matrices, zero executable facts/mappings, zero unsafe operational bindings, API household isolation, and idempotent no-op.
-8. [ ] Rebuild/restart only FamilyCare-owned services if the new API artifact requires it, preserve login credentials/session/archive configuration, and recheck HTTPS health and authenticated bounded queries.
-9. [ ] Open a PR, wait for GitHub Actions, merge only after CI passes, and report the PR, merge commit, runtime migration, real-data verification, and every remaining unverified status/password/visual boundary. Do not tag or deploy a release without separate approval.
+1. [x] Reconfirm the target FamilyCare containers, PostgreSQL database, current migration, household, operator, free disk/memory, active sessions, and ownership without stopping any other session's process or container.
+2. [x] Create a timestamped custom-format PostgreSQL backup outside Git, set mode `0600`, calculate its SHA-256, and verify it with `pg_restore --list`.
+3. [x] Validate the actual package locally and record only sanitized aggregate counts and the validation result.
+4. [x] Run real DB dry-run, compare every package count, decision matrix, create/no-op/conflict/block count, baseline digest, and expected post-apply count against the externally reviewed reconciliation. Stop on any mismatch.
+5. [x] Restore the backup into a disposable database, upgrade it to migration head, apply the exact approved package/report, run `verify`, and compare every expected count.
+6. [x] Apply the same package and approved report to the real database once; if commit result is uncertain, identify the outcome by package digest rather than retrying.
+7. [x] Run post-apply verification for one current snapshot, all table/FK counts, all row digests, independent decision matrices, zero executable facts/mappings, zero unsafe operational bindings, API household isolation, and idempotent no-op.
+8. [x] Rebuild and recreate only the API service, preserve the existing database, Web, Worker, sessions, and archive configuration, and recheck readiness, route registration, household-scoped bounded projections, and the unauthenticated `no-store` boundary. Browser-session authenticated HTTPS acceptance remains explicitly unverified.
+9. [x] Open PR #39 and keep merge contingent on required GitHub Actions. The completion report records the resulting merge commit, runtime migration, real-data verification, and remaining browser/password/visual boundaries. No tag or release deployment is part of this task.
 
 ## Completion boundary
 

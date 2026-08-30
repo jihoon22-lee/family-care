@@ -1,6 +1,6 @@
 # Private insurance knowledge catalog design
 
-- 상태: 최종 보안 검토 보강 완료, 전체 저장소·실제 런타임 검증 진행 중
+- 상태: 최종 보안 검토, 전체 저장소 검증, 실제 DB 적용·런타임 API 교체 완료; PR #39 통합 게이트
 - 적용 단계: private policy structuring과 document inventory 이후
 - 권위 경계: 증권 가입 사실, 약관 적용성, 의미 사실, 실행 규칙을 서로 다른 상태로 보존
 
