@@ -55,6 +55,9 @@ export const API_PATHS = [
   "/api/v1/policies/{policy_id}/candidate-fields/{field_id}",
   "/api/v1/policies/{policy_id}/restore",
   "/api/v1/policies/{policy_id}/riders",
+  "/api/v1/private-knowledge/current",
+  "/api/v1/private-knowledge/current/contracts",
+  "/api/v1/private-knowledge/current/contracts/{contract_id}",
   "/api/v1/review-items",
   "/api/v1/review-items/{review_item_id}",
   "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
@@ -422,6 +425,24 @@ export const API_OPERATIONS = [
     method: "GET",
     path: "/api/v1/policies/{policy_id}/riders",
     operationId: "list_policy_riders_api_v1_policies__policy_id__riders_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/private-knowledge/current",
+    operationId:
+      "get_current_private_knowledge_api_v1_private_knowledge_current_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/private-knowledge/current/contracts",
+    operationId:
+      "list_current_private_knowledge_contracts_api_v1_private_knowledge_current_contracts_get",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/private-knowledge/current/contracts/{contract_id}",
+    operationId:
+      "get_current_private_knowledge_contract_api_v1_private_knowledge_current_contracts__contract_id__get",
   },
   {
     method: "GET",
@@ -1147,6 +1168,15 @@ export interface CsrfResponse {
   csrf_token: string;
 }
 
+export interface CurrentKnowledgeResponse {
+  counts: KnowledgeEntityCounts;
+  executable_fact_count: number;
+  executable_mapping_count: number;
+  run_id: string;
+  schema_version: "1";
+  unsafe_operational_binding_count: number;
+}
+
 export interface DecisionErrorResponse {
   error_code: string;
   message: string;
@@ -1371,6 +1401,148 @@ export interface InventorySummaryResponse {
   product_explanation_documents: number;
   terms_only_documents: number;
   unreadable_documents: number;
+}
+
+export interface KnowledgeContractDetailResponse {
+  contract: KnowledgeContractListItemResponse;
+  coverage_mappings: Array<KnowledgeCoverageMappingResponse>;
+  coverages: Array<KnowledgeCoverageResponse>;
+  next_section_cursor: string | null;
+  schema_version: "1";
+  terms_assignments: Array<KnowledgeTermsAssignmentResponse>;
+  terms_sections: Array<KnowledgeTermsSectionResponse>;
+}
+
+export interface KnowledgeContractListItemResponse {
+  certificate_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  contract_end: string | null;
+  contract_start: string | null;
+  coverage_count: number;
+  current_status: "active" | "inactive" | "lapsed" | "terminated" | "unknown";
+  document_identity_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  edition_applicability_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  enrollment_match_count: number;
+  enrollment_no_match_count: number;
+  enrollment_unknown_count: number;
+  family_alias: string;
+  id: string;
+  insurer_display: string;
+  product_display: string;
+  subject_id: string;
+  terms_overall_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+}
+
+export interface KnowledgeContractPageResponse {
+  items: Array<KnowledgeContractListItemResponse>;
+  next_cursor: string | null;
+  schema_version: "1";
+}
+
+export interface KnowledgeCoverageMappingResponse {
+  coverage_id: string;
+  document_identity_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  edition_applicability_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  enrollment_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  executable: false;
+  mapping_applicability: "APPLICABLE" | "NOT_APPLICABLE" | "UNKNOWN";
+  overall_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  reason_codes: Array<string>;
+  section_mapping_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  terms_section_id: string | null;
+}
+
+export interface KnowledgeCoverageResponse {
+  benefit_type: "FIXED" | "INDEMNITY" | "UNKNOWN" | "NOT_APPLICABLE";
+  component_classification:
+    "BENEFIT_COVERAGE" | "NON_BENEFIT_CONTRACT_COMPONENT" | "UNKNOWN";
+  component_role: "MAIN_CONTRACT" | "RIDER";
+  coverage_end: string | null;
+  coverage_start: string | null;
+  currency?: string | null;
+  current_status: "active" | "inactive" | "lapsed" | "terminated" | "unknown";
+  display_name: string;
+  enrollment_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  id: string;
+  insured_amount: string | null;
+  renewal_state: "YES" | "NO" | "UNKNOWN" | "NOT_APPLICABLE";
+}
+
+export interface KnowledgeEntityCounts {
+  contracts: number;
+  coverage_terms_mappings: number;
+  coverages: number;
+  document_bindings: number;
+  fact_citations: number;
+  facts: number;
+  semantic_reviews: number;
+  source_clauses: number;
+  subjects: number;
+  terms_assignment_sources: number;
+  terms_assignments: number;
+  terms_sections: number;
+}
+
+export interface KnowledgeFactCitationResponse {
+  clause_label?: string | null;
+  clause_title?: string | null;
+  page_end: number;
+  page_start: number;
+  source_document_ref: string;
+}
+
+export interface KnowledgeFactConditionsResponse {
+  confidence: "high" | "medium";
+  decision_impact: string;
+  details_ko: Array<string>;
+  unresolved_reference: boolean;
+}
+
+export interface KnowledgeFactResponse {
+  citations: Array<KnowledgeFactCitationResponse>;
+  conditions: KnowledgeFactConditionsResponse;
+  executable: false;
+  fact_type:
+    | "PAYMENT_TRIGGER"
+    | "DEFINITION"
+    | "EXCLUSION"
+    | "WAITING_PERIOD"
+    | "REDUCTION"
+    | "FREQUENCY"
+    | "AMOUNT"
+    | "RENEWAL"
+    | "REQUIRED_DOCUMENT"
+    | "TERMINATION"
+    | "CROSS_REFERENCE"
+    | "OTHER";
+  id: string;
+  numeric_terms: Array<string>;
+  review_state:
+    "DIRECT_REVIEWED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "UNKNOWN";
+  statement: string;
+}
+
+export interface KnowledgeTermsAssignmentResponse {
+  document_identity_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  edition_applicability_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  id: string;
+  overall_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  reason_codes: Array<string>;
+  selected_source_count: number;
+}
+
+export interface KnowledgeTermsSectionResponse {
+  confidence: "high" | "medium";
+  facts: Array<KnowledgeFactResponse>;
+  found_categories: Array<string>;
+  heading: string;
+  id: string;
+  missing_categories: Array<string>;
+  page_end: number;
+  page_start: number;
+  review_state:
+    "DIRECT_REVIEWED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "UNKNOWN";
+  section_summary: string;
+  warnings: Array<string>;
 }
 
 export interface LoginRequest {
@@ -1600,6 +1772,12 @@ export interface PolicyUpdateRequest {
 }
 
 export type PositiveVersion = number;
+
+export interface PrivateKnowledgeErrorResponse {
+  error_code: string;
+  fields?: Array<string> | null;
+  message: string;
+}
 
 export interface QuestionResponse {
   field_path: string;

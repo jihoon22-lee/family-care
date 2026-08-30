@@ -10,9 +10,30 @@ import pytest
 from scripts.integration_test_database import (
     IntegrationDatabaseGuardError,
     configure_integration_test_database,
+    is_safe_integration_database_name,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize(
+    "database_name",
+    ["familycare_test", "familycare_ci", "ci_familycare", "test-familycare"],
+)
+def test_safe_integration_database_name_accepts_standalone_markers(
+    database_name: str,
+) -> None:
+    assert is_safe_integration_database_name(database_name)
+
+
+@pytest.mark.parametrize(
+    "database_name",
+    ["familycare", "critical", "contest", "production"],
+)
+def test_safe_integration_database_name_rejects_embedded_or_missing_markers(
+    database_name: str,
+) -> None:
+    assert not is_safe_integration_database_name(database_name)
 
 
 def test_legacy_runtime_database_url_is_not_used_as_a_test_fallback() -> None:

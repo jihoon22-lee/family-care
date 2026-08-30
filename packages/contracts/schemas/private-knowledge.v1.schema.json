@@ -1,0 +1,800 @@
+{
+  "$defs": {
+    "KnowledgeContractListItemResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "certificate_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Certificate Decision",
+          "type": "string"
+        },
+        "contract_end": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contract End"
+        },
+        "contract_start": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Contract Start"
+        },
+        "coverage_count": {
+          "minimum": 0,
+          "title": "Coverage Count",
+          "type": "integer"
+        },
+        "current_status": {
+          "enum": [
+            "active",
+            "inactive",
+            "lapsed",
+            "terminated",
+            "unknown"
+          ],
+          "title": "Current Status",
+          "type": "string"
+        },
+        "document_identity_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Document Identity Decision",
+          "type": "string"
+        },
+        "edition_applicability_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Edition Applicability Decision",
+          "type": "string"
+        },
+        "enrollment_match_count": {
+          "minimum": 0,
+          "title": "Enrollment Match Count",
+          "type": "integer"
+        },
+        "enrollment_no_match_count": {
+          "minimum": 0,
+          "title": "Enrollment No Match Count",
+          "type": "integer"
+        },
+        "enrollment_unknown_count": {
+          "minimum": 0,
+          "title": "Enrollment Unknown Count",
+          "type": "integer"
+        },
+        "family_alias": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Family Alias",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "insurer_display": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Insurer Display",
+          "type": "string"
+        },
+        "product_display": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Product Display",
+          "type": "string"
+        },
+        "subject_id": {
+          "format": "uuid",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "terms_overall_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Terms Overall Decision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "subject_id",
+        "family_alias",
+        "insurer_display",
+        "product_display",
+        "contract_start",
+        "contract_end",
+        "certificate_decision",
+        "current_status",
+        "coverage_count",
+        "enrollment_match_count",
+        "enrollment_no_match_count",
+        "enrollment_unknown_count",
+        "document_identity_decision",
+        "edition_applicability_decision",
+        "terms_overall_decision"
+      ],
+      "title": "KnowledgeContractListItemResponse",
+      "type": "object"
+    },
+    "KnowledgeCoverageMappingResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        },
+        "document_identity_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Document Identity Decision",
+          "type": "string"
+        },
+        "edition_applicability_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Edition Applicability Decision",
+          "type": "string"
+        },
+        "enrollment_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Enrollment Decision",
+          "type": "string"
+        },
+        "executable": {
+          "const": false,
+          "title": "Executable",
+          "type": "boolean"
+        },
+        "mapping_applicability": {
+          "enum": [
+            "APPLICABLE",
+            "NOT_APPLICABLE",
+            "UNKNOWN"
+          ],
+          "title": "Mapping Applicability",
+          "type": "string"
+        },
+        "overall_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Overall Decision",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "section_mapping_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Section Mapping Decision",
+          "type": "string"
+        },
+        "terms_section_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Terms Section Id"
+        }
+      },
+      "required": [
+        "coverage_id",
+        "terms_section_id",
+        "mapping_applicability",
+        "enrollment_decision",
+        "document_identity_decision",
+        "edition_applicability_decision",
+        "section_mapping_decision",
+        "overall_decision",
+        "reason_codes",
+        "executable"
+      ],
+      "title": "KnowledgeCoverageMappingResponse",
+      "type": "object"
+    },
+    "KnowledgeCoverageResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "benefit_type": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN",
+            "NOT_APPLICABLE"
+          ],
+          "title": "Benefit Type",
+          "type": "string"
+        },
+        "component_classification": {
+          "enum": [
+            "BENEFIT_COVERAGE",
+            "NON_BENEFIT_CONTRACT_COMPONENT",
+            "UNKNOWN"
+          ],
+          "title": "Component Classification",
+          "type": "string"
+        },
+        "component_role": {
+          "enum": [
+            "MAIN_CONTRACT",
+            "RIDER"
+          ],
+          "title": "Component Role",
+          "type": "string"
+        },
+        "coverage_end": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Coverage End"
+        },
+        "coverage_start": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Coverage Start"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "current_status": {
+          "enum": [
+            "active",
+            "inactive",
+            "lapsed",
+            "terminated",
+            "unknown"
+          ],
+          "title": "Current Status",
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "enrollment_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Enrollment Decision",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "insured_amount": {
+          "anyOf": [
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Insured Amount"
+        },
+        "renewal_state": {
+          "enum": [
+            "YES",
+            "NO",
+            "UNKNOWN",
+            "NOT_APPLICABLE"
+          ],
+          "title": "Renewal State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "display_name",
+        "component_role",
+        "component_classification",
+        "enrollment_decision",
+        "benefit_type",
+        "insured_amount",
+        "coverage_start",
+        "coverage_end",
+        "renewal_state",
+        "current_status"
+      ],
+      "title": "KnowledgeCoverageResponse",
+      "type": "object"
+    },
+    "KnowledgeFactCitationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "clause_label": {
+          "anyOf": [
+            {
+              "maxLength": 800,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clause Label"
+        },
+        "clause_title": {
+          "anyOf": [
+            {
+              "maxLength": 800,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Clause Title"
+        },
+        "page_end": {
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "source_document_ref": {
+          "format": "uuid",
+          "title": "Source Document Ref",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_document_ref",
+        "page_start",
+        "page_end"
+      ],
+      "title": "KnowledgeFactCitationResponse",
+      "type": "object"
+    },
+    "KnowledgeFactConditionsResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "enum": [
+            "high",
+            "medium"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "decision_impact": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Decision Impact",
+          "type": "string"
+        },
+        "details_ko": {
+          "items": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Details Ko",
+          "type": "array"
+        },
+        "unresolved_reference": {
+          "title": "Unresolved Reference",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "details_ko",
+        "decision_impact",
+        "confidence",
+        "unresolved_reference"
+      ],
+      "title": "KnowledgeFactConditionsResponse",
+      "type": "object"
+    },
+    "KnowledgeFactResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeFactCitationResponse"
+          },
+          "maxItems": 32,
+          "title": "Citations",
+          "type": "array"
+        },
+        "conditions": {
+          "$ref": "#/$defs/KnowledgeFactConditionsResponse"
+        },
+        "executable": {
+          "const": false,
+          "title": "Executable",
+          "type": "boolean"
+        },
+        "fact_type": {
+          "enum": [
+            "PAYMENT_TRIGGER",
+            "DEFINITION",
+            "EXCLUSION",
+            "WAITING_PERIOD",
+            "REDUCTION",
+            "FREQUENCY",
+            "AMOUNT",
+            "RENEWAL",
+            "REQUIRED_DOCUMENT",
+            "TERMINATION",
+            "CROSS_REFERENCE",
+            "OTHER"
+          ],
+          "title": "Fact Type",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "numeric_terms": {
+          "items": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Numeric Terms",
+          "type": "array"
+        },
+        "review_state": {
+          "enum": [
+            "DIRECT_REVIEWED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED",
+            "UNKNOWN"
+          ],
+          "title": "Review State",
+          "type": "string"
+        },
+        "statement": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Statement",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "fact_type",
+        "statement",
+        "conditions",
+        "numeric_terms",
+        "review_state",
+        "executable",
+        "citations"
+      ],
+      "title": "KnowledgeFactResponse",
+      "type": "object"
+    },
+    "KnowledgeTermsAssignmentResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "document_identity_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Document Identity Decision",
+          "type": "string"
+        },
+        "edition_applicability_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Edition Applicability Decision",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "overall_decision": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Overall Decision",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "selected_source_count": {
+          "maximum": 8,
+          "minimum": 0,
+          "title": "Selected Source Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "document_identity_decision",
+        "edition_applicability_decision",
+        "overall_decision",
+        "reason_codes",
+        "selected_source_count"
+      ],
+      "title": "KnowledgeTermsAssignmentResponse",
+      "type": "object"
+    },
+    "KnowledgeTermsSectionResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "confidence": {
+          "enum": [
+            "high",
+            "medium"
+          ],
+          "title": "Confidence",
+          "type": "string"
+        },
+        "facts": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeFactResponse"
+          },
+          "maxItems": 1000,
+          "title": "Facts",
+          "type": "array"
+        },
+        "found_categories": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Found Categories",
+          "type": "array"
+        },
+        "heading": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Heading",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "missing_categories": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Missing Categories",
+          "type": "array"
+        },
+        "page_end": {
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "review_state": {
+          "enum": [
+            "DIRECT_REVIEWED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED",
+            "UNKNOWN"
+          ],
+          "title": "Review State",
+          "type": "string"
+        },
+        "section_summary": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Section Summary",
+          "type": "string"
+        },
+        "warnings": {
+          "items": {
+            "maxLength": 240,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 128,
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "heading",
+        "page_start",
+        "page_end",
+        "review_state",
+        "section_summary",
+        "confidence",
+        "found_categories",
+        "missing_categories",
+        "warnings",
+        "facts"
+      ],
+      "title": "KnowledgeTermsSectionResponse",
+      "type": "object"
+    }
+  },
+  "$id": "https://familycare.local/contracts/private-knowledge.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract": {
+      "$ref": "#/$defs/KnowledgeContractListItemResponse"
+    },
+    "coverage_mappings": {
+      "items": {
+        "$ref": "#/$defs/KnowledgeCoverageMappingResponse"
+      },
+      "maxItems": 256,
+      "title": "Coverage Mappings",
+      "type": "array"
+    },
+    "coverages": {
+      "items": {
+        "$ref": "#/$defs/KnowledgeCoverageResponse"
+      },
+      "maxItems": 256,
+      "title": "Coverages",
+      "type": "array"
+    },
+    "next_section_cursor": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Section Cursor"
+    },
+    "schema_version": {
+      "const": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "terms_assignments": {
+      "items": {
+        "$ref": "#/$defs/KnowledgeTermsAssignmentResponse"
+      },
+      "maxItems": 8,
+      "title": "Terms Assignments",
+      "type": "array"
+    },
+    "terms_sections": {
+      "items": {
+        "$ref": "#/$defs/KnowledgeTermsSectionResponse"
+      },
+      "maxItems": 50,
+      "title": "Terms Sections",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "contract",
+    "coverages",
+    "terms_assignments",
+    "coverage_mappings",
+    "terms_sections",
+    "next_section_cursor"
+  ],
+  "title": "KnowledgeContractDetailResponse",
+  "type": "object"
+}
