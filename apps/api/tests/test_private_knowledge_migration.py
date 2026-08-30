@@ -112,6 +112,7 @@ def test_revision_and_table_dependency_order_are_additive() -> None:
         "private_knowledge_terms_assignment_sources",
         "private_knowledge_terms_sections",
         "private_knowledge_source_clauses",
+        "private_knowledge_semantic_reviews",
         "private_knowledge_facts",
         "private_knowledge_fact_citations",
         "private_knowledge_coverage_terms_mappings",
@@ -138,6 +139,7 @@ def test_import_run_is_household_scoped_idempotent_and_count_only() -> None:
         "state",
         "is_current",
         "manifest_counts_json",
+        "manifest_json",
         "reconciliation_counts_json",
         "baseline_digest_sha256",
         "report_digest_sha256",
@@ -250,6 +252,7 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
     assignments = operations.tables["private_knowledge_terms_assignments"]
     sections = operations.tables["private_knowledge_terms_sections"]
     clauses = operations.tables["private_knowledge_source_clauses"]
+    semantic_reviews = operations.tables["private_knowledge_semantic_reviews"]
     facts = operations.tables["private_knowledge_facts"]
     citations = operations.tables["private_knowledge_fact_citations"]
     mappings = operations.tables["private_knowledge_coverage_terms_mappings"]
@@ -271,9 +274,14 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
         "terms_section_id": ("private_knowledge_terms_sections.id", "RESTRICT"),
     }
+    assert foreign_keys(semantic_reviews) == {
+        "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
+        "terms_section_id": ("private_knowledge_terms_sections.id", "RESTRICT"),
+    }
     assert foreign_keys(facts) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
         "terms_section_id": ("private_knowledge_terms_sections.id", "RESTRICT"),
+        "semantic_review_id": ("private_knowledge_semantic_reviews.id", "RESTRICT"),
     }
     assert foreign_keys(citations) == {
         "import_run_id": ("private_knowledge_import_runs.id", "RESTRICT"),
@@ -317,6 +325,16 @@ def test_terms_clause_fact_and_mapping_lineage_is_normalized() -> None:
     assert {"source_clause_key", "page_start", "page_end", "source_text_sha256"} <= set(
         clauses.columns.keys()
     )
+    assert {
+        "source_review_key",
+        "section_summary",
+        "analysis_status",
+        "confidence",
+        "review_state",
+        "found_categories_json",
+        "missing_categories_json",
+        "warnings_json",
+    } <= set(semantic_reviews.columns.keys())
     assert {
         "source_fact_key",
         "fact_type",
@@ -385,7 +403,7 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
             ),
         )
     }
-    assert composite_foreign_keys(operations.tables["private_knowledge_facts"]) == {
+    assert composite_foreign_keys(operations.tables["private_knowledge_semantic_reviews"]) == {
         (
             ("terms_section_id", "import_run_id"),
             (
@@ -393,6 +411,22 @@ def test_cross_entity_references_cannot_cross_import_runs() -> None:
                 "private_knowledge_terms_sections.import_run_id",
             ),
         )
+    }
+    assert composite_foreign_keys(operations.tables["private_knowledge_facts"]) == {
+        (
+            ("terms_section_id", "import_run_id"),
+            (
+                "private_knowledge_terms_sections.id",
+                "private_knowledge_terms_sections.import_run_id",
+            ),
+        ),
+        (
+            ("semantic_review_id", "import_run_id"),
+            (
+                "private_knowledge_semantic_reviews.id",
+                "private_knowledge_semantic_reviews.import_run_id",
+            ),
+        ),
     }
     assert composite_foreign_keys(operations.tables["private_knowledge_fact_citations"]) == {
         (
@@ -496,6 +530,7 @@ def test_unique_source_identity_and_query_indexes_cover_every_entity() -> None:
         "uq_private_knowledge_assignment_sources_ordinal",
         "uq_private_knowledge_sections_source",
         "uq_private_knowledge_clauses_source",
+        "uq_private_knowledge_semantic_reviews_source",
         "uq_private_knowledge_facts_source",
         "uq_private_knowledge_fact_citations_ordinal",
         "uq_private_knowledge_mappings_source",
@@ -526,6 +561,7 @@ def test_downgrade_drops_tables_in_reverse_dependency_order() -> None:
                 "private_knowledge_terms_assignment_sources",
                 "private_knowledge_terms_sections",
                 "private_knowledge_source_clauses",
+                "private_knowledge_semantic_reviews",
                 "private_knowledge_facts",
                 "private_knowledge_fact_citations",
                 "private_knowledge_coverage_terms_mappings",

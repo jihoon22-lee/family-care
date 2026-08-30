@@ -17,6 +17,7 @@ RUN_B_ID = UUID("00000000-0000-4000-8000-000000001804")
 SUBJECT_ID = UUID("00000000-0000-4000-8000-000000001805")
 CONTRACT_ID = UUID("00000000-0000-4000-8000-000000001806")
 SECTION_ID = UUID("00000000-0000-4000-8000-000000001807")
+SEMANTIC_REVIEW_ID = UUID("00000000-0000-4000-8000-000000001808")
 
 
 def _database_url() -> str:
@@ -39,13 +40,13 @@ def _insert_run(
           id, household_space_id, package_schema_version,
           package_digest_sha256, manifest_digest_sha256,
           importer_version, analysis_authority, state, is_current,
-          manifest_counts_json, reconciliation_counts_json,
+          manifest_counts_json, manifest_json, reconciliation_counts_json,
           baseline_digest_sha256, report_digest_sha256,
           applied_by, applied_at
         ) VALUES (
           %s, %s, 'private-analysis-package.sol-v2', %s, %s,
           'synthetic-importer-v1', 'DIRECT_REVIEW', 'APPLIED', %s,
-          '{}'::jsonb, '{}'::jsonb, %s, %s, %s, clock_timestamp()
+          '{}'::jsonb, '{}'::jsonb, '{}'::jsonb, %s, %s, %s, clock_timestamp()
         )
         """,
         (
@@ -152,21 +153,37 @@ def test_postgresql_enforces_current_run_lineage_and_non_executable_facts() -> N
             """,
             (SECTION_ID, RUN_A_ID, "5" * 64, "6" * 64),
         )
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_semantic_reviews (
+              id, import_run_id, terms_section_id, source_review_key,
+              section_summary, analysis_status, confidence, review_state,
+              source_clause_count, classified_clause_count,
+              unclassified_clause_count, source_record_json,
+              source_record_digest_sha256
+            ) VALUES (
+              %s, %s, %s, 'synthetic-review-001',
+              'Synthetic section summary.', 'complete', 'high', 'DIRECT_REVIEWED',
+              1, 1, 0, '{}'::jsonb, %s
+            )
+            """,
+            (SEMANTIC_REVIEW_ID, RUN_A_ID, SECTION_ID, "a" * 64),
+        )
 
         with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
             connection.execute(
                 """
                     INSERT INTO private_knowledge_facts (
-                      import_run_id, terms_section_id, source_fact_key,
+                      import_run_id, terms_section_id, semantic_review_id, source_fact_key,
                       fact_type, statement, review_state, executable,
                       source_record_json, source_record_digest_sha256
                     ) VALUES (
-                      %s, %s, 'synthetic-fact-001', 'PAYMENT_TRIGGER',
+                      %s, %s, %s, 'synthetic-fact-001', 'PAYMENT_TRIGGER',
                       'Synthetic payment condition.', 'DIRECT_REVIEWED', true,
                       '{}'::jsonb, %s
                     )
                     """,
-                (RUN_A_ID, SECTION_ID, "7" * 64),
+                (RUN_A_ID, SECTION_ID, SEMANTIC_REVIEW_ID, "7" * 64),
             )
 
         with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
@@ -193,8 +210,9 @@ def test_postgresql_enforces_current_run_lineage_and_non_executable_facts() -> N
               (SELECT count(*) FROM private_knowledge_subjects),
               (SELECT count(*) FROM private_knowledge_contracts),
               (SELECT count(*) FROM private_knowledge_terms_sections),
+              (SELECT count(*) FROM private_knowledge_semantic_reviews),
               (SELECT count(*) FROM private_knowledge_facts),
               (SELECT count(*) FROM private_knowledge_document_bindings)
             """
         ).fetchone()
-        assert counts == (2, 1, 1, 1, 0, 0)
+        assert counts == (2, 1, 1, 1, 1, 0, 0)

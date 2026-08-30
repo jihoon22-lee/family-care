@@ -110,6 +110,7 @@ def upgrade() -> None:
             server_default=sa.text("false"),
         ),
         _jsonb("manifest_counts_json", default="'{}'::jsonb"),
+        _jsonb("manifest_json"),
         _jsonb("reconciliation_counts_json", default="'{}'::jsonb"),
         _sha256("baseline_digest_sha256", nullable=True),
         _sha256("report_digest_sha256", nullable=True),
@@ -145,6 +146,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "jsonb_typeof(manifest_counts_json) = 'object'",
             name="ck_private_knowledge_runs_manifest_counts_object",
+        ),
+        sa.CheckConstraint(
+            "jsonb_typeof(manifest_json) = 'object'",
+            name="ck_private_knowledge_runs_manifest_object",
         ),
         sa.CheckConstraint(
             "jsonb_typeof(reconciliation_counts_json) = 'object'",
@@ -690,10 +695,93 @@ def upgrade() -> None:
     )
 
     op.create_table(
+        "private_knowledge_semantic_reviews",
+        _uuid("id", primary_key=True),
+        _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
+        _foreign_uuid("terms_section_id", "private_knowledge_terms_sections.id"),
+        sa.Column("source_review_key", sa.String(length=300), nullable=False),
+        sa.Column("section_summary", sa.Text(), nullable=False),
+        sa.Column("analysis_status", sa.String(length=24), nullable=False),
+        sa.Column("confidence", sa.String(length=16), nullable=False),
+        sa.Column("review_state", sa.String(length=24), nullable=False),
+        _jsonb("found_categories_json", default="'[]'::jsonb"),
+        _jsonb("missing_categories_json", default="'[]'::jsonb"),
+        _jsonb("warnings_json", default="'[]'::jsonb"),
+        sa.Column("source_clause_count", sa.Integer(), nullable=False),
+        sa.Column("classified_clause_count", sa.Integer(), nullable=False),
+        sa.Column("unclassified_clause_count", sa.Integer(), nullable=False),
+        sa.Column(
+            "legacy_review_only",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+        ),
+        *_source_record_columns(),
+        _timestamp("created_at"),
+        sa.UniqueConstraint(
+            "id",
+            "import_run_id",
+            name="uq_private_knowledge_semantic_reviews_id_run",
+        ),
+        sa.ForeignKeyConstraint(
+            ["terms_section_id", "import_run_id"],
+            [
+                "private_knowledge_terms_sections.id",
+                "private_knowledge_terms_sections.import_run_id",
+            ],
+            name="fk_private_knowledge_semantic_reviews_section_run",
+            ondelete="RESTRICT",
+        ),
+        sa.CheckConstraint(
+            "btrim(source_review_key) <> '' AND btrim(section_summary) <> '' "
+            "AND char_length(section_summary) <= 8000",
+            name="ck_private_knowledge_semantic_reviews_content",
+        ),
+        sa.CheckConstraint(
+            "analysis_status = 'complete'",
+            name="ck_private_knowledge_semantic_reviews_status",
+        ),
+        sa.CheckConstraint(
+            "confidence IN ('high', 'medium')",
+            name="ck_private_knowledge_semantic_reviews_confidence",
+        ),
+        sa.CheckConstraint(
+            "review_state = 'DIRECT_REVIEWED'",
+            name="ck_private_knowledge_semantic_reviews_review_state",
+        ),
+        sa.CheckConstraint(
+            "jsonb_typeof(found_categories_json) = 'array' "
+            "AND jsonb_typeof(missing_categories_json) = 'array' "
+            "AND jsonb_typeof(warnings_json) = 'array'",
+            name="ck_private_knowledge_semantic_reviews_arrays",
+        ),
+        sa.CheckConstraint(
+            "source_clause_count >= 0 AND classified_clause_count >= 0 "
+            "AND unclassified_clause_count >= 0 "
+            "AND classified_clause_count + unclassified_clause_count = source_clause_count",
+            name="ck_private_knowledge_semantic_reviews_counts",
+        ),
+        *_source_record_checks("private_knowledge_semantic_reviews"),
+    )
+    op.create_index(
+        "uq_private_knowledge_semantic_reviews_source",
+        "private_knowledge_semantic_reviews",
+        ["import_run_id", "source_review_key"],
+        unique=True,
+    )
+    op.create_index(
+        "ix_private_knowledge_semantic_reviews_section",
+        "private_knowledge_semantic_reviews",
+        ["import_run_id", "terms_section_id", "id"],
+        unique=False,
+    )
+
+    op.create_table(
         "private_knowledge_facts",
         _uuid("id", primary_key=True),
         _foreign_uuid("import_run_id", "private_knowledge_import_runs.id"),
         _foreign_uuid("terms_section_id", "private_knowledge_terms_sections.id"),
+        _foreign_uuid("semantic_review_id", "private_knowledge_semantic_reviews.id"),
         sa.Column("source_fact_key", sa.String(length=280), nullable=False),
         sa.Column("fact_type", sa.String(length=40), nullable=False),
         sa.Column("statement", sa.Text(), nullable=False),
@@ -720,6 +808,15 @@ def upgrade() -> None:
                 "private_knowledge_terms_sections.import_run_id",
             ],
             name="fk_private_knowledge_facts_section_run",
+            ondelete="RESTRICT",
+        ),
+        sa.ForeignKeyConstraint(
+            ["semantic_review_id", "import_run_id"],
+            [
+                "private_knowledge_semantic_reviews.id",
+                "private_knowledge_semantic_reviews.import_run_id",
+            ],
+            name="fk_private_knowledge_facts_semantic_review_run",
             ondelete="RESTRICT",
         ),
         sa.CheckConstraint(
@@ -1007,6 +1104,7 @@ def downgrade() -> None:
             "private_knowledge_terms_assignment_sources",
             "private_knowledge_terms_sections",
             "private_knowledge_source_clauses",
+            "private_knowledge_semantic_reviews",
             "private_knowledge_facts",
             "private_knowledge_fact_citations",
             "private_knowledge_coverage_terms_mappings",
