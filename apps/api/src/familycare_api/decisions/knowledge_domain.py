@@ -189,6 +189,7 @@ class KnowledgeCoverageContext:
     status_intervals: tuple[KnowledgeStatusInterval, ...]
     rules: tuple[KnowledgeRulePublication, ...]
     calculation: KnowledgeCalculationPublication | None
+    claim_history_counted_occurrence: KnowledgeFact | None = None
 
     def __post_init__(self) -> None:
         _nonzero(self.knowledge_contract_id, "knowledge contract")
@@ -220,6 +221,8 @@ class KnowledgeDecisionContext:
     status_projection_digest_sha256: str
     coverages: tuple[KnowledgeCoverageContext, ...]
     normalizers: tuple[KnowledgeFactNormalizer, ...]
+    supporting_facts: Mapping[str, KnowledgeFact] = field(default_factory=dict)
+    receipt_currency: str | None = None
 
     def __post_init__(self) -> None:
         _nonzero(self.household_space_id, "household")
@@ -231,6 +234,17 @@ class KnowledgeDecisionContext:
         coverage_ids = [item.knowledge_coverage_id for item in self.coverages]
         if len(coverage_ids) != len(set(coverage_ids)):
             raise ValueError("duplicate knowledge coverage")
+        if any(
+            path not in {"Receipt.confirmed_amount", "Receipt.covered_amount"}
+            for path in self.supporting_facts
+        ):
+            raise ValueError("unsupported private supporting fact")
+        if self.receipt_currency is not None and (
+            len(self.receipt_currency) != 3
+            or not self.receipt_currency.isascii()
+            or not self.receipt_currency.isupper()
+        ):
+            raise ValueError("invalid receipt currency")
 
 
 @dataclass(frozen=True)

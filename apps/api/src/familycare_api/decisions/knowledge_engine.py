@@ -107,14 +107,32 @@ class DeterministicKnowledgeDecisionEngine:
             or context.family_member_id != event.family_member_id
         ):
             raise ValueError("private knowledge scope mismatch")
-        facts = normalize_private_event_facts(event, context.normalizers)
+        event_facts = normalize_private_event_facts(event, context.normalizers)
+        facts = KnowledgeFactContext(
+            facts={**context.supporting_facts, **event_facts.facts},
+            audit_conflicts=event_facts.audit_conflicts,
+        )
         outcomes: list[_CoverageOutcome] = []
         failures: list[str] = []
         for coverage in sorted(context.coverages, key=lambda item: str(item.knowledge_coverage_id)):
             if coverage.disposition == "NOT_APPLICABLE":
                 continue
             try:
-                outcome = self._evaluate_coverage(event, facts, coverage)
+                coverage_facts = facts
+                if (
+                    context.receipt_currency is not None
+                    and coverage.currency is not None
+                    and context.receipt_currency != coverage.currency
+                ):
+                    coverage_facts = KnowledgeFactContext(
+                        facts={
+                            path: value
+                            for path, value in facts.facts.items()
+                            if not path.startswith("Receipt.")
+                        },
+                        audit_conflicts=facts.audit_conflicts,
+                    )
+                outcome = self._evaluate_coverage(event, coverage_facts, coverage)
             except Exception:
                 outcome = self._failed_coverage(coverage)
             outcomes.append(outcome)
@@ -397,7 +415,7 @@ class DeterministicKnowledgeDecisionEngine:
             ),
             kind=coverage.benefit_type,
             status=status,
-            currency=(coverage.currency if status in {"UNKNOWN", "FAILED"} else None),
+            currency=(coverage.currency if status == "UNKNOWN" else None),
             conditional_amount=None,
             hold_reason_code=reason,
         )
@@ -535,6 +553,10 @@ def _legacy_fact_context(
             (),
         ),
     }
+    if coverage.claim_history_counted_occurrence is not None:
+        claim_history["ClaimHistory.counted_occurrence"] = _fact_value(
+            coverage.claim_history_counted_occurrence
+        )
     event_date = facts.get("MedicalEvent.event_date")
     as_of_date = (
         event_date.value if event_date is not None and isinstance(event_date.value, date) else None
@@ -689,4 +711,17 @@ def _indemnity_summary(
     )
 
 
-__all__ = ["DeterministicKnowledgeDecisionEngine", "ENGINE_VERSION"]
+def summarize_knowledge_results(
+    candidates: Sequence[KnowledgeClaimCandidate],
+    calculations: Sequence[KnowledgeBenefitCalculation],
+) -> tuple[tuple[KnowledgeFixedSubtotal, ...], KnowledgeIndemnitySummary]:
+    """Rebuild derived summaries from an immutable stored result snapshot."""
+
+    return _fixed_subtotals(candidates, calculations), _indemnity_summary(candidates, calculations)
+
+
+__all__ = [
+    "DeterministicKnowledgeDecisionEngine",
+    "ENGINE_VERSION",
+    "summarize_knowledge_results",
+]

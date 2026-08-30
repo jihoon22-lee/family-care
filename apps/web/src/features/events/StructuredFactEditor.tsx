@@ -10,12 +10,20 @@ const FIELD_LABELS: Record<EventFactField, string> = {
   admission: "입원 여부",
   outpatient: "외래 여부",
   pharmacy: "약국 이용 여부",
+  diagnosis_code: "진단 코드",
+  procedure_code: "처치·수술 코드",
+  anatomical_site_code: "신체 부위 코드",
+  pathology_code: "병리 코드",
+  treatment_setting: "치료 환경",
+  treatment_context: "치료 맥락",
+  separately_billed_treatment: "별도 결제 치료 여부",
 };
 
 const BOOLEAN_FIELDS = new Set<EventFactField>([
   "admission",
   "outpatient",
   "pharmacy",
+  "separately_billed_treatment",
 ]);
 
 const SOURCE_LABELS: Record<EventFactView["source"], string> = {

@@ -235,7 +235,7 @@ class CalculationRepository:
                       WHERE decision.medical_event_id = event.id
                         AND decision.household_space_id = event.household_space_id
                         AND decision.event_version = event.version
-                        AND decision.status = 'succeeded'
+                        AND decision.status IN ('succeeded', 'partial')
                         AND (%s::uuid IS NULL OR decision.id = %s)
                       ORDER BY decision.created_at DESC, decision.id DESC
                       LIMIT 1

@@ -1627,7 +1627,14 @@ export interface OptionalQuestionResponse {
     | "treatment_kind"
     | "admission"
     | "outpatient"
-    | "pharmacy";
+    | "pharmacy"
+    | "diagnosis_code"
+    | "procedure_code"
+    | "anatomical_site_code"
+    | "pathology_code"
+    | "treatment_setting"
+    | "treatment_context"
+    | "separately_billed_treatment";
   question_code:
     | "event_date"
     | "visit_date"
@@ -1636,7 +1643,14 @@ export interface OptionalQuestionResponse {
     | "treatment_kind"
     | "admission"
     | "outpatient"
-    | "pharmacy";
+    | "pharmacy"
+    | "diagnosis_code"
+    | "procedure_code"
+    | "anatomical_site_code"
+    | "pathology_code"
+    | "treatment_setting"
+    | "treatment_context"
+    | "separately_billed_treatment";
 }
 
 export interface PasswordRequest {
@@ -1984,7 +1998,14 @@ export interface StructuredFactInput {
     | "treatment_kind"
     | "admission"
     | "outpatient"
-    | "pharmacy";
+    | "pharmacy"
+    | "diagnosis_code"
+    | "procedure_code"
+    | "anatomical_site_code"
+    | "pathology_code"
+    | "treatment_setting"
+    | "treatment_context"
+    | "separately_billed_treatment";
   value: string | boolean | null;
 }
 
@@ -2000,7 +2021,14 @@ export interface StructuredFactResponse {
     | "treatment_kind"
     | "admission"
     | "outpatient"
-    | "pharmacy";
+    | "pharmacy"
+    | "diagnosis_code"
+    | "procedure_code"
+    | "anatomical_site_code"
+    | "pathology_code"
+    | "treatment_setting"
+    | "treatment_context"
+    | "separately_billed_treatment";
   source: "user" | "ai" | "system";
   state: "confirmed" | "ambiguous" | "missing" | "conflict";
   value: string | boolean | null;

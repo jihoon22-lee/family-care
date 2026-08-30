@@ -177,6 +177,22 @@ def upgrade() -> None:
             server_default=sa.text("'[]'::jsonb"),
         ),
     )
+    for column_name in (
+        "knowledge_contract_count",
+        "knowledge_benefit_coverage_count",
+        "knowledge_published_coverage_count",
+        "knowledge_blocked_coverage_count",
+        "knowledge_not_applicable_coverage_count",
+    ):
+        op.add_column(
+            "decision_runs",
+            sa.Column(
+                column_name,
+                sa.Integer(),
+                nullable=False,
+                server_default=sa.text("0"),
+            ),
+        )
     op.create_check_constraint(
         "ck_decision_runs_status",
         "decision_runs",
@@ -208,6 +224,16 @@ def upgrade() -> None:
         "ck_decision_runs_knowledge_lineage",
         "decision_runs",
         "knowledge_rule_import_run_id IS NULL OR knowledge_import_run_id IS NOT NULL",
+    )
+    op.create_check_constraint(
+        "ck_decision_runs_knowledge_counts",
+        "decision_runs",
+        "knowledge_contract_count >= 0 AND knowledge_benefit_coverage_count >= 0 "
+        "AND knowledge_published_coverage_count >= 0 "
+        "AND knowledge_blocked_coverage_count >= 0 "
+        "AND knowledge_not_applicable_coverage_count >= 0 "
+        "AND knowledge_published_coverage_count + knowledge_blocked_coverage_count "
+        "+ knowledge_not_applicable_coverage_count <= knowledge_benefit_coverage_count",
     )
     op.create_foreign_key(
         "fk_decision_runs_knowledge_run",
@@ -609,6 +635,7 @@ def downgrade() -> None:
         "ck_decision_runs_status_digest",
         "ck_decision_runs_fact_schema_nonempty",
         "ck_decision_runs_analysis_completeness",
+        "ck_decision_runs_knowledge_counts",
         "ck_decision_runs_status",
     ):
         op.drop_constraint(constraint_name, "decision_runs", type_="check")
@@ -619,6 +646,11 @@ def downgrade() -> None:
         "status IN ('running', 'succeeded', 'failed')",
     )
     for column_name in (
+        "knowledge_not_applicable_coverage_count",
+        "knowledge_blocked_coverage_count",
+        "knowledge_published_coverage_count",
+        "knowledge_benefit_coverage_count",
+        "knowledge_contract_count",
         "source_failure_codes_json",
         "analysis_completeness",
         "event_fact_schema_version",

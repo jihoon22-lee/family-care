@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
@@ -23,6 +24,7 @@ from familycare_api.decisions.domain import (
     DecisionRunResult,
     FactConfirmation,
     FactValue,
+    KnowledgeCatalogCoverage,
     MedicalEvent,
     PolicySnapshot,
     Question,
@@ -36,6 +38,11 @@ from familycare_api.decisions.errors import (
     MedicalEventNotFound,
 )
 from familycare_api.decisions.facts import FactNormalizationError, normalize_facts
+from familycare_api.decisions.knowledge_engine import DeterministicKnowledgeDecisionEngine
+from familycare_api.decisions.knowledge_repository import (
+    KnowledgeContextRead,
+    PostgresKnowledgeDecisionRepository,
+)
 from familycare_api.decisions.structuring_repository import _facts as _structured_fact_records
 from familycare_api.decisions.structuring_repository import _merge_user_overrides
 from familycare_api.decisions.structuring_repository import (
@@ -58,9 +65,13 @@ class DecisionRepository:
         database_url: str,
         *,
         history_reader: ClaimHistoryReader | None = None,
+        knowledge_repository: PostgresKnowledgeDecisionRepository | None = None,
+        knowledge_engine: DeterministicKnowledgeDecisionEngine | None = None,
     ) -> None:
         self.database_url = _database_url(database_url)
         self.history_reader = history_reader
+        self.knowledge_repository = knowledge_repository or PostgresKnowledgeDecisionRepository()
+        self.knowledge_engine = knowledge_engine or DeterministicKnowledgeDecisionEngine()
 
     def create_medical_event(
         self,
@@ -413,8 +424,71 @@ class DecisionRepository:
                     history=readers,
                 )
                 result = DeterministicCoverageDecisionEngine(ports).evaluate(scope, event)
-                self._persist_result(connection, scope, result)
-                return result
+                knowledge_read = KnowledgeContextRead(
+                    context=None,
+                    catalog_coverage=result.catalog_coverage,
+                    knowledge_import_run_id=None,
+                    rule_import_run_id=None,
+                    status_projection_digest_sha256=None,
+                )
+                knowledge_result = None
+                knowledge_failures: tuple[str, ...] = ()
+                try:
+                    with connection.transaction():
+                        knowledge_read = self.knowledge_repository.read_context(
+                            connection,
+                            scope,
+                            event,
+                        )
+                        if knowledge_read.context is not None:
+                            knowledge_result = self.knowledge_engine.evaluate(
+                                scope,
+                                event,
+                                knowledge_read.context,
+                                run_id=result.run_id,
+                            )
+                except psycopg.Error, ValueError, ArithmeticError:
+                    knowledge_failures = ("KNOWLEDGE_SOURCE_UNAVAILABLE",)
+                source_failures = tuple(
+                    dict.fromkeys(
+                        (
+                            *knowledge_read.reason_codes,
+                            *(
+                                knowledge_result.source_failure_codes
+                                if knowledge_result is not None
+                                else ()
+                            ),
+                            *knowledge_failures,
+                        )
+                    )
+                )
+                completeness = (
+                    knowledge_result.completeness if knowledge_result is not None else "UNAVAILABLE"
+                )
+                if knowledge_result is not None and source_failures != (
+                    knowledge_result.source_failure_codes
+                ):
+                    knowledge_result = replace(
+                        knowledge_result,
+                        completeness=("PARTIAL" if source_failures else completeness),
+                        source_failure_codes=source_failures,
+                    )
+                    completeness = knowledge_result.completeness
+                combined = replace(
+                    result,
+                    status="partial" if source_failures else "succeeded",
+                    knowledge_result=knowledge_result,
+                    analysis_completeness=completeness,
+                    source_failure_codes=source_failures,
+                    catalog_coverage=knowledge_read.catalog_coverage,
+                    knowledge_import_run_id=knowledge_read.knowledge_import_run_id,
+                    knowledge_rule_import_run_id=knowledge_read.rule_import_run_id,
+                    knowledge_status_projection_digest=(
+                        knowledge_read.status_projection_digest_sha256
+                    ),
+                )
+                self._persist_result(connection, scope, combined)
+                return combined
         except MedicalEventNotFound:
             raise
         except psycopg.Error:
@@ -436,7 +510,7 @@ class DecisionRepository:
                     WHERE run.household_space_id = %s
                       AND run.medical_event_id = %s
                       AND run.event_version = %s
-                      AND run.status = 'succeeded'
+                      AND run.status IN ('succeeded', 'partial')
                       AND event.household_space_id = %s
                       AND event.deleted_at IS NULL
                     ORDER BY run.created_at DESC, run.id DESC
@@ -451,7 +525,7 @@ class DecisionRepository:
                 ).fetchone()
                 if run is None:
                     raise DecisionResultNotFound
-                return self._load_result(connection, run)
+                return self._load_result(connection, scope, run)
         except DecisionResultNotFound:
             raise
         except psycopg.Error:
@@ -862,8 +936,17 @@ class DecisionRepository:
             """
             INSERT INTO decision_runs (
               id, household_space_id, medical_event_id, engine_version,
-              rule_set_version, event_version, policy_snapshot_at, status, stale
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'succeeded', %s)
+              rule_set_version, event_version, policy_snapshot_at, status, stale,
+              knowledge_import_run_id, knowledge_rule_import_run_id,
+              knowledge_status_projection_digest, event_fact_schema_version,
+              analysis_completeness, source_failure_codes_json,
+              knowledge_contract_count, knowledge_benefit_coverage_count,
+              knowledge_published_coverage_count, knowledge_blocked_coverage_count,
+              knowledge_not_applicable_coverage_count
+            ) VALUES (
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
             """,
             (
                 result.run_id,
@@ -873,7 +956,19 @@ class DecisionRepository:
                 result.rule_set_version,
                 result.event_version,
                 result.policy_snapshot_at,
+                result.status,
                 result.stale,
+                result.knowledge_import_run_id,
+                result.knowledge_rule_import_run_id,
+                result.knowledge_status_projection_digest,
+                result.event_fact_schema_version,
+                result.analysis_completeness,
+                Jsonb(list(result.source_failure_codes)),
+                result.catalog_coverage.contract_count,
+                result.catalog_coverage.benefit_coverage_count,
+                result.catalog_coverage.published_coverage_count,
+                result.catalog_coverage.blocked_coverage_count,
+                result.catalog_coverage.not_applicable_coverage_count,
             ),
         )
         for evaluation in result.evaluations:
@@ -944,10 +1039,17 @@ class DecisionRepository:
                     candidate.version,
                 ),
             )
+        if result.knowledge_result is not None:
+            self.knowledge_repository.persist_result(
+                connection,
+                scope,
+                result.knowledge_result,
+            )
 
     def _load_result(
         self,
         connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
         run: dict[str, Any],
     ) -> DecisionRunResult:
         evaluation_rows = connection.execute(
@@ -980,6 +1082,20 @@ class DecisionRepository:
             _claim_candidate(row, tuple(by_rider.get(cast(UUID, row["rider_id"]), ())))
             for row in candidate_rows
         )
+        knowledge_result = self.knowledge_repository.load_result(connection, scope, run)
+        event_row = self._event_row(
+            connection,
+            scope,
+            cast(UUID, run["medical_event_id"]),
+        )
+        if event_row is None:
+            raise DecisionRepositoryUnavailable
+        knowledge_stale = self.knowledge_repository.is_stale(
+            connection,
+            scope,
+            _medical_event(event_row),
+            run,
+        )
         return DecisionRunResult(
             run_id=cast(UUID, run["id"]),
             medical_event_id=cast(UUID, run["medical_event_id"]),
@@ -989,7 +1105,28 @@ class DecisionRepository:
             policy_snapshot_at=cast(datetime, run["policy_snapshot_at"]),
             candidates=candidates,
             evaluations=evaluations,
-            stale=bool(run["stale"]),
+            stale=bool(run["stale"]) or knowledge_stale,
+            status=cast(Any, run["status"]),
+            knowledge_result=knowledge_result,
+            analysis_completeness=cast(Any, run.get("analysis_completeness", "UNAVAILABLE")),
+            source_failure_codes=_strings(run.get("source_failure_codes_json")),
+            catalog_coverage=KnowledgeCatalogCoverage(
+                contract_count=int(run.get("knowledge_contract_count") or 0),
+                benefit_coverage_count=int(run.get("knowledge_benefit_coverage_count") or 0),
+                published_coverage_count=int(run.get("knowledge_published_coverage_count") or 0),
+                blocked_coverage_count=int(run.get("knowledge_blocked_coverage_count") or 0),
+                not_applicable_coverage_count=int(
+                    run.get("knowledge_not_applicable_coverage_count") or 0
+                ),
+            ),
+            knowledge_import_run_id=cast(UUID | None, run.get("knowledge_import_run_id")),
+            knowledge_rule_import_run_id=cast(UUID | None, run.get("knowledge_rule_import_run_id")),
+            knowledge_status_projection_digest=cast(
+                str | None, run.get("knowledge_status_projection_digest")
+            ),
+            event_fact_schema_version=cast(
+                str, run.get("event_fact_schema_version", "medical-event-facts.v2")
+            ),
         )
 
 

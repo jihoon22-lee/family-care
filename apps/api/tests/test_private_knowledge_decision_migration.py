@@ -164,12 +164,25 @@ def test_decision_runs_capture_private_snapshot_identity_and_partial_status() ->
         "event_fact_schema_version",
         "analysis_completeness",
         "source_failure_codes_json",
+        "knowledge_contract_count",
+        "knowledge_benefit_coverage_count",
+        "knowledge_published_coverage_count",
+        "knowledge_blocked_coverage_count",
+        "knowledge_not_applicable_coverage_count",
     }
     assert columns["knowledge_import_run_id"].nullable is True
     assert columns["knowledge_rule_import_run_id"].nullable is True
     assert columns["event_fact_schema_version"].nullable is False
     assert columns["analysis_completeness"].nullable is False
     assert columns["source_failure_codes_json"].nullable is False
+    for name in (
+        "knowledge_contract_count",
+        "knowledge_benefit_coverage_count",
+        "knowledge_published_coverage_count",
+        "knowledge_blocked_coverage_count",
+        "knowledge_not_applicable_coverage_count",
+    ):
+        assert columns[name].nullable is False
     assert operations.created_checks["ck_decision_runs_status"] == (
         "decision_runs",
         "status IN ('running', 'succeeded', 'partial', 'failed')",
@@ -183,6 +196,15 @@ def test_decision_runs_capture_private_snapshot_identity_and_partial_status() ->
         "knowledge_import_run_id",
         "household_space_id",
     ]
+    assert operations.created_checks["ck_decision_runs_knowledge_counts"] == (
+        "decision_runs",
+        "knowledge_contract_count >= 0 AND knowledge_benefit_coverage_count >= 0 "
+        "AND knowledge_published_coverage_count >= 0 "
+        "AND knowledge_blocked_coverage_count >= 0 "
+        "AND knowledge_not_applicable_coverage_count >= 0 "
+        "AND knowledge_published_coverage_count + knowledge_blocked_coverage_count "
+        "+ knowledge_not_applicable_coverage_count <= knowledge_benefit_coverage_count",
+    )
 
 
 def test_private_evaluations_keep_exact_rule_coverage_and_citation_snapshot() -> None:
@@ -357,6 +379,11 @@ def test_downgrade_reverses_private_tables_and_decision_run_extensions() -> None
         if item[0] == "drop_column" and item[2] == "decision_runs"
     ]
     assert dropped_columns == [
+        "knowledge_not_applicable_coverage_count",
+        "knowledge_blocked_coverage_count",
+        "knowledge_published_coverage_count",
+        "knowledge_benefit_coverage_count",
+        "knowledge_contract_count",
         "source_failure_codes_json",
         "analysis_completeness",
         "event_fact_schema_version",

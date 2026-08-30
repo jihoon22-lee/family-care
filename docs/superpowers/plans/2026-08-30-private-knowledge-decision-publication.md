@@ -291,6 +291,7 @@ def load_rule_publication_package(
     repository_root: Path,
 ) -> RulePublicationPackage: ...
 
+
 def canonical_rule_publication_digest(package: RulePublicationPackage) -> str: ...
 ```
 
@@ -493,10 +494,12 @@ KnowledgeFactProvenance = Literal[
     "CONFLICTING",
 ]
 
+
 def normalize_private_event_facts(
     event: MedicalEvent,
     normalizers: tuple[KnowledgeFactNormalizer, ...],
 ) -> KnowledgeFactContext: ...
+
 
 class DeterministicKnowledgeDecisionEngine:
     def evaluate(
@@ -581,6 +584,8 @@ git commit -m "feat(decisions): evaluate private knowledge rules"
 
 ### Task 7: Integrate private decisions with PostgreSQL analysis
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/src/familycare_api/decisions/knowledge_repository.py`
 - Modify: `apps/api/src/familycare_api/decisions/domain.py`
@@ -610,15 +615,15 @@ class PostgresKnowledgeDecisionRepository:
     ) -> None: ...
 ```
 
-- [ ] **Step 1: Write repository RED tests**
+- [x] **Step 1: Write repository RED tests**
 
 Prove the scoped SQL loads only exact member-bound current knowledge contracts, current user confirmations, event-date status intervals, complete dispositions, current publications, exact citations, receipt lines, and claim history. A catalog with coverages but no publication must produce `UNAVAILABLE` and a count, not an empty-success interpretation.
 
-- [ ] **Step 2: Write PostgreSQL end-to-end RED tests**
+- [x] **Step 2: Write PostgreSQL end-to-end RED tests**
 
 Seed wholly synthetic operational and knowledge sources in one household. Analyze once and assert both streams persist under one run. Seed a second household and prove it never appears. Make knowledge evaluation fail and assert legacy rows persist with run `partial`. Edit event/publication/status and assert the prior result becomes stale.
 
-- [ ] **Step 3: Run RED tests**
+- [x] **Step 3: Run RED tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_repository.py apps/api/tests/test_private_knowledge_decision_integration.py -q
@@ -626,7 +631,7 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_reposit
 
 Expected: FAIL on missing integration.
 
-- [ ] **Step 4: Implement one-transaction combined analysis**
+- [x] **Step 4: Implement one-transaction combined analysis**
 
 `DecisionRepository.analyze_medical_event()` must lock the event at repeatable-read, evaluate legacy and knowledge streams independently, persist one run plus both child streams in one transaction, and set:
 
@@ -638,7 +643,7 @@ analysis_completeness = knowledge_result.completeness
 
 `get_decision_result()` must load both succeeded and partial runs and reconstruct the exact captured snapshot without consulting current rules for historical output.
 
-- [ ] **Step 5: Run focused regression and commit**
+- [x] **Step 5: Run focused regression and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_repository.py apps/api/tests/test_private_knowledge_decision_integration.py apps/api/tests/test_decision_repository.py apps/api/tests/test_decision_integration.py apps/api/tests/test_benefit_integration.py -q
@@ -770,6 +775,7 @@ git commit -m "feat(decisions): add structured recommendations"
 
 ```python
 RECOMMENDER_SCHEMA_NAME = "event_clause_recommendations_v1"
+
 
 def recommend_clauses(
     *,

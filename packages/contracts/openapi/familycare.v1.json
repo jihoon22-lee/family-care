@@ -5166,7 +5166,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"
@@ -5180,7 +5187,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Question Code",
             "type": "string"
@@ -6832,7 +6846,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"
@@ -6896,7 +6917,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"

@@ -11,12 +11,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import UUID
 
 from familycare_api.clauses.rules import CoverageRuleVersion
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
+
+if TYPE_CHECKING:
+    from familycare_api.decisions.knowledge_domain import KnowledgeDecisionResult
 
 TriState = Literal["MATCH", "NO_MATCH", "UNKNOWN"]
 FactConfirmation = Literal["user", "ai_structured", "unconfirmed", "conflicting"]
@@ -307,6 +310,35 @@ class DecisionRun:
 
 
 @dataclass(frozen=True)
+class KnowledgeCatalogCoverage:
+    """Counts from the member-scoped private catalog captured for one run."""
+
+    contract_count: int = 0
+    benefit_coverage_count: int = 0
+    published_coverage_count: int = 0
+    blocked_coverage_count: int = 0
+    not_applicable_coverage_count: int = 0
+
+    def __post_init__(self) -> None:
+        values = (
+            self.contract_count,
+            self.benefit_coverage_count,
+            self.published_coverage_count,
+            self.blocked_coverage_count,
+            self.not_applicable_coverage_count,
+        )
+        if any(isinstance(value, bool) or value < 0 for value in values):
+            raise ValueError("catalog coverage counts cannot be negative")
+        if (
+            self.published_coverage_count
+            + self.blocked_coverage_count
+            + self.not_applicable_coverage_count
+            > self.benefit_coverage_count
+        ):
+            raise ValueError("catalog disposition counts exceed benefit coverage count")
+
+
+@dataclass(frozen=True)
 class DecisionRunResult:
     run_id: UUID
     medical_event_id: UUID
@@ -317,6 +349,25 @@ class DecisionRunResult:
     candidates: tuple[ClaimCandidate, ...]
     evaluations: tuple[RuleEvaluation, ...]
     stale: bool
+    status: Literal["succeeded", "partial", "failed"] = "succeeded"
+    knowledge_result: KnowledgeDecisionResult | None = None
+    analysis_completeness: Literal["COMPLETE", "PARTIAL", "UNAVAILABLE"] = "UNAVAILABLE"
+    source_failure_codes: tuple[str, ...] = ()
+    catalog_coverage: KnowledgeCatalogCoverage = field(default_factory=KnowledgeCatalogCoverage)
+    knowledge_import_run_id: UUID | None = None
+    knowledge_rule_import_run_id: UUID | None = None
+    knowledge_status_projection_digest: str | None = None
+    event_fact_schema_version: str = "medical-event-facts.v2"
+
+    def __post_init__(self) -> None:
+        if self.status not in {"succeeded", "partial", "failed"}:
+            raise ValueError("unsupported decision run status")
+        if self.analysis_completeness not in {"COMPLETE", "PARTIAL", "UNAVAILABLE"}:
+            raise ValueError("unsupported analysis completeness")
+        if not self.event_fact_schema_version:
+            raise ValueError("event fact schema version is required")
+        if self.knowledge_rule_import_run_id is not None and self.knowledge_import_run_id is None:
+            raise ValueError("knowledge rule run requires knowledge run")
 
 
 class ClaimHistoryReader(Protocol):
@@ -375,6 +426,7 @@ __all__ = [
     "FactContext",
     "FactValue",
     "MedicalEvent",
+    "KnowledgeCatalogCoverage",
     "OperatorOutcome",
     "PolicySnapshot",
     "PolicySnapshotReader",
