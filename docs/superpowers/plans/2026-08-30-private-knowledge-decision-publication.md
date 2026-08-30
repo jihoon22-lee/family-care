@@ -198,6 +198,8 @@ git commit -m "feat(private-knowledge): add rule publication schema"
 
 ### Task 3: Add private decision-result persistence
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/migrations/versions/0021_private_knowledge_decisions.py`
 - Create: `apps/api/tests/test_private_knowledge_decision_migration.py`
@@ -207,7 +209,7 @@ git commit -m "feat(private-knowledge): add rule publication schema"
 - Consumes: `decision_runs` and all tables from Task 2.
 - Produces: knowledge snapshot identity on decision runs and additive evaluation, candidate, and calculation records.
 
-- [ ] **Step 1: Write RED tests for the exact result schema**
+- [x] **Step 1: Write RED tests for the exact result schema**
 
 Require `decision_runs` columns:
 
@@ -235,7 +237,7 @@ Require new tables:
 
 Evaluation rows reference one decision run, one publication, one knowledge coverage, and store tri-state, required flag, reason, fact path arrays, citation snapshot, and evaluator version. Candidate rows reference one contract and coverage and store benefit type, counts, questions, hold reasons, and safe label snapshots. Calculation amounts use `Numeric(20,4)` and never binary float.
 
-- [ ] **Step 2: Run RED tests**
+- [x] **Step 2: Run RED tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_migration.py -q
@@ -243,7 +245,7 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_migrati
 
 Expected: FAIL because revision `0021_private_knowledge_decisions` is missing.
 
-- [ ] **Step 3: Implement migration and run integration constraints**
+- [x] **Step 3: Implement migration and run integration constraints**
 
 Add `partial` to the decision-run status check while retaining `running`, `succeeded`, and `failed`. Require:
 
@@ -256,7 +258,7 @@ benefit_type IN ('FIXED', 'INDEMNITY', 'UNKNOWN')
 
 The integration test must prove same-household/same-run references, one candidate per run/coverage, one calculation per candidate, ordered unique steps, nonnegative amounts, rate bounds, and rollback-safe downgrade/upgrade.
 
-- [ ] **Step 4: Run focused migration verification and commit**
+- [x] **Step 4: Run focused migration verification and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_decision_migration.py apps/api/tests/test_private_knowledge_decision_migration_integration.py -q
