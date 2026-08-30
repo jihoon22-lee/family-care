@@ -6,9 +6,11 @@ import json
 import stat
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
+from familycare_api.private_knowledge import reconciliation as reconciliation_module
 from familycare_api.private_knowledge.package import load_private_knowledge_package
 from familycare_api.private_knowledge.reconciliation import (
     BaselineCounts,
@@ -126,6 +128,12 @@ def test_first_import_report_is_count_only_and_keeps_authorities_independent(
         "applicable": 1,
         "not_applicable": 0,
         "unknown": 0,
+    }
+    assert report.mapping_source_decisions.model_dump() == {
+        "match": 1,
+        "no_match": 0,
+        "unknown": 0,
+        "not_applicable": 0,
     }
     assert report.operational_reconciliation.policy_label_review_candidates == 1
     assert report.operational_reconciliation.coverage_label_review_candidates == 1
@@ -268,6 +276,48 @@ def test_benefit_type_counts_join_mappings_by_coverage_id_not_file_order(
     }
 
 
+def test_mapping_source_decision_and_applicability_axes_remain_independent(
+    tmp_path: Path,
+) -> None:
+    package = _package(tmp_path)
+    unknown_coverage = replace(
+        package.coverages[0],
+        value=package.coverages[0].value.model_copy(update={"benefit_type": "unknown"}),
+    )
+    unknown_mapping = replace(
+        package.mappings[0],
+        value=package.mappings[0].value.model_copy(
+            update={
+                "component_class": "UNKNOWN",
+                "mapping_decision": "NO_MATCH",
+            }
+        ),
+    )
+
+    report = build_dry_run_report(
+        replace(package, coverages=(unknown_coverage,), mappings=(unknown_mapping,)),
+        _baseline(),
+    )
+
+    assert report.mapping_source_decisions.model_dump() == {
+        "match": 0,
+        "no_match": 1,
+        "unknown": 0,
+        "not_applicable": 0,
+    }
+    assert report.mapping_applicability.model_dump() == {
+        "applicable": 0,
+        "not_applicable": 0,
+        "unknown": 1,
+    }
+    assert report.benefit_types.model_dump() == {
+        "fixed": 0,
+        "indemnity": 0,
+        "unknown": 1,
+        "not_applicable": 0,
+    }
+
+
 def test_report_digest_changes_with_baseline_and_detects_tampering(tmp_path: Path) -> None:
     package = _package(tmp_path)
     first = build_dry_run_report(package, _baseline(baseline_digest="1" * 64))
@@ -280,14 +330,14 @@ def test_report_digest_changes_with_baseline_and_detects_tampering(tmp_path: Pat
     report_path = report_root / "dry-run.json"
     write_dry_run_report(first, report_path, repository_root=tmp_path / "repository")
     assert stat.S_IMODE(report_path.stat().st_mode) == 0o600
-    assert load_dry_run_report(report_path) == first
+    assert load_dry_run_report(report_path, repository_root=tmp_path / "repository") == first
 
     payload = json.loads(report_path.read_text(encoding="utf-8"))
     payload["apply_block_count"] = 1
     report_path.write_text(json.dumps(payload), encoding="utf-8")
     report_path.chmod(0o600)
     with pytest.raises(PrivateKnowledgeReconciliationError) as tampered:
-        load_dry_run_report(report_path)
+        load_dry_run_report(report_path, repository_root=tmp_path / "repository")
     assert tampered.value.code is ReconciliationErrorCode.REPORT_DIGEST_MISMATCH
 
 
@@ -324,3 +374,75 @@ def test_report_path_must_be_absolute_external_private_storage(tmp_path: Path) -
             repository_root=repository,
         )
     assert mode.value.code is ReconciliationErrorCode.REPORT_PARENT_MODE_INVALID
+
+
+def test_report_load_rechecks_external_private_descriptor_boundary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(tmp_path)
+    report = build_dry_run_report(package, _baseline())
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    repository.chmod(0o700)
+    report_root = tmp_path / "reports"
+    report_root.mkdir(mode=0o700)
+    report_path = report_root / "dry-run.json"
+    write_dry_run_report(report, report_path, repository_root=repository)
+
+    with pytest.raises(PrivateKnowledgeReconciliationError) as inside:
+        load_dry_run_report(report_path, repository_root=tmp_path)
+    assert inside.value.code is ReconciliationErrorCode.REPORT_PATH_INVALID
+
+    real_fstat = reconciliation_module.os.fstat
+
+    def changed_file_fstat(fd: int):
+        observed = real_fstat(fd)
+        if not stat.S_ISREG(observed.st_mode):
+            return observed
+        return SimpleNamespace(
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino + 1,
+            st_mode=observed.st_mode,
+            st_size=observed.st_size,
+            st_mtime_ns=observed.st_mtime_ns,
+        )
+
+    monkeypatch.setattr(reconciliation_module.os, "fstat", changed_file_fstat)
+    with pytest.raises(PrivateKnowledgeReconciliationError) as replaced:
+        load_dry_run_report(report_path, repository_root=repository)
+    assert replaced.value.code is ReconciliationErrorCode.REPORT_INVALID
+
+
+def test_report_write_rechecks_private_parent_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = _package(tmp_path)
+    report = build_dry_run_report(package, _baseline())
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    report_root = tmp_path / "reports"
+    report_root.mkdir(mode=0o700)
+    real_fstat = reconciliation_module.os.fstat
+
+    def changed_directory_fstat(fd: int):
+        observed = real_fstat(fd)
+        if not stat.S_ISDIR(observed.st_mode):
+            return observed
+        return SimpleNamespace(
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino + 1,
+            st_mode=observed.st_mode,
+            st_ctime_ns=observed.st_ctime_ns,
+            st_mtime_ns=observed.st_mtime_ns,
+        )
+
+    monkeypatch.setattr(reconciliation_module.os, "fstat", changed_directory_fstat)
+    with pytest.raises(PrivateKnowledgeReconciliationError) as replaced:
+        write_dry_run_report(
+            report,
+            report_root / "dry-run.json",
+            repository_root=repository,
+        )
+    assert replaced.value.code is ReconciliationErrorCode.REPORT_PATH_INVALID

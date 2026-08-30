@@ -34,7 +34,7 @@ def test_valid_package_is_lossless_deterministic_and_reference_closed(tmp_path: 
     package = _load(root, tmp_path / "repository")
 
     assert package.schema_version == "private-analysis-package.sol-v2"
-    assert package.manifest.review_authority == "synthetic-direct-local-review"
+    assert package.manifest.review_authority == ("gpt-5.6-sol_direct_local_review_no_model_api")
     assert len(package.contracts) == 1
     assert len(package.coverages) == 1
     assert len(package.pairings) == 1
@@ -258,8 +258,28 @@ def test_assignment_alias_can_exist_without_a_structured_section(tmp_path: Path)
     root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
     mutate_jsonl(
         root,
+        "contracts.jsonl",
+        lambda row: row["terms_pairing"]["selected_terms_aliases"].append(
+            "synthetic-unstructured-terms"
+        ),
+        refresh=False,
+    )
+    mutate_jsonl(
+        root,
         "policy-terms-pairings.jsonl",
         lambda row: row["selected_terms_aliases"].append("synthetic-unstructured-terms"),
+        refresh=False,
+    )
+    mutate_jsonl(
+        root,
+        "coverage-components.jsonl",
+        lambda row: row["terms_mapping"]["pairing_aliases"].append("synthetic-unstructured-terms"),
+        refresh=False,
+    )
+    mutate_jsonl(
+        root,
+        "coverage-terms-mappings.jsonl",
+        lambda row: row["pairing_aliases"].append("synthetic-unstructured-terms"),
     )
 
     package = _load(root, tmp_path / "repository")
@@ -350,3 +370,207 @@ def test_post_open_file_identity_change_is_rejected(
         _load(root, tmp_path / "repository")
     assert changed_error.value.code is PackageErrorCode.FILE_CHANGED
     assert changed_error.value.file_role == "contracts.jsonl"
+
+
+def test_opened_root_descriptor_must_match_the_preflight_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    real_fstat = package_module.os.fstat
+
+    def changed_root_fstat(fd: int):
+        observed = real_fstat(fd)
+        if not package_module.stat.S_ISDIR(observed.st_mode):
+            return observed
+        return SimpleNamespace(
+            st_dev=observed.st_dev,
+            st_ino=observed.st_ino + 1,
+            st_mode=observed.st_mode,
+            st_ctime_ns=observed.st_ctime_ns,
+            st_mtime_ns=observed.st_mtime_ns,
+        )
+
+    monkeypatch.setattr(package_module.os, "fstat", changed_root_fstat)
+
+    with pytest.raises(PrivateKnowledgePackageError) as changed_error:
+        _load(root, tmp_path / "repository")
+
+    assert changed_error.value.code is PackageErrorCode.ROOT_NOT_DIRECTORY
+
+
+@pytest.mark.parametrize(
+    ("target", "mutation", "expected_role"),
+    [
+        (
+            "contracts.jsonl",
+            lambda row: row["terms_pairing"].__setitem__("review_decision", "UNKNOWN"),
+            "contracts.jsonl",
+        ),
+        (
+            "coverage-components.jsonl",
+            lambda row: row["terms_mapping"].__setitem__("mapping_decision", "UNKNOWN"),
+            "coverage-components.jsonl",
+        ),
+        (
+            "coverage-components.jsonl",
+            lambda row: row.__setitem__(
+                "current_coverage_applicability_decision",
+                "MATCH",
+            ),
+            "coverage-components.jsonl",
+        ),
+        (
+            "coverage-terms-mappings.jsonl",
+            lambda row: row.__setitem__(
+                "pairing_document_identity_decision",
+                "UNKNOWN",
+            ),
+            "coverage-components.jsonl",
+        ),
+        (
+            "terms-semantic-review.jsonl",
+            lambda row: row["coverage_references"][0].__setitem__(
+                "enrollment_decision",
+                "UNKNOWN",
+            ),
+            "terms-semantic-review.jsonl",
+        ),
+    ],
+)
+def test_duplicated_cross_file_authority_axes_must_agree(
+    tmp_path: Path,
+    target: str,
+    mutation,
+    expected_role: str,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    mutate_jsonl(root, target, mutation)
+
+    with pytest.raises(PrivateKnowledgePackageError) as mismatch:
+        _load(root, tmp_path / "repository")
+
+    assert mismatch.value.code is PackageErrorCode.SOURCE_LINEAGE_MISMATCH
+    assert mismatch.value.file_role == expected_role
+
+
+def test_inherited_coverage_references_must_exist_in_the_same_contract(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    missing = "synthetic-missing-coverage"
+    mutate_jsonl(
+        root,
+        "coverage-components.jsonl",
+        lambda row: (
+            row["certificate_review"].__setitem__(
+                "evidence_inherited_from_rider_id",
+                missing,
+            ),
+            row["terms_mapping"].__setitem__("mapping_inherited_from_rider_id", missing),
+        ),
+        refresh=False,
+    )
+    mutate_jsonl(
+        root,
+        "coverage-terms-mappings.jsonl",
+        lambda row: row.__setitem__("mapping_inherited_from_rider_id", missing),
+    )
+
+    with pytest.raises(PrivateKnowledgePackageError) as missing_parent:
+        _load(root, tmp_path / "repository")
+
+    assert missing_parent.value.code is PackageErrorCode.BROKEN_REFERENCE
+
+
+def test_unknown_mapping_selected_section_is_still_reference_closed(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+
+    def unknown_missing_section(row):
+        row.update(
+            {
+                "mapping_decision": "UNKNOWN",
+                "selected_terms_alias": "synthetic-missing-terms",
+                "selected_section_id": "synthetic-missing-section",
+                "physical_page": 2,
+                "clause_count": 1,
+            }
+        )
+
+    mutate_jsonl(
+        root,
+        "coverage-components.jsonl",
+        lambda row: unknown_missing_section(row["terms_mapping"]),
+        refresh=False,
+    )
+    mutate_jsonl(root, "coverage-terms-mappings.jsonl", unknown_missing_section)
+
+    with pytest.raises(PrivateKnowledgePackageError) as missing_section:
+        _load(root, tmp_path / "repository")
+
+    assert missing_section.value.code is PackageErrorCode.BROKEN_REFERENCE
+    assert missing_section.value.file_role == "coverage-terms-mappings.jsonl"
+
+
+def test_duplicate_assignment_alias_is_rejected_before_database_access(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    duplicate_alias = "synthetic-terms-source"
+    mutate_jsonl(
+        root,
+        "contracts.jsonl",
+        lambda row: row["terms_pairing"]["selected_terms_aliases"].append(duplicate_alias),
+        refresh=False,
+    )
+    mutate_jsonl(
+        root,
+        "policy-terms-pairings.jsonl",
+        lambda row: row["selected_terms_aliases"].append(duplicate_alias),
+    )
+
+    with pytest.raises(PrivateKnowledgePackageError) as duplicate:
+        _load(root, tmp_path / "repository")
+
+    assert duplicate.value.code is PackageErrorCode.DUPLICATE_CANONICAL_KEY
+    assert duplicate.value.file_role == "policy-terms-pairings.jsonl"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        lambda row: row.__setitem__("product_name", "   "),
+        lambda row: row.__setitem__("product_name", "Sample\x00Policy"),
+        lambda row: row.__setitem__("monthly_premium_krw", 10**20),
+        lambda row: row["group_review"].__setitem__("password", "synthetic-secret"),
+        lambda row: row["field_conflicts"].append({"source_path": "/synthetic/private/source.pdf"}),
+    ],
+)
+def test_database_incompatible_and_forbidden_nested_values_fail_validation(
+    tmp_path: Path,
+    mutation,
+) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    mutate_jsonl(root, "contracts.jsonl", mutation)
+
+    with pytest.raises(PrivateKnowledgePackageError) as invalid:
+        _load(root, tmp_path / "repository")
+
+    assert invalid.value.code is PackageErrorCode.INVALID_RECORD
+    assert invalid.value.file_role == "contracts.jsonl"
+
+
+def test_manifest_review_authority_is_not_caller_defined(tmp_path: Path) -> None:
+    root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["review_authority"] = "synthetic-untrusted-authority"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    manifest_path.chmod(0o600)
+
+    with pytest.raises(PrivateKnowledgePackageError) as invalid:
+        _load(root, tmp_path / "repository")
+
+    assert invalid.value.code is PackageErrorCode.MANIFEST_INVALID

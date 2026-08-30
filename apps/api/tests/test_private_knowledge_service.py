@@ -108,7 +108,7 @@ def test_prepare_dry_run_validates_reads_reconciles_and_persists(tmp_path: Path)
     assert reader.requested == [HOUSEHOLD_ID]
     assert report.operation == "CREATE"
     assert report.apply_block_count == 0
-    assert load_dry_run_report(report_path) == report
+    assert load_dry_run_report(report_path, repository_root=repository_root) == report
 
 
 def test_apply_service_reloads_and_authenticates_package_and_report(tmp_path: Path) -> None:

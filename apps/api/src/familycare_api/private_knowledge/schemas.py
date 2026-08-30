@@ -74,6 +74,7 @@ class KnowledgeCoverageResponse(BaseModel):
     component_classification: Literal[
         "BENEFIT_COVERAGE",
         "NON_BENEFIT_CONTRACT_COMPONENT",
+        "UNKNOWN",
     ]
     enrollment_decision: TriState
     benefit_type: Literal["FIXED", "INDEMNITY", "UNKNOWN", "NOT_APPLICABLE"]
@@ -114,6 +115,7 @@ class KnowledgeCoverageMappingResponse(BaseModel):
 class KnowledgeFactCitationResponse(BaseModel):
     model_config = _STRICT
 
+    source_document_ref: UUID
     page_start: int = Field(ge=1)
     page_end: int = Field(ge=1)
     clause_label: str | None = Field(default=None, max_length=800)
@@ -178,7 +180,7 @@ class KnowledgeTermsSectionResponse(BaseModel):
     found_categories: tuple[ShortText, ...] = Field(max_length=32)
     missing_categories: tuple[ShortText, ...] = Field(max_length=32)
     warnings: tuple[ShortText, ...] = Field(max_length=128)
-    facts: tuple[KnowledgeFactResponse, ...] = Field(max_length=5_000)
+    facts: tuple[KnowledgeFactResponse, ...] = Field(max_length=1_000)
 
 
 class KnowledgeContractDetailResponse(BaseModel):
@@ -186,7 +188,8 @@ class KnowledgeContractDetailResponse(BaseModel):
 
     schema_version: Literal["1"]
     contract: KnowledgeContractListItemResponse
-    coverages: tuple[KnowledgeCoverageResponse, ...] = Field(max_length=2_000)
+    coverages: tuple[KnowledgeCoverageResponse, ...] = Field(max_length=256)
     terms_assignments: tuple[KnowledgeTermsAssignmentResponse, ...] = Field(max_length=8)
-    coverage_mappings: tuple[KnowledgeCoverageMappingResponse, ...] = Field(max_length=2_000)
-    terms_sections: tuple[KnowledgeTermsSectionResponse, ...] = Field(max_length=2_000)
+    coverage_mappings: tuple[KnowledgeCoverageMappingResponse, ...] = Field(max_length=256)
+    terms_sections: tuple[KnowledgeTermsSectionResponse, ...] = Field(max_length=50)
+    next_section_cursor: UUID | None

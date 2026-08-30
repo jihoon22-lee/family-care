@@ -1407,6 +1407,7 @@ export interface KnowledgeContractDetailResponse {
   contract: KnowledgeContractListItemResponse;
   coverage_mappings: Array<KnowledgeCoverageMappingResponse>;
   coverages: Array<KnowledgeCoverageResponse>;
+  next_section_cursor: string | null;
   schema_version: "1";
   terms_assignments: Array<KnowledgeTermsAssignmentResponse>;
   terms_sections: Array<KnowledgeTermsSectionResponse>;
@@ -1453,7 +1454,7 @@ export interface KnowledgeCoverageMappingResponse {
 export interface KnowledgeCoverageResponse {
   benefit_type: "FIXED" | "INDEMNITY" | "UNKNOWN" | "NOT_APPLICABLE";
   component_classification:
-    "BENEFIT_COVERAGE" | "NON_BENEFIT_CONTRACT_COMPONENT";
+    "BENEFIT_COVERAGE" | "NON_BENEFIT_CONTRACT_COMPONENT" | "UNKNOWN";
   component_role: "MAIN_CONTRACT" | "RIDER";
   coverage_end: string | null;
   coverage_start: string | null;
@@ -1486,6 +1487,7 @@ export interface KnowledgeFactCitationResponse {
   clause_title?: string | null;
   page_end: number;
   page_start: number;
+  source_document_ref: string;
 }
 
 export interface KnowledgeFactConditionsResponse {

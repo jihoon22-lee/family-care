@@ -31,6 +31,7 @@ def synthetic_reconciliation() -> dict[str, int]:
         "policy_terms_identity_match_count": 1,
         "policy_terms_edition_match_count": 1,
         "coverage_section_match_count": 1,
+        "coverage_section_no_match_count": 0,
         "coverage_section_unknown_count": 0,
         "coverage_section_not_applicable_count": 0,
         "terms_section_review_count": 1,
@@ -65,7 +66,7 @@ def synthetic_records() -> dict[str, list[dict[str, Any]]]:
         "clause_pages": [2],
         "direct_body_name_hit": True,
         "physical_page": 2,
-        "physical_page_lineage": "synthetic-physical-page",
+        "physical_page_lineage": True,
         "section_id": "synthetic-section-001",
         "terms_alias": "synthetic-terms-source",
         "title_similarity": 1.0,
@@ -116,7 +117,7 @@ def synthetic_records() -> dict[str, list[dict[str, Any]]]:
                 "monthly_premium_krw": 1000,
                 "source_members": [
                     {
-                        "decision": "MATCH",
+                        "decision": "approved",
                         "document_alias": "synthetic-certificate-source",
                         "evidence_pages": [1],
                         "local_policy_id": "synthetic-local-policy-001",
@@ -198,7 +199,7 @@ def synthetic_records() -> dict[str, list[dict[str, Any]]]:
                     "name_support": "synthetic-supported",
                     "object_identity_review_state": "UNKNOWN",
                     "reviewed_benefit_type": "fixed",
-                    "reviewed_current_status": "UNKNOWN",
+                    "reviewed_current_status": "unknown",
                 },
                 "review_state": "NEEDS_REVIEW",
                 "direct_review_state": "SOL_DIRECT_GROUNDED",
@@ -222,11 +223,11 @@ def synthetic_records() -> dict[str, list[dict[str, Any]]]:
                     {
                         "candidate_score": 1.0,
                         "clause_count": 1,
-                        "direct_insurer_identity": True,
-                        "direct_product_identity": True,
+                        "direct_insurer_identity": 1.0,
+                        "direct_product_identity": 1.0,
                         "edition_decision": "MATCH",
                         "edition_reason_code": "SYNTHETIC_DATE_MATCH",
-                        "physical_page_lineage": "synthetic-physical-page",
+                        "physical_page_lineage": True,
                         "profile_insurer_grounded": True,
                         "profile_product_grounded": True,
                         "rider_count": 1,
@@ -348,7 +349,7 @@ def refresh_manifest(root: Path) -> None:
         )
     manifest = {
         "schema_version": "private-analysis-package.sol-v2",
-        "review_authority": "synthetic-direct-local-review",
+        "review_authority": "gpt-5.6-sol_direct_local_review_no_model_api",
         "authority_boundaries": {
             "enrollment": "certificate_only",
             "terms_presence_never_establishes_enrollment": True,

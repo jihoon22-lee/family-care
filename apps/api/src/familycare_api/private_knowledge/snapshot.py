@@ -7,13 +7,16 @@ import json
 from collections.abc import Callable, Sequence
 from datetime import date
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.types.json import Jsonb
 
-from familycare_api.private_knowledge.package import PrivateKnowledgePackage
+from familycare_api.private_knowledge.package import (
+    PrivateKnowledgePackage,
+    contract_certificate_decision,
+)
 from familycare_api.private_knowledge.reconciliation import (
     KnowledgeEntityCounts,
     package_source_aliases,
@@ -181,6 +184,7 @@ def insert_private_knowledge_snapshot(
                 "product": contract.product_name,
                 "start": _date(contract.contract_start),
                 "end": _date(contract.contract_end),
+                "certificate_decision": contract_certificate_decision(contract),
                 "status_candidates": Jsonb(
                     [
                         {
@@ -189,7 +193,9 @@ def insert_private_knowledge_snapshot(
                         }
                     ]
                 ),
-                "evidence": Jsonb(contract.source_members),
+                "evidence": Jsonb(
+                    [member.model_dump(mode="json") for member in contract.source_members]
+                ),
                 "issues": Jsonb(contract.field_conflicts),
                 "source": Jsonb(contract_record.source_record),
                 "source_digest": contract_record.source_record_digest_sha256,
@@ -207,7 +213,7 @@ def insert_private_knowledge_snapshot(
           source_record_json, source_record_digest_sha256
         ) VALUES (
           %(id)s, %(run)s, %(household)s, %(subject)s, %(key)s, %(insurer)s, %(product)s,
-          %(start)s, %(end)s, 'MATCH', 'unknown', %(status_candidates)s,
+          %(start)s, %(end)s, %(certificate_decision)s, 'unknown', %(status_candidates)s,
           %(evidence)s, %(issues)s, 'UNKNOWN', 'NO_EXACT_BINDING',
           %(source)s, %(source_digest)s
         )
@@ -251,7 +257,9 @@ def insert_private_knowledge_snapshot(
                 "start": _date(coverage.coverage_start),
                 "end": _date(coverage.coverage_end),
                 "renewal": renewal,
-                "evidence": Jsonb(coverage.source_refs),
+                "evidence": Jsonb(
+                    [reference.model_dump(mode="json") for reference in coverage.source_refs]
+                ),
                 "issues": Jsonb(coverage.warnings),
                 "source": Jsonb(coverage_record.source_record),
                 "source_digest": coverage_record.source_record_digest_sha256,
@@ -302,9 +310,7 @@ def insert_private_knowledge_snapshot(
             }
         )
         evidence_by_alias = {
-            cast(str, item["terms_alias"]): item
-            for item in pairing.selected_evidence
-            if isinstance(item, dict) and isinstance(item.get("terms_alias"), str)
+            item.terms_alias: item.model_dump(mode="json") for item in pairing.selected_evidence
         }
         for ordinal, alias in enumerate(pairing.selected_terms_aliases, start=1):
             selected_evidence = evidence_by_alias.get(alias, {})
@@ -580,10 +586,12 @@ def insert_private_knowledge_snapshot(
             "APPLICABLE"
             if mapping_value.component_class == "BENEFIT_COVERAGE"
             else "NOT_APPLICABLE"
+            if mapping_value.component_class == "NON_BENEFIT_CONTRACT_COMPONENT"
+            else "UNKNOWN"
         )
         section_decision = (
             mapping_value.mapping_decision
-            if mapping_value.mapping_decision in {"MATCH", "UNKNOWN"}
+            if mapping_value.mapping_decision != "NOT_APPLICABLE"
             else "UNKNOWN"
         )
         selected_section_uuid: UUID | None = None

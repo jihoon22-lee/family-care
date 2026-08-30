@@ -143,6 +143,7 @@ def test_import_run_is_household_scoped_idempotent_and_count_only() -> None:
         "reconciliation_counts_json",
         "entity_counts_json",
         "decision_counts_json",
+        "projection_digest_sha256",
         "baseline_digest_sha256",
         "report_digest_sha256",
         "validated_at",
@@ -166,6 +167,9 @@ def test_import_run_is_household_scoped_idempotent_and_count_only() -> None:
     assert "jsonb_typeof(reconciliation_counts_json) = 'object'" in run_checks
     assert "jsonb_typeof(entity_counts_json) = 'object'" in run_checks
     assert "jsonb_typeof(decision_counts_json) = 'object'" in run_checks
+    assert (
+        "projection_digest_sha256 IS NULL OR projection_digest_sha256 ~ '^[0-9a-f]{64}$'"
+    ) in run_checks
     assert any("is_current" in value and "APPLIED" in value for value in run_checks)
 
 
@@ -242,12 +246,17 @@ def test_subject_contract_and_coverage_keep_authorities_separate() -> None:
     assert "enrollment_decision IN ('MATCH', 'NO_MATCH', 'UNKNOWN')" in checks(coverages)
     assert "component_role IN ('MAIN_CONTRACT', 'RIDER')" in checks(coverages)
     assert (
-        "component_classification IN ('BENEFIT_COVERAGE', 'NON_BENEFIT_CONTRACT_COMPONENT')"
+        "component_classification IN ('BENEFIT_COVERAGE', "
+        "'NON_BENEFIT_CONTRACT_COMPONENT', 'UNKNOWN')"
     ) in checks(coverages)
     assert "benefit_type IN ('FIXED', 'INDEMNITY', 'UNKNOWN', 'NOT_APPLICABLE')" in checks(
         coverages
     )
     assert any("NON_BENEFIT_CONTRACT_COMPONENT" in value for value in checks(coverages))
+    assert any(
+        "component_classification = 'UNKNOWN'" in value and "benefit_type = 'UNKNOWN'" in value
+        for value in checks(coverages)
+    )
     assert any(
         "operational_binding_decision" in value and "rider_id" in value
         for value in checks(coverages)

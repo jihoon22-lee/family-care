@@ -1,6 +1,6 @@
 # Private insurance knowledge catalog design
 
-- 상태: 구현 완료, 전체 저장소·실제 런타임 검증 진행 중
+- 상태: 최종 보안 검토 보강 완료, 전체 저장소·실제 런타임 검증 진행 중
 - 적용 단계: private policy structuring과 document inventory 이후
 - 권위 경계: 증권 가입 사실, 약관 적용성, 의미 사실, 실행 규칙을 서로 다른 상태로 보존
 
@@ -40,6 +40,7 @@ knowledge snapshot으로 저장하고, 현재 snapshot만 조회 projection에 �
 - `VALIDATED`, `APPLIED`, `SUPERSEDED`, `REJECTED` 상태
 - 검증한 전체 manifest, manifest와 reconciliation의 bounded count projection
 - 적용 당시 entity count와 독립 판정 행렬의 검증 projection
+- 모든 정규화 열과 snapshot 내부 관계를 묶은 projection SHA-256
 - 적용 actor와 시각
 - 현재 snapshot 여부
 
@@ -84,7 +85,7 @@ Evidence lineage가 정확히 일치할 때만 `MATCH`이며, 문자열 유사�
 - KnowledgeContract
 - package 내부 canonical key
 - `MAIN_CONTRACT` 또는 `RIDER` 역할
-- `BENEFIT_COVERAGE` 또는 `NON_BENEFIT_CONTRACT_COMPONENT` 분류
+- `BENEFIT_COVERAGE`, `NON_BENEFIT_CONTRACT_COMPONENT`, `UNKNOWN` 분류
 - 가입 판정 `MATCH`, `NO_MATCH`, `UNKNOWN`
 - 보장 유형 `FIXED`, `INDEMNITY`, `UNKNOWN`, `NOT_APPLICABLE`
 - 가입금액·통화·기간·갱신 여부
@@ -94,7 +95,8 @@ Evidence lineage가 정확히 일치할 때만 `MATCH`이며, 문자열 유사�
 
 가입 `UNKNOWN`은 오류가 아니며 current Rider projection을 만들지 않는다. 행정성 구성요소를
 가짜 보장이나 fixed benefit으로 변환하지 않는다. 가입 `NO_MATCH`는 결정적 불일치 근거가
-있는 패키지만 허용한다.
+있는 패키지만 허용한다. 구성요소 성격 자체가 미확인인 `UNKNOWN`도 급부로 추정하지 않고
+보장 유형을 `UNKNOWN`으로 보존한다.
 
 ### Terms assignment
 
@@ -215,8 +217,8 @@ external package
   -> reconcile current snapshot and optional operational bindings
   -> write count-only dry-run report outside repository
   -> operator approves exact report digest
-  -> open apply transaction
-  -> lock current import run
+  -> open repeatable-read apply transaction
+  -> lock operational baseline tables and household import scope
   -> insert immutable snapshot rows
   -> compare persisted counts and decision matrices with approved report
   -> atomically make snapshot current
@@ -232,8 +234,10 @@ baseline이 바뀌면 `STALE_DRY_RUN`으로 거부한다. 현재 snapshot과 같
 snapshot write는 한 transaction이다. 실패 시 새 snapshot 행은 전부 rollback되고 이전
 current snapshot은 유지된다. 적용 시 승인 보고서의 entity count와 가입·보장유형·약관 동일성·
 판본 적용성·mapping 적용성·현재 상태 행렬을 저장한다. `verify`는 현재 indexed column에서 이
-행렬을 다시 계산하고, 모든 source record digest와 같은 snapshot 내부 부모-자식 연결 폐쇄성,
-실행 가능 행 0건, 미확인 operational binding 0건을 함께 확인한다. commit 결과가 불명확하면
+행렬을 다시 계산하고, 모든 source record digest와 정규화 projection digest, fact-review 및
+fact-citation의 동일 section 폐쇄성, mapping과 선택 문서 alias 관계, 실행 가능 행 0건,
+미확인 operational binding 0건을 함께 확인한다. apply는 기준선에 포함되는 운영 테이블을
+`SHARE` 잠금으로 고정해 dry-run 재대사와 삽입 사이의 혼합 snapshot을 막는다. commit 결과가 불명확하면
 자동 재적용하지 않고 package digest로 DB를 조회해 결과를 판별한다.
 
 ## Compatibility and query boundary
@@ -244,6 +248,9 @@ current snapshot은 유지된다. 적용 시 승인 보고서의 entity count와
 구성요소·약관 assignment·semantic fact projection을 HouseholdScope로 조회한다. source path,
 document alias, statement 전체를 목록 응답에 무제한 노출하지 않는다. 상세 fact 응답은 인증된
 household 안에서 bounded citation과 함께 제공하며 `Cache-Control: no-store`를 사용한다.
+상세 조회는 section UUID cursor로 최대 50개 section만 반환하고, 계약당 coverage·mapping은
+각 256개, page당 fact 1,000개, citation 4,000개, 직렬화 응답 2 MiB로 제한한다. citation은
+운영 DocumentVersion ID가 아니라 해당 snapshot 안의 불투명한 `source_document_ref`를 제공한다.
 
 기존 policy/rider API는 즉시 바꾸지 않는다. 호환 projection은 다음 조건을 모두 만족하는
 항목만 기존 원장에 publish한다.
@@ -258,7 +265,8 @@ Knowledge snapshot 자체는 분석·대사·검토의 권위 기록이며 보�
 
 ## CLI boundary
 
-운영 CLI는 private path를 argv로 받지 않고 환경변수로만 읽는다. 명령은 다음 네 가지다.
+운영 CLI는 private path를 argv로 받지 않고 환경변수로만 읽는다. 저장소 보호 경계는 호출자가
+지정하지 못하며 설치된 Python runtime root에서 계산한다. 명령은 다음 네 가지다.
 
 - `validate`: package-only 검증과 digest
 - `dry-run`: read-only DB reconciliation report 생성

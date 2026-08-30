@@ -9,6 +9,7 @@ from uuid import UUID
 import pytest
 from familycare_api.common.scope import HouseholdScope, resolve_household_scope
 from familycare_api.errors import install_error_handlers
+from familycare_api.identity.context import get_session_service
 from familycare_api.private_knowledge.router import (
     get_private_knowledge_query_service,
     router,
@@ -29,6 +30,7 @@ COVERAGE_ID = UUID("00000000-0000-4000-8000-000000001965")
 ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000001966")
 SECTION_ID = UUID("00000000-0000-4000-8000-000000001967")
 FACT_ID = UUID("00000000-0000-4000-8000-000000001968")
+DOCUMENT_REF = UUID("00000000-0000-4000-8000-000000001969")
 
 
 def _counts() -> dict[str, int]:
@@ -96,8 +98,16 @@ class _QueryService:
             }
         )
 
-    def get_contract(self, contract_id: UUID) -> KnowledgeContractDetailResponse:
+    def get_contract(
+        self,
+        contract_id: UUID,
+        *,
+        section_limit: int,
+        section_after: UUID | None,
+    ) -> KnowledgeContractDetailResponse:
         assert contract_id == CONTRACT_ID
+        assert section_limit in {1, 20}
+        assert section_after in {None, SECTION_ID}
         return KnowledgeContractDetailResponse.model_validate(
             {
                 "schema_version": "1",
@@ -170,6 +180,7 @@ class _QueryService:
                                 "executable": False,
                                 "citations": [
                                     {
+                                        "source_document_ref": DOCUMENT_REF,
                                         "page_start": 2,
                                         "page_end": 2,
                                         "clause_label": "Synthetic clause 1",
@@ -180,6 +191,7 @@ class _QueryService:
                         ],
                     }
                 ],
+                "next_section_cursor": None,
             }
         )
 
@@ -223,6 +235,7 @@ def test_contract_detail_exposes_semantics_and_citations_without_source_material
     assert fact["executable"] is False
     assert fact["citations"] == [
         {
+            "source_document_ref": str(DOCUMENT_REF),
             "page_start": 2,
             "page_end": 2,
             "clause_label": "Synthetic clause 1",
@@ -243,3 +256,39 @@ def test_contract_detail_exposes_semantics_and_citations_without_source_material
         "/mnt/",
     ):
         assert forbidden not in serialized
+
+
+def test_contract_detail_accepts_bounded_section_cursor_and_documents_422(
+    client: TestClient,
+) -> None:
+    response = client.get(
+        f"/api/v1/private-knowledge/current/contracts/{CONTRACT_ID}",
+        params={"section_limit": 1, "section_after": str(SECTION_ID)},
+    )
+    invalid = client.get(
+        f"/api/v1/private-knowledge/current/contracts/{CONTRACT_ID}",
+        params={"section_limit": 0},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["next_section_cursor"] is None
+    assert invalid.status_code == 422
+
+
+def test_private_knowledge_uses_the_real_unauthenticated_dependency_chain() -> None:
+    class _MissingSessions:
+        @staticmethod
+        def resolve(raw_token: str, now: object) -> None:
+            del raw_token, now
+            return None
+
+    app = FastAPI()
+    install_error_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[get_session_service] = _MissingSessions
+
+    with TestClient(app) as unauthenticated:
+        response = unauthenticated.get("/api/v1/private-knowledge/current")
+
+    assert response.status_code == 401
+    assert response.json()["error_code"] == "AUTHENTICATION_REQUIRED"

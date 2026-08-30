@@ -120,6 +120,7 @@ def upgrade() -> None:
         _jsonb("reconciliation_counts_json", default="'{}'::jsonb"),
         _jsonb("entity_counts_json", default="'{}'::jsonb"),
         _jsonb("decision_counts_json", default="'{}'::jsonb"),
+        _sha256("projection_digest_sha256", nullable=True),
         _sha256("baseline_digest_sha256", nullable=True),
         _sha256("report_digest_sha256", nullable=True),
         _foreign_uuid("applied_by", "app_users.id", nullable=True),
@@ -149,6 +150,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "manifest_digest_sha256 ~ '^[0-9a-f]{64}$'",
             name="ck_private_knowledge_runs_manifest_digest",
+        ),
+        sa.CheckConstraint(
+            "projection_digest_sha256 IS NULL OR projection_digest_sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_private_knowledge_runs_projection_digest",
         ),
         sa.CheckConstraint(
             "baseline_digest_sha256 IS NULL OR baseline_digest_sha256 ~ '^[0-9a-f]{64}$'",
@@ -184,6 +189,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "((is_current = true AND state = 'APPLIED' AND applied_by IS NOT NULL "
+            "AND projection_digest_sha256 IS NOT NULL "
             "AND applied_at IS NOT NULL AND superseded_at IS NULL) OR is_current = false)",
             name="ck_private_knowledge_runs_current_state",
         ),
@@ -509,7 +515,8 @@ def upgrade() -> None:
             name="ck_private_knowledge_coverages_component_role",
         ),
         sa.CheckConstraint(
-            "component_classification IN ('BENEFIT_COVERAGE', 'NON_BENEFIT_CONTRACT_COMPONENT')",
+            "component_classification IN ('BENEFIT_COVERAGE', "
+            "'NON_BENEFIT_CONTRACT_COMPONENT', 'UNKNOWN')",
             name="ck_private_knowledge_coverages_classification",
         ),
         sa.CheckConstraint(
@@ -520,7 +527,8 @@ def upgrade() -> None:
             "((component_classification = 'NON_BENEFIT_CONTRACT_COMPONENT' "
             "AND benefit_type = 'NOT_APPLICABLE') OR "
             "(component_classification = 'BENEFIT_COVERAGE' "
-            "AND benefit_type <> 'NOT_APPLICABLE'))",
+            "AND benefit_type <> 'NOT_APPLICABLE') OR "
+            "(component_classification = 'UNKNOWN' AND benefit_type = 'UNKNOWN'))",
             name="ck_private_knowledge_coverages_classification_benefit",
         ),
         sa.CheckConstraint(

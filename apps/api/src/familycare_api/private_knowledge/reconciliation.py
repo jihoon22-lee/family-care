@@ -124,6 +124,7 @@ class MappingApplicabilityCounts(StrictReconciliationModel):
 
 class SourceMappingDecisionCounts(StrictReconciliationModel):
     match: NonNegativeInt
+    no_match: NonNegativeInt
     unknown: NonNegativeInt
     not_applicable: NonNegativeInt
 
@@ -383,7 +384,8 @@ def build_dry_run_report(
     benefit_types = BenefitTypeCounts(
         fixed=benefit_type_values.count("fixed"),
         indemnity=benefit_type_values.count("indemnity"),
-        unknown=benefit_type_values.count("unknown"),
+        unknown=benefit_type_values.count("unknown")
+        + sum(1 for mapping in mapping_values if mapping.component_class == "UNKNOWN"),
         not_applicable=sum(
             1
             for mapping in mapping_values
@@ -392,6 +394,7 @@ def build_dry_run_report(
     )
     mapping_source_decisions = SourceMappingDecisionCounts(
         match=sum(1 for value in mapping_values if value.mapping_decision == "MATCH"),
+        no_match=sum(1 for value in mapping_values if value.mapping_decision == "NO_MATCH"),
         unknown=sum(1 for value in mapping_values if value.mapping_decision == "UNKNOWN"),
         not_applicable=sum(
             1 for value in mapping_values if value.mapping_decision == "NOT_APPLICABLE"
@@ -406,7 +409,7 @@ def build_dry_run_report(
             for value in mapping_values
             if value.component_class == "NON_BENEFIT_CONTRACT_COMPONENT"
         ),
-        unknown=0,
+        unknown=sum(1 for value in mapping_values if value.component_class == "UNKNOWN"),
     )
     statuses = [record.value.current_status.casefold() for record in package.coverages]
     provisional = KnowledgeDryRunReport(
@@ -510,9 +513,34 @@ def write_dry_run_report(
 
     payload = _canonical_json(report.model_dump(mode="json")) + b"\n"
     temporary_name = f".familycare-dry-run-{uuid4().hex}.tmp"
-    parent_fd = os.open(resolved_parent, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    parent_flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        parent_flags |= os.O_DIRECTORY
+    if hasattr(os, "O_NOFOLLOW"):
+        parent_flags |= os.O_NOFOLLOW
+    try:
+        parent_fd = os.open(resolved_parent, parent_flags)
+    except OSError:
+        raise PrivateKnowledgeReconciliationError(
+            ReconciliationErrorCode.REPORT_PATH_INVALID
+        ) from None
     file_fd: int | None = None
     try:
+        opened_parent = os.fstat(parent_fd)
+        if (
+            parent_stat.st_dev,
+            parent_stat.st_ino,
+            parent_stat.st_mode,
+            parent_stat.st_ctime_ns,
+            parent_stat.st_mtime_ns,
+        ) != (
+            opened_parent.st_dev,
+            opened_parent.st_ino,
+            opened_parent.st_mode,
+            opened_parent.st_ctime_ns,
+            opened_parent.st_mtime_ns,
+        ):
+            raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_PATH_INVALID)
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
@@ -541,33 +569,141 @@ def write_dry_run_report(
         os.close(parent_fd)
 
 
-def load_dry_run_report(path: Path) -> KnowledgeDryRunReport:
+def load_dry_run_report(
+    path: Path,
+    *,
+    repository_root: Path,
+) -> KnowledgeDryRunReport:
     """Read and authenticate one bounded dry-run report."""
 
     if not path.is_absolute():
         raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_PATH_INVALID)
+    resolved_repository = repository_root.resolve(strict=False)
+    if _is_inside(path.resolve(strict=False), resolved_repository):
+        raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_PATH_INVALID)
     try:
-        observed = os.lstat(path)
+        resolved_parent = path.parent.resolve(strict=True)
+        parent_before = os.lstat(resolved_parent)
     except OSError:
         raise PrivateKnowledgeReconciliationError(
             ReconciliationErrorCode.REPORT_PATH_INVALID
         ) from None
-    if not stat.S_ISREG(observed.st_mode) or stat.S_IMODE(observed.st_mode) != 0o600:
-        raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_FILE_MODE_INVALID)
-    if observed.st_size > 1024 * 1024:
-        raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_INVALID)
-    flags = os.O_RDONLY | os.O_CLOEXEC
+    if not stat.S_ISDIR(parent_before.st_mode) or stat.S_IMODE(parent_before.st_mode) != 0o700:
+        raise PrivateKnowledgeReconciliationError(
+            ReconciliationErrorCode.REPORT_PARENT_MODE_INVALID
+        )
+    parent_flags = os.O_RDONLY | os.O_CLOEXEC
+    if hasattr(os, "O_DIRECTORY"):
+        parent_flags |= os.O_DIRECTORY
     if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+        parent_flags |= os.O_NOFOLLOW
     try:
-        fd = os.open(path, flags)
+        parent_fd = os.open(resolved_parent, parent_flags)
         try:
-            payload = os.read(fd, 1024 * 1024 + 1)
+            parent_opened = os.fstat(parent_fd)
+            parent_identity = (
+                parent_before.st_dev,
+                parent_before.st_ino,
+                parent_before.st_mode,
+                parent_before.st_ctime_ns,
+                parent_before.st_mtime_ns,
+            )
+            opened_parent_identity = (
+                parent_opened.st_dev,
+                parent_opened.st_ino,
+                parent_opened.st_mode,
+                parent_opened.st_ctime_ns,
+                parent_opened.st_mtime_ns,
+            )
+            if parent_identity != opened_parent_identity:
+                raise PrivateKnowledgeReconciliationError(
+                    ReconciliationErrorCode.REPORT_PATH_INVALID
+                )
+            observed = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            if not stat.S_ISREG(observed.st_mode) or stat.S_IMODE(observed.st_mode) != 0o600:
+                raise PrivateKnowledgeReconciliationError(
+                    ReconciliationErrorCode.REPORT_FILE_MODE_INVALID
+                )
+            if observed.st_size > 1024 * 1024:
+                raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_INVALID)
+            flags = os.O_RDONLY | os.O_CLOEXEC
+            if hasattr(os, "O_NOFOLLOW"):
+                flags |= os.O_NOFOLLOW
+            fd = os.open(path.name, flags, dir_fd=parent_fd)
+            try:
+                opened = os.fstat(fd)
+                before_identity = (
+                    observed.st_dev,
+                    observed.st_ino,
+                    observed.st_mode,
+                    observed.st_size,
+                    observed.st_mtime_ns,
+                )
+                opened_identity = (
+                    opened.st_dev,
+                    opened.st_ino,
+                    opened.st_mode,
+                    opened.st_size,
+                    opened.st_mtime_ns,
+                )
+                if before_identity != opened_identity:
+                    raise PrivateKnowledgeReconciliationError(
+                        ReconciliationErrorCode.REPORT_INVALID
+                    )
+                chunks: list[bytes] = []
+                total = 0
+                while True:
+                    chunk = os.read(fd, 64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > 1024 * 1024:
+                        raise PrivateKnowledgeReconciliationError(
+                            ReconciliationErrorCode.REPORT_INVALID
+                        )
+                    chunks.append(chunk)
+                after_open = os.fstat(fd)
+            finally:
+                os.close(fd)
+            after_path = os.stat(path.name, dir_fd=parent_fd, follow_symlinks=False)
+            after_open_identity = (
+                after_open.st_dev,
+                after_open.st_ino,
+                after_open.st_mode,
+                after_open.st_size,
+                after_open.st_mtime_ns,
+            )
+            after_path_identity = (
+                after_path.st_dev,
+                after_path.st_ino,
+                after_path.st_mode,
+                after_path.st_size,
+                after_path.st_mtime_ns,
+            )
+            if before_identity != after_open_identity or before_identity != after_path_identity:
+                raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_INVALID)
+            parent_after = os.fstat(parent_fd)
+            if opened_parent_identity != (
+                parent_after.st_dev,
+                parent_after.st_ino,
+                parent_after.st_mode,
+                parent_after.st_ctime_ns,
+                parent_after.st_mtime_ns,
+            ):
+                raise PrivateKnowledgeReconciliationError(
+                    ReconciliationErrorCode.REPORT_PATH_INVALID
+                )
+            payload = b"".join(chunks)
         finally:
-            os.close(fd)
+            os.close(parent_fd)
+    except PrivateKnowledgeReconciliationError:
+        raise
+    except OSError:
+        raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_INVALID) from None
+    try:
         parsed = json.loads(payload)
         report = KnowledgeDryRunReport.model_validate(parsed)
-    except OSError, UnicodeDecodeError, json.JSONDecodeError, ValidationError:
+    except UnicodeDecodeError, json.JSONDecodeError, ValidationError:
         raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_INVALID) from None
     if report.report_digest_sha256 != canonical_report_digest(report):
         raise PrivateKnowledgeReconciliationError(ReconciliationErrorCode.REPORT_DIGEST_MISMATCH)

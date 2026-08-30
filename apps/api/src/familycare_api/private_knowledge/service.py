@@ -85,7 +85,10 @@ def apply_private_knowledge_snapshot(
         package_root,
         repository_root=repository_root,
     )
-    approved_report = load_dry_run_report(report_path)
+    approved_report = load_dry_run_report(
+        report_path,
+        repository_root=repository_root,
+    )
     if not hmac.compare_digest(
         approved_report.report_digest_sha256,
         approved_report_digest_sha256,

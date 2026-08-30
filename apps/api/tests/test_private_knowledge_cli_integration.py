@@ -34,7 +34,6 @@ def test_cli_validate_dry_run_apply_verify_and_idempotent_apply(
         "FAMILYCARE_DATABASE_URL": _database_url(),
         "FAMILYCARE_PRIVATE_KNOWLEDGE_PACKAGE_ROOT": str(package_root),
         "FAMILYCARE_PRIVATE_KNOWLEDGE_REPORT_PATH": str(report_path),
-        "FAMILYCARE_PRIVATE_KNOWLEDGE_REPOSITORY_ROOT": str(repository_root),
         "FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID": str(HOUSEHOLD_ID),
         "FAMILYCARE_PRIVATE_KNOWLEDGE_ACTOR_ID": str(ACTOR_ID),
     }
@@ -43,7 +42,7 @@ def test_cli_validate_dry_run_apply_verify_and_idempotent_apply(
 
     assert cli.main(["validate"]) == 0
     assert cli.main(["dry-run"]) == 0
-    first_report = load_dry_run_report(report_path)
+    first_report = load_dry_run_report(report_path, repository_root=repository_root)
     assert first_report.operation == "CREATE"
     monkeypatch.setenv(
         "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST",
@@ -57,7 +56,7 @@ def test_cli_validate_dry_run_apply_verify_and_idempotent_apply(
 
     assert cli.main(["verify"]) == 0
     assert cli.main(["dry-run"]) == 0
-    second_report = load_dry_run_report(report_path)
+    second_report = load_dry_run_report(report_path, repository_root=repository_root)
     assert second_report.operation == "NO_OP"
     monkeypatch.setenv(
         "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST",

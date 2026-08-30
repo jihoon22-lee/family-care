@@ -36,6 +36,7 @@ _COMMON_ERRORS: dict[int | str, dict[str, Any]] = {
     401: {"model": PrivateKnowledgeErrorResponse, "description": "Authentication required"},
     404: {"model": PrivateKnowledgeErrorResponse, "description": "Scoped snapshot not found"},
     409: {"model": PrivateKnowledgeErrorResponse, "description": "Response bound exceeded"},
+    422: {"model": PrivateKnowledgeErrorResponse, "description": "Invalid request"},
     503: {"model": PrivateKnowledgeErrorResponse, "description": "Database unavailable"},
 }
 
@@ -77,9 +78,15 @@ def get_current_private_knowledge_contract(
     contract_id: UUID,
     response: Response,
     service: ServiceDependency,
+    section_limit: Annotated[int, Query(ge=1, le=50)] = 20,
+    section_after: UUID | None = None,
 ) -> KnowledgeContractDetailResponse:
     response.headers["Cache-Control"] = "no-store"
-    return service.get_contract(contract_id)
+    return service.get_contract(
+        contract_id,
+        section_limit=section_limit,
+        section_after=section_after,
+    )
 
 
 __all__ = ["get_private_knowledge_query_service", "router"]

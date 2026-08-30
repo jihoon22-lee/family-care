@@ -83,9 +83,20 @@ class PrivateKnowledgeQueryService:
             raise PrivateKnowledgeNotFound
         return result
 
-    def get_contract(self, contract_id: UUID) -> KnowledgeContractDetailResponse:
+    def get_contract(
+        self,
+        contract_id: UUID,
+        *,
+        section_limit: int,
+        section_after: UUID | None,
+    ) -> KnowledgeContractDetailResponse:
         try:
-            result = self.repository.get_contract(self.scope, contract_id)
+            result = self.repository.get_contract(
+                self.scope,
+                contract_id,
+                section_limit=section_limit,
+                section_after=section_after,
+            )
         except PrivateKnowledgeQueryTooLargeError:
             raise PrivateKnowledgeTooLarge from None
         except PrivateKnowledgeQueryRepositoryError:

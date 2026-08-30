@@ -101,6 +101,7 @@
           "executable": false,
           "citations": [
             {
+              "source_document_ref": "00000000-0000-4000-8000-000000001907",
               "page_start": 2,
               "page_end": 2,
               "clause_label": "Synthetic clause 1",
@@ -110,5 +111,6 @@
         }
       ]
     }
-  ]
+  ],
+  "next_section_cursor": null
 }

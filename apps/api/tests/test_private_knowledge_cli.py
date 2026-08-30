@@ -21,7 +21,6 @@ _PRIVATE_ENVIRONMENT = (
     "FAMILYCARE_DATABASE_URL",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_PACKAGE_ROOT",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_REPORT_PATH",
-    "FAMILYCARE_PRIVATE_KNOWLEDGE_REPOSITORY_ROOT",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_ACTOR_ID",
     "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST",
@@ -40,10 +39,7 @@ def test_validate_uses_only_environment_paths_and_sanitizes_output(
 ) -> None:
     _clear_environment(monkeypatch)
     package_root = write_synthetic_private_knowledge_package(tmp_path / "private-package")
-    repository_root = tmp_path / "repository"
-    repository_root.mkdir()
     monkeypatch.setenv("FAMILYCARE_PRIVATE_KNOWLEDGE_PACKAGE_ROOT", str(package_root))
-    monkeypatch.setenv("FAMILYCARE_PRIVATE_KNOWLEDGE_REPOSITORY_ROOT", str(repository_root))
 
     assert cli.main(["validate"]) == 0
 
@@ -53,12 +49,39 @@ def test_validate_uses_only_environment_paths_and_sanitizes_output(
     assert "contracts=1" in captured.out
     for private_value in (
         str(package_root),
-        str(repository_root),
         "Family Member A",
         "Sample Policy",
         "synthetic-certificate-source",
     ):
         assert private_value not in captured.out
+
+
+def test_validate_ignores_caller_repository_override_and_protects_runtime_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_environment(monkeypatch)
+    runtime_root = tmp_path / "runtime"
+    runtime_root.mkdir()
+    virtual_environment = runtime_root / ".venv"
+    virtual_environment.mkdir()
+    package_root = write_synthetic_private_knowledge_package(runtime_root / "private-package")
+    caller_root = tmp_path / "caller-selected-root"
+    caller_root.mkdir()
+    monkeypatch.setattr(cli.sys, "prefix", str(virtual_environment))
+    monkeypatch.setenv("FAMILYCARE_PRIVATE_KNOWLEDGE_PACKAGE_ROOT", str(package_root))
+    monkeypatch.setenv(
+        "FAMILYCARE_PRIVATE_KNOWLEDGE_REPOSITORY_ROOT",
+        str(caller_root),
+    )
+
+    assert cli.main(["validate"]) == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "familycare-private-knowledge: ROOT_INSIDE_REPOSITORY\n"
+    assert str(package_root) not in captured.err
 
 
 def test_missing_environment_and_unknown_argv_return_stable_errors(

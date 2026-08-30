@@ -19,6 +19,7 @@ from familycare_api.private_knowledge.repository import (
     PrivateKnowledgeRepositoryError,
     PrivateKnowledgeRepositoryErrorCode,
 )
+from psycopg.rows import dict_row
 
 from apps.api.tests.private_knowledge_fixtures import (
     mutate_jsonl,
@@ -118,6 +119,16 @@ def test_apply_verify_and_same_current_digest_are_atomic_and_idempotent(
     assert verified.executable_fact_count == 0
     assert verified.executable_mapping_count == 0
     assert verified.unsafe_operational_binding_count == 0
+    with psycopg.connect(_database_url()) as connection:
+        certificate = connection.execute(
+            """
+            SELECT certificate_decision
+            FROM private_knowledge_contracts
+            WHERE import_run_id = %s
+            """,
+            (applied.run_id,),
+        ).fetchone()
+    assert certificate == ("MATCH",)
 
     no_op_report = _report(repository, package)
     assert no_op_report.operation == "NO_OP"
@@ -158,6 +169,189 @@ def test_verify_rejects_indexed_decision_matrix_drift(tmp_path: Path) -> None:
     with pytest.raises(PrivateKnowledgeRepositoryError) as invalid:
         repository.verify_current(HOUSEHOLD_ID)
     assert invalid.value.code is PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
+
+
+def test_verify_rejects_normalized_projection_drift(tmp_path: Path) -> None:
+    _seed()
+    _, package = _package(tmp_path)
+    repository = PostgresPrivateKnowledgeRepository(_database_url())
+    applied = repository.apply_snapshot(
+        package,
+        household_space_id=HOUSEHOLD_ID,
+        actor_id=ACTOR_ID,
+        approved_report=_report(repository, package),
+    )
+
+    with psycopg.connect(_database_url()) as connection:
+        connection.execute(
+            """
+            UPDATE private_knowledge_contracts
+            SET insurer_display = 'Changed Synthetic Insurer'
+            WHERE import_run_id = %s
+            """,
+            (applied.run_id,),
+        )
+
+    with pytest.raises(PrivateKnowledgeRepositoryError) as invalid:
+        repository.verify_current(HOUSEHOLD_ID)
+    assert invalid.value.code is PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
+
+
+def test_verify_rejects_cross_section_fact_and_citation_drift(tmp_path: Path) -> None:
+    _seed()
+    _, package = _package(tmp_path)
+    repository = PostgresPrivateKnowledgeRepository(_database_url())
+    applied = repository.apply_snapshot(
+        package,
+        household_space_id=HOUSEHOLD_ID,
+        actor_id=ACTOR_ID,
+        approved_report=_report(repository, package),
+    )
+
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        original = connection.execute(
+            """
+            SELECT id FROM private_knowledge_terms_sections
+            WHERE import_run_id = %s
+            """,
+            (applied.run_id,),
+        ).fetchone()
+        assert original is not None
+        original_section_id = original["id"]
+        second_section_id = UUID(int=original_section_id.int + 1)
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_terms_sections (
+              id, import_run_id, source_section_key, terms_source_alias,
+              terms_source_alias_digest_sha256, section_kind, heading,
+              page_start, page_end, review_state, source_record_json,
+              source_record_digest_sha256, created_at
+            )
+            SELECT %s, import_run_id, 'synthetic-cross-section', terms_source_alias,
+                   terms_source_alias_digest_sha256, section_kind,
+                   'Synthetic Cross Section', page_start, page_end, review_state,
+                   source_record_json, source_record_digest_sha256, created_at
+            FROM private_knowledge_terms_sections
+            WHERE id = %s AND import_run_id = %s
+            """,
+            (second_section_id, original_section_id, applied.run_id),
+        )
+        connection.execute(
+            """
+            UPDATE private_knowledge_facts
+            SET terms_section_id = %s
+            WHERE import_run_id = %s
+            """,
+            (second_section_id, applied.run_id),
+        )
+        connection.execute(
+            """
+            UPDATE private_knowledge_import_runs
+            SET entity_counts_json = jsonb_set(
+                  entity_counts_json, '{terms_sections}', '2'::jsonb
+                )
+            WHERE id = %s
+            """,
+            (applied.run_id,),
+        )
+        _, records = repository._current_knowledge_snapshot(connection, applied.run_id)
+        connection.execute(
+            """
+            UPDATE private_knowledge_import_runs
+            SET projection_digest_sha256 = %s
+            WHERE id = %s
+            """,
+            (repository_module._projection_digest(records), applied.run_id),
+        )
+        assert repository._referential_closure_violation_count(connection, applied.run_id) == 2
+
+    with pytest.raises(PrivateKnowledgeRepositoryError) as invalid:
+        repository.verify_current(HOUSEHOLD_ID)
+    assert invalid.value.code is PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
+
+
+def test_apply_persists_manifest_authority_and_certificate_evidence_decision(
+    tmp_path: Path,
+) -> None:
+    _seed()
+    package_root, _ = _package(tmp_path)
+    mutate_jsonl(
+        package_root,
+        "contracts.jsonl",
+        lambda row: row["source_members"][0].__setitem__("decision", "needs_review"),
+    )
+    package = load_private_knowledge_package(
+        package_root,
+        repository_root=tmp_path / "repository",
+    )
+    repository = PostgresPrivateKnowledgeRepository(_database_url())
+    applied = repository.apply_snapshot(
+        package,
+        household_space_id=HOUSEHOLD_ID,
+        actor_id=ACTOR_ID,
+        approved_report=_report(repository, package),
+    )
+
+    with psycopg.connect(_database_url()) as connection:
+        run = connection.execute(
+            """
+            SELECT analysis_authority, projection_digest_sha256
+            FROM private_knowledge_import_runs
+            WHERE id = %s
+            """,
+            (applied.run_id,),
+        ).fetchone()
+        contract = connection.execute(
+            """
+            SELECT certificate_decision
+            FROM private_knowledge_contracts
+            WHERE import_run_id = %s
+            """,
+            (applied.run_id,),
+        ).fetchone()
+    assert run is not None
+    assert run[0] == "gpt-5.6-sol_direct_local_review_no_model_api"
+    assert isinstance(run[1], str) and len(run[1]) == 64
+    assert contract == ("UNKNOWN",)
+
+
+def test_apply_holds_operational_tables_stable_until_commit(tmp_path: Path) -> None:
+    _seed()
+    _, package = _package(tmp_path)
+    baseline_repository = PostgresPrivateKnowledgeRepository(_database_url())
+    report = _report(baseline_repository, package)
+    lock_probe_ran = False
+
+    def probe(stage: str) -> None:
+        nonlocal lock_probe_ran
+        if stage != "import_run":
+            return
+        lock_probe_ran = True
+        with psycopg.connect(_database_url(), autocommit=True) as competing:
+            competing.execute("SET lock_timeout = '150ms'")
+            with pytest.raises(psycopg.errors.LockNotAvailable):
+                competing.execute(
+                    """
+                    UPDATE household_spaces
+                    SET display_name = 'Concurrent Synthetic Change'
+                    WHERE id = %s
+                    """,
+                    (HOUSEHOLD_ID,),
+                )
+
+    repository = PostgresPrivateKnowledgeRepository(
+        _database_url(),
+        failure_injector=probe,
+    )
+    applied = repository.apply_snapshot(
+        package,
+        household_space_id=HOUSEHOLD_ID,
+        actor_id=ACTOR_ID,
+        approved_report=report,
+    )
+
+    assert lock_probe_ran is True
+    assert repository.verify_current(HOUSEHOLD_ID).run_id == applied.run_id
 
 
 def test_database_rejects_cross_household_member_binding(tmp_path: Path) -> None:

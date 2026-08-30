@@ -27,12 +27,13 @@ from familycare_api.private_knowledge.schemas import (
     KnowledgeTermsSectionResponse,
 )
 
-_MAX_COVERAGES = 2_000
+_MAX_COVERAGES = 256
 _MAX_ASSIGNMENTS = 8
-_MAX_MAPPINGS = 2_000
-_MAX_SECTIONS = 2_000
-_MAX_FACTS = 5_000
-_MAX_CITATIONS = 160_000
+_MAX_MAPPINGS = 256
+_MAX_SECTION_PAGE = 50
+_MAX_FACTS = 1_000
+_MAX_CITATIONS = 4_000
+_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
 
 class PrivateKnowledgeQueryRepositoryError(RuntimeError):
@@ -117,7 +118,12 @@ class PostgresPrivateKnowledgeQueryRepository:
         self,
         scope: HouseholdScope,
         contract_id: UUID,
+        *,
+        section_limit: int,
+        section_after: UUID | None,
     ) -> KnowledgeContractDetailResponse | None:
+        if not 1 <= section_limit <= _MAX_SECTION_PAGE:
+            raise PrivateKnowledgeQueryTooLargeError
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 connection.isolation_level = IsolationLevel.REPEATABLE_READ
@@ -138,15 +144,25 @@ class PostgresPrivateKnowledgeQueryRepository:
                     coverages = self._coverages(connection, run_id, contract_id)
                     assignments = self._assignments(connection, run_id, contract_id)
                     mappings = self._mappings(connection, run_id, contract_id)
-                    sections = self._sections(connection, run_id, contract_id)
-                    return KnowledgeContractDetailResponse(
+                    sections, next_section_cursor = self._sections(
+                        connection,
+                        run_id,
+                        contract_id,
+                        limit=section_limit,
+                        after=section_after,
+                    )
+                    response = KnowledgeContractDetailResponse(
                         schema_version="1",
                         contract=contract,
                         coverages=coverages,
                         terms_assignments=assignments,
                         coverage_mappings=mappings,
                         terms_sections=sections,
+                        next_section_cursor=next_section_cursor,
                     )
+                    if len(response.model_dump_json().encode("utf-8")) > _MAX_RESPONSE_BYTES:
+                        raise PrivateKnowledgeQueryTooLargeError
+                    return response
         except PrivateKnowledgeQueryTooLargeError:
             raise
         except psycopg.Error, KeyError, TypeError, ValueError, ValidationError:
@@ -369,7 +385,10 @@ class PostgresPrivateKnowledgeQueryRepository:
         connection: psycopg.Connection[dict[str, Any]],
         run_id: UUID,
         contract_id: UUID,
-    ) -> tuple[KnowledgeTermsSectionResponse, ...]:
+        *,
+        limit: int,
+        after: UUID | None,
+    ) -> tuple[tuple[KnowledgeTermsSectionResponse, ...], UUID | None]:
         section_rows = connection.execute(
             """
             WITH selected_aliases AS (
@@ -407,21 +426,23 @@ class PostgresPrivateKnowledgeQueryRepository:
               ON section.id = selected_sections.id
              AND section.import_run_id = %(run)s
             JOIN private_knowledge_semantic_reviews AS review
-              ON review.terms_section_id = section.id
+             ON review.terms_section_id = section.id
              AND review.import_run_id = section.import_run_id
-            ORDER BY section.page_start, section.id
+            WHERE (%(after)s::uuid IS NULL OR section.id > %(after)s::uuid)
+            ORDER BY section.id
             LIMIT %(limit)s
             """,
             {
                 "run": run_id,
                 "contract": contract_id,
-                "limit": _MAX_SECTIONS + 1,
+                "after": after,
+                "limit": limit + 1,
             },
         ).fetchall()
-        if len(section_rows) > _MAX_SECTIONS:
-            raise PrivateKnowledgeQueryTooLargeError
+        has_more = len(section_rows) > limit
+        section_rows = section_rows[:limit]
         if not section_rows:
-            return ()
+            return (), None
         section_ids = [cast(UUID, row["id"]) for row in section_rows]
         fact_rows = connection.execute(
             """
@@ -444,11 +465,19 @@ class PostgresPrivateKnowledgeQueryRepository:
             citation_rows = connection.execute(
                 """
                 SELECT citation.fact_id, citation.page_start, citation.page_end,
-                       clause.clause_label, clause.title AS clause_title
+                       clause.clause_label, clause.title AS clause_title,
+                       binding.id AS source_document_ref
                 FROM private_knowledge_fact_citations AS citation
                 JOIN private_knowledge_source_clauses AS clause
-                  ON clause.id = citation.source_clause_id
+                 ON clause.id = citation.source_clause_id
                  AND clause.import_run_id = citation.import_run_id
+                JOIN private_knowledge_terms_sections AS section
+                  ON section.id = clause.terms_section_id
+                 AND section.import_run_id = clause.import_run_id
+                JOIN private_knowledge_document_bindings AS binding
+                  ON binding.import_run_id = section.import_run_id
+                 AND binding.source_alias_digest_sha256 =
+                     section.terms_source_alias_digest_sha256
                 WHERE citation.import_run_id = %s AND citation.fact_id = ANY(%s)
                 ORDER BY citation.fact_id, citation.citation_ordinal
                 LIMIT %s
@@ -462,6 +491,7 @@ class PostgresPrivateKnowledgeQueryRepository:
             citations_by_fact[cast(UUID, row["fact_id"])].append(
                 KnowledgeFactCitationResponse.model_validate(
                     {
+                        "source_document_ref": row["source_document_ref"],
                         "page_start": row["page_start"],
                         "page_end": row["page_end"],
                         "clause_label": row["clause_label"],
@@ -485,7 +515,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                     citations=tuple(citations_by_fact[fact_id]),
                 )
             )
-        return tuple(
+        sections = tuple(
             KnowledgeTermsSectionResponse(
                 id=cast(UUID, row["id"]),
                 heading=cast(str, row["heading"]),
@@ -501,3 +531,5 @@ class PostgresPrivateKnowledgeQueryRepository:
             )
             for row in section_rows
         )
+        next_cursor = sections[-1].id if has_more and sections else None
+        return sections, next_cursor

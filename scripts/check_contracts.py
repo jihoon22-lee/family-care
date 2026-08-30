@@ -1048,15 +1048,16 @@ def validate_private_knowledge_contract() -> list[str]:
         "terms_assignments",
         "coverage_mappings",
         "terms_sections",
+        "next_section_cursor",
     }
     if set(schema.get("required", [])) != required:
         errors.append("private-knowledge required properties are inconsistent")
     properties = schema.get("properties", {})
     expected_bounds = {
-        "coverages": 2_000,
+        "coverages": 256,
         "terms_assignments": 8,
-        "coverage_mappings": 2_000,
-        "terms_sections": 2_000,
+        "coverage_mappings": 256,
+        "terms_sections": 50,
     }
     for field, maximum in expected_bounds.items():
         if properties.get(field, {}).get("maxItems") != maximum:

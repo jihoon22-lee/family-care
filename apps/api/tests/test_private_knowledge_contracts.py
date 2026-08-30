@@ -97,10 +97,10 @@ def test_private_knowledge_contract_keeps_decisions_independent_and_bounded() ->
 
     assert walk_objects(schema)
     assert all(item.get("additionalProperties") is False for item in walk_objects(schema))
-    assert schema["properties"]["coverages"]["maxItems"] == 2_000
+    assert schema["properties"]["coverages"]["maxItems"] == 256
     assert schema["properties"]["terms_assignments"]["maxItems"] == 8
-    assert schema["properties"]["coverage_mappings"]["maxItems"] == 2_000
-    assert schema["properties"]["terms_sections"]["maxItems"] == 2_000
+    assert schema["properties"]["coverage_mappings"]["maxItems"] == 256
+    assert schema["properties"]["terms_sections"]["maxItems"] == 50
     definitions = schema["$defs"]
     assert (
         definitions["KnowledgeTermsAssignmentResponse"]["properties"]["reason_codes"]["items"][
@@ -130,6 +130,8 @@ def test_private_knowledge_contract_keeps_decisions_independent_and_bounded() ->
     assert mapping["overall_decision"] == "UNKNOWN"
     assert mapping["executable"] is False
     assert example["terms_sections"][0]["facts"][0]["executable"] is False
+    assert example["next_section_cursor"] is None
+    assert "source_document_ref" in example["terms_sections"][0]["facts"][0]["citations"][0]
 
 
 def test_private_knowledge_contract_excludes_private_source_and_binding_fields() -> None:

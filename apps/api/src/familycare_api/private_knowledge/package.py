@@ -154,6 +154,21 @@ def canonical_package_digest(package: PrivateKnowledgePackage) -> str:
     return _sha256(b"familycare-private-knowledge-sol-v2\x00" + canonical_manifest)
 
 
+def contract_certificate_decision(contract: ContractRecord) -> str:
+    """Derive certificate certainty only from typed certificate-review evidence."""
+
+    if (
+        all(member.decision == "approved" for member in contract.source_members)
+        and contract.group_review.confidence == "high"
+        and contract.row_reconciliation.balanced
+        and contract.row_reconciliation.certificate_rows_detected > 0
+        and contract.row_reconciliation.unresolved_enrollment_rows == 0
+        and not contract.field_conflicts
+    ):
+        return "MATCH"
+    return "UNKNOWN"
+
+
 def _is_inside(child: Path, parent: Path) -> bool:
     try:
         child.relative_to(parent)
@@ -552,6 +567,16 @@ def _validate_references(
     if set(coverage_by_id) != set(mapping_by_id):
         raise _error(PackageErrorCode.BROKEN_REFERENCE, file_role="coverage-terms-mappings.jsonl")
 
+    pairing_projection_fields = {
+        "canonical_policy_id",
+        "previous_decision",
+        "selected_terms_aliases",
+        "document_identity_decision",
+        "edition_applicability_decision",
+        "review_decision",
+        "reason_codes",
+        "executable_rule",
+    }
     for row_number, contract_record in enumerate(contracts, start=1):
         contract = contract_record.value
         _validate_date_range(
@@ -560,15 +585,22 @@ def _validate_references(
             file_role="contracts.jsonl",
             row_number=row_number,
         )
-        nested_policy_id = contract_record.source_record["terms_pairing"]
-        if (
-            not isinstance(nested_policy_id, dict)
-            or nested_policy_id.get("canonical_policy_id") != contract.canonical_policy_id
-        ):
+        pairing = pairing_by_id[contract.canonical_policy_id][1].value
+        pairing_projection = pairing.model_dump(
+            mode="python",
+            include=pairing_projection_fields,
+        )
+        if contract.terms_pairing.model_dump(mode="python") != pairing_projection:
             raise _error(
                 PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
                 file_role="contracts.jsonl",
                 row_number=row_number,
+            )
+        if len(set(pairing.selected_terms_aliases)) != len(pairing.selected_terms_aliases):
+            raise _error(
+                PackageErrorCode.DUPLICATE_CANONICAL_KEY,
+                file_role="policy-terms-pairings.jsonl",
+                row_number=pairing_by_id[contract.canonical_policy_id][0],
             )
 
     for row_number, coverage_record in enumerate(coverages, start=1):
@@ -587,20 +619,29 @@ def _validate_references(
             row_number=row_number,
         )
         certificate_review = coverage.certificate_review
-        _nested_string(
-            certificate_review,
-            "component_class",
-            allowed=frozenset({"BENEFIT_COVERAGE", "NON_BENEFIT_CONTRACT_COMPONENT"}),
-            file_role="coverage-components.jsonl",
-            row_number=row_number,
-        )
-        _nested_string(
-            certificate_review,
-            "enrollment_decision",
-            allowed=frozenset({"MATCH", "NO_MATCH", "UNKNOWN"}),
-            file_role="coverage-components.jsonl",
-            row_number=row_number,
-        )
+        mapping = mapping_by_id[coverage.canonical_rider_id][1].value
+        if (
+            coverage.terms_mapping != mapping
+            or coverage.current_coverage_applicability_decision
+            != mapping.current_coverage_applicability_decision
+            or certificate_review.canonical_policy_id != coverage.canonical_policy_id
+            or certificate_review.canonical_rider_id != coverage.canonical_rider_id
+            or certificate_review.name != coverage.name
+            or certificate_review.reviewed_benefit_type != coverage.benefit_type
+            or certificate_review.reviewed_current_status != coverage.current_status.casefold()
+            or certificate_review.component_class != mapping.component_class
+            or certificate_review.enrollment_decision != mapping.enrollment_decision
+            or certificate_review.evidence_inherited_from_rider_id
+            != mapping.mapping_inherited_from_rider_id
+            or certificate_review.insured_object_ref != coverage.insured_object_ref
+            or certificate_review.object_identity_review_state
+            != coverage.object_identity_review_state
+        ):
+            raise _error(
+                PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
+                file_role="coverage-components.jsonl",
+                row_number=row_number,
+            )
 
     for row_number, mapping_record in enumerate(mappings, start=1):
         mapping = mapping_record.value
@@ -612,40 +653,95 @@ def _validate_references(
                 row_number=row_number,
             )
         certificate_review = coverage.certificate_review
+        pairing = pairing_by_id[mapping.canonical_policy_id][1].value
         if (
-            certificate_review.get("component_class") != mapping.component_class
-            or certificate_review.get("enrollment_decision") != mapping.enrollment_decision
+            certificate_review.component_class != mapping.component_class
+            or certificate_review.enrollment_decision != mapping.enrollment_decision
+            or mapping.pairing_aliases != pairing.selected_terms_aliases
+            or mapping.pairing_document_identity_decision != pairing.document_identity_decision
+            or mapping.pairing_edition_applicability_decision
+            != pairing.edition_applicability_decision
+            or mapping.pairing_review_decision != pairing.review_decision
         ):
             raise _error(
                 PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
                 file_role="coverage-terms-mappings.jsonl",
                 row_number=row_number,
             )
+        selection = (
+            mapping.selected_terms_alias,
+            mapping.selected_section_id,
+            mapping.physical_page,
+        )
+        selected_count = sum(value is not None for value in selection)
+        if selected_count not in {0, 3}:
+            raise _error(
+                PackageErrorCode.INVALID_RECORD,
+                file_role="coverage-terms-mappings.jsonl",
+                row_number=row_number,
+            )
         if mapping.mapping_decision == "MATCH":
-            if mapping.selected_terms_alias is None or mapping.selected_section_id is None:
+            if selected_count != 3:
                 raise _error(
                     PackageErrorCode.BROKEN_REFERENCE,
                     file_role="coverage-terms-mappings.jsonl",
                     row_number=row_number,
                 )
-            section = section_by_key.get(
-                (mapping.selected_terms_alias, mapping.selected_section_id)
+            section_key = (
+                cast(str, mapping.selected_terms_alias),
+                cast(str, mapping.selected_section_id),
             )
+            section = section_by_key.get(section_key)
             if (
                 section is None
                 or mapping.physical_page != section.physical_page
-                or mapping.clause_count
-                != clause_counts[(mapping.selected_terms_alias, mapping.selected_section_id)]
+                or mapping.clause_count != clause_counts[section_key]
+                or mapping.selected_terms_alias not in mapping.pairing_aliases
             ):
                 raise _error(
                     PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
                     file_role="coverage-terms-mappings.jsonl",
                     row_number=row_number,
                 )
-        elif mapping.mapping_decision == "NOT_APPLICABLE" and (
-            mapping.component_class != "NON_BENEFIT_CONTRACT_COMPONENT"
-            or mapping.selected_terms_alias is not None
-            or mapping.selected_section_id is not None
+        elif mapping.mapping_decision == "UNKNOWN" and selected_count == 3:
+            section_key = (
+                cast(str, mapping.selected_terms_alias),
+                cast(str, mapping.selected_section_id),
+            )
+            section = section_by_key.get(section_key)
+            if section is None:
+                raise _error(
+                    PackageErrorCode.BROKEN_REFERENCE,
+                    file_role="coverage-terms-mappings.jsonl",
+                    row_number=row_number,
+                )
+            if (
+                mapping.physical_page != section.physical_page
+                or mapping.clause_count != clause_counts[section_key]
+                or mapping.selected_terms_alias not in mapping.pairing_aliases
+            ):
+                raise _error(
+                    PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
+                    file_role="coverage-terms-mappings.jsonl",
+                    row_number=row_number,
+                )
+        elif mapping.mapping_decision in {"UNKNOWN", "NO_MATCH"} and (
+            selected_count != 0 or mapping.clause_count != 0
+        ):
+            raise _error(
+                PackageErrorCode.INVALID_RECORD,
+                file_role="coverage-terms-mappings.jsonl",
+                row_number=row_number,
+            )
+        if mapping.component_class == "NON_BENEFIT_CONTRACT_COMPONENT":
+            valid_classification = mapping.mapping_decision == "NOT_APPLICABLE"
+        elif mapping.component_class == "BENEFIT_COVERAGE":
+            valid_classification = mapping.mapping_decision != "NOT_APPLICABLE"
+        else:
+            valid_classification = mapping.mapping_decision == "UNKNOWN" and selected_count == 0
+        if not valid_classification or (
+            mapping.mapping_decision == "NOT_APPLICABLE"
+            and (selected_count != 0 or mapping.clause_count != 0)
         ):
             raise _error(
                 PackageErrorCode.INVALID_RECORD,
@@ -653,7 +749,22 @@ def _validate_references(
                 row_number=row_number,
             )
 
+        inherited = mapping.mapping_inherited_from_rider_id
+        if inherited is not None:
+            parent_entry = mapping_by_id.get(inherited)
+            if (
+                parent_entry is None
+                or parent_entry[1].value.canonical_policy_id != mapping.canonical_policy_id
+                or inherited == mapping.canonical_rider_id
+            ):
+                raise _error(
+                    PackageErrorCode.BROKEN_REFERENCE,
+                    file_role="coverage-terms-mappings.jsonl",
+                    row_number=row_number,
+                )
+
     review_keys: set[tuple[str, str]] = set()
+    semantic_coverage_keys: set[tuple[str, str, str]] = set()
     fact_ids: set[tuple[str, str, str]] = set()
     fact_counts: Counter[tuple[str, str]] = Counter()
     for row_number, semantic_record in enumerate(semantic_reviews, start=1):
@@ -687,6 +798,45 @@ def _validate_references(
                 file_role="terms-semantic-review.jsonl",
                 row_number=row_number,
             )
+        for coverage_reference in semantic_review.coverage_references:
+            coverage_key = (
+                semantic_review.terms_alias,
+                semantic_review.section_id,
+                coverage_reference.canonical_rider_id,
+            )
+            mapping_entry = mapping_by_id.get(coverage_reference.canonical_rider_id)
+            if mapping_entry is None:
+                raise _error(
+                    PackageErrorCode.BROKEN_REFERENCE,
+                    file_role="terms-semantic-review.jsonl",
+                    row_number=row_number,
+                )
+            mapping = mapping_entry[1].value
+            if coverage_key in semantic_coverage_keys:
+                raise _error(
+                    PackageErrorCode.DUPLICATE_CANONICAL_KEY,
+                    file_role="terms-semantic-review.jsonl",
+                    row_number=row_number,
+                )
+            semantic_coverage_keys.add(coverage_key)
+            if (
+                mapping.selected_terms_alias != semantic_review.terms_alias
+                or mapping.selected_section_id != semantic_review.section_id
+                or coverage_reference.canonical_policy_id != mapping.canonical_policy_id
+                or coverage_reference.current_coverage_applicability_decision
+                != mapping.current_coverage_applicability_decision
+                or coverage_reference.enrollment_decision != mapping.enrollment_decision
+                or coverage_reference.pairing_document_identity_decision
+                != mapping.pairing_document_identity_decision
+                or coverage_reference.pairing_edition_applicability_decision
+                != mapping.pairing_edition_applicability_decision
+                or coverage_reference.section_mapping_decision != mapping.mapping_decision
+            ):
+                raise _error(
+                    PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
+                    file_role="terms-semantic-review.jsonl",
+                    row_number=row_number,
+                )
         for fact in semantic_review.facts:
             fact_key = (
                 semantic_review.terms_alias,
@@ -722,6 +872,21 @@ def _validate_references(
                 PackageErrorCode.SOURCE_LINEAGE_MISMATCH,
                 file_role="terms-sections.jsonl",
             )
+    expected_semantic_coverage_keys = {
+        (
+            mapping.value.selected_terms_alias,
+            mapping.value.selected_section_id,
+            mapping.value.canonical_rider_id,
+        )
+        for mapping in mappings
+        if mapping.value.selected_terms_alias is not None
+        and mapping.value.selected_section_id is not None
+    }
+    if semantic_coverage_keys != expected_semantic_coverage_keys:
+        raise _error(
+            PackageErrorCode.BROKEN_REFERENCE,
+            file_role="terms-semantic-review.jsonl",
+        )
 
 
 def _derived_counts(
@@ -740,7 +905,7 @@ def _derived_counts(
     inherited_object_rows = sum(
         1
         for record in coverages
-        if record.value.certificate_review.get("evidence_inherited_from_rider_id") is not None
+        if record.value.certificate_review.evidence_inherited_from_rider_id is not None
     )
     return {
         "policy_count": len(contracts),
@@ -768,6 +933,9 @@ def _derived_counts(
         "coverage_section_match_count": sum(
             1 for record in mappings if record.value.mapping_decision == "MATCH"
         ),
+        "coverage_section_no_match_count": sum(
+            1 for record in mappings if record.value.mapping_decision == "NO_MATCH"
+        ),
         "coverage_section_unknown_count": sum(
             1 for record in mappings if record.value.mapping_decision == "UNKNOWN"
         ),
@@ -779,9 +947,7 @@ def _derived_counts(
         "semantic_fact_count": sum(len(record.value.facts) for record in semantic_reviews),
         "previous_fact_recheck_count": len(previous_audits),
         "previous_fact_needs_review_count": sum(
-            1
-            for item in previous_audits
-            if isinstance(item, dict) and item.get("review_decision") == "NEEDS_REVIEW"
+            1 for item in previous_audits if item.review_decision == "NEEDS_REVIEW"
         ),
         "restored_distinct_object_row_count": inherited_object_rows,
         "true_duplicate_row_count": sum(
@@ -846,6 +1012,25 @@ def load_private_knowledge_package(
     except OSError:
         raise _error(PackageErrorCode.ROOT_NOT_DIRECTORY) from None
     try:
+        opened_root = os.fstat(root_fd)
+        root_identity = (
+            root_stat.st_dev,
+            root_stat.st_ino,
+            root_stat.st_mode,
+            root_stat.st_ctime_ns,
+            root_stat.st_mtime_ns,
+        )
+        opened_identity = (
+            opened_root.st_dev,
+            opened_root.st_ino,
+            opened_root.st_mode,
+            opened_root.st_ctime_ns,
+            opened_root.st_mtime_ns,
+        )
+        if not stat.S_ISDIR(opened_root.st_mode) or opened_identity != root_identity:
+            raise _error(PackageErrorCode.ROOT_NOT_DIRECTORY)
+        if stat.S_IMODE(opened_root.st_mode) != 0o700:
+            raise _error(PackageErrorCode.ROOT_MODE_INVALID)
         manifest_payload = _read_file(root_fd, MANIFEST_NAME)
         manifest_source = _parse_json_object(
             manifest_payload,
@@ -892,6 +1077,16 @@ def load_private_knowledge_package(
         expected_names = set(entries) | {MANIFEST_NAME}
         if actual_names != expected_names:
             raise _error(PackageErrorCode.UNEXPECTED_FILE)
+        closed_root = os.fstat(root_fd)
+        closed_identity = (
+            closed_root.st_dev,
+            closed_root.st_ino,
+            closed_root.st_mode,
+            closed_root.st_ctime_ns,
+            closed_root.st_mtime_ns,
+        )
+        if closed_identity != opened_identity:
+            raise _error(PackageErrorCode.ROOT_NOT_DIRECTORY)
     finally:
         os.close(root_fd)
 

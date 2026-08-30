@@ -275,6 +275,7 @@ class KnowledgeContractDetailResponse(TypedDict):
     contract: KnowledgeContractListItemResponse
     coverage_mappings: list[KnowledgeCoverageMappingResponse]
     coverages: list[KnowledgeCoverageResponse]
+    next_section_cursor: str | None
     schema_version: Literal["1"]
     terms_assignments: list[KnowledgeTermsAssignmentResponse]
     terms_sections: list[KnowledgeTermsSectionResponse]
@@ -314,7 +315,9 @@ class KnowledgeCoverageMappingResponse(TypedDict):
 
 class KnowledgeCoverageResponse(TypedDict):
     benefit_type: Literal["FIXED", "INDEMNITY", "NOT_APPLICABLE", "UNKNOWN"]
-    component_classification: Literal["BENEFIT_COVERAGE", "NON_BENEFIT_CONTRACT_COMPONENT"]
+    component_classification: Literal[
+        "BENEFIT_COVERAGE", "NON_BENEFIT_CONTRACT_COMPONENT", "UNKNOWN"
+    ]
     component_role: Literal["MAIN_CONTRACT", "RIDER"]
     coverage_end: str | None
     coverage_start: str | None
@@ -332,6 +335,7 @@ class KnowledgeFactCitationResponse(TypedDict):
     clause_title: NotRequired[str | None]
     page_end: int
     page_start: int
+    source_document_ref: str
 
 
 class KnowledgeFactConditionsResponse(TypedDict):

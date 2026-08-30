@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–6 complete; Task 7 in progress; Task 8 pending
+**Status:** Tasks 1–6 and final-review hardening complete; Task 7 verification in progress; Task 8 pending
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -53,7 +53,7 @@ def build_dry_run_report(
 ) -> KnowledgeDryRunReport: ...
 ```
 
-The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `dry-run`, `apply`, and `verify`. Private paths, the database URL, actor ID, household ID, report path, and approval digest are environment-only inputs. Standard output contains only stable status/reason codes, opaque internal IDs, and counts.
+The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `dry-run`, `apply`, and `verify`. Private paths, the database URL, actor ID, household ID, report path, and approval digest are environment-only inputs; the protected repository/runtime root is derived internally and cannot be weakened by an environment override. Standard output contains only stable status/reason codes, opaque internal IDs, and counts.
 
 ## Task 1: Freeze the approved design and executable plan
 
@@ -150,7 +150,7 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
 
 1. [x] Run the complete synthetic package flow twice: validate → dry-run → approve exact digest → apply → verify → idempotent apply.
 2. [x] Review the full diff for enrollment authority, terms-edition independence, subject binding, household scope, row preservation, digest/stale checks, transaction rollback, query bounds, logging, cache, and absence of actual data.
-3. [x] Run the required repository verification serially:
+3. [x] Re-run the required repository verification serially after final-review hardening:
 
 ```bash
 python3 scripts/check_documentation.py
@@ -168,6 +168,16 @@ git diff --check
 
 4. [x] Re-run the migration and private-knowledge PostgreSQL integration groups after the full suite so their latest evidence is explicit.
 5. [ ] Commit the tested implementation in reviewable Conventional Commit units and request a final code review before operational apply.
+
+### Final-review hardening completed before operational apply
+
+1. [x] Replace permissive nested package JSON with explicit strict models and cross-file authority reconciliation, including inherited references, semantic closure, duplicate aliases, bounded `Numeric(20,4)`, and NUL/blank rejection.
+2. [x] Derive contract certificate decisions from approved certificate evidence; preserve all other contracts as `UNKNOWN` rather than assuming enrollment.
+3. [x] Separate mapping source `NO_MATCH` from mapping applicability `UNKNOWN`, and make unknown component classification representable in package, database, reconciliation, and API contracts.
+4. [x] Run apply in `REPEATABLE READ`, lock every operational baseline table against concurrent DML, and prove a competing update cannot cross the apply transaction.
+5. [x] Persist and verify a normalized projection digest in addition to source-record digests, and verify cross-section fact/review/citation plus selected-document mapping closure.
+6. [x] Authenticate dry-run reports with descriptor/path rechecks, derive the CLI repository boundary from the trusted runtime, and keep manifest review authority as the persisted provenance.
+7. [x] Bound contract detail by section cursor, conservative entity/byte ceilings, snapshot-local document references, explicit 422 documentation, and the real unauthenticated dependency chain.
 
 ## Task 8: Apply the reviewed package to the real FamilyCare database
 

@@ -265,7 +265,8 @@
         "component_classification": {
           "enum": [
             "BENEFIT_COVERAGE",
-            "NON_BENEFIT_CONTRACT_COMPONENT"
+            "NON_BENEFIT_CONTRACT_COMPONENT",
+            "UNKNOWN"
           ],
           "title": "Component Classification",
           "type": "string"
@@ -423,9 +424,15 @@
           "minimum": 1,
           "title": "Page Start",
           "type": "integer"
+        },
+        "source_document_ref": {
+          "format": "uuid",
+          "title": "Source Document Ref",
+          "type": "string"
         }
       },
       "required": [
+        "source_document_ref",
         "page_start",
         "page_end"
       ],
@@ -633,7 +640,7 @@
           "items": {
             "$ref": "#/$defs/KnowledgeFactResponse"
           },
-          "maxItems": 5000,
+          "maxItems": 1000,
           "title": "Facts",
           "type": "array"
         },
@@ -733,7 +740,7 @@
       "items": {
         "$ref": "#/$defs/KnowledgeCoverageMappingResponse"
       },
-      "maxItems": 2000,
+      "maxItems": 256,
       "title": "Coverage Mappings",
       "type": "array"
     },
@@ -741,9 +748,21 @@
       "items": {
         "$ref": "#/$defs/KnowledgeCoverageResponse"
       },
-      "maxItems": 2000,
+      "maxItems": 256,
       "title": "Coverages",
       "type": "array"
+    },
+    "next_section_cursor": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Section Cursor"
     },
     "schema_version": {
       "const": "1",
@@ -762,7 +781,7 @@
       "items": {
         "$ref": "#/$defs/KnowledgeTermsSectionResponse"
       },
-      "maxItems": 2000,
+      "maxItems": 50,
       "title": "Terms Sections",
       "type": "array"
     }
@@ -773,7 +792,8 @@
     "coverages",
     "terms_assignments",
     "coverage_mappings",
-    "terms_sections"
+    "terms_sections",
+    "next_section_cursor"
   ],
   "title": "KnowledgeContractDetailResponse",
   "type": "object"

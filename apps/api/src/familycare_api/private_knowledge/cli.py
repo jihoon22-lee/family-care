@@ -30,7 +30,6 @@ from familycare_api.private_knowledge.service import (
 
 _PACKAGE_ROOT = "FAMILYCARE_PRIVATE_KNOWLEDGE_PACKAGE_ROOT"
 _REPORT_PATH = "FAMILYCARE_PRIVATE_KNOWLEDGE_REPORT_PATH"
-_REPOSITORY_ROOT = "FAMILYCARE_PRIVATE_KNOWLEDGE_REPOSITORY_ROOT"
 _HOUSEHOLD_ID = "FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID"
 _ACTOR_ID = "FAMILYCARE_PRIVATE_KNOWLEDGE_ACTOR_ID"
 _APPROVAL_DIGEST = "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST"
@@ -84,6 +83,23 @@ def _approval_digest() -> str:
     return value
 
 
+def _trusted_repository_root() -> Path:
+    """Derive the protected application root from the installed runtime."""
+
+    try:
+        runtime_prefix = Path(sys.prefix).resolve(strict=True)
+        repository_root = runtime_prefix.parent.resolve(strict=True)
+    except OSError:
+        raise PrivateKnowledgeCliError(PrivateKnowledgeCliErrorCode.ENVIRONMENT_INVALID) from None
+    if (
+        not runtime_prefix.is_dir()
+        or not repository_root.is_dir()
+        or not repository_root.is_absolute()
+    ):
+        raise PrivateKnowledgeCliError(PrivateKnowledgeCliErrorCode.ENVIRONMENT_INVALID)
+    return repository_root
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _SafeArgumentParser(prog="familycare-private-knowledge")
     subparsers = parser.add_subparsers(
@@ -124,10 +140,11 @@ def _print_counts(
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        repository_root = _trusted_repository_root()
         if args.command == "validate":
             package = load_private_knowledge_package(
                 _path_environment(_PACKAGE_ROOT),
-                repository_root=_path_environment(_REPOSITORY_ROOT),
+                repository_root=repository_root,
             )
             _print_counts(status="VALIDATED", counts=package_entity_counts(package))
         elif args.command == "dry-run":
@@ -135,7 +152,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = prepare_private_knowledge_dry_run(
                 package_root=_path_environment(_PACKAGE_ROOT),
                 report_path=_path_environment(_REPORT_PATH),
-                repository_root=_path_environment(_REPOSITORY_ROOT),
+                repository_root=repository_root,
                 household_space_id=_uuid_environment(_HOUSEHOLD_ID),
                 baseline_reader=repository,
             )
@@ -148,7 +165,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             applied = apply_private_knowledge_snapshot(
                 package_root=_path_environment(_PACKAGE_ROOT),
                 report_path=_path_environment(_REPORT_PATH),
-                repository_root=_path_environment(_REPOSITORY_ROOT),
+                repository_root=repository_root,
                 household_space_id=_uuid_environment(_HOUSEHOLD_ID),
                 actor_id=_uuid_environment(_ACTOR_ID),
                 approved_report_digest_sha256=_approval_digest(),

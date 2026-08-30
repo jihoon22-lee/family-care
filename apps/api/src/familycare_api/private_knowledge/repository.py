@@ -124,6 +124,12 @@ def _record_digest(payload: object) -> str:
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
 
+def _projection_digest(payload: object) -> str:
+    return hashlib.sha256(
+        b"familycare-private-knowledge-projection-v1\x00" + _canonical_json(payload)
+    ).hexdigest()
+
+
 def _advisory_lock_key(household_space_id: UUID) -> int:
     payload = hashlib.sha256(
         b"familycare-private-knowledge-lock\x00" + household_space_id.bytes
@@ -183,56 +189,64 @@ class PostgresPrivateKnowledgeRepository:
             raise PrivateKnowledgeRepositoryError(PrivateKnowledgeRepositoryErrorCode.APPLY_BLOCKED)
 
         try:
-            with (
-                psycopg.connect(self.database_url, row_factory=dict_row) as connection,
-                connection.transaction(),
-            ):
-                connection.execute(
-                    "SELECT pg_advisory_xact_lock(%s)",
-                    (_advisory_lock_key(household_space_id),),
-                )
-                actor = connection.execute(
-                    """
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.isolation_level = IsolationLevel.REPEATABLE_READ
+                with connection.transaction():
+                    self._require_apply_transaction_mode(connection)
+                    connection.execute(
+                        """
+                        LOCK TABLE household_spaces, app_users, family_members,
+                                   policy_contracts, riders, terms_editions,
+                                   documents, document_versions, evidence
+                        IN SHARE MODE
+                        """
+                    )
+                    connection.execute(
+                        "SELECT pg_advisory_xact_lock(%s)",
+                        (_advisory_lock_key(household_space_id),),
+                    )
+                    actor = connection.execute(
+                        """
                         SELECT 1
                         FROM app_users
                         WHERE id = %s AND household_space_id = %s AND is_active
                         """,
-                    (actor_id, household_space_id),
-                ).fetchone()
-                if actor is None:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.ACTOR_NOT_FOUND
-                    )
-
-                baseline = self._read_baseline(connection, household_space_id)
-                current_report = build_dry_run_report(package, baseline)
-                if current_report.report_digest_sha256 != approved_report.report_digest_sha256:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.STALE_DRY_RUN
-                    )
-                if current_report.operation == "BLOCKED":
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.APPLY_BLOCKED
-                    )
-                if current_report.operation == "NO_OP":
-                    if baseline.current_run_id is None:
+                        (actor_id, household_space_id),
+                    ).fetchone()
+                    if actor is None:
                         raise PrivateKnowledgeRepositoryError(
-                            PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
+                            PrivateKnowledgeRepositoryErrorCode.ACTOR_NOT_FOUND
                         )
-                    summary = self._verify_run(
-                        connection,
-                        household_space_id=household_space_id,
-                        run_id=baseline.current_run_id,
-                    )
-                    return AppliedKnowledgeSnapshot.model_validate(summary.model_dump())
-                if current_report.operation not in {"CREATE", "SUPERSEDE"}:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.APPROVAL_INVALID
-                    )
 
-                run_id = uuid4()
-                connection.execute(
-                    """
+                    baseline = self._read_baseline(connection, household_space_id)
+                    current_report = build_dry_run_report(package, baseline)
+                    if current_report.report_digest_sha256 != approved_report.report_digest_sha256:
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.STALE_DRY_RUN
+                        )
+                    if current_report.operation == "BLOCKED":
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.APPLY_BLOCKED
+                        )
+                    if current_report.operation == "NO_OP":
+                        if baseline.current_run_id is None:
+                            raise PrivateKnowledgeRepositoryError(
+                                PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
+                            )
+                        summary = self._verify_run(
+                            connection,
+                            household_space_id=household_space_id,
+                            run_id=baseline.current_run_id,
+                        )
+                        return AppliedKnowledgeSnapshot.model_validate(summary.model_dump())
+                    if current_report.operation not in {"CREATE", "SUPERSEDE"}:
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.APPROVAL_INVALID
+                        )
+
+                    run_id = uuid4()
+                    connection.execute(
+                        """
                         INSERT INTO private_knowledge_import_runs (
                           id, household_space_id, package_schema_version,
                           package_digest_sha256, manifest_digest_sha256,
@@ -244,75 +258,85 @@ class PostgresPrivateKnowledgeRepository:
                           applied_by, applied_at
                         ) VALUES (
                           %s, %s, %s, %s, %s, 'familycare-private-knowledge-v1',
-                          'SOL_DIRECT_REVIEW', 'APPLIED', false, %s, %s, %s, %s,
+                          %s, 'APPLIED', false, %s, %s, %s, %s,
                           %s, %s, %s, %s, clock_timestamp()
                         )
                         """,
-                    (
+                        (
+                            run_id,
+                            household_space_id,
+                            package.schema_version,
+                            package.package_digest_sha256,
+                            package.manifest_digest_sha256,
+                            package.manifest.review_authority,
+                            Jsonb(package.manifest.counts.model_dump(mode="json")),
+                            Jsonb(package.manifest.model_dump(mode="json")),
+                            Jsonb(package.reconciliation.model_dump(mode="json")),
+                            Jsonb(approved_report.expected_insert_counts.model_dump(mode="json")),
+                            Jsonb(report_decision_counts(approved_report).model_dump(mode="json")),
+                            baseline.baseline_digest_sha256,
+                            approved_report.report_digest_sha256,
+                            actor_id,
+                        ),
+                    )
+                    self._after_group("import_run")
+                    inserted_counts = insert_private_knowledge_snapshot(
+                        connection,
+                        run_id=run_id,
+                        household_space_id=household_space_id,
+                        package=package,
+                        after_group=self._after_group,
+                    )
+                    if inserted_counts != approved_report.expected_insert_counts:
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.COUNT_MISMATCH
+                        )
+                    persisted_counts, persisted_records = self._current_knowledge_snapshot(
+                        connection,
                         run_id,
-                        household_space_id,
-                        package.schema_version,
-                        package.package_digest_sha256,
-                        package.manifest_digest_sha256,
-                        Jsonb(package.manifest.counts.model_dump(mode="json")),
-                        Jsonb(package.manifest.model_dump(mode="json")),
-                        Jsonb(package.reconciliation.model_dump(mode="json")),
-                        Jsonb(approved_report.expected_insert_counts.model_dump(mode="json")),
-                        Jsonb(report_decision_counts(approved_report).model_dump(mode="json")),
-                        baseline.baseline_digest_sha256,
-                        approved_report.report_digest_sha256,
-                        actor_id,
-                    ),
-                )
-                self._after_group("import_run")
-                inserted_counts = insert_private_knowledge_snapshot(
-                    connection,
-                    run_id=run_id,
-                    household_space_id=household_space_id,
-                    package=package,
-                    after_group=self._after_group,
-                )
-                if inserted_counts != approved_report.expected_insert_counts:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.COUNT_MISMATCH
                     )
-                persisted_counts, _ = self._current_knowledge_snapshot(
-                    connection,
-                    run_id,
-                )
-                if persisted_counts != inserted_counts:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.COUNT_MISMATCH
+                    if persisted_counts != inserted_counts:
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.COUNT_MISMATCH
+                        )
+                    projection_digest = _projection_digest(persisted_records)
+                    connection.execute(
+                        """
+                        UPDATE private_knowledge_import_runs
+                        SET projection_digest_sha256 = %s
+                        WHERE id = %s AND household_space_id = %s
+                        """,
+                        (projection_digest, run_id, household_space_id),
                     )
-                self._after_group("before_current_switch")
-                connection.execute(
-                    """
+                    self._after_group("before_current_switch")
+                    connection.execute(
+                        """
                         UPDATE private_knowledge_import_runs
                         SET state = 'SUPERSEDED', is_current = false,
                             superseded_at = clock_timestamp()
                         WHERE household_space_id = %s AND is_current
                         """,
-                    (household_space_id,),
-                )
-                selected = connection.execute(
-                    """
+                        (household_space_id,),
+                    )
+                    selected = connection.execute(
+                        """
                         UPDATE private_knowledge_import_runs
                         SET is_current = true
                         WHERE id = %s AND household_space_id = %s
                           AND state = 'APPLIED' AND NOT is_current
                         RETURNING id
                         """,
-                    (run_id, household_space_id),
-                ).fetchone()
-                if selected is None:
-                    raise PrivateKnowledgeRepositoryError(
-                        PrivateKnowledgeRepositoryErrorCode.APPLY_FAILED
+                        (run_id, household_space_id),
+                    ).fetchone()
+                    if selected is None:
+                        raise PrivateKnowledgeRepositoryError(
+                            PrivateKnowledgeRepositoryErrorCode.APPLY_FAILED
+                        )
+                    summary = self._verify_run(
+                        connection,
+                        household_space_id=household_space_id,
+                        run_id=run_id,
                     )
-                summary = self._verify_run(
-                    connection,
-                    household_space_id=household_space_id,
-                    run_id=run_id,
-                )
             return AppliedKnowledgeSnapshot.model_validate(summary.model_dump())
         except PrivateKnowledgeRepositoryError:
             raise
@@ -400,7 +424,7 @@ class PostgresPrivateKnowledgeRepository:
     ) -> KnowledgeSnapshotSummary:
         run = connection.execute(
             """
-            SELECT id, package_digest_sha256, state, is_current,
+            SELECT id, package_digest_sha256, projection_digest_sha256, state, is_current,
                    entity_counts_json, decision_counts_json
             FROM private_knowledge_import_runs
             WHERE id = %s AND household_space_id = %s
@@ -412,10 +436,18 @@ class PostgresPrivateKnowledgeRepository:
                 PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
             )
         expected_counts = KnowledgeEntityCounts.model_validate(run["entity_counts_json"])
-        actual_counts, _ = self._current_knowledge_snapshot(connection, run_id)
+        actual_counts, actual_records = self._current_knowledge_snapshot(connection, run_id)
         if actual_counts != expected_counts:
             raise PrivateKnowledgeRepositoryError(
                 PrivateKnowledgeRepositoryErrorCode.COUNT_MISMATCH
+            )
+        projection_digest = run["projection_digest_sha256"]
+        if (
+            not isinstance(projection_digest, str)
+            or _projection_digest(actual_records) != projection_digest
+        ):
+            raise PrivateKnowledgeRepositoryError(
+                PrivateKnowledgeRepositoryErrorCode.VERIFICATION_FAILED
             )
         expected_decisions = KnowledgeDecisionCounts.model_validate(run["decision_counts_json"])
         if self._persisted_decision_counts(connection, run_id) != expected_decisions:
@@ -554,6 +586,9 @@ class PostgresPrivateKnowledgeRepository:
                  'match', count(*) FILTER (
                    WHERE source_record_json ->> 'mapping_decision' = 'MATCH'
                  ),
+                 'no_match', count(*) FILTER (
+                   WHERE source_record_json ->> 'mapping_decision' = 'NO_MATCH'
+                 ),
                  'unknown', count(*) FILTER (
                    WHERE source_record_json ->> 'mapping_decision' = 'UNKNOWN'
                  ),
@@ -651,7 +686,8 @@ class PostgresPrivateKnowledgeRepository:
                 ON review.id = child.semantic_review_id
                AND review.import_run_id = child.import_run_id
               WHERE child.import_run_id = %(run)s
-                AND (section.id IS NULL OR review.id IS NULL)
+                AND (section.id IS NULL OR review.id IS NULL
+                     OR review.terms_section_id <> child.terms_section_id)
               UNION ALL
               SELECT child.id
               FROM private_knowledge_fact_citations AS child
@@ -662,7 +698,8 @@ class PostgresPrivateKnowledgeRepository:
                 ON clause.id = child.source_clause_id
                AND clause.import_run_id = child.import_run_id
               WHERE child.import_run_id = %(run)s
-                AND (fact.id IS NULL OR clause.id IS NULL)
+                AND (fact.id IS NULL OR clause.id IS NULL
+                     OR fact.terms_section_id <> clause.terms_section_id)
               UNION ALL
               SELECT child.id
               FROM private_knowledge_coverage_terms_mappings AS child
@@ -675,6 +712,10 @@ class PostgresPrivateKnowledgeRepository:
               WHERE child.import_run_id = %(run)s
                 AND (coverage.id IS NULL OR (
                   child.terms_section_id IS NOT NULL AND section.id IS NULL
+                ) OR (
+                  child.terms_section_id IS NOT NULL
+                  AND child.selected_terms_source_alias_digest_sha256
+                      IS DISTINCT FROM section.terms_source_alias_digest_sha256
                 ))
             ) AS violations
             """,
@@ -706,6 +747,22 @@ class PostgresPrivateKnowledgeRepository:
             raise PrivateKnowledgeRepositoryError(
                 PrivateKnowledgeRepositoryErrorCode.BASELINE_INVALID
             ) from None
+
+    @staticmethod
+    def _require_apply_transaction_mode(
+        connection: psycopg.Connection[dict[str, Any]],
+    ) -> None:
+        row = connection.execute(
+            """
+            SELECT
+              current_setting('transaction_isolation') AS isolation,
+              current_setting('transaction_read_only') AS read_only
+            """
+        ).fetchone()
+        if row != {"isolation": "repeatable read", "read_only": "off"}:
+            raise PrivateKnowledgeRepositoryError(
+                PrivateKnowledgeRepositoryErrorCode.TRANSACTION_MODE_INVALID
+            )
 
     @staticmethod
     def _require_transaction_mode(

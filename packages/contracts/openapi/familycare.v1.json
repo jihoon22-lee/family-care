@@ -3771,7 +3771,7 @@
             "items": {
               "$ref": "#/components/schemas/KnowledgeCoverageMappingResponse"
             },
-            "maxItems": 2000,
+            "maxItems": 256,
             "title": "Coverage Mappings",
             "type": "array"
           },
@@ -3779,9 +3779,21 @@
             "items": {
               "$ref": "#/components/schemas/KnowledgeCoverageResponse"
             },
-            "maxItems": 2000,
+            "maxItems": 256,
             "title": "Coverages",
             "type": "array"
+          },
+          "next_section_cursor": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Section Cursor"
           },
           "schema_version": {
             "const": "1",
@@ -3800,7 +3812,7 @@
             "items": {
               "$ref": "#/components/schemas/KnowledgeTermsSectionResponse"
             },
-            "maxItems": 2000,
+            "maxItems": 50,
             "title": "Terms Sections",
             "type": "array"
           }
@@ -3811,7 +3823,8 @@
           "coverages",
           "terms_assignments",
           "coverage_mappings",
-          "terms_sections"
+          "terms_sections",
+          "next_section_cursor"
         ],
         "title": "KnowledgeContractDetailResponse",
         "type": "object"
@@ -4118,7 +4131,8 @@
           "component_classification": {
             "enum": [
               "BENEFIT_COVERAGE",
-              "NON_BENEFIT_CONTRACT_COMPONENT"
+              "NON_BENEFIT_CONTRACT_COMPONENT",
+              "UNKNOWN"
             ],
             "title": "Component Classification",
             "type": "string"
@@ -4354,9 +4368,15 @@
             "minimum": 1.0,
             "title": "Page Start",
             "type": "integer"
+          },
+          "source_document_ref": {
+            "format": "uuid",
+            "title": "Source Document Ref",
+            "type": "string"
           }
         },
         "required": [
+          "source_document_ref",
           "page_start",
           "page_end"
         ],
@@ -4564,7 +4584,7 @@
             "items": {
               "$ref": "#/components/schemas/KnowledgeFactResponse"
             },
-            "maxItems": 5000,
+            "maxItems": 1000,
             "title": "Facts",
             "type": "array"
           },
@@ -13204,6 +13224,16 @@
             },
             "description": "Response bound exceeded"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PrivateKnowledgeErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
           "503": {
             "content": {
               "application/json": {
@@ -13305,11 +13335,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PrivateKnowledgeErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "503": {
             "content": {
@@ -13345,6 +13375,35 @@
               "format": "uuid",
               "title": "Contract Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "section_limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Section Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "section_after",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Section After"
             }
           }
         ],
@@ -13393,11 +13452,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/PrivateKnowledgeErrorResponse"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Invalid request"
           },
           "503": {
             "content": {
