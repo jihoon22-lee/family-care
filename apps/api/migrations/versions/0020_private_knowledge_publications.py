@@ -112,6 +112,7 @@ def upgrade() -> None:
     op.create_table(
         "private_knowledge_contract_status_intervals",
         _uuid("id", primary_key=True),
+        _uuid("rule_import_run_id"),
         _uuid("import_run_id"),
         _uuid("household_space_id"),
         _uuid("knowledge_contract_id"),
@@ -179,7 +180,7 @@ def upgrade() -> None:
     op.create_index(
         "uq_private_knowledge_status_intervals_digest",
         "private_knowledge_contract_status_intervals",
-        ["import_run_id", "interval_digest_sha256"],
+        ["rule_import_run_id", "interval_digest_sha256"],
         unique=True,
     )
     op.create_index(
@@ -289,6 +290,14 @@ def upgrade() -> None:
         "private_knowledge_rule_import_runs",
         ["household_space_id", "created_at", "id"],
         unique=False,
+    )
+    op.create_foreign_key(
+        "fk_private_knowledge_status_intervals_rule_run",
+        "private_knowledge_contract_status_intervals",
+        "private_knowledge_rule_import_runs",
+        ["rule_import_run_id", "import_run_id", "household_space_id"],
+        ["id", "knowledge_import_run_id", "household_space_id"],
+        ondelete="RESTRICT",
     )
 
     op.create_table(
@@ -453,6 +462,7 @@ def upgrade() -> None:
         _uuid("terms_section_id"),
         _nullable_uuid("source_clause_id"),
         _nullable_uuid("fact_id"),
+        sa.Column("citation_key", sa.String(length=160), nullable=False),
         sa.Column("evidence_purpose", sa.String(length=24), nullable=False),
         sa.Column("page_start", sa.Integer(), nullable=False),
         sa.Column("page_end", sa.Integer(), nullable=False),
@@ -516,7 +526,14 @@ def upgrade() -> None:
             "source_text_sha256",
             "private_knowledge_rule_citations",
         ),
+        _nonempty("citation_key", "private_knowledge_rule_citations"),
         _digest_check("citation_digest_sha256", "private_knowledge_rule_citations"),
+    )
+    op.create_index(
+        "uq_private_knowledge_rule_citations_key",
+        "private_knowledge_rule_citations",
+        ["rule_import_run_id", "citation_key"],
+        unique=True,
     )
     op.create_index(
         "uq_private_knowledge_rule_citations_digest",
@@ -604,6 +621,7 @@ def upgrade() -> None:
         _uuid("terms_section_id"),
         _nullable_uuid("source_clause_id"),
         _nullable_uuid("fact_id"),
+        sa.Column("citation_key", sa.String(length=160), nullable=False),
         sa.Column("evidence_purpose", sa.String(length=24), nullable=False),
         sa.Column("page_start", sa.Integer(), nullable=False),
         sa.Column("page_end", sa.Integer(), nullable=False),
@@ -667,10 +685,17 @@ def upgrade() -> None:
             "source_text_sha256",
             "pk_calc_citations",
         ),
+        _nonempty("citation_key", "pk_calc_citations"),
         _digest_check(
             "citation_digest_sha256",
             "pk_calc_citations",
         ),
+    )
+    op.create_index(
+        "uq_private_knowledge_calculation_citations_key",
+        "private_knowledge_calculation_citations",
+        ["rule_import_run_id", "citation_key"],
+        unique=True,
     )
     op.create_index(
         "uq_private_knowledge_calculation_citations_digest",
@@ -689,9 +714,18 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Remove only the additive private publication layer."""
 
+    op.drop_constraint(
+        "fk_private_knowledge_status_intervals_rule_run",
+        "private_knowledge_contract_status_intervals",
+        type_="foreignkey",
+    )
     indexes = (
         (
             "ix_private_knowledge_calculation_citations_publication",
+            "private_knowledge_calculation_citations",
+        ),
+        (
+            "uq_private_knowledge_calculation_citations_key",
             "private_knowledge_calculation_citations",
         ),
         (
@@ -712,6 +746,10 @@ def downgrade() -> None:
         ),
         (
             "ix_private_knowledge_rule_citations_publication",
+            "private_knowledge_rule_citations",
+        ),
+        (
+            "uq_private_knowledge_rule_citations_key",
             "private_knowledge_rule_citations",
         ),
         (

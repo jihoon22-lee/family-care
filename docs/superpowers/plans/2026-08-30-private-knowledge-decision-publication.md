@@ -381,6 +381,8 @@ git commit -m "feat(private-knowledge): validate rule packages"
 
 ### Task 5: Reconcile, dry-run, apply, and verify publication packages
 
+**Status:** completed
+
 **Files:**
 - Create: `apps/api/src/familycare_api/private_knowledge/publication_reconciliation.py`
 - Create: `apps/api/src/familycare_api/private_knowledge/publication_repository.py`
@@ -414,13 +416,13 @@ class PostgresRulePublicationRepository:
     def verify_current(self, household_space_id: UUID) -> RulePublicationSummary: ...
 ```
 
-- [ ] **Step 1: Write RED count-only reconciliation tests**
+- [x] **Step 1: Write RED count-only reconciliation tests**
 
 The baseline digest includes current knowledge run/package/projection digests, coverage authority axes, current confirmations, referenced sections/clauses/facts, AppUser identity/version metadata, and current publication identity. Reports contain only schema version, package/snapshot/baseline/report digests, operation, and count/decision matrices.
 
 Test first apply, same-current no-op, new snapshot/package supersede, historical digest block, stale knowledge snapshot, incomplete disposition matrix, missing current confirmation, non-MATCH mapping axes, citation mismatch, and changed baseline.
 
-- [ ] **Step 2: Run RED tests**
+- [x] **Step 2: Run RED tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_reconciliation.py apps/api/tests/test_private_knowledge_publication_service.py -q
@@ -428,15 +430,15 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_reco
 
 Expected: FAIL on missing repository/service contracts.
 
-- [ ] **Step 3: Implement read-only dry-run and atomic service**
+- [x] **Step 3: Implement read-only dry-run and atomic service**
 
 Use `REPEATABLE READ READ ONLY` for baseline/dry-run. Persist the report with atomic mode-`0600` replacement outside the repository and reread it before approval. Apply must advisory-lock the household publication scope, lock all baseline tables against DML, recompute the baseline, insert all rows, compare every count/matrix/digest, supersede the prior publication, and mark exactly one current run in one transaction.
 
-- [ ] **Step 4: Prove rollback and idempotency in PostgreSQL**
+- [x] **Step 4: Prove rollback and idempotency in PostgreSQL**
 
 Integration tests inject a failure after each entity group and assert no partial run/child remains and the previous current run is unchanged. Apply the same digest twice and assert the second result is `NO_OP` with identical row counts. Mutate one clause digest and prove verify fails closed.
 
-- [ ] **Step 5: Add sanitized CLI commands**
+- [x] **Step 5: Add sanitized CLI commands**
 
 Add:
 
@@ -449,7 +451,7 @@ publication-verify
 
 Private package/report path, household, actor, approval digest, and DB URL remain environment-only. stdout contains only status, opaque run ID, and aggregate counts. Extend CLI tests for invalid/missing environment, unapproved digest, sanitized errors, idempotent apply, and verify.
 
-- [ ] **Step 6: Run focused verification and commit**
+- [x] **Step 6: Run focused verification and commit**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_reconciliation.py apps/api/tests/test_private_knowledge_publication_service.py apps/api/tests/test_private_knowledge_publication_repository_integration.py apps/api/tests/test_private_knowledge_cli.py -q

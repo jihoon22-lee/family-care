@@ -19,6 +19,8 @@ PUBLICATION_DATA_FILES = (
     "reconciliation.json",
 )
 
+SYNTHETIC_SOURCE_SUBJECT_KEY = "subject:" + hashlib.sha256(b'["Family Member A"]').hexdigest()
+
 
 def _canonical_json(value: object) -> str:
     return json.dumps(
@@ -48,6 +50,22 @@ def refresh_publication_manifest(root: Path) -> None:
                 "sha256": hashlib.sha256(payload).hexdigest(),
             }
         )
+    _write_private_file(
+        manifest_path,
+        (_canonical_json(manifest) + "\n").encode("utf-8"),
+    )
+
+
+def bind_publication_package_to_knowledge(
+    root: Path,
+    *,
+    package_digest_sha256: str,
+    projection_digest_sha256: str,
+) -> None:
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["source_knowledge_package_digest_sha256"] = package_digest_sha256
+    manifest["source_knowledge_projection_digest_sha256"] = projection_digest_sha256
     _write_private_file(
         manifest_path,
         (_canonical_json(manifest) + "\n").encode("utf-8"),
@@ -85,7 +103,7 @@ def write_synthetic_rule_publication_package(root: Path) -> Path:
     root.chmod(0o700)
 
     coverage_disposition = {
-        "source_subject_key": "synthetic-subject-001",
+        "source_subject_key": SYNTHETIC_SOURCE_SUBJECT_KEY,
         "family_alias": "Family Member A",
         "canonical_policy_id": "synthetic-policy-001",
         "canonical_coverage_id": "synthetic-coverage-001",
@@ -141,12 +159,13 @@ def write_synthetic_rule_publication_package(root: Path) -> Path:
         "rule_key": "synthetic-rule-001",
         "canonical_policy_id": "synthetic-policy-001",
         "canonical_coverage_id": "synthetic-coverage-001",
+        "terms_source_alias": "synthetic-terms-source",
         "source_section_key": "synthetic-section-001",
-        "source_clause_key": "synthetic-clause-001",
+        "source_clause_index": 1,
         "source_fact_key": "synthetic-fact-001",
         "evidence_purpose": "ELIGIBILITY",
-        "page_start": 1,
-        "page_end": 1,
+        "page_start": 2,
+        "page_end": 2,
         "source_text_sha256": "a" * 64,
     }
     calculation_publication = {
@@ -178,12 +197,13 @@ def write_synthetic_rule_publication_package(root: Path) -> Path:
         "calculation_key": "synthetic-calculation-001",
         "canonical_policy_id": "synthetic-policy-001",
         "canonical_coverage_id": "synthetic-coverage-001",
+        "terms_source_alias": "synthetic-terms-source",
         "source_section_key": "synthetic-section-001",
-        "source_clause_key": "synthetic-clause-001",
+        "source_clause_index": 1,
         "source_fact_key": "synthetic-fact-001",
         "evidence_purpose": "AMOUNT",
-        "page_start": 1,
-        "page_end": 1,
+        "page_start": 2,
+        "page_end": 2,
         "source_text_sha256": "a" * 64,
     }
     counts = {

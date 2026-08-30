@@ -47,8 +47,31 @@ class RecordingOperations:
         self.indexes[name] = {"table_name": table_name, "columns": columns, **kwargs}
         self.operations.append(("create_index", name, table_name))
 
+    def create_foreign_key(
+        self,
+        name: str,
+        source_table: str,
+        referent_table: str,
+        local_cols: list[str],
+        remote_cols: list[str],
+        **kwargs: Any,
+    ) -> None:
+        table = self.tables[source_table]
+        table.append_constraint(
+            sa.ForeignKeyConstraint(
+                local_cols,
+                [f"{referent_table}.{column}" for column in remote_cols],
+                name=name,
+                **kwargs,
+            )
+        )
+        self.operations.append(("create_foreign_key", name, source_table))
+
     def drop_index(self, name: str, **kwargs: Any) -> None:
         self.operations.append(("drop_index", name, cast(str | None, kwargs.get("table_name"))))
+
+    def drop_constraint(self, name: str, table_name: str, **kwargs: Any) -> None:
+        self.operations.append(("drop_constraint", name, table_name))
 
     def drop_table(self, name: str) -> None:
         self.operations.append(("drop_table", name, None))
@@ -110,6 +133,7 @@ def test_status_intervals_require_exact_contract_household_and_user_authority() 
 
     assert {
         "id",
+        "rule_import_run_id",
         "import_run_id",
         "household_space_id",
         "knowledge_contract_id",
@@ -126,6 +150,15 @@ def test_status_intervals_require_exact_contract_household_and_user_authority() 
         "created_at",
     } == set(table.columns.keys())
     assert composite_foreign_keys(table) >= {
+        (
+            ("rule_import_run_id", "import_run_id", "household_space_id"),
+            (
+                "private_knowledge_rule_import_runs.id",
+                "private_knowledge_rule_import_runs.knowledge_import_run_id",
+                "private_knowledge_rule_import_runs.household_space_id",
+            ),
+            "RESTRICT",
+        ),
         (
             ("knowledge_contract_id", "import_run_id"),
             (
@@ -155,6 +188,8 @@ def test_status_intervals_require_exact_contract_household_and_user_authority() 
     assert "decision IN ('MATCH', 'NO_MATCH', 'UNKNOWN')" in table_checks
     assert "review_state = 'USER_CONFIRMED'" in table_checks
     assert any("effective_through" in value and "effective_from" in value for value in table_checks)
+    digest_index = operations.indexes["uq_private_knowledge_status_intervals_digest"]
+    assert digest_index["columns"] == ["rule_import_run_id", "interval_digest_sha256"]
 
 
 def test_publication_run_is_user_reviewed_digest_bound_and_append_only() -> None:
@@ -286,6 +321,7 @@ def test_rule_and_calculation_citations_keep_exact_run_page_and_clause_lineage()
         assert any(
             "evidence_purpose IN" in value and "ELIGIBILITY" in value for value in table_checks
         )
+        assert "citation_key" in table.columns
         assert (
             (
                 parent_column,

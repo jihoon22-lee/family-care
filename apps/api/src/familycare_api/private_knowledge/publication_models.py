@@ -100,6 +100,24 @@ class PublicationCounts(StrictPublicationModel):
     calculation_publication_count: NonNegativeInt
     calculation_citation_count: NonNegativeInt
 
+    @classmethod
+    def zero(cls) -> PublicationCounts:
+        return cls(
+            subject_count=0,
+            contract_count=0,
+            coverage_count=0,
+            disposition_count=0,
+            published_disposition_count=0,
+            blocked_disposition_count=0,
+            not_applicable_disposition_count=0,
+            status_interval_count=0,
+            fact_normalizer_count=0,
+            rule_publication_count=0,
+            rule_citation_count=0,
+            calculation_publication_count=0,
+            calculation_citation_count=0,
+        )
+
 
 class PublicationManifest(StrictPublicationModel):
     schema_version: Literal["private-knowledge-rule-publication.sol-v1"]
@@ -176,8 +194,9 @@ class PublicationCitationRecord(StrictPublicationModel):
     citation_key: ShortText
     canonical_policy_id: ShortText
     canonical_coverage_id: ShortText
+    terms_source_alias: MediumText
     source_section_key: ShortText
-    source_clause_key: ShortText | None
+    source_clause_index: PositivePage | None
     source_fact_key: ShortText | None
     evidence_purpose: EvidencePurpose
     page_start: PositivePage

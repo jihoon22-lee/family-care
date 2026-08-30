@@ -19,8 +19,26 @@ from familycare_api.private_knowledge.confirmations import (
     load_confirmation_manifest,
     prepare_confirmation_dry_run,
 )
-from familycare_api.private_knowledge.errors import PrivateKnowledgePackageError
+from familycare_api.private_knowledge.errors import (
+    PrivateKnowledgePackageError,
+    PublicationPackageError,
+)
 from familycare_api.private_knowledge.package import load_private_knowledge_package
+from familycare_api.private_knowledge.publication_models import PublicationCounts
+from familycare_api.private_knowledge.publication_package import (
+    load_rule_publication_package,
+)
+from familycare_api.private_knowledge.publication_reconciliation import (
+    PublicationReconciliationError,
+)
+from familycare_api.private_knowledge.publication_repository import (
+    PostgresRulePublicationRepository,
+    RulePublicationRepositoryError,
+)
+from familycare_api.private_knowledge.publication_service import (
+    apply_rule_publication_package,
+    prepare_rule_publication_dry_run,
+)
 from familycare_api.private_knowledge.reconciliation import (
     KnowledgeEntityCounts,
     PrivateKnowledgeReconciliationError,
@@ -43,6 +61,8 @@ _APPROVAL_DIGEST = "FAMILYCARE_PRIVATE_KNOWLEDGE_APPROVAL_DIGEST"
 _DATABASE_URL = "FAMILYCARE_DATABASE_URL"
 _CONFIRMATION_MANIFEST_PATH = "FAMILYCARE_PRIVATE_CONFIRMATION_MANIFEST_PATH"
 _CONFIRMATION_REPORT_PATH = "FAMILYCARE_PRIVATE_CONFIRMATION_REPORT_PATH"
+_RULE_PACKAGE_ROOT = "FAMILYCARE_PRIVATE_RULE_PACKAGE_ROOT"
+_RULE_REPORT_PATH = "FAMILYCARE_PRIVATE_RULE_REPORT_PATH"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -123,6 +143,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("confirmation-dry-run")
     subparsers.add_parser("confirmation-apply")
     subparsers.add_parser("confirmation-verify")
+    subparsers.add_parser("publication-validate")
+    subparsers.add_parser("publication-dry-run")
+    subparsers.add_parser("publication-apply")
+    subparsers.add_parser("publication-verify")
     return parser
 
 
@@ -169,11 +193,90 @@ def _print_confirmation_counts(
     print(" ".join(fields))
 
 
+def _print_publication_counts(
+    *,
+    status: str,
+    counts: PublicationCounts,
+    run_id: UUID | None = None,
+) -> None:
+    fields = [f"status={status}"]
+    if run_id is not None:
+        fields.append(f"run_id={run_id}")
+    fields.extend(
+        (
+            f"subjects={counts.subject_count}",
+            f"contracts={counts.contract_count}",
+            f"coverages={counts.coverage_count}",
+            f"published={counts.published_disposition_count}",
+            f"blocked={counts.blocked_disposition_count}",
+            f"not_applicable={counts.not_applicable_disposition_count}",
+            f"rules={counts.rule_publication_count}",
+            f"calculations={counts.calculation_publication_count}",
+            f"citations={counts.rule_citation_count + counts.calculation_citation_count}",
+        )
+    )
+    print(" ".join(fields))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         repository_root = _trusted_repository_root()
-        if args.command == "validate":
+        if args.command == "publication-validate":
+            publication_package = load_rule_publication_package(
+                _path_environment(_RULE_PACKAGE_ROOT),
+                repository_root=repository_root,
+            )
+            _print_publication_counts(
+                status="PUBLICATION_VALIDATED",
+                counts=publication_package.reconciliation,
+            )
+        elif args.command == "publication-dry-run":
+            publication_repository = PostgresRulePublicationRepository(
+                _required_environment(_DATABASE_URL)
+            )
+            publication_report = prepare_rule_publication_dry_run(
+                package_root=_path_environment(_RULE_PACKAGE_ROOT),
+                report_path=_path_environment(_RULE_REPORT_PATH),
+                repository_root=repository_root,
+                household_space_id=_uuid_environment(_HOUSEHOLD_ID),
+                baseline_reader=publication_repository,
+            )
+            _print_publication_counts(
+                status=f"PUBLICATION_DRY_RUN_{publication_report.operation}",
+                counts=publication_report.expected_current_counts,
+            )
+        elif args.command == "publication-apply":
+            publication_repository = PostgresRulePublicationRepository(
+                _required_environment(_DATABASE_URL)
+            )
+            publication_applied = apply_rule_publication_package(
+                package_root=_path_environment(_RULE_PACKAGE_ROOT),
+                report_path=_path_environment(_RULE_REPORT_PATH),
+                repository_root=repository_root,
+                household_space_id=_uuid_environment(_HOUSEHOLD_ID),
+                actor_id=_uuid_environment(_ACTOR_ID),
+                approved_report_digest_sha256=_approval_digest(),
+                publication_applier=publication_repository,
+            )
+            _print_publication_counts(
+                status="PUBLICATION_APPLIED",
+                run_id=publication_applied.run_id,
+                counts=publication_applied.counts,
+            )
+        elif args.command == "publication-verify":
+            publication_repository = PostgresRulePublicationRepository(
+                _required_environment(_DATABASE_URL)
+            )
+            publication_verified = publication_repository.verify_current(
+                _uuid_environment(_HOUSEHOLD_ID)
+            )
+            _print_publication_counts(
+                status="PUBLICATION_VERIFIED",
+                run_id=publication_verified.run_id,
+                counts=publication_verified.counts,
+            )
+        elif args.command == "validate":
             package = load_private_knowledge_package(
                 _path_environment(_PACKAGE_ROOT),
                 repository_root=repository_root,
@@ -273,6 +376,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         PrivateKnowledgePackageError,
         PrivateKnowledgeReconciliationError,
         PrivateKnowledgeRepositoryError,
+        PublicationPackageError,
+        PublicationReconciliationError,
+        RulePublicationRepositoryError,
     ) as error:
         code = getattr(error, "code", PrivateKnowledgeCliErrorCode.ENVIRONMENT_INVALID)
         print(f"familycare-private-knowledge: {code}", file=sys.stderr)
