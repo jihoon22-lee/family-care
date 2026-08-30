@@ -1,0 +1,322 @@
+{
+  "schema_version": "2",
+  "run_id": "00000000-0000-4000-8000-000000000801",
+  "medical_event_id": "00000000-0000-4000-8000-000000000802",
+  "event_version": 1,
+  "engine_version": "synthetic-decision-engine-v2",
+  "rule_set_version": "synthetic-rule-set-v2",
+  "knowledge_snapshot_version": {
+    "catalog_import_run_id": "00000000-0000-4000-8000-000000000803",
+    "rule_import_run_id": "00000000-0000-4000-8000-000000000804",
+    "event_fact_schema_version": "medical-event-facts.v2"
+  },
+  "policy_snapshot_at": "2026-08-25T09:00:00Z",
+  "stale": false,
+  "analysis_completeness": "COMPLETE",
+  "catalog_coverage": {
+    "contract_count": 2,
+    "benefit_coverage_count": 2,
+    "published_coverage_count": 2,
+    "blocked_coverage_count": 0,
+    "not_applicable_coverage_count": 0
+  },
+  "candidates": [
+    {
+      "candidate_id": "00000000-0000-4000-8000-000000000805",
+      "source": {
+        "kind": "OPERATIONAL_RIDER",
+        "rider_id": "00000000-0000-4000-8000-000000000806"
+      },
+      "contract_label": "Registered Sample Policy",
+      "coverage_label": "Sample Rider A",
+      "benefit_kind": "FIXED",
+      "aggregate_result": "UNKNOWN",
+      "required_match_count": 0,
+      "required_unknown_count": 1,
+      "required_no_match_count": 0,
+      "questions": [
+        {
+          "field_path": "MedicalEvent.classification",
+          "reason_code": "MISSING_CLASSIFICATION"
+        }
+      ],
+      "hold_reason_codes": [
+        "MISSING_REQUIRED_FACT"
+      ],
+      "calculation": null,
+      "claim_start_ready": false
+    },
+    {
+      "candidate_id": "00000000-0000-4000-8000-000000000807",
+      "source": {
+        "kind": "OPERATIONAL_RIDER",
+        "rider_id": "00000000-0000-4000-8000-000000000808"
+      },
+      "contract_label": "Registered Sample Policy",
+      "coverage_label": "Sample Rider B",
+      "benefit_kind": "INDEMNITY",
+      "aggregate_result": "NO_MATCH",
+      "required_match_count": 0,
+      "required_unknown_count": 0,
+      "required_no_match_count": 1,
+      "questions": [],
+      "hold_reason_codes": [
+        "DETERMINISTIC_EXCLUSION"
+      ],
+      "calculation": null,
+      "claim_start_ready": false
+    },
+    {
+      "candidate_id": "00000000-0000-4000-8000-000000000809",
+      "source": {
+        "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+        "knowledge_contract_id": "00000000-0000-4000-8000-000000000810",
+        "knowledge_coverage_id": "00000000-0000-4000-8000-000000000811"
+      },
+      "contract_label": "Sample Private Policy A",
+      "coverage_label": "Sample Fixed Coverage A",
+      "benefit_kind": "FIXED",
+      "aggregate_result": "MATCH",
+      "required_match_count": 1,
+      "required_unknown_count": 0,
+      "required_no_match_count": 0,
+      "questions": [],
+      "hold_reason_codes": [],
+      "calculation": {
+        "calculation_id": "00000000-0000-4000-8000-000000000812",
+        "calculation_publication_id": "00000000-0000-4000-8000-000000000813",
+        "kind": "FIXED",
+        "status": "CALCULATED",
+        "currency": "KRW",
+        "conditional_amount": "300000",
+        "confirmed_amount": null,
+        "excluded_amount": null,
+        "deductible_amount": null,
+        "applied_rate": null,
+        "applied_limit": null,
+        "rounding_rule": null,
+        "hold_reason_code": null,
+        "steps": [
+          {
+            "step_number": 1,
+            "operation": "fixed_amount",
+            "input_amount": null,
+            "output_amount": "300000",
+            "currency": "KRW",
+            "rounding_rule": null,
+            "reason_code": "FIXED_AMOUNT_CALCULATED"
+          }
+        ]
+      },
+      "claim_start_ready": false
+    },
+    {
+      "candidate_id": "00000000-0000-4000-8000-000000000814",
+      "source": {
+        "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+        "knowledge_contract_id": "00000000-0000-4000-8000-000000000815",
+        "knowledge_coverage_id": "00000000-0000-4000-8000-000000000816"
+      },
+      "contract_label": "Sample Private Policy B",
+      "coverage_label": "Sample Indemnity Coverage B",
+      "benefit_kind": "INDEMNITY",
+      "aggregate_result": "UNKNOWN",
+      "required_match_count": 0,
+      "required_unknown_count": 1,
+      "required_no_match_count": 0,
+      "questions": [
+        {
+          "field_path": "Receipt.confirmed_amount",
+          "reason_code": "RECEIPT_REQUIRED"
+        }
+      ],
+      "hold_reason_codes": [
+        "INDEMNITY_INPUT_UNKNOWN"
+      ],
+      "calculation": {
+        "calculation_id": "00000000-0000-4000-8000-000000000817",
+        "calculation_publication_id": "00000000-0000-4000-8000-000000000818",
+        "kind": "INDEMNITY",
+        "status": "UNKNOWN",
+        "currency": "KRW",
+        "conditional_amount": null,
+        "confirmed_amount": null,
+        "excluded_amount": null,
+        "deductible_amount": null,
+        "applied_rate": null,
+        "applied_limit": null,
+        "rounding_rule": null,
+        "hold_reason_code": "INDEMNITY_INPUT_UNKNOWN",
+        "steps": []
+      },
+      "claim_start_ready": false
+    }
+  ],
+  "evaluations": [
+    {
+      "evaluation_id": "00000000-0000-4000-8000-000000000819",
+      "source": {
+        "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+        "knowledge_coverage_id": "00000000-0000-4000-8000-000000000811",
+        "rule_publication_id": "00000000-0000-4000-8000-000000000820"
+      },
+      "result": "MATCH",
+      "required": true,
+      "reason_code": "PRIVATE_RULE_MATCH",
+      "fact_paths": [
+        "MedicalEvent.classification"
+      ],
+      "missing_fields": [],
+      "conflicting_fields": [],
+      "engine_version": "private-knowledge-engine-v1",
+      "citations": [
+        {
+          "kind": "PRIVATE_KNOWLEDGE_CITATION",
+          "terms_section_id": "00000000-0000-4000-8000-000000000821",
+          "source_clause_id": "00000000-0000-4000-8000-000000000822",
+          "fact_id": "00000000-0000-4000-8000-000000000823",
+          "evidence_purpose": "ELIGIBILITY",
+          "page_start": 7,
+          "page_end": 7
+        }
+      ]
+    },
+    {
+      "evaluation_id": "00000000-0000-4000-8000-000000000824",
+      "source": {
+        "kind": "OPERATIONAL_RIDER",
+        "rider_id": "00000000-0000-4000-8000-000000000806",
+        "rule_version_id": "00000000-0000-4000-8000-000000000825"
+      },
+      "result": "UNKNOWN",
+      "required": true,
+      "reason_code": "MISSING_REQUIRED_FACT",
+      "fact_paths": [
+        "MedicalEvent.classification"
+      ],
+      "missing_fields": [
+        "MedicalEvent.classification"
+      ],
+      "conflicting_fields": [],
+      "engine_version": "synthetic-decision-engine-v2",
+      "citations": [
+        {
+          "kind": "OPERATIONAL_EVIDENCE",
+          "evidence_id": "00000000-0000-4000-8000-000000000826",
+          "document_version_id": "00000000-0000-4000-8000-000000000827",
+          "extraction_id": "00000000-0000-4000-8000-000000000828",
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "physical_page": 1,
+          "bbox": null,
+          "review_state": "USER_CONFIRMED"
+        }
+      ]
+    },
+    {
+      "evaluation_id": "00000000-0000-4000-8000-000000000829",
+      "source": {
+        "kind": "OPERATIONAL_RIDER",
+        "rider_id": "00000000-0000-4000-8000-000000000808",
+        "rule_version_id": "00000000-0000-4000-8000-000000000830"
+      },
+      "result": "NO_MATCH",
+      "required": true,
+      "reason_code": "DETERMINISTIC_EXCLUSION",
+      "fact_paths": [
+        "MedicalEvent.classification"
+      ],
+      "missing_fields": [],
+      "conflicting_fields": [],
+      "engine_version": "synthetic-decision-engine-v2",
+      "citations": [
+        {
+          "kind": "OPERATIONAL_EVIDENCE",
+          "evidence_id": "00000000-0000-4000-8000-000000000831",
+          "document_version_id": "00000000-0000-4000-8000-000000000832",
+          "extraction_id": "00000000-0000-4000-8000-000000000833",
+          "content_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "physical_page": 2,
+          "bbox": [
+            72,
+            120,
+            480,
+            180
+          ],
+          "review_state": "AI_VERIFIED"
+        }
+      ]
+    },
+    {
+      "evaluation_id": "00000000-0000-4000-8000-000000000834",
+      "source": {
+        "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+        "knowledge_coverage_id": "00000000-0000-4000-8000-000000000816",
+        "rule_publication_id": "00000000-0000-4000-8000-000000000835"
+      },
+      "result": "UNKNOWN",
+      "required": true,
+      "reason_code": "RECEIPT_REQUIRED",
+      "fact_paths": [
+        "Receipt.confirmed_amount"
+      ],
+      "missing_fields": [
+        "Receipt.confirmed_amount"
+      ],
+      "conflicting_fields": [],
+      "engine_version": "private-knowledge-engine-v1",
+      "citations": [
+        {
+          "kind": "PRIVATE_KNOWLEDGE_CITATION",
+          "terms_section_id": "00000000-0000-4000-8000-000000000836",
+          "source_clause_id": "00000000-0000-4000-8000-000000000837",
+          "fact_id": "00000000-0000-4000-8000-000000000838",
+          "evidence_purpose": "INDEMNITY_CALCULATION",
+          "page_start": 12,
+          "page_end": 13
+        }
+      ]
+    }
+  ],
+  "conditional_fixed_subtotals": [
+    {
+      "currency": "KRW",
+      "amount": "300000",
+      "calculated_candidate_count": 1,
+      "unresolved_candidate_count": 0
+    }
+  ],
+  "indemnity_summary": {
+    "status": "UNKNOWN",
+    "candidate_count": 1,
+    "calculated_candidate_count": 0,
+    "unresolved_candidate_count": 1
+  },
+  "source_failure_codes": [],
+  "assistance": {
+    "mode": "STRUCTURED_SEARCH",
+    "state": "SEARCH_READY",
+    "outcome_code": "LOCAL_SEARCH_READY",
+    "model_label": null,
+    "recommendations": [
+      {
+        "recommendation_id": "00000000-0000-4000-8000-000000000839",
+        "rank": 1,
+        "contract_label": "Sample Private Policy A",
+        "coverage_label": "Sample Fixed Coverage A",
+        "clause_label": "Sample Clause A",
+        "excerpt": "Synthetic bounded clause excerpt for review.",
+        "reason_code": "TOKEN_OVERLAP",
+        "explanation_code": null,
+        "question_code": null,
+        "citation": {
+          "kind": "FACT_CITATION",
+          "terms_section_id": "00000000-0000-4000-8000-000000000821",
+          "source_clause_id": "00000000-0000-4000-8000-000000000822",
+          "fact_id": "00000000-0000-4000-8000-000000000823",
+          "page_start": 7,
+          "page_end": 7
+        }
+      }
+    ]
+  }
+}

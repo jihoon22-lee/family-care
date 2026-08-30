@@ -23,8 +23,8 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = ROOT / "packages/contracts/schemas/coverage-decision.v1.schema.json"
-EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v1.json"
+SCHEMA_PATH = ROOT / "packages/contracts/schemas/coverage-decision.v2.schema.json"
+EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v2.json"
 DECISION_SOURCE_ROOT = ROOT / "apps/api/src/familycare_api/decisions"
 
 RAW_FACT_SENTINEL = "SYNTHETIC_FACT_VALUE_SENTINEL"
@@ -36,7 +36,6 @@ MEMBER_ID = "00000000-0000-4000-8000-000000000202"
 _FORBIDDEN_KEYS = {
     "absolute_path",
     "archive_key",
-    "amount",
     "diagnosis",
     "diagnosis_text",
     "document_path",
@@ -46,7 +45,11 @@ _FORBIDDEN_KEYS = {
     "guaranteed",
     "household_space_id",
     "password",
+    "payable_amount",
     "pdf_path",
+    "prompt",
+    "provider_request_id",
+    "raw_response",
     "raw_description",
     "raw_text",
     "source_path",
@@ -150,7 +153,7 @@ def _invalid_request_client() -> Iterator[TestClient]:
 def test_actual_coverage_decision_response_serialization_matches_schema() -> None:
     schema = _load_json(SCHEMA_PATH)
     example = _load_json(EXAMPLE_PATH)
-    example["evaluations"][1]["evidence"][0]["bbox"] = [
+    example["evaluations"][1]["citations"][0]["bbox"] = [
         72.1234,
         120.5678,
         480.0001,
@@ -187,7 +190,7 @@ def test_decision_response_and_contract_objects_are_strict() -> None:
         CoverageDecisionResponse.model_validate({**example, "private_extra": "value"})
 
     nested = copy.deepcopy(example)
-    nested["evaluations"][0]["evidence"][0]["private_extra"] = "value"
+    nested["evaluations"][0]["citations"][0]["private_extra"] = "value"
     with pytest.raises(ValidationError):
         CoverageDecisionResponse.model_validate(nested)
     assert validate_schema_instance(schema, {**example, "private_extra": "value"})

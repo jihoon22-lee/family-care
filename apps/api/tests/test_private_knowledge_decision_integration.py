@@ -17,6 +17,7 @@ from familycare_api.decisions.knowledge_repository import (
     PostgresKnowledgeDecisionRepository,
 )
 from familycare_api.decisions.repository import DecisionRepository
+from familycare_api.decisions.schemas import CoverageDecisionResponse
 from familycare_api.decisions.service import DecisionService
 from familycare_api.private_knowledge.package import load_private_knowledge_package
 from familycare_api.private_knowledge.publication_package import (
@@ -218,6 +219,21 @@ def test_combined_analysis_round_trip_partial_isolation_and_staleness(
     assert combined.knowledge_result is not None
     assert combined.knowledge_result.candidates[0].result == "MATCH"
     assert combined.knowledge_result.calculations[0].conditional_amount == 1
+    wire = CoverageDecisionResponse.from_value(combined).model_dump(mode="json")
+    assert wire["schema_version"] == "2"
+    assert {item["source"]["kind"] for item in wire["candidates"]} == {
+        "OPERATIONAL_RIDER",
+        "PRIVATE_KNOWLEDGE_COVERAGE",
+    }
+    private_candidate = next(
+        item
+        for item in wire["candidates"]
+        if item["source"]["kind"] == "PRIVATE_KNOWLEDGE_COVERAGE"
+    )
+    assert private_candidate["claim_start_ready"] is False
+    assert private_candidate["calculation"]["conditional_amount"] == "1"
+    assert wire["conditional_fixed_subtotals"][0]["amount"] == "1"
+    assert "provider_request_id" not in str(wire)
 
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         counts = connection.execute(
@@ -282,6 +298,7 @@ def test_combined_analysis_round_trip_partial_isolation_and_staleness(
     assert unavailable.catalog_coverage.published_coverage_count == 0
     assert unavailable.knowledge_result is None
     assert unavailable.candidates
+    assert CoverageDecisionResponse.from_value(unavailable).analysis_completeness == "UNAVAILABLE"
 
     failing_service = DecisionService(
         seed.scope_a,
@@ -295,6 +312,7 @@ def test_combined_analysis_round_trip_partial_isolation_and_staleness(
     assert partial.source_failure_codes == ("KNOWLEDGE_SOURCE_UNAVAILABLE",)
     assert partial.candidates
     assert partial.knowledge_result is None
+    assert CoverageDecisionResponse.from_value(partial).analysis_completeness == "UNAVAILABLE"
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         persisted = connection.execute(
             """

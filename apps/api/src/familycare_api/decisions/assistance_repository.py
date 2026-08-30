@@ -397,6 +397,8 @@ def _recommendation(row: dict[str, Any], *, rank: int) -> AnalysisRecommendation
         page_end=int(row["page_end"]),
         citation_kind="FACT_CITATION",
         reason_code=cast(str, row["reason_code"]),
+        explanation_code=cast(str | None, row.get("explanation_code")),
+        question_code=cast(str | None, row.get("question_code")),
     )
 
 

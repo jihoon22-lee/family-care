@@ -590,6 +590,14 @@ export interface AnalysisAcceptedResponse {
   status_url: string;
 }
 
+export interface AnalysisAssistanceResponse {
+  mode: "STRUCTURED_SEARCH" | "LLM_ASSISTED" | "NONE";
+  model_label: string | null;
+  outcome_code: string;
+  recommendations: Array<AnalysisRecommendationResponse>;
+  state: "SEARCH_READY" | "LLM_PENDING" | "LLM_READY";
+}
+
 export interface AnalysisJobStatusResponse {
   attempts: number;
   document_id: string;
@@ -618,6 +626,28 @@ export interface AnalysisJobStatusResponse {
     | "retryable_failed"
     | "running"
     | "succeeded";
+}
+
+export interface AnalysisRecommendationResponse {
+  citation: AssistanceCitationResponse;
+  clause_label: string;
+  contract_label: string;
+  coverage_label: string;
+  excerpt: string;
+  explanation_code: string | null;
+  question_code: string | null;
+  rank: number;
+  reason_code: string;
+  recommendation_id: string;
+}
+
+export interface AssistanceCitationResponse {
+  fact_id: string;
+  kind: "FACT_CITATION";
+  page_end: number;
+  page_start: number;
+  source_clause_id: string;
+  terms_section_id: string;
 }
 
 export interface AuthErrorResponse {
@@ -895,6 +925,14 @@ export type CandidateStatus =
 
 export type CandidateVersionId = string;
 
+export interface CatalogCoverageResponse {
+  benefit_coverage_count: number;
+  blocked_coverage_count: number;
+  contract_count: number;
+  not_applicable_coverage_count: number;
+  published_coverage_count: number;
+}
+
 export interface ChangePasswordRequest {
   new_password: string;
 }
@@ -905,18 +943,8 @@ export interface ChecklistUpdateRequest {
   prepared: boolean;
 }
 
-export interface ClaimCandidateResponse {
-  aggregate_result: "MATCH" | "NO_MATCH" | "UNKNOWN";
-  candidate_id: string;
-  hold_reason_codes: Array<string>;
-  questions: Array<QuestionResponse>;
-  required_match_count: number;
-  required_no_match_count: number;
-  required_unknown_count: number;
-  rider_id: string;
-  rider_label: string;
-  rider_type: "fixed" | "indemnity";
-}
+export type ClaimCandidateResponse =
+  OperationalCandidateResponse | PrivateKnowledgeCandidateResponse;
 
 export interface ClaimCaseListResponse {
   items: Array<ClaimCaseResponse>;
@@ -1125,16 +1153,30 @@ export interface ComponentCreateRequest {
     "policy" | "terms" | "product_explanation" | "application" | "supporting";
 }
 
+export interface ConditionalFixedSubtotalResponse {
+  amount: string;
+  calculated_candidate_count: number;
+  currency: string;
+  unresolved_candidate_count: number;
+}
+
 export interface CoverageDecisionResponse {
+  analysis_completeness: "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
+  assistance: AnalysisAssistanceResponse;
   candidates: Array<ClaimCandidateResponse>;
+  catalog_coverage: CatalogCoverageResponse;
+  conditional_fixed_subtotals: Array<ConditionalFixedSubtotalResponse>;
   engine_version: string;
   evaluations: Array<RuleEvaluationResponse>;
   event_version: number;
+  indemnity_summary: IndemnitySummaryResponse;
+  knowledge_snapshot_version: KnowledgeSnapshotVersionResponse;
   medical_event_id: string;
   policy_snapshot_at: string;
   rule_set_version: string;
   run_id: string;
-  schema_version?: "1";
+  schema_version: "2";
+  source_failure_codes: Array<string>;
   stale: boolean;
 }
 
@@ -1254,6 +1296,15 @@ export interface EvidenceRef {
   page: number;
 }
 
+export interface EvidenceResponse {
+  bbox: [number, number, number, number] | null;
+  content_sha256: string;
+  document_version_id: string;
+  evidence_id: string;
+  physical_page: number;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
+}
+
 export interface EvidenceSnapshotResponse {
   content_sha256?: Array<string>;
   evidence_ids?: Array<string>;
@@ -1334,6 +1385,13 @@ export interface ImportSourceResponse {
   source_id: string;
 }
 
+export interface IndemnitySummaryResponse {
+  calculated_candidate_count: number;
+  candidate_count: number;
+  status: "NONE" | "CALCULATED" | "UNKNOWN";
+  unresolved_candidate_count: number;
+}
+
 export interface InsuranceDocumentComponentResponse {
   document_batch_item_id: string;
   id: string;
@@ -1401,6 +1459,33 @@ export interface InventorySummaryResponse {
   product_explanation_documents: number;
   terms_only_documents: number;
   unreadable_documents: number;
+}
+
+export interface KnowledgeBenefitCalculationResponse {
+  applied_limit: string | null;
+  applied_rate: string | null;
+  calculation_id: string;
+  calculation_publication_id: string | null;
+  conditional_amount: string | null;
+  confirmed_amount: string | null;
+  currency: string | null;
+  deductible_amount: string | null;
+  excluded_amount: string | null;
+  hold_reason_code: string | null;
+  kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  rounding_rule: string | null;
+  status: "CALCULATED" | "UNKNOWN" | "NOT_APPLICABLE" | "FAILED";
+  steps: Array<KnowledgeCalculationStepResponse>;
+}
+
+export interface KnowledgeCalculationStepResponse {
+  currency: string | null;
+  input_amount: string | null;
+  operation: string;
+  output_amount: string | null;
+  reason_code: string;
+  rounding_rule: string | null;
+  step_number: number;
 }
 
 export interface KnowledgeContractDetailResponse {
@@ -1534,6 +1619,12 @@ export interface KnowledgeFactResponse {
   statement: string;
 }
 
+export interface KnowledgeSnapshotVersionResponse {
+  catalog_import_run_id: string | null;
+  event_fact_schema_version: string;
+  rule_import_run_id: string | null;
+}
+
 export interface KnowledgeTermsAssignmentResponse {
   document_identity_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
   edition_applicability_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
@@ -1616,6 +1707,57 @@ export interface MemberInsuranceDocumentInventoryResponse {
 export interface MoneyResponse {
   amount: string;
   currency: string;
+}
+
+export interface OperationalCandidateResponse {
+  aggregate_result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  calculation: null;
+  candidate_id: string;
+  claim_start_ready: boolean;
+  contract_label: string;
+  coverage_label: string;
+  hold_reason_codes: Array<string>;
+  questions: Array<QuestionResponse>;
+  required_match_count: number;
+  required_no_match_count: number;
+  required_unknown_count: number;
+  source: OperationalCandidateSourceResponse;
+}
+
+export interface OperationalCandidateSourceResponse {
+  kind: "OPERATIONAL_RIDER";
+  rider_id: string;
+}
+
+export interface OperationalEvaluationResponse {
+  citations: Array<OperationalEvidenceCitationResponse>;
+  conflicting_fields: Array<string>;
+  engine_version: string;
+  evaluation_id: string;
+  fact_paths: Array<string>;
+  missing_fields: Array<string>;
+  reason_code: string;
+  required: boolean;
+  result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  source: OperationalEvaluationSourceResponse;
+}
+
+export interface OperationalEvaluationSourceResponse {
+  kind: "OPERATIONAL_RIDER";
+  rider_id: string;
+  rule_version_id: string;
+}
+
+export interface OperationalEvidenceCitationResponse {
+  bbox: [number, number, number, number] | null;
+  content_sha256: string;
+  document_version_id: string;
+  evidence_id: string;
+  extraction_id: string;
+  kind: "OPERATIONAL_EVIDENCE";
+  physical_page: number;
+  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
 }
 
 export interface OptionalQuestionResponse {
@@ -1741,7 +1883,7 @@ export interface PolicyPartyCreateRequest {
 export interface PolicyPartyResponse {
   effective_from: string | null;
   effective_to: string | null;
-  evidence: familycare_api__policies__schemas__EvidenceResponse;
+  evidence: EvidenceResponse;
   family_member_id: string;
   id: string;
   role:
@@ -1761,9 +1903,9 @@ export interface PolicyResponse {
   product_display: string;
   product_key: string;
   source_document_version_id: string;
-  source_evidence: familycare_api__policies__schemas__EvidenceResponse;
+  source_evidence: EvidenceResponse;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
-  status_evidence: familycare_api__policies__schemas__EvidenceResponse | null;
+  status_evidence: EvidenceResponse | null;
   version: number;
 }
 
@@ -1800,10 +1942,61 @@ export interface PolicyUpdateRequest {
 
 export type PositiveVersion = number;
 
+export interface PrivateKnowledgeCandidateResponse {
+  aggregate_result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  calculation: KnowledgeBenefitCalculationResponse | null;
+  candidate_id: string;
+  claim_start_ready: false;
+  contract_label: string;
+  coverage_label: string;
+  hold_reason_codes: Array<string>;
+  questions: Array<QuestionResponse>;
+  required_match_count: number;
+  required_no_match_count: number;
+  required_unknown_count: number;
+  source: PrivateKnowledgeCandidateSourceResponse;
+}
+
+export interface PrivateKnowledgeCandidateSourceResponse {
+  kind: "PRIVATE_KNOWLEDGE_COVERAGE";
+  knowledge_contract_id: string;
+  knowledge_coverage_id: string;
+}
+
+export interface PrivateKnowledgeCitationResponse {
+  evidence_purpose: string;
+  fact_id: string | null;
+  kind: "PRIVATE_KNOWLEDGE_CITATION";
+  page_end: number;
+  page_start: number;
+  source_clause_id: string | null;
+  terms_section_id: string;
+}
+
 export interface PrivateKnowledgeErrorResponse {
   error_code: string;
   fields?: Array<string> | null;
   message: string;
+}
+
+export interface PrivateKnowledgeEvaluationResponse {
+  citations: Array<PrivateKnowledgeCitationResponse>;
+  conflicting_fields: Array<string>;
+  engine_version: string;
+  evaluation_id: string;
+  fact_paths: Array<string>;
+  missing_fields: Array<string>;
+  reason_code: string;
+  required: boolean;
+  result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  source: PrivateKnowledgeEvaluationSourceResponse;
+}
+
+export interface PrivateKnowledgeEvaluationSourceResponse {
+  kind: "PRIVATE_KNOWLEDGE_COVERAGE";
+  knowledge_coverage_id: string;
+  rule_publication_id: string;
 }
 
 export interface QuestionResponse {
@@ -1947,9 +2140,9 @@ export interface RiderResponse {
   normalized_key: string;
   policy_contract_id: string;
   renewable: boolean | null;
-  source_evidence: familycare_api__policies__schemas__EvidenceResponse;
+  source_evidence: EvidenceResponse;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
-  status_evidence: familycare_api__policies__schemas__EvidenceResponse | null;
+  status_evidence: EvidenceResponse | null;
   version: number;
 }
 
@@ -1962,19 +2155,8 @@ export interface RoleDocumentSummaryResponse {
   source_count: number;
 }
 
-export interface RuleEvaluationResponse {
-  conflicting_fields: Array<string>;
-  engine_version: string;
-  evaluation_id: string;
-  evidence: Array<familycare_api__decisions__schemas__EvidenceResponse>;
-  fact_paths: Array<string>;
-  missing_fields: Array<string>;
-  reason_code: string;
-  required: boolean;
-  result: "MATCH" | "NO_MATCH" | "UNKNOWN";
-  rider_id: string;
-  rule_version_id: string;
-}
+export type RuleEvaluationResponse =
+  OperationalEvaluationResponse | PrivateKnowledgeEvaluationResponse;
 
 export interface RuleSnapshotResponse {
   evaluator_versions?: Array<string>;
@@ -2115,27 +2297,8 @@ export interface familycare_api__clauses__schemas__ExpectedVersionRequest {
   expected_version: number;
 }
 
-export interface familycare_api__decisions__schemas__EvidenceResponse {
-  bbox: [number, number, number, number] | null;
-  content_sha256: string;
-  document_version_id: string;
-  evidence_id: string;
-  extraction_id: string;
-  physical_page: number;
-  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
-}
-
 export interface familycare_api__decisions__schemas__ExpectedVersionRequest {
   expected_version: number;
-}
-
-export interface familycare_api__policies__schemas__EvidenceResponse {
-  bbox: [number, number, number, number] | null;
-  content_sha256: string;
-  document_version_id: string;
-  evidence_id: string;
-  physical_page: number;
-  review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
 }
 
 export interface familycare_api__policies__schemas__ExpectedVersionRequest {

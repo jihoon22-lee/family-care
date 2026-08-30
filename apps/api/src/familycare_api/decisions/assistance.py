@@ -44,6 +44,8 @@ class AnalysisRecommendation:
     page_end: int
     citation_kind: Literal["FACT_CITATION"]
     reason_code: str
+    explanation_code: str | None = None
+    question_code: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -81,6 +83,11 @@ class AnalysisRecommendation:
             raise ValueError("unsupported recommendation citation kind")
         if not _REASON_CODE_PATTERN.fullmatch(self.reason_code):
             raise ValueError("invalid recommendation reason code")
+        if any(
+            value is not None and _REASON_CODE_PATTERN.fullmatch(value) is None
+            for value in (self.explanation_code, self.question_code)
+        ):
+            raise ValueError("invalid recommendation assistance code")
 
 
 @dataclass(frozen=True)

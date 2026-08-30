@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
+import pytest
+from pydantic import ValidationError
+
 ROOT = Path(__file__).resolve().parents[3]
 CONTRACT_ROOT = ROOT / "packages/contracts"
-SCHEMA_PATH = CONTRACT_ROOT / "schemas/coverage-decision.v1.schema.json"
-EXAMPLE_PATH = CONTRACT_ROOT / "examples/coverage-decision.v1.json"
+SCHEMA_PATH = CONTRACT_ROOT / "schemas/coverage-decision.v2.schema.json"
+EXAMPLE_PATH = CONTRACT_ROOT / "examples/coverage-decision.v2.json"
+HISTORICAL_SCHEMA_PATH = CONTRACT_ROOT / "schemas/coverage-decision.v1.schema.json"
+HISTORICAL_EXAMPLE_PATH = CONTRACT_ROOT / "examples/coverage-decision.v1.json"
 
 FORBIDDEN_FIELDS = {
     "absolute_path",
@@ -73,7 +79,7 @@ def walk_keys(value: Any, path: str = "$") -> list[tuple[str, str]]:
     return []
 
 
-def test_decision_example_matches_strict_schema() -> None:
+def test_decision_v2_example_matches_strict_schema_and_v1_is_retained() -> None:
     schema = load_json(SCHEMA_PATH)
     example = load_json(EXAMPLE_PATH)
     validate_schema_instance = load_schema_validator()
@@ -81,9 +87,11 @@ def test_decision_example_matches_strict_schema() -> None:
     assert not validate_schema_instance(schema, example)
     assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
     assert schema["additionalProperties"] is False
-    assert example["schema_version"] == "1"
+    assert example["schema_version"] == "2"
     assert example["candidates"]
     assert example["evaluations"]
+    assert load_json(HISTORICAL_EXAMPLE_PATH)["schema_version"] == "1"
+    assert load_json(HISTORICAL_SCHEMA_PATH)["properties"]["schema_version"]["const"] == "1"
 
 
 def test_decision_schema_is_recursive_strict_and_bounded() -> None:
@@ -92,33 +100,44 @@ def test_decision_schema_is_recursive_strict_and_bounded() -> None:
     objects = walk_objects(schema)
     assert objects
     assert all(item.get("additionalProperties") is False for item in objects)
-    assert schema["properties"]["candidates"]["maxItems"] == 64
-    assert schema["properties"]["evaluations"]["maxItems"] == 256
+    assert schema["properties"]["candidates"]["maxItems"] == 128
+    assert schema["properties"]["evaluations"]["maxItems"] == 512
+    assert (
+        schema["$defs"]["AnalysisAssistanceResponse"]["properties"]["recommendations"]["maxItems"]
+        == 12
+    )
 
 
-def test_decision_evaluation_requires_tri_state_rule_version_evidence_and_engine() -> None:
+def test_decision_evaluations_have_discriminated_lineage_and_exact_citations() -> None:
     schema = load_json(SCHEMA_PATH)
-    evaluation = schema["$defs"]["RuleEvaluation"]
+    operational = schema["$defs"]["OperationalEvaluationResponse"]
+    private = schema["$defs"]["PrivateKnowledgeEvaluationResponse"]
 
-    assert set(evaluation["required"]) >= {
-        "rule_version_id",
-        "result",
-        "reason_code",
-        "evidence",
-        "engine_version",
-    }
-    assert schema["$defs"]["TriState"]["enum"] == ["MATCH", "NO_MATCH", "UNKNOWN"]
-    assert "amount" not in evaluation["properties"]
-    assert "amount" not in schema["properties"]
+    assert set(operational["required"]) >= {"source", "result", "citations", "engine_version"}
+    assert set(private["required"]) >= {"source", "result", "citations", "engine_version"}
+    assert operational["properties"]["source"]["$ref"].endswith(
+        "/OperationalEvaluationSourceResponse"
+    )
+    assert private["properties"]["source"]["$ref"].endswith(
+        "/PrivateKnowledgeEvaluationSourceResponse"
+    )
+    assert operational["properties"]["result"]["enum"] == [
+        "MATCH",
+        "NO_MATCH",
+        "UNKNOWN",
+    ]
 
 
-def test_decision_contract_has_no_private_payload_fields_or_amounts() -> None:
+def test_decision_contract_has_no_private_payload_fields_and_uses_decimal_strings() -> None:
     schema = load_json(SCHEMA_PATH)
     example = load_json(EXAMPLE_PATH)
 
     for document in (schema, example):
         assert all(key.lower() not in FORBIDDEN_FIELDS for _, key in walk_keys(document))
-        assert all(key.lower() != "amount" for _, key in walk_keys(document))
+    subtotal = example["conditional_fixed_subtotals"][0]
+    assert isinstance(subtotal["amount"], str)
+    assert subtotal["amount"] == "300000"
+    assert example["indemnity_summary"]["status"] == "UNKNOWN"
     assert all(
         isinstance(item.get("run_id"), str)
         and item["run_id"].startswith("00000000-0000-4000-8000-")
@@ -135,6 +154,14 @@ def test_decision_example_covers_unknown_and_deterministic_mismatch() -> None:
     assert "NO_MATCH" in results
     assert results <= {"MATCH", "NO_MATCH", "UNKNOWN"}
     assert candidate_results <= {"MATCH", "NO_MATCH", "UNKNOWN"}
+    source_kinds = {item["source"]["kind"] for item in example["candidates"]}
+    assert source_kinds == {"OPERATIONAL_RIDER", "PRIVATE_KNOWLEDGE_COVERAGE"}
+    private = next(
+        item
+        for item in example["candidates"]
+        if item["source"]["kind"] == "PRIVATE_KNOWLEDGE_COVERAGE"
+    )
+    assert private["claim_start_ready"] is False
 
 
 def test_decision_schema_rejects_unknown_tri_state_rule_and_private_fields() -> None:
@@ -143,7 +170,7 @@ def test_decision_schema_rejects_unknown_tri_state_rule_and_private_fields() -> 
     validate_schema_instance = load_schema_validator()
 
     mutations = [
-        {**example, "amount": 100},
+        {**example, "payable_amount": "300000"},
         {
             **example,
             "evaluations": [
@@ -152,14 +179,14 @@ def test_decision_schema_rejects_unknown_tri_state_rule_and_private_fields() -> 
         },
         {
             **example,
-            "evaluations": [
-                {**example["evaluations"][0], "rule_version_id": "synthetic-rule"},
+            "conditional_fixed_subtotals": [
+                {**example["conditional_fixed_subtotals"][0], "amount": 300000},
             ],
         },
         {
             **example,
             "evaluations": [
-                {**example["evaluations"][0], "evidence": []},
+                {**example["evaluations"][0], "citations": []},
             ],
         },
         {
@@ -167,6 +194,13 @@ def test_decision_schema_rejects_unknown_tri_state_rule_and_private_fields() -> 
             "candidates": [
                 {**example["candidates"][0], "document_text": "not allowed"},
             ],
+        },
+        {
+            **example,
+            "assistance": {
+                **example["assistance"],
+                "eligibility_result": "MATCH",
+            },
         },
     ]
 
@@ -179,3 +213,32 @@ def test_decision_checker_reports_clean_artifacts() -> None:
     from scripts.check_contracts import validate_decision_contract
 
     assert validate_decision_contract() == []
+
+
+def test_decision_v2_model_rejects_cross_field_authority_and_inconsistent_counts() -> None:
+    from familycare_api.decisions.schemas import CoverageDecisionResponse
+
+    example = load_json(EXAMPLE_PATH)
+    mutations: list[dict[str, Any]] = []
+
+    claim_ready = copy.deepcopy(example)
+    claim_ready["candidates"][2]["claim_start_ready"] = True
+    mutations.append(claim_ready)
+
+    missing_calculated_amount = copy.deepcopy(example)
+    missing_calculated_amount["candidates"][2]["calculation"]["conditional_amount"] = None
+    mutations.append(missing_calculated_amount)
+
+    duplicate_rank = copy.deepcopy(example)
+    duplicate_rank["assistance"]["recommendations"].append(
+        copy.deepcopy(duplicate_rank["assistance"]["recommendations"][0])
+    )
+    mutations.append(duplicate_rank)
+
+    invalid_catalog = copy.deepcopy(example)
+    invalid_catalog["catalog_coverage"]["blocked_coverage_count"] = 1
+    mutations.append(invalid_catalog)
+
+    for mutation in mutations:
+        with pytest.raises(ValidationError):
+            CoverageDecisionResponse.model_validate(mutation)

@@ -846,7 +846,7 @@ git commit -m "feat(analyzer): add bounded llm recommendations"
 No live provider call is part of this task. If all fake-provider and adapter-boundary tests pass, do not spend
 the user's API balance merely to duplicate existing adapter acceptance.
 
-### Task 10: Publish the v2 API and generated contracts
+### Task 10: Publish the v2 API and generated contracts `completed`
 
 **Files:**
 - Modify: `apps/api/src/familycare_api/decisions/schemas.py`
@@ -866,7 +866,7 @@ the user's API balance merely to duplicate existing adapter acceptance.
 **Interfaces:**
 - Produces `CoverageDecisionResponse.schema_version == "2"` and a discriminated candidate/evaluation union.
 
-- [ ] **Step 1: Write RED HTTP and schema tests**
+- [x] **Step 1: Write RED HTTP and schema tests**
 
 Require literal envelope fields:
 
@@ -901,7 +901,7 @@ citation projections. It must not contain provider request IDs, prompts, raw res
 eligibility, amount, claim readiness, or another member's candidates. Repeated GET returns the latest immutable
 assistance run and never enqueues or calls a provider.
 
-- [ ] **Step 2: Run RED contract tests**
+- [x] **Step 2: Run RED contract tests**
 
 ```bash
 TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_api.py apps/api/tests/test_decision_contracts.py apps/api/tests/test_decision_privacy.py -q
@@ -909,11 +909,11 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_api.py apps/api/tests/tes
 
 Expected: FAIL because v2 fields and schema are absent.
 
-- [ ] **Step 3: Implement strict Pydantic adapters and transport schema**
+- [x] **Step 3: Implement strict Pydantic adapters and transport schema**
 
 Retain the v1 schema/example as a historical artifact. Change the live endpoint and generated OpenAPI atomically to v2. Every nested object uses `extra="forbid"`; response collections have explicit max lengths; money is a decimal string.
 
-- [ ] **Step 4: Regenerate and verify contracts**
+- [x] **Step 4: Regenerate and verify contracts**
 
 ```bash
 TMPDIR=/tmp uv run python scripts/generate_business_contract_types.py
@@ -924,7 +924,7 @@ TMPDIR=/tmp uv run pytest apps/api/tests/test_decision_api.py apps/api/tests/tes
 
 Expected: generated files are deterministic and all checks pass.
 
-- [ ] **Step 5: Commit the API boundary**
+- [x] **Step 5: Commit the API boundary**
 
 ```bash
 git diff --check
