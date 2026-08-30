@@ -8,6 +8,8 @@ from uuid import UUID
 import psycopg
 import pytest
 
+from scripts.integration_test_database import is_safe_integration_database_name
+
 pytestmark = pytest.mark.integration
 
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-000000001801")
@@ -71,7 +73,7 @@ def test_postgresql_enforces_current_run_lineage_and_non_executable_facts() -> N
     with psycopg.connect(_database_url()) as connection:
         database_name = connection.execute("SELECT current_database()").fetchone()
         assert database_name is not None
-        assert "test" in str(database_name[0]).lower()
+        assert is_safe_integration_database_name(str(database_name[0]))
         connection.execute("TRUNCATE TABLE household_spaces RESTART IDENTITY CASCADE")
         connection.execute(
             """

@@ -17,6 +17,8 @@ from familycare_api.private_knowledge.repository import (
     PrivateKnowledgeRepositoryErrorCode,
 )
 
+from scripts.integration_test_database import is_safe_integration_database_name
+
 pytestmark = pytest.mark.integration
 
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-000000001911")
@@ -36,7 +38,7 @@ def _seed() -> None:
     with psycopg.connect(_database_url()) as connection:
         database_name = connection.execute("SELECT current_database()").fetchone()
         assert database_name is not None
-        assert "test" in str(database_name[0]).lower()
+        assert is_safe_integration_database_name(str(database_name[0]))
         connection.execute("TRUNCATE TABLE household_spaces, documents RESTART IDENTITY CASCADE")
         connection.execute(
             """

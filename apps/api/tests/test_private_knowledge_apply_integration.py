@@ -25,6 +25,7 @@ from apps.api.tests.private_knowledge_fixtures import (
     mutate_jsonl,
     write_synthetic_private_knowledge_package,
 )
+from scripts.integration_test_database import is_safe_integration_database_name
 
 pytestmark = pytest.mark.integration
 
@@ -43,7 +44,7 @@ def _seed() -> None:
     with psycopg.connect(_database_url()) as connection:
         database_name = connection.execute("SELECT current_database()").fetchone()
         assert database_name is not None
-        assert "test" in str(database_name[0]).lower()
+        assert is_safe_integration_database_name(str(database_name[0]))
         connection.execute("TRUNCATE TABLE household_spaces, documents RESTART IDENTITY CASCADE")
         connection.execute(
             """

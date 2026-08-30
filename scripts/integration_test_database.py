@@ -40,6 +40,12 @@ def _read_current_database(database_url: str) -> str:
     return row[0]
 
 
+def is_safe_integration_database_name(database_name: str) -> bool:
+    """Return whether a database name has a standalone test or CI marker."""
+
+    return _SAFE_DATABASE_MARKER.search(database_name) is not None
+
+
 def configure_integration_test_database(
     environment: MutableMapping[str, str] | None = None,
     *,
@@ -60,7 +66,7 @@ def configure_integration_test_database(
         )
 
     database_name = database_name_reader(_psycopg_url(database_url))
-    if _SAFE_DATABASE_MARKER.search(database_name) is None:
+    if not is_safe_integration_database_name(database_name):
         raise IntegrationDatabaseGuardError(
             "integration test database name must include a standalone test or ci marker"
         )
