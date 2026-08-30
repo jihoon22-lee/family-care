@@ -1,6 +1,6 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–3 complete; Task 4 in progress; Tasks 5–8 pending
+**Status:** Tasks 1–4 complete; Task 5 in progress; Tasks 6–8 pending
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 
@@ -32,7 +32,7 @@ def load_private_knowledge_package(
 
 def canonical_package_digest(package: PrivateKnowledgePackage) -> str: ...
 
-class PrivateKnowledgeRepository:
+class PostgresPrivateKnowledgeRepository:
     def read_baseline(self, household_space_id: UUID) -> KnowledgeDatabaseBaseline: ...
     def apply_snapshot(
         self,
@@ -74,6 +74,7 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
    - `private_knowledge_terms_assignment_sources`
    - `private_knowledge_terms_sections`
    - `private_knowledge_source_clauses`
+   - `private_knowledge_semantic_reviews`
    - `private_knowledge_facts`
    - `private_knowledge_fact_citations`
    - `private_knowledge_coverage_terms_mappings`
@@ -103,14 +104,14 @@ The CLI entry point is `familycare-private-knowledge`. It supports `validate`, `
 
 **Files:** `apps/api/src/familycare_api/private_knowledge/reconciliation.py`, `repository.py`, `service.py`, `apps/api/tests/test_private_knowledge_reconciliation.py`, `apps/api/tests/test_private_knowledge_repository.py`, `apps/api/tests/test_private_knowledge_reconciliation_integration.py`.
 
-1. [ ] Write RED tests for a `KnowledgeDatabaseBaseline` digest over the current snapshot plus scoped operational FamilyMember, PolicyContract, Rider, DocumentVersion, and Evidence identity/version metadata needed for exact binding.
-2. [ ] Write RED cases for first import, same-digest idempotent no-op, new digest supersede, unbound subjects, candidate operational matches, exact document bindings, conflicts, and blocked executable facts.
-3. [ ] Ensure product/insurer text similarity is reported only as a review candidate and never creates `MATCH`, `family_member_id`, `policy_contract_id`, `rider_id`, or `document_version_id`.
-4. [ ] Implement the baseline read in a PostgreSQL `REPEATABLE READ READ ONLY` transaction scoped by `household_space_id`.
-5. [ ] Build a count-only `KnowledgeDryRunReport` containing schema/package digest, baseline digest, create/no-op/supersede result, per-entity input/expected counts, independent decision matrices, binding counts, conflict/block counts, and expected post-apply current snapshot counts.
-6. [ ] Canonicalize the report and calculate `report_digest_sha256`; exclude paths, source aliases, statements, display values, IDs other than opaque run IDs, SQL, DSN, and credentials.
-7. [ ] Persist the report outside the repository with mode `0600` using atomic replacement, then reread and rehash it before approval.
-8. [ ] Run focused unit and PostgreSQL integration tests, including an assertion that dry run performs no write.
+1. [x] Write RED tests for a `KnowledgeDatabaseBaseline` digest over the current snapshot plus scoped operational FamilyMember, PolicyContract, Rider, DocumentVersion, and Evidence identity/version metadata needed for reconciliation.
+2. [x] Write RED cases for first import, same-current-digest idempotent no-op, new digest supersede, historical non-current digest block, unbound subjects, label-only operational candidates, and zero unsupported exact bindings. Executable input remains a package-validation failure before DB access.
+3. [x] Ensure product/insurer text similarity is reported only as a review candidate and never creates `MATCH`, `family_member_id`, `policy_contract_id`, `rider_id`, or `document_version_id`.
+4. [x] Implement the baseline read in a PostgreSQL `REPEATABLE READ READ ONLY` transaction scoped by `household_space_id`; assert the transaction remains without an assigned write transaction ID.
+5. [x] Build a count-only `KnowledgeDryRunReport` containing schema/package digest, baseline digest, create/no-op/supersede/block result, per-entity input/expected counts, independent decision matrices, binding counts, conflict/block counts, and expected post-apply current snapshot counts.
+6. [x] Canonicalize the report and calculate `report_digest_sha256`; exclude paths, source aliases, statements, display values, household/actor/database IDs, SQL, DSN, and credentials.
+7. [x] Persist the report outside the repository with mode `0600` using atomic replacement, then reread and rehash it before approval.
+8. [x] Run focused unit and PostgreSQL integration tests, including assertions that dry run performs no write and relevant ledger changes alter the baseline digest.
 
 ## Task 5: Apply one snapshot atomically and verify it
 

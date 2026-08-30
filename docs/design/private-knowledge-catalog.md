@@ -38,7 +38,7 @@ knowledge snapshot으로 저장하고, 현재 snapshot만 조회 projection에 �
 - package schema version과 전체 content digest
 - 분석 권위와 importer version
 - `VALIDATED`, `APPLIED`, `SUPERSEDED`, `REJECTED` 상태
-- manifest와 reconciliation의 bounded count-only projection
+- 검증한 전체 manifest, manifest와 reconciliation의 bounded count projection
 - 적용 actor와 시각
 - 현재 snapshot 여부
 
@@ -117,6 +117,10 @@ Rider-Clause 또는 CoverageRule의 실행 근거가 될 수 없다. assignment�
 
 `KnowledgeTermsSection`은 분석 단위, `KnowledgeSourceClause`는 원문 조항 index와
 page/hash lineage, `BenefitProvisionFact`는 검토한 의미 사실을 보존한다.
+
+`KnowledgeSemanticReview`는 section별 분석 상태·요약·분류 건수·경고·이전 결과 감사와
+요약 citation을 한 행으로 보존한다. 개별 fact가 없는 section이나 fact로 환원되지 않는
+검토 metadata도 유실되지 않으며, fact는 해당 review와 section을 함께 참조한다.
 
 의미 사실은 지급사유, 정의, 면책, 대기, 감액, 횟수, 금액 기준, 갱신, 청구서류,
 소멸, 교차참조 범주를 가질 수 있다. 사실의 설명·조건·숫자 용어와 citation을 저장하지만
@@ -213,8 +217,10 @@ external package
 ```
 
 apply는 dry-run report digest와 package digest를 함께 요구한다. dry-run 이후 패키지나 DB
-baseline이 바뀌면 `STALE_DRY_RUN`으로 거부한다. 같은 package digest의 재실행은 기존 run을
-반환하고 새 row를 만들지 않는다.
+baseline이 바뀌면 `STALE_DRY_RUN`으로 거부한다. 현재 snapshot과 같은 package digest의
+재실행은 기존 run을 반환하고 새 row를 만들지 않는다. 과거에 supersede된 digest를 다시
+지정하면 이를 거짓 no-op으로 처리하거나 과거 감사 행을 변경하지 않고 `BLOCKED`로 중단한다.
+재활성화가 필요하면 별도 activation-history 설계와 명시적 승인을 거친다.
 
 snapshot write는 한 transaction이다. 실패 시 새 snapshot 행은 전부 rollback되고 이전
 current snapshot은 유지된다. commit 결과가 불명확하면 자동 재적용하지 않고 package digest로
@@ -285,7 +291,8 @@ stdout에는 상태, digest prefix가 아닌 opaque run ID, count, stable reason
 - 중복 canonical key 또는 끊어진 reference: 전체 package 거부
 - stale dry-run, current snapshot race, count mismatch: apply transaction rollback
 - unsupported future schema: fail closed
-- 기존 knowledge snapshot 존재: idempotent no-op 또는 explicit supersede만 허용
+- 현재와 같은 knowledge snapshot: idempotent no-op
+- 과거 non-current digest 재지정: `BLOCKED`; 과거 run을 암묵적으로 재활성화하지 않음
 - 실제 데이터가 Git에 들어갈 가능성 발견: 변경·commit·push·apply 중단
 
 ## Tests
