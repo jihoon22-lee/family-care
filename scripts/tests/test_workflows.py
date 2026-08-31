@@ -75,6 +75,31 @@ def test_database_workflow_requires_a_dedicated_destructive_test_boundary(
     assert any("destructive test opt-in" in error for error in errors)
 
 
+@pytest.mark.parametrize(
+    ("content_loader", "validator"),
+    [(current_ci, validate_ci), (current_release, validate_release)],
+)
+def test_database_workflow_resets_only_the_guarded_test_schema_before_downgrade(
+    content_loader: Callable[[], str],
+    validator: Callable[[str], list[str]],
+) -> None:
+    content = content_loader()
+    reset_command = "uv run python scripts/integration_test_database.py"
+
+    assert not any("guarded integration database reset" in error for error in validator(content))
+
+    without_reset = content.replace(reset_command, "echo guarded-reset-removed", 1)
+    assert any("guarded integration database reset" in error for error in validator(without_reset))
+
+    wrong_order = content.replace(
+        f"{reset_command}\n          uv run alembic -c apps/api/alembic.ini upgrade head\n"
+        "          uv run alembic -c apps/api/alembic.ini downgrade base",
+        f"uv run alembic -c apps/api/alembic.ini downgrade base\n          {reset_command}",
+        1,
+    )
+    assert any("before migration downgrade" in error for error in validator(wrong_order))
+
+
 def test_current_release_satisfies_workflow_policy() -> None:
     assert validate_release(current_release()) == []
 

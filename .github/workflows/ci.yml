@@ -137,6 +137,8 @@ jobs:
         run: uv run python scripts/check_contracts.py
       - name: Verify reversible migration baseline
         run: |
+          uv run python scripts/integration_test_database.py
+          uv run alembic -c apps/api/alembic.ini upgrade head
           uv run alembic -c apps/api/alembic.ini downgrade base
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run alembic -c apps/api/alembic.ini current

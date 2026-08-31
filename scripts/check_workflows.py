@@ -42,6 +42,8 @@ EXPECTED_RELEASE_MATRIX = (
 )
 PINNED_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)\s+#\s+(v[0-9][0-9A-Za-z.-]*)\s*$")
 ALL_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)")
+GUARDED_DATABASE_RESET = "uv run python scripts/integration_test_database.py"
+ALEMBIC_DOWNGRADE = "uv run alembic -c apps/api/alembic.ini downgrade base"
 
 
 def validate_action_pins(content: str, relative: Path) -> list[str]:
@@ -67,11 +69,26 @@ def validate_action_pins(content: str, relative: Path) -> list[str]:
     return errors
 
 
+def validate_guarded_database_reset(content: str, relative: Path) -> list[str]:
+    """Require an explicitly guarded disposable-schema reset before downgrade."""
+
+    reset_index = content.find(GUARDED_DATABASE_RESET)
+    downgrade_index = content.find(ALEMBIC_DOWNGRADE)
+    if reset_index < 0:
+        return [f"{relative}: missing guarded integration database reset"]
+    if downgrade_index < 0 or reset_index > downgrade_index:
+        return [
+            f"{relative}: guarded integration database reset must run before migration downgrade"
+        ]
+    return []
+
+
 def validate_ci(content: str) -> list[str]:
     """Validate CI triggers, permissions, jobs, and build-only boundaries."""
 
     relative = CI_PATH.relative_to(ROOT)
     errors = validate_action_pins(content, relative)
+    errors.extend(validate_guarded_database_reset(content, relative))
     required_fragments = {
         "pull_request trigger": "  pull_request:",
         "main push trigger": "      - main",
@@ -213,6 +230,7 @@ def validate_release(content: str) -> list[str]:
 
     relative = RELEASE_PATH.relative_to(ROOT)
     errors = validate_action_pins(content, relative)
+    errors.extend(validate_guarded_database_reset(content, relative))
     required_fragments = {
         "semantic-version tags": '      - "v[0-9]+.[0-9]+.[0-9]+"',
         "read-only top-level permissions": "permissions:\n  contents: read",

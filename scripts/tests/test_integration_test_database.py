@@ -11,6 +11,7 @@ from scripts.integration_test_database import (
     IntegrationDatabaseGuardError,
     configure_integration_test_database,
     is_safe_integration_database_name,
+    reset_integration_test_database,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -106,6 +107,39 @@ def test_verified_test_database_replaces_the_runtime_url(database_name: str) -> 
     assert configured == test_url
     assert environment["FAMILYCARE_DATABASE_URL"] == test_url
     assert observed_urls == ["postgresql://synthetic@localhost/familycare_test"]
+
+
+def test_reset_uses_only_the_verified_dedicated_test_database() -> None:
+    test_url = "postgresql+psycopg://synthetic@localhost/familycare_ci"
+    environment = {
+        "FAMILYCARE_DATABASE_URL": "postgresql+psycopg://synthetic@localhost/familycare",
+        "FAMILYCARE_TEST_DATABASE_URL": test_url,
+        "FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB": "true",
+    }
+    reset_urls: list[str] = []
+
+    reset_integration_test_database(
+        environment,
+        database_name_reader=lambda _: "familycare_ci",
+        database_resetter=reset_urls.append,
+    )
+
+    assert reset_urls == ["postgresql://synthetic@localhost/familycare_ci"]
+    assert environment["FAMILYCARE_DATABASE_URL"] == test_url
+
+
+def test_reset_rejects_a_runtime_database_before_calling_the_resetter() -> None:
+    environment = {
+        "FAMILYCARE_TEST_DATABASE_URL": ("postgresql+psycopg://synthetic@localhost/familycare"),
+        "FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB": "true",
+    }
+
+    with pytest.raises(IntegrationDatabaseGuardError, match="test.*ci.*marker"):
+        reset_integration_test_database(
+            environment,
+            database_name_reader=lambda _: "familycare",
+            database_resetter=lambda _: pytest.fail("resetter must not run"),
+        )
 
 
 def test_pytest_blocks_an_integration_body_when_only_the_runtime_url_is_set() -> None:
