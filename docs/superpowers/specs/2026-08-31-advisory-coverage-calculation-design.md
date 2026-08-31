@@ -54,10 +54,15 @@ For a fixed-benefit coverage:
    `NO_MATCH`. AI-suggested dates are never promoted into authoritative event date columns.
 7. A missing authoritative event date does not erase a reviewed fixed-benefit estimate. The amount
    remains conditional with `EVENT_DATE_REQUIRED` until the date is supplied.
+8. A certificate amount whose dedicated page location still needs review remains a conditional
+   estimate with `CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED`. It is included in the conditional
+   fixed subtotal so the result answers the user's expected-amount question, but it never creates
+   `confirmed_amount` and the review label remains visible on the card.
 
 The response's `conditional_fixed_subtotals` deliberately includes these executable conditional
 fixed amounts. Its name and each calculation's null `confirmed_amount` distinguish the result from
-an insurer-confirmed payment. Catalog-only rows and indemnity estimates never enter that subtotal.
+an insurer-confirmed payment. This includes a fixed estimate carrying only the certificate-amount
+evidence-review hold. Catalog-only rows and indemnity estimates never enter that subtotal.
 
 ## API and UI
 
@@ -66,7 +71,11 @@ The v2 decision response adds `advisory_coverage_count` and retains
 and searchable but rule-incomplete. It labels an executable amount on an unresolved candidate as a
 conditional estimate rather than confirmed payment. Event result cards omit every catalog-only row
 with no evaluation even if it carries a reference amount; the completeness panel still reports its
-catalog count. The panel separately names each coverage for which an automatic rule was evaluated.
+catalog count. A candidate whose evaluated rules are all `UNKNOWN / ALL_UNKNOWN` stays hidden from
+both result cards and recommendations, and structured search excludes a candidate already proven
+all-unknown for that decision run. An unevaluated catalog coverage may remain in the separate
+related-clause recommendation stream. The panel separately names each coverage for which an
+automatic rule was evaluated.
 
 ## Privacy and authority
 
@@ -79,6 +88,9 @@ catalog count. The panel separately names each coverage for which an automatic r
   `USER_CONFIRMED_COVERAGE_ENROLLMENT` may admit a certificate enrollment `UNKNOWN` only for the
   current advisory publication, records the confirming actor, and remains visible in the
   publication reconciliation counts and result evidence.
+- A reviewed `EXACT_TOKEN_SEQUENCE` normalizer accepts only the exact token sequence (plus an
+  explicit Korean case marker). A compound or prefix alias must be added as its own reviewed,
+  digest-covered publication record before it can produce a `DERIVED_CONFIRMED` fact.
 - The result exposes the recorded calculation and its assumptions; a human decides whether the
   event satisfies the policy terms.
 

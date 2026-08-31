@@ -45,22 +45,53 @@ function emptyCopy(group: ResultGroupKey): string {
   return "조건이 맞지 않는 항목이 없습니다.";
 }
 
-function isCatalogOnlyCandidate(
+export function hasOnlyAllUnknownPrivateEvaluations(
   candidate: ClaimCandidateResponse,
   evaluations: RuleEvaluationResponse[],
 ): boolean {
-  if (
-    candidate.source.kind !== "PRIVATE_KNOWLEDGE_COVERAGE" ||
-    !candidate.hold_reason_codes.some((code) =>
-      CATALOG_ONLY_HOLD_REASONS.has(code),
-    )
-  ) {
+  if (candidate.source.kind !== "PRIVATE_KNOWLEDGE_COVERAGE") {
     return false;
   }
-  const hasEvaluation = evaluations.some((evaluation) =>
+  const candidateEvaluations = evaluations.filter((evaluation) =>
     evaluationMatchesCandidate(candidate, evaluation),
   );
-  return !hasEvaluation;
+  return (
+    candidateEvaluations.length > 0 &&
+    candidateEvaluations.every(
+      (evaluation) =>
+        evaluation.result === "UNKNOWN" &&
+        evaluation.reason_code === "ALL_UNKNOWN",
+    )
+  );
+}
+
+export function isAllUnknownPrivateCandidate(
+  candidate: ClaimCandidateResponse,
+  evaluations: RuleEvaluationResponse[],
+): boolean {
+  return (
+    candidate.aggregate_result === "UNKNOWN" &&
+    hasOnlyAllUnknownPrivateEvaluations(candidate, evaluations)
+  );
+}
+
+export function isHiddenPrivateCandidate(
+  candidate: ClaimCandidateResponse,
+  evaluations: RuleEvaluationResponse[],
+): boolean {
+  if (candidate.source.kind !== "PRIVATE_KNOWLEDGE_COVERAGE") {
+    return false;
+  }
+  const candidateEvaluations = evaluations.filter((evaluation) =>
+    evaluationMatchesCandidate(candidate, evaluation),
+  );
+  const catalogOnly = candidate.hold_reason_codes.some((code) =>
+    CATALOG_ONLY_HOLD_REASONS.has(code),
+  );
+  if (catalogOnly && candidateEvaluations.length === 0) {
+    return true;
+  }
+  return isAllUnknownPrivateCandidate(candidate, evaluations);
 }
 
 export function ResultGroup({
@@ -76,7 +107,7 @@ export function ResultGroup({
   const grouped = candidates.filter(
     (candidate) =>
       resultGroupFor(candidate.aggregate_result) === group &&
-      !isCatalogOnlyCandidate(candidate, evaluations),
+      !isHiddenPrivateCandidate(candidate, evaluations),
   );
 
   return (

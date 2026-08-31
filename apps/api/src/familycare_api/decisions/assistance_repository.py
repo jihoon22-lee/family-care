@@ -31,11 +31,21 @@ class AnalysisAssistanceRepository:
         scope: HouseholdScope,
         event: MedicalEvent,
         decision_run_id: UUID,
+        *,
+        reviewed_fact_tokens: tuple[str, ...] = (),
     ) -> AnalysisAssistance:
-        fact_values = tuple(
+        legacy_fact_values = tuple(
             value.value for _, value in sorted(event.facts.items()) if isinstance(value.value, str)
         )
-        tokens = normalize_search_tokens(event.situation, fact_values)
+        structured_fact_values = tuple(
+            value
+            for fact in event.structured_facts
+            if isinstance((value := fact.get("value")), str)
+        )
+        tokens = normalize_search_tokens(
+            event.situation,
+            (*legacy_fact_values, *structured_fact_values, *reviewed_fact_tokens),
+        )
         rows = self._search_rows(
             connection,
             scope,
@@ -312,6 +322,18 @@ class AnalysisAssistanceRepository:
                           AND disposition.enrollment_reason_code =
                               'USER_CONFIRMED_COVERAGE_ENROLLMENT'
                           AND disposition.enrollment_confirmed_by IS NOT NULL))
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM private_knowledge_rule_evaluations AS evaluation
+                      WHERE evaluation.household_space_id = decision.household_space_id
+                        AND evaluation.decision_run_id = decision.id
+                        AND evaluation.knowledge_coverage_id = coverage.id
+                      GROUP BY evaluation.knowledge_coverage_id
+                      HAVING bool_and(
+                        evaluation.result = 'UNKNOWN'
+                        AND evaluation.reason_code = 'ALL_UNKNOWN'
+                      )
+                    )
                 ), reviewed_facts AS (
                   SELECT section.import_run_id,
                          section.id AS terms_section_id,

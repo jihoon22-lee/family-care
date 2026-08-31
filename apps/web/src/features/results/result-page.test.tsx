@@ -232,6 +232,7 @@ function result(
           rank: 1,
           reason_code: "TOKEN_OVERLAP",
           recommendation_id: "00000000-0000-4000-8000-000000000814",
+          knowledge_coverage_id: PRIVATE_COVERAGE,
         },
       ],
       state: "SEARCH_READY",
@@ -699,6 +700,181 @@ describe("action-first event results", () => {
     expect(screen.getByText("예외 확인").parentElement).toHaveTextContent(
       /1개/,
     );
+  });
+
+  it("hides all-unknown private rules from cards and stale recommendations", () => {
+    const recommendedCoverage = "00000000-0000-4000-8000-000000000661";
+    const unrelatedCoverage = "00000000-0000-4000-8000-000000000662";
+    const recommended = privateCandidate(
+      "00000000-0000-4000-8000-000000000361",
+      recommendedCoverage,
+      "UNKNOWN",
+      "Synthetic Recommended Review Coverage",
+    );
+    const unrelated = privateCandidate(
+      "00000000-0000-4000-8000-000000000362",
+      unrelatedCoverage,
+      "UNKNOWN",
+      "Synthetic Unrelated Housing Coverage",
+    );
+    recommended.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    unrelated.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    const recommendedEvaluation = privateEvaluation(
+      recommendedCoverage,
+      "UNKNOWN",
+    );
+    recommendedEvaluation.reason_code = "ALL_UNKNOWN";
+    const unrelatedEvaluation = privateEvaluation(unrelatedCoverage, "UNKNOWN");
+    unrelatedEvaluation.reason_code = "ALL_UNKNOWN";
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          assistance: {
+            ...result().assistance,
+            recommendations: [
+              {
+                ...result().assistance.recommendations[0],
+                coverage_label: "Synthetic Recommended Review Coverage",
+                knowledge_coverage_id: recommendedCoverage,
+              },
+            ],
+          },
+          candidates: [recommended, unrelated],
+          evaluations: [recommendedEvaluation, unrelatedEvaluation],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const needsInformation = screen
+      .getByRole("heading", { name: "추가 확인 필요" })
+      .closest("section");
+    const recommendations = screen
+      .getByRole("heading", { name: "관련 약관 추천" })
+      .closest("section");
+    const reviewed = screen
+      .getByRole("heading", { name: "자동 판정 규칙이 준비된 담보" })
+      .closest("section");
+    expect(needsInformation).not.toBeNull();
+    expect(recommendations).not.toBeNull();
+    expect(reviewed).not.toBeNull();
+    expect(
+      within(needsInformation!).queryByText(
+        "Synthetic Recommended Review Coverage",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(needsInformation!).queryByText(
+        "Synthetic Unrelated Housing Coverage",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(recommendations!).queryByText(
+        "Synthetic Recommended Review Coverage",
+      ),
+    ).not.toBeInTheDocument();
+    expect(
+      within(reviewed!).getByText("Synthetic Recommended Review Coverage"),
+    ).toBeInTheDocument();
+    expect(
+      within(reviewed!).getByText("Synthetic Unrelated Housing Coverage"),
+    ).toBeInTheDocument();
+  });
+
+  it("drops an all-unknown stale recommendation when a precondition makes the card no-match", () => {
+    const coverageId = "00000000-0000-4000-8000-000000000664";
+    const candidate = privateCandidate(
+      "00000000-0000-4000-8000-000000000364",
+      coverageId,
+      "NO_MATCH",
+      "Synthetic Precondition Mismatch Coverage",
+    );
+    const evaluation = privateEvaluation(coverageId, "UNKNOWN");
+    evaluation.reason_code = "ALL_UNKNOWN";
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          assistance: {
+            ...result().assistance,
+            recommendations: [
+              {
+                ...result().assistance.recommendations[0],
+                coverage_label: "Synthetic Precondition Mismatch Coverage",
+                knowledge_coverage_id: coverageId,
+              },
+            ],
+          },
+          candidates: [candidate],
+          evaluations: [evaluation],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const mismatch = screen
+      .getByRole("heading", { name: "조건 불일치" })
+      .closest("section");
+    const recommendations = screen
+      .getByRole("heading", { name: "관련 약관 추천" })
+      .closest("section");
+    expect(mismatch).not.toBeNull();
+    expect(recommendations).not.toBeNull();
+    expect(
+      within(mismatch!).getByText("Synthetic Precondition Mismatch Coverage"),
+    ).toBeInTheDocument();
+    expect(
+      within(recommendations!).queryByText(
+        "Synthetic Precondition Mismatch Coverage",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps a related recommendation when the catalog coverage has no rule evaluation", () => {
+    const coverageId = "00000000-0000-4000-8000-000000000663";
+    const catalogOnly = privateCandidate(
+      "00000000-0000-4000-8000-000000000363",
+      coverageId,
+      "UNKNOWN",
+      "Synthetic Unevaluated Related Coverage",
+    );
+    catalogOnly.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          assistance: {
+            ...result().assistance,
+            recommendations: [
+              {
+                ...result().assistance.recommendations[0],
+                coverage_label: "Synthetic Unevaluated Related Coverage",
+                knowledge_coverage_id: coverageId,
+              },
+            ],
+          },
+          candidates: [catalogOnly],
+          evaluations: [],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getAllByText("Synthetic Unevaluated Related Coverage"),
+    ).toHaveLength(1);
+    expect(
+      screen
+        .getByText("Synthetic Unevaluated Related Coverage")
+        .closest("article"),
+    ).toHaveClass(/recommendationCard/);
   });
 
   it("distinguishes held policy estimates from confirmed calculations", () => {

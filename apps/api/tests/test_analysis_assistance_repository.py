@@ -181,6 +181,9 @@ def test_create_projection_searches_exact_scope_and_persists_only_bounded_result
     assert "coverage.enrollment_decision = 'UNKNOWN'" in search_sql
     assert "USER_CONFIRMED_COVERAGE_ENROLLMENT" in search_sql
     assert "scoped.execution_disposition = 'ADVISORY'" in search_sql
+    assert "private_knowledge_rule_evaluations AS evaluation" in search_sql
+    assert "evaluation.reason_code = 'ALL_UNKNOWN'" in search_sql
+    assert "bool_and" in search_sql
     assert "PARTITION BY knowledge_coverage_id, association_priority" in search_sql
     assert "ORDER BY association_priority DESC" in search_sql
 
@@ -189,6 +192,26 @@ def test_create_projection_searches_exact_scope_and_persists_only_bounded_result
     ]
     assert "sensitive_event_marker" not in repr(insert_params)
     assert all(len(item.excerpt) <= 240 for item in result.recommendations)
+
+
+def test_create_projection_searches_with_reviewed_normalizer_tokens() -> None:
+    connection = _Connection(search_rows=[_search_row()])
+
+    AnalysisAssistanceRepository().create_search_projection(
+        connection,  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event("synthetic compound"),
+        DECISION_RUN_ID,
+        reviewed_fact_tokens=("reviewed anatomical",),
+    )
+
+    _, params = next(
+        (query, params)
+        for query, params in connection.calls
+        if query.startswith("WITH query_tokens")
+    )
+    assert isinstance(params, tuple)
+    assert set(params[0]) >= {"anatomical", "reviewed"}
 
 
 def test_create_projection_persists_user_authority_with_raw_unknown_enrollment() -> None:
@@ -348,6 +371,32 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
             tokens,
         )
         assert baseline
+
+        connection.execute(
+            """
+            UPDATE private_knowledge_rule_evaluations
+            SET result = 'UNKNOWN', reason_code = 'ALL_UNKNOWN'
+            WHERE decision_run_id = %s
+            """,
+            (first.run_id,),
+        )
+        connection.execute(
+            """
+            UPDATE private_knowledge_claim_candidates
+            SET aggregate_result = 'NO_MATCH'
+            WHERE decision_run_id = %s
+            """,
+            (first.run_id,),
+        )
+        all_unknown_rows = repository._search_rows(  # noqa: SLF001
+            connection,
+            seed.scope_a,
+            event,
+            first.run_id,
+            tokens,
+        )
+        assert all_unknown_rows == []
+        connection.rollback()
 
         connection.execute(
             """

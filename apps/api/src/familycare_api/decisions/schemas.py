@@ -688,6 +688,7 @@ class AssistanceCitationResponse(StrictModel):
 
 class AnalysisRecommendationResponse(StrictModel):
     recommendation_id: UUID
+    knowledge_coverage_id: UUID
     rank: int = Field(ge=1, le=12)
     contract_label: SafeLabel
     coverage_label: SafeLabel
@@ -702,6 +703,7 @@ class AnalysisRecommendationResponse(StrictModel):
     def from_domain(cls, value: AnalysisRecommendation) -> Self:
         return cls(
             recommendation_id=value.id,
+            knowledge_coverage_id=value.knowledge_coverage_id,
             rank=value.rank,
             contract_label=value.contract_label,
             coverage_label=value.coverage_label,

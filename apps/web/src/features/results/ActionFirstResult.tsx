@@ -11,7 +11,10 @@ import {
   partialFailureCount,
   partialReasonCodes,
 } from "./PartialResultBanner";
-import { ResultGroup } from "./ResultGroup";
+import {
+  hasOnlyAllUnknownPrivateEvaluations,
+  ResultGroup,
+} from "./ResultGroup";
 import { RelatedClauseRecommendations } from "./RelatedClauseRecommendations";
 import { StaleResultBanner } from "./StaleResultBanner";
 import styles from "./Results.module.css";
@@ -40,6 +43,24 @@ export function ActionFirstResult({
     result.evaluations,
   );
   const calculationValues = calculations?.calculations ?? [];
+  const allUnknownCoverageIds = new Set(
+    result.candidates
+      .filter((candidate) =>
+        hasOnlyAllUnknownPrivateEvaluations(candidate, result.evaluations),
+      )
+      .flatMap((candidate) =>
+        candidate.source.kind === "PRIVATE_KNOWLEDGE_COVERAGE"
+          ? [candidate.source.knowledge_coverage_id]
+          : [],
+      ),
+  );
+  const visibleAssistance = {
+    ...result.assistance,
+    recommendations: result.assistance.recommendations.filter(
+      (recommendation) =>
+        !allUnknownCoverageIds.has(recommendation.knowledge_coverage_id),
+    ),
+  };
   const claimStartEnabled = !result.stale;
   const firstReviewCandidate = result.candidates.find(
     (candidate): candidate is OperationalCandidateResponse =>
@@ -161,7 +182,7 @@ export function ActionFirstResult({
           </div>
         </section>
       ) : null}
-      <RelatedClauseRecommendations assistance={result.assistance} />
+      <RelatedClauseRecommendations assistance={visibleAssistance} />
     </div>
   );
 }

@@ -603,7 +603,7 @@ def test_reviewed_fixed_rule_uses_certificate_amount_when_formula_is_absent() ->
     assert result.fixed_subtotals[0].calculated_candidate_count == 1
 
 
-def test_unreviewed_certificate_amount_is_visible_but_excluded_from_the_subtotal() -> None:
+def test_unreviewed_certificate_amount_is_visible_and_included_as_an_estimate() -> None:
     amount_only = replace(
         _coverage(25, "100"),
         calculation=None,
@@ -620,9 +620,9 @@ def test_unreviewed_certificate_amount_is_visible_but_excluded_from_the_subtotal
     assert calculation.hold_reason_code == "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
     assert calculation.certificate_amount_decision == "UNKNOWN"
     assert calculation.certificate_amount_evidence_state == "REVIEW_REQUIRED"
-    assert result.fixed_subtotals[0].amount == Decimal("0")
-    assert result.fixed_subtotals[0].calculated_candidate_count == 0
-    assert result.fixed_subtotals[0].unresolved_candidate_count == 1
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 0
 
 
 @pytest.mark.parametrize(
@@ -655,9 +655,9 @@ def test_published_formula_keeps_unreviewed_certificate_amount_conditional(
     assert calculation.conditional_amount == Decimal("100")
     assert calculation.confirmed_amount is None
     assert calculation.hold_reason_code == "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
-    assert result.fixed_subtotals[0].amount == Decimal("0")
-    assert result.fixed_subtotals[0].calculated_candidate_count == 0
-    assert result.fixed_subtotals[0].unresolved_candidate_count == 1
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 0
 
 
 def test_published_certificate_amount_remains_an_estimate_without_a_formula() -> None:

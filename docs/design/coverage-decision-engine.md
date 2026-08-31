@@ -36,9 +36,11 @@ publication이 모두 닫힌 담보만 실행한다. 약관에 조항이 있다�
 `MATCH` 근거가 아니다.
 
 결과 v2는 source-discriminated candidate/evaluation, exact clause/page citation, catalog completeness,
-통화별 조건부 정액 subtotal과 별도 실손 summary를 반환한다. 정액 subtotal은
-`MATCH + CALCULATED`만 더하고 실손 `UNKNOWN`을 섞지 않는다. 저장 직후 응답과 immutable result
-재조회는 금액 문자열과 fact-path ordering을 canonicalize해 동일한 verified projection을 제공한다.
+통화별 조건부 정액 subtotal과 별도 실손 summary를 반환한다. 정액 subtotal은 검토된 eligibility
+rule이 일치해 계산된 정액 조건부 예상액을 더한다. 가입금액 전용 위치 검토가 남아 있는 예상액도
+hold와 함께 포함하지만 catalog-only 담보와 실손 `UNKNOWN`은 섞지 않는다. 저장 직후 응답과
+immutable result 재조회는 금액 문자열과 fact-path ordering을 canonicalize해 동일한 verified
+projection을 제공한다.
 
 분석 뒤 member-scoped structured search는 관련 약관 검토 후보를 즉시 만든다. Worker key가 있으면
 이미 선택된 bounded token만 한 번 재정렬·설명할 수 있고, key가 없거나 호출이 실패하면 DB 검색을
@@ -155,13 +157,14 @@ Rule publication 단계는 다음 불변식을 보장해야 합니다.
 않습니다. `certificate_review.amount_decision=MATCH`이고 가입금액 전용
 `amount_evidence_locations`가 있을 때만 `certificate_amount_evidence_state=DIRECT`로 표시하고,
 해당 문서 별칭과 물리 페이지를 계산 응답에 보존합니다. 담보 존재만 확인하는 일반 증권
-페이지밖에 없거나 금액 검토가 `UNKNOWN`이면 예상액 자체는 참고값으로 표시하되
-`CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED` hold로 합계에서 제외하고, UI도 “가입금액 위치
-확인 필요”로 구분합니다. 이 근거는 계산이 참조한 immutable knowledge snapshot에서 다시 읽어
-약관 eligibility citation과 함께 한 카드에서 확인합니다.
+페이지밖에 없거나 금액 검토가 `UNKNOWN`이면 예상액 자체는 참고값으로 표시하고
+`CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED` hold와 “가입금액 위치 확인 필요” 표기를 유지합니다.
+사용자가 요청한 예상 합계에는 이 조건부 정액 예상액도 포함하되 `confirmed_amount`는 만들지
+않습니다. 이 근거는 계산이 참조한 immutable knowledge snapshot에서 다시 읽어 약관 eligibility
+citation과 함께 한 카드에서 확인합니다.
 검토된 calculation publication이 `Rider.insured_amount`를 입력으로 사용하더라도 같은 경계를
 적용합니다. 금액 review가 `MATCH + DIRECT`가 아니면 계산식은 참고 예상액을 만들 수 있지만
-`confirmed_amount`를 만들거나 조건부 정액 합계에 포함될 수 없습니다.
+`confirmed_amount`를 만들 수는 없고 review hold를 유지한 채 조건부 정액 합계에만 포함됩니다.
 
 AI가 구조화한 fact는 규칙 평가가 `MATCH`, `NO_MATCH`, exclusion match 중 어느 결과를
 만들더라도 단독으로 확정 판정을 만들지 않습니다. 계약 기간·가입 상태처럼 별도 신뢰 근거가

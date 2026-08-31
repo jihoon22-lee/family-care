@@ -220,4 +220,28 @@ def normalize_private_event_facts(
     )
 
 
-__all__ = ["normalize_private_event_facts", "normalized_tokens"]
+def reviewed_normalizer_search_tokens(
+    facts: KnowledgeFactContext,
+    normalizers: tuple[KnowledgeFactNormalizer, ...],
+) -> tuple[str, ...]:
+    """Return only reviewed source tokens that produced trusted derived facts."""
+
+    selected_keys = {
+        key
+        for fact in facts.facts.values()
+        if fact.provenance == "DERIVED_CONFIRMED" and not fact.stale
+        for key in fact.normalizer_keys
+    }
+    tokens: list[str] = []
+    for normalizer in normalizers:
+        if normalizer.normalizer_key not in selected_keys:
+            continue
+        tokens.extend(normalizer.normalized_tokens)
+    return tuple(dict.fromkeys(tokens))
+
+
+__all__ = [
+    "normalize_private_event_facts",
+    "normalized_tokens",
+    "reviewed_normalizer_search_tokens",
+]
