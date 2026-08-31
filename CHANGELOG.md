@@ -4,6 +4,18 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-31
+
+### Changed
+
+- Event result requests now make at most one bounded structuring attempt and fall back to deterministic local analysis without repeatedly spending external API balance.
+- Result pages list only event-relevant coverages, name the coverages that were evaluated, and keep indemnity guidance separate from fixed-benefit totals.
+
+### Fixed
+
+- Relevant fixed-benefit candidates now show each conditional expected amount and a conditional subtotal from a reviewed formula or certificate insured amount, together with the available certificate evidence state, without presenting eligibility as confirmed.
+- AI-structured facts remain non-authoritative, and a late provider response cannot replace the event version already used by local analysis.
+
 ## [0.3.0] - 2026-08-31
 
 ### Added
