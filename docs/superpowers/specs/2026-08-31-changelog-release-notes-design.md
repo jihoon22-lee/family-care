@@ -1,7 +1,7 @@
 # Changelog-derived GitHub Release Notes Design
 
-- 상태: PR #49 구현·기존 `v0.1.0`~`v0.3.2` Release 정비 완료; 다음 tag 전
-  job-level `runner.temp` GitHub parser regression 수정 필요
+- 상태: PR #49 구현·기존 `v0.1.0`~`v0.3.2` Release 정비와 후속 job-level
+  `runner.temp` GitHub parser regression 수정 완료; 다음 실제 tag run 미실행
 - 작성일: 2026-08-31
 - 적용 범위: `CHANGELOG.md`, 릴리스 노트 생성 도구, GHCR 태그 검증, GitHub Release 게시, 기존 v0.1.0~v0.3.2 본문 정비
 
@@ -16,9 +16,9 @@ FamilyCare의 GitHub Release 본문을 버전마다 수기로 다시 쓰거나 G
 - 다섯 Release를 API로 다시 읽어 `Changes`, `Release evidence`,
   `Privacy and deployment boundary`, 실제 줄바꿈과 서로 다른 세 image digest를 확인했다.
 - renderer, digest evidence, release audit, workflow policy와 v0.1.0 CHANGELOG 정규화는 구현됐다.
-- 후속 검토에서 `publish-release` job-level `env`의 `${{ runner.temp }}` context가 GitHub에서
-  허용되지 않음을 확인했다. 이 parser regression은 기존 Release 정비 결과를 바꾸지 않지만 다음
-  tag 자동화를 차단하므로 별도 fix와 tag-run 검증이 필요하다.
+- 후속 검토에서 확인한 `publish-release` job-level `env`의 `${{ runner.temp }}` 오류는 해당
+  경로를 step-level `env`로 이동하고 저장소 validator에 회귀 검사를 추가해 수정했다. 기존
+  Release 정비 결과는 바뀌지 않았고, 다음 실제 tag-run 검증은 아직 수행하지 않았다.
 
 ## 결정
 

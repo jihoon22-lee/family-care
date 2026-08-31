@@ -14,6 +14,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Fixed
 
+- Release temporary-file paths now use the `runner` context only in step-level environments, and
+  repository workflow validation rejects the invalid job-level form before GitHub parses it.
 - GitHub Release notes now derive their change list from the matching CHANGELOG section, append
   verified workflow and immutable image-digest evidence, and use real Markdown files so escaped
   newline text cannot replace actual line breaks.

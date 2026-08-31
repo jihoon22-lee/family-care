@@ -560,12 +560,11 @@ docker compose --env-file .env -f infra/compose/compose.yaml build worker
   digest 검증은 성공했습니다.
 - 다섯 GitHub Release 본문은 같은 `Changes`/`Release evidence`/`Privacy and deployment
   boundary` 구조이며 실제 줄바꿈과 서로 다른 세 digest를 확인했습니다.
-- PR #49 이후 `main`의 release workflow는 job-level `env`에서 `${{ runner.temp }}`를
-  참조합니다. GitHub는 이 context를 해당 위치에서 허용하지 않아 일반 push마다 job 없는 실패
-  run을 만들고, 다음 tag workflow도 파싱할 수 없습니다.
-- 따라서 새 tag는 별도 fix PR, `actionlint`와 repository workflow 검사, PR/`main` CI, 실제 tag
-  workflow 성공을 차례로 확인하기 전까지 만들지 않습니다. 기존 tag, image와 Release는 이
-  알려진 결함으로 변경되지 않았습니다.
+- release 임시 파일 경로는 `${{ runner.temp }}`를 사용할 수 있는 각 step의 `env`에만 두며,
+  repository workflow 검사는 job-level `runner` context를 회귀 오류로 거부합니다.
+- `actionlint`와 repository workflow 검사는 수정된 파일을 통과했습니다. 이 수정은 tag, image,
+  기존 Release를 만들거나 바꾸지 않았으므로 다음 실제 tag workflow는 명시적인 릴리스 결정 뒤
+  별도 실행 증거로 확인합니다.
 
 ## Troubleshooting
 

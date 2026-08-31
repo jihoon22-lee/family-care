@@ -13,8 +13,8 @@
 **Status:** Implementation and historical repair complete in PR #49, merged as
 `c418579fd6ffbfd1924d8998a4cb171a739be646`. The five public Release bodies were read back with the
 common headings, real newlines, and three distinct image digests. A post-completion GitHub parser
-regression in the job-level `runner.temp` context remains a blocker for the next tag and requires a
-separate fix PR.
+regression in the job-level `runner.temp` context was subsequently corrected with step-level
+environments and a repository regression check. No new tag was created for that correction.
 
 ## Global Constraints
 

@@ -49,9 +49,9 @@
 
 빠르고 외부 서비스가 없어야 하므로 모든 PR의 첫 관문으로 실행합니다.
 
-`scripts/check_workflows.py`는 저장소 정책을 검사하지만 GitHub expression context의 모든 위치
-규칙을 대신하지 않습니다. 2026-09-01 `actionlint`가 release workflow의 job-level
-`runner.temp` 오류를 찾았으므로 해당 결함이 고쳐질 때까지 release workflow 변경과 새 tag 전에는
+`scripts/check_workflows.py`는 release workflow의 job-level `env`에서 `runner` context를
+사용하는 회귀를 명시적으로 거부합니다. 모든 GitHub expression 위치 규칙을 자체 구현하지는
+않으므로 release workflow 변경과 새 tag 전에는
 `actionlint -oneline .github/workflows/*.yml`도 실행합니다.
 
 ### Unit tests

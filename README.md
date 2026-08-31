@@ -31,10 +31,10 @@ end-to-end import/OCR, Windows 브라우저, 모바일 PWA, 다른 실제 기기
 [`workthrough/2026-08-27-v0-2-0-release-metadata.md`](workthrough/2026-08-27-v0-2-0-release-metadata.md)에
 보존합니다.
 
-2026-09-01 현재 일반 PR/`main` CI는 동작하지만, PR #49에서 추가된 release workflow의
-job-level `env`가 허용되지 않는 `runner.temp` context를 참조해 GitHub가 workflow 파일을
-파싱하지 못합니다. 이 문서 변경은 그 workflow를 수정하지 않으므로 다음 tag는 별도 fix PR과
-성공한 tag workflow 확인 전까지 만들지 않습니다.
+2026-09-01 release workflow의 임시 파일 경로는 `runner.temp`를 사용할 수 있는 step-level
+`env`로 한정했고, 저장소 검사도 job-level `runner` context를 거부합니다. `actionlint`와 로컬
+workflow 정책 검사는 통과했지만 이 수정으로 새 tag를 만들지는 않았으므로 다음 실제 tag run은
+명시적인 릴리스 결정 뒤 별도로 확인합니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
@@ -139,9 +139,9 @@ ENV_FILE=.env.private make down
 
 게시 성공은 운영 배포 성공을 뜻하지 않습니다. 현재 자동화의 경계는 GHCR 이미지 게시까지이며, Cloud Run을 포함한 운영 배포는 모든 개발이 끝난 뒤 별도로 설계하고 승인합니다. `1.0.0` 이전에는 `latest` 태그를 만들지 않습니다.
 
-현재 공개 릴리스는 `v0.1.0`부터 `v0.3.2`까지입니다. 위 Current status의 release-workflow
-파싱 결함을 해결하고 GitHub가 tag-only workflow를 정상 인식하는 증거를 확보하기 전에는 새
-태그를 만들지 않습니다.
+현재 공개 릴리스는 `v0.1.0`부터 `v0.3.2`까지입니다. release workflow의 parser 결함은
+수정했지만 실제 tag 실행은 만들지 않았습니다. 다음 태그는 사용자의 명시적인 릴리스 결정과
+tag workflow 결과 확인을 포함해야 합니다.
 
 ## License
 

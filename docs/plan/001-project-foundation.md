@@ -777,6 +777,10 @@ git commit -m "ci: validate project foundation"
 
 ### Task 8: GHCR semantic-tag release workflow
 
+**2026-09-01 parser regression follow-up:** complete. Repository validation now rejects job-level
+expressions that use the unavailable `runner` context, release temporary paths use step-level
+environments, and both `actionlint` and the repository workflow policy pass. No tag was created.
+
 **Files:**
 - Create: `.github/workflows/release.yml`
 - Modify: `scripts/check_workflows.py`

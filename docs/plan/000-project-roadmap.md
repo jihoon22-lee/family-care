@@ -36,7 +36,7 @@
 | v0.3.0 — Container release | Complete | Release workflow run `33350051878`; catalog/advisory baseline published on 2026-08-31. |
 | v0.3.1 — Container release | Complete | Release workflow run `33374796485`; relevant-result and bounded structuring corrections published on 2026-08-31. |
 | v0.3.2 — Container release | Complete | Release workflow run `33389763777`; live benefit regressions and exact-token authority corrections published on 2026-08-31. |
-| Release-note normalization | Implemented; next-tag parser fix required | PR #49 normalized all five GitHub Release bodies. Current workflow has an invalid job-level `runner.temp` context and must be fixed before another tag. |
+| Release-note normalization | Complete; next tag run pending | PR #49 normalized all five GitHub Release bodies. The follow-up moved `runner.temp` paths to step-level environments and added a repository regression check; no new tag was created. |
 
 ## Dependency flow
 
@@ -340,9 +340,9 @@ The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0
 - PR #50 updated `@testing-library/react` and `@vitejs/plugin-react`; PR #51 updated Ruff and the
   Python lockfile. Both replacement PRs passed all seven required CI checks and superseded the stale
   Dependabot PRs.
-- The current release workflow cannot be parsed by GitHub because job-level `env` uses
-  `${{ runner.temp }}`. This is a known unreleased blocker, not a failed `v0.3.2` publication. A
-  separate fix PR must pass before any new tag.
+- The release workflow parser regression was corrected by moving `${{ runner.temp }}` paths to
+  step-level environments and rejecting the invalid job-level form in repository validation.
+  `actionlint` and local workflow policy checks pass; the next deliberate tag run remains unverified.
 
 ## Deferred after the current baseline
 
