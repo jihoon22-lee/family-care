@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
+from familycare_worker.ai.minimizer import EvidenceMinimizationError, minimize_text
 from familycare_worker.ai.provider import (
     EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME,
     AiProvider,
@@ -24,6 +25,10 @@ _UUID_PATTERN = re.compile(
 )
 _PRIVATE_PATH_PATTERN = re.compile(
     r"(?i)(?:[A-Z]:[\\/]|file://|(?:^|\s)/(?:home|mnt|private|tmp|users?)/)"
+)
+_RESIDUAL_IDENTIFIER_PATTERN = re.compile(
+    r"(?i)\b(?:customer|member|person|policy|contract|certificate)"
+    r"[_-](?:id|number|no)[_:-][a-z0-9][a-z0-9._/-]{4,}\b"
 )
 
 
@@ -187,11 +192,13 @@ def recommend_clauses(
     request: RecommendationRequest,
     provider: AiProvider,
     model: str,
+    sensitive_terms: Sequence[str],
 ) -> RecommendationResult:
     """Call the configured provider exactly once and validate supplied-token output."""
 
     if not isinstance(request, RecommendationRequest) or not _safe_model_label(model):
         raise ValueError("invalid recommender configuration")
+    request = _minimized_request(request, sensitive_terms=sensitive_terms)
     response = provider.complete(
         model=model,
         schema_name=RECOMMENDER_SCHEMA_NAME,
@@ -229,6 +236,59 @@ def recommend_clauses(
     )
     payload, request_id = provider_payload(response)
     return _validated_result(payload, request_id, request)
+
+
+def _minimized_request(
+    request: RecommendationRequest,
+    *,
+    sensitive_terms: Sequence[str],
+) -> RecommendationRequest:
+    """Apply the shared provider minimizer to every free-text projection field."""
+
+    return RecommendationRequest(
+        situation=_minimized_text(request.situation, sensitive_terms=sensitive_terms),
+        facts=tuple(
+            RecommendationFact(
+                field_id=item.field_id,
+                value=_minimized_text(item.value, sensitive_terms=sensitive_terms),
+                confirmation=item.confirmation,
+            )
+            for item in request.facts
+        ),
+        candidates=tuple(
+            RecommendationCandidate(
+                token=item.token,
+                contract_label=_minimized_text(
+                    item.contract_label,
+                    sensitive_terms=sensitive_terms,
+                ),
+                coverage_label=_minimized_text(
+                    item.coverage_label,
+                    sensitive_terms=sensitive_terms,
+                ),
+                clause_label=_minimized_text(
+                    item.clause_label,
+                    sensitive_terms=sensitive_terms,
+                ),
+                excerpt=_minimized_text(item.excerpt, sensitive_terms=sensitive_terms),
+                page_start=item.page_start,
+                page_end=item.page_end,
+                citation_kind=item.citation_kind,
+            )
+            for item in request.candidates
+        ),
+    )
+
+
+def _minimized_text(text: str, *, sensitive_terms: Sequence[str]) -> str:
+    minimized = minimize_text(text, sensitive_terms=sensitive_terms)
+    if (
+        not _safe_text(minimized, 240)
+        or _RESIDUAL_IDENTIFIER_PATTERN.search(minimized) is not None
+        or any(term.casefold() in minimized.casefold() for term in sensitive_terms)
+    ):
+        raise EvidenceMinimizationError
+    return minimized
 
 
 def _validated_result(

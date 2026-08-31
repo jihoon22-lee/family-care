@@ -76,7 +76,12 @@ def test_schema_is_closed_and_one_call_can_only_reorder_supplied_tokens() -> Non
         }
     )
 
-    result = recommend_clauses(request=_request(), provider=provider, model="synthetic-model-v1")
+    result = recommend_clauses(
+        request=_request(),
+        provider=provider,
+        model="synthetic-model-v1",
+        sensitive_terms=("Family Member A",),
+    )
 
     assert [item.token for item in result.selections] == ["candidate-02", "candidate-01"]
     assert len(provider.calls) == 1
@@ -161,7 +166,12 @@ def test_unknown_duplicate_or_authoritative_output_is_rejected(payload: object) 
     provider = _Provider(payload)
 
     with pytest.raises(RecommendationValidationError) as raised:
-        recommend_clauses(request=_request(), provider=provider, model="synthetic-model-v1")
+        recommend_clauses(
+            request=_request(),
+            provider=provider,
+            model="synthetic-model-v1",
+            sensitive_terms=("Family Member A",),
+        )
 
     assert str(raised.value) == "INVALID_RECOMMENDATION_RESPONSE"
     assert len(provider.calls) == 1
@@ -189,7 +199,12 @@ def test_request_and_result_repr_hide_event_facts_excerpts_and_request_id() -> N
         }
     )
 
-    result = recommend_clauses(request=request, provider=provider, model="synthetic-model-v1")
+    result = recommend_clauses(
+        request=request,
+        provider=provider,
+        model="synthetic-model-v1",
+        sensitive_terms=("Family Member A",),
+    )
     rendered = f"{request!r} {result!r}"
 
     assert "bounded event situation marker" not in rendered
@@ -206,6 +221,152 @@ def test_request_rejects_database_ids_and_paths_before_provider_call() -> None:
             _request(),
             situation="00000000-0000-4000-8000-000000000001 /private/source.pdf",
         )
-        recommend_clauses(request=unsafe, provider=provider, model="synthetic-model-v1")
+        recommend_clauses(
+            request=unsafe,
+            provider=provider,
+            model="synthetic-model-v1",
+            sensitive_terms=("Family Member A",),
+        )
 
     assert provider.calls == []
+
+
+def test_provider_projection_minimizes_every_free_text_field() -> None:
+    provider = _Provider(
+        {
+            "schema_version": "1",
+            "recommendations": [
+                {
+                    "token": "candidate-01",
+                    "explanation_code": "RELATED_CLAUSE",
+                    "question_code": None,
+                }
+            ],
+        }
+    )
+    request = RecommendationRequest(
+        situation="Family Member A sample@example.invalid synthetic visit",
+        facts=(
+            RecommendationFact(
+                field_id="MedicalEvent.note",
+                value="Family Member A 010-0000-0000",
+                confirmation="USER_CONFIRMED",
+            ),
+        ),
+        candidates=(
+            RecommendationCandidate(
+                token="candidate-01",
+                contract_label="Family Member A Sample Policy",
+                coverage_label="Family Member A Sample Coverage",
+                clause_label="Family Member A Sample Clause",
+                excerpt="Family Member A 증권번호: synthetic-policy-001",
+                page_start=1,
+                page_end=1,
+                citation_kind="FACT_CITATION",
+            ),
+        ),
+    )
+
+    recommend_clauses(
+        request=request,
+        provider=provider,
+        model="synthetic-model-v1",
+        sensitive_terms=("Family Member A",),
+    )
+
+    payload = provider.calls[0]["input_payload"]
+    assert isinstance(payload, dict)
+    event = payload["event"]
+    candidates = payload["candidates"]
+    assert isinstance(event, dict)
+    assert isinstance(candidates, list)
+    projected = (
+        event["situation"],
+        event["facts"][0]["value"],
+        candidates[0]["contract_label"],
+        candidates[0]["coverage_label"],
+        candidates[0]["clause_label"],
+        candidates[0]["excerpt"],
+    )
+    assert all("[REDACTED]" in value for value in projected)
+    assert all("Family Member A" not in value for value in projected)
+    assert "sample@example.invalid" not in event["situation"]
+    assert "010-0000-0000" not in event["facts"][0]["value"]
+    assert "synthetic-policy-001" not in candidates[0]["excerpt"]
+
+
+def test_provider_projection_redacts_identifiers_crossing_the_240_character_boundary() -> None:
+    provider = _Provider(
+        {
+            "schema_version": "1",
+            "recommendations": [
+                {
+                    "token": "candidate-01",
+                    "explanation_code": "RELATED_CLAUSE",
+                    "question_code": None,
+                }
+            ],
+        }
+    )
+    request = replace(
+        _request(count=1),
+        situation=f"{'x' * 225} sample@example.invalid synthetic tail",
+        candidates=(
+            replace(
+                _candidate(1),
+                coverage_label=f"{'y' * 230} Family Member A synthetic tail",
+            ),
+        ),
+    )
+
+    recommend_clauses(
+        request=request,
+        provider=provider,
+        model="synthetic-model-v1",
+        sensitive_terms=("Family Member A",),
+    )
+
+    payload = provider.calls[0]["input_payload"]
+    assert isinstance(payload, dict)
+    event = payload["event"]
+    candidates = payload["candidates"]
+    assert isinstance(event, dict)
+    assert isinstance(candidates, list)
+    assert "sample@" not in event["situation"]
+    assert "Family" not in candidates[0]["coverage_label"]
+
+
+def test_provider_projection_redacts_labelled_identity_values_longer_than_160_chars() -> None:
+    provider = _Provider(
+        {
+            "schema_version": "1",
+            "recommendations": [
+                {
+                    "token": "candidate-01",
+                    "explanation_code": "RELATED_CLAUSE",
+                    "question_code": None,
+                }
+            ],
+        }
+    )
+    synthetic_address = ("SyntheticRoad" * 15) + "ABCD"
+    assert len(synthetic_address) == 199
+    request = replace(
+        _request(count=1),
+        situation=f"주소: {synthetic_address}",
+    )
+
+    recommend_clauses(
+        request=request,
+        provider=provider,
+        model="synthetic-model-v1",
+        sensitive_terms=("Family Member A",),
+    )
+
+    assert len(provider.calls) == 1
+    payload = provider.calls[0]["input_payload"]
+    assert isinstance(payload, dict)
+    event = payload["event"]
+    assert isinstance(event, dict)
+    assert event["situation"] == "주소: [REDACTED]"
+    assert synthetic_address not in repr(payload)

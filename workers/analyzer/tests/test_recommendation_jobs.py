@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -53,6 +54,9 @@ def _local(index: int = 1) -> LocalRecommendationRecord:
         private_claim_candidate_id=_uuid(300 + index),
         knowledge_import_run_id=_uuid(400),
         knowledge_coverage_id=_uuid(500 + index),
+        coverage_execution_disposition_id=_uuid(550 + index),
+        enrollment_decision_snapshot="MATCH",
+        enrollment_authority_snapshot="CERTIFICATE_SNAPSHOT",
         terms_section_id=_uuid(600 + index),
         knowledge_fact_id=_uuid(700 + index),
         source_clause_id=_uuid(800 + index),
@@ -89,9 +93,15 @@ def _work(job: RecommendationJobRecord | None = None) -> RecommendationWorkItem:
 
 
 class _Queue:
-    def __init__(self, jobs: list[RecommendationJobRecord]) -> None:
+    def __init__(
+        self,
+        jobs: list[RecommendationJobRecord],
+        *,
+        member_terms: tuple[str, ...] = ("Family Member A", "Member A"),
+    ) -> None:
         self.jobs = jobs
         self.works = {job.id: _work(job) for job in jobs}
+        self.member_terms = member_terms
         self.fallbacks: list[tuple[UUID, str]] = []
         self.llm_results: list[tuple[UUID, tuple[str, ...]]] = []
 
@@ -101,6 +111,10 @@ class _Queue:
 
     def load_work(self, job: RecommendationJobRecord) -> RecommendationWorkItem:
         return self.works[job.id]
+
+    def load_member_terms(self, job: RecommendationJobRecord) -> tuple[str, ...]:
+        assert job.household_space_id == _uuid(100)
+        return self.member_terms
 
     def complete_with_fallback(
         self,
@@ -191,6 +205,38 @@ def test_configured_provider_is_called_once_and_only_reorders_local_tokens() -> 
     assert queue.llm_results == [(_job().id, ("candidate-02", "candidate-01"))]
 
 
+def test_unbounded_household_terms_make_zero_external_requests_and_keep_search() -> None:
+    provider = _Provider(_success_payload())
+    queue = _Queue(
+        [_job()],
+        member_terms=tuple(f"Synthetic Member {index}" for index in range(17)),
+    )
+    runner = RecommendationJobRunner(queue=queue, provider=provider)
+
+    assert runner.run_once("worker-a") is True
+
+    assert provider.calls == 0
+    assert queue.llm_results == []
+    assert queue.fallbacks == [(_job().id, "PROVIDER_INPUT_REJECTED")]
+
+
+def test_residual_synthetic_identifier_makes_zero_external_requests_and_keeps_search() -> None:
+    job = _job()
+    provider = _Provider(_success_payload())
+    queue = _Queue([job])
+    queue.works[job.id] = replace(
+        queue.works[job.id],
+        situation="Synthetic visit customer-id-synthetic-001",
+    )
+    runner = RecommendationJobRunner(queue=queue, provider=provider)
+
+    assert runner.run_once("worker-a") is True
+
+    assert provider.calls == 0
+    assert queue.llm_results == []
+    assert queue.fallbacks == [(job.id, "PROVIDER_INPUT_REJECTED")]
+
+
 @pytest.mark.parametrize(
     ("error", "outcome"),
     [
@@ -273,7 +319,13 @@ def test_postgresql_job_success_and_missing_key_fallback_round_trip(
         pytest.skip("FAMILYCARE_DATABASE_URL is required")
     _reset_database(database_url)
     seed = _seed(database_url)
-    _seed_private_publication(database_url, seed, tmp_path)
+    _seed_private_publication(
+        database_url,
+        seed,
+        tmp_path,
+        advisory=True,
+        user_confirmed_enrollment=True,
+    )
     service = DecisionService(seed.scope_a, DecisionRepository(database_url))
 
     def create_event() -> MedicalEvent:
@@ -367,3 +419,21 @@ def test_postgresql_job_success_and_missing_key_fallback_round_trip(
                 "outcome_code": "PROVIDER_NOT_CONFIGURED",
             },
         ]
+        lineage = connection.execute(
+            """
+            SELECT recommendation.enrollment_decision_snapshot,
+                   recommendation.coverage_execution_disposition_id,
+                   recommendation.enrollment_authority_snapshot
+            FROM analysis_recommendations AS recommendation
+            JOIN analysis_assistance_runs AS assistance
+              ON assistance.id = recommendation.analysis_assistance_run_id
+            WHERE assistance.state IN ('LLM_READY', 'SEARCH_READY')
+            ORDER BY assistance.created_at, assistance.id, recommendation.rank
+            """
+        ).fetchall()
+        assert lineage
+        assert {row["enrollment_decision_snapshot"] for row in lineage} == {"UNKNOWN"}
+        assert all(row["coverage_execution_disposition_id"] is not None for row in lineage)
+        assert {row["enrollment_authority_snapshot"] for row in lineage} == {
+            "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+        }

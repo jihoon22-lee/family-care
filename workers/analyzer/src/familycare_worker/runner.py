@@ -15,6 +15,7 @@ from familycare_worker.ai.event_structurer import EventStructuringRequest, struc
 from familycare_worker.ai.evidence_loader import (
     EvidenceLoadError,
     EvidenceRepositoryUnavailable,
+    PolicyEvidenceLoader,
 )
 from familycare_worker.ai.minimizer import EvidenceMinimizationError, minimize_evidence
 from familycare_worker.ai.policy_pipeline import run_policy_batch_pipeline, run_policy_pipeline
@@ -466,11 +467,16 @@ class RecommendationJobRunner:
             return True
 
         try:
+            sensitive_terms = _recommendation_member_terms(self.queue, job)
             result = recommend_clauses(
                 request=request,
                 provider=self.provider,
                 model=self.model,
+                sensitive_terms=sensitive_terms,
             )
+        except EvidenceLoadError, EvidenceMinimizationError, ValueError:
+            self._safe_fallback(job, work, "PROVIDER_INPUT_REJECTED")
+            return True
         except ProviderConfigurationError:
             self._safe_fallback(job, work, "PROVIDER_NOT_CONFIGURED")
             return True
@@ -537,6 +543,41 @@ def _recommendation_request(work: RecommendationWorkItem) -> RecommendationReque
             )
             for index, item in enumerate(target.recommendations, start=1)
         ),
+    )
+
+
+def _recommendation_member_terms(
+    queue: RecommendationQueue,
+    job: RecommendationJobRecord,
+) -> tuple[str, ...]:
+    queue_loader = getattr(queue, "load_member_terms", None)
+    if callable(queue_loader):
+        terms = queue_loader(job)
+        if not isinstance(terms, tuple):
+            raise EvidenceLoadError
+        return terms
+
+    database_url = getattr(queue, "database_url", None)
+    if not isinstance(database_url, str) or not database_url:
+        raise EvidenceLoadError
+    try:
+        with psycopg.connect(database_url) as connection:
+            row = connection.execute(
+                """
+                SELECT family_member_id
+                FROM medical_events
+                WHERE id = %s AND household_space_id = %s
+                  AND deleted_at IS NULL
+                """,
+                (job.medical_event_id, job.household_space_id),
+            ).fetchone()
+    except psycopg.Error:
+        raise EvidenceRepositoryUnavailable from None
+    if row is None or not isinstance(row[0], UUID):
+        raise EvidenceLoadError
+    return PolicyEvidenceLoader(database_url).load_member_terms(
+        household_space_id=job.household_space_id,
+        family_member_id=row[0],
     )
 
 

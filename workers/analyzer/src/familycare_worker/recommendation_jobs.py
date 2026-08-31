@@ -16,6 +16,11 @@ from familycare_worker.ai.recommender import RecommendationResult
 
 JobState = Literal["RUNNING"]
 FactConfirmation = Literal["USER_CONFIRMED", "AI_SUGGESTED"]
+EnrollmentDecision = Literal["MATCH", "UNKNOWN"]
+EnrollmentAuthority = Literal[
+    "CERTIFICATE_SNAPSHOT",
+    "USER_CONFIRMED_COVERAGE_ENROLLMENT",
+]
 
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
@@ -62,6 +67,9 @@ class LocalRecommendationRecord:
     private_claim_candidate_id: UUID = field(repr=False)
     knowledge_import_run_id: UUID = field(repr=False)
     knowledge_coverage_id: UUID = field(repr=False)
+    coverage_execution_disposition_id: UUID = field(repr=False)
+    enrollment_decision_snapshot: EnrollmentDecision = field(repr=False)
+    enrollment_authority_snapshot: EnrollmentAuthority = field(repr=False)
     terms_section_id: UUID = field(repr=False)
     knowledge_fact_id: UUID = field(repr=False)
     source_clause_id: UUID = field(repr=False)
@@ -84,6 +92,7 @@ class LocalRecommendationRecord:
             self.private_claim_candidate_id,
             self.knowledge_import_run_id,
             self.knowledge_coverage_id,
+            self.coverage_execution_disposition_id,
             self.terms_section_id,
             self.knowledge_fact_id,
             self.source_clause_id,
@@ -91,6 +100,14 @@ class LocalRecommendationRecord:
         ):
             _require_uuid(value)
         if not _DIGEST_PATTERN.fullmatch(self.candidate_digest_sha256):
+            raise InvalidRecommendationWork
+        if (
+            self.enrollment_decision_snapshot,
+            self.enrollment_authority_snapshot,
+        ) not in {
+            ("MATCH", "CERTIFICATE_SNAPSHOT"),
+            ("UNKNOWN", "USER_CONFIRMED_COVERAGE_ENROLLMENT"),
+        }:
             raise InvalidRecommendationWork
         if isinstance(self.rank, bool) or not 1 <= self.rank <= 12 or self.score < 0:
             raise InvalidRecommendationWork
@@ -119,6 +136,9 @@ class LocalRecommendationRecord:
 
         return (
             self.knowledge_coverage_id,
+            self.coverage_execution_disposition_id,
+            self.enrollment_decision_snapshot,
+            self.enrollment_authority_snapshot,
             self.terms_section_id,
             self.knowledge_fact_id,
             self.source_clause_id,
@@ -489,15 +509,18 @@ class PostgresRecommendationJobQueue:
                   id, analysis_assistance_run_id, household_space_id,
                   decision_run_id, private_claim_candidate_id,
                   knowledge_import_run_id, knowledge_coverage_id,
-                  enrollment_decision_snapshot, terms_section_id,
+                  coverage_execution_disposition_id,
+                  enrollment_decision_snapshot, enrollment_authority_snapshot,
+                  terms_section_id,
                   knowledge_fact_id, source_clause_id, fact_citation_id,
                   candidate_digest_sha256, rank, score,
                   contract_label_snapshot, coverage_label_snapshot,
                   clause_label_snapshot, excerpt, page_start, page_end,
                   citation_kind, reason_code, explanation_code, question_code
                 ) VALUES (
-                  %s, %s, %s, %s, %s, %s, %s, 'MATCH', %s, %s, %s, %s,
-                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                  %s, %s, %s
                 )
                 """,
                 (
@@ -508,6 +531,9 @@ class PostgresRecommendationJobQueue:
                     item.private_claim_candidate_id,
                     item.knowledge_import_run_id,
                     item.knowledge_coverage_id,
+                    item.coverage_execution_disposition_id,
+                    item.enrollment_decision_snapshot,
+                    item.enrollment_authority_snapshot,
                     item.terms_section_id,
                     item.knowledge_fact_id,
                     item.source_clause_id,
@@ -547,6 +573,11 @@ def _local(row: Mapping[str, Any]) -> LocalRecommendationRecord:
         private_claim_candidate_id=cast(UUID, row["private_claim_candidate_id"]),
         knowledge_import_run_id=cast(UUID, row["knowledge_import_run_id"]),
         knowledge_coverage_id=cast(UUID, row["knowledge_coverage_id"]),
+        coverage_execution_disposition_id=cast(UUID, row["coverage_execution_disposition_id"]),
+        enrollment_decision_snapshot=cast(EnrollmentDecision, row["enrollment_decision_snapshot"]),
+        enrollment_authority_snapshot=cast(
+            EnrollmentAuthority, row["enrollment_authority_snapshot"]
+        ),
         terms_section_id=cast(UUID, row["terms_section_id"]),
         knowledge_fact_id=cast(UUID, row["knowledge_fact_id"]),
         source_clause_id=cast(UUID, row["source_clause_id"]),
