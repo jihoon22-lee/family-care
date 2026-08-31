@@ -2,10 +2,14 @@ import type {
   ClaimCandidateResponse,
   RuleEvaluationResponse,
 } from "../../api/generated";
-import { reasonLabel } from "./ResultGroup";
+import {
+  candidateSourceKey,
+  evaluationSourceKey,
+  reasonLabel,
+} from "./resultPresentation";
 import styles from "./Results.module.css";
 
-const PARTIAL_REASON_PREFIXES = ["RULE_", "EVIDENCE_"];
+const PARTIAL_REASON_PREFIXES = ["RULE_", "EVIDENCE_", "KNOWLEDGE_"];
 
 function isPartialReason(reasonCode: string): boolean {
   return PARTIAL_REASON_PREFIXES.some((prefix) =>
@@ -17,8 +21,11 @@ export function partialFailureCount(
   candidates: ClaimCandidateResponse[],
   evaluations: RuleEvaluationResponse[],
 ): number {
-  const candidateByRider = new Map(
-    candidates.map((candidate) => [candidate.rider_id, candidate.candidate_id]),
+  const candidateBySource = new Map(
+    candidates.map((candidate) => [
+      candidateSourceKey(candidate),
+      candidate.candidate_id,
+    ]),
   );
   const failedCandidateIds = new Set<string>();
   for (const candidate of candidates) {
@@ -28,7 +35,7 @@ export function partialFailureCount(
   }
   for (const evaluation of evaluations) {
     if (!isPartialReason(evaluation.reason_code)) continue;
-    const candidateId = candidateByRider.get(evaluation.rider_id);
+    const candidateId = candidateBySource.get(evaluationSourceKey(evaluation));
     if (candidateId) failedCandidateIds.add(candidateId);
   }
   return failedCandidateIds.size;

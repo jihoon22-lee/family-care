@@ -1,0 +1,1485 @@
+{
+  "$defs": {
+    "AnalysisAssistanceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "enum": [
+            "STRUCTURED_SEARCH",
+            "LLM_ASSISTED",
+            "NONE"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "model_label": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model Label"
+        },
+        "outcome_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Outcome Code",
+          "type": "string"
+        },
+        "recommendations": {
+          "items": {
+            "$ref": "#/$defs/AnalysisRecommendationResponse"
+          },
+          "maxItems": 12,
+          "title": "Recommendations",
+          "type": "array"
+        },
+        "state": {
+          "enum": [
+            "SEARCH_READY",
+            "LLM_PENDING",
+            "LLM_READY"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "state",
+        "outcome_code",
+        "model_label",
+        "recommendations"
+      ],
+      "title": "AnalysisAssistanceResponse",
+      "type": "object"
+    },
+    "AnalysisRecommendationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "citation": {
+          "$ref": "#/$defs/AssistanceCitationResponse"
+        },
+        "clause_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Clause Label",
+          "type": "string"
+        },
+        "contract_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Contract Label",
+          "type": "string"
+        },
+        "coverage_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Coverage Label",
+          "type": "string"
+        },
+        "excerpt": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Excerpt",
+          "type": "string"
+        },
+        "explanation_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Explanation Code"
+        },
+        "question_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Question Code"
+        },
+        "rank": {
+          "maximum": 12,
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "recommendation_id": {
+          "format": "uuid",
+          "title": "Recommendation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "recommendation_id",
+        "rank",
+        "contract_label",
+        "coverage_label",
+        "clause_label",
+        "excerpt",
+        "reason_code",
+        "explanation_code",
+        "question_code",
+        "citation"
+      ],
+      "title": "AnalysisRecommendationResponse",
+      "type": "object"
+    },
+    "AssistanceCitationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "fact_id": {
+          "format": "uuid",
+          "title": "Fact Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "FACT_CITATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page_end": {
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "source_clause_id": {
+          "format": "uuid",
+          "title": "Source Clause Id",
+          "type": "string"
+        },
+        "terms_section_id": {
+          "format": "uuid",
+          "title": "Terms Section Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "terms_section_id",
+        "source_clause_id",
+        "fact_id",
+        "page_start",
+        "page_end"
+      ],
+      "title": "AssistanceCitationResponse",
+      "type": "object"
+    },
+    "CatalogCoverageResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "advisory_coverage_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Advisory Coverage Count",
+          "type": "integer"
+        },
+        "benefit_coverage_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Benefit Coverage Count",
+          "type": "integer"
+        },
+        "blocked_coverage_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Blocked Coverage Count",
+          "type": "integer"
+        },
+        "contract_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Contract Count",
+          "type": "integer"
+        },
+        "not_applicable_coverage_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Not Applicable Coverage Count",
+          "type": "integer"
+        },
+        "published_coverage_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Published Coverage Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract_count",
+        "benefit_coverage_count",
+        "published_coverage_count",
+        "advisory_coverage_count",
+        "blocked_coverage_count",
+        "not_applicable_coverage_count"
+      ],
+      "title": "CatalogCoverageResponse",
+      "type": "object"
+    },
+    "ClaimCandidateResponse": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OperationalCandidateResponse"
+        },
+        {
+          "$ref": "#/$defs/PrivateKnowledgeCandidateResponse"
+        }
+      ],
+      "title": "ClaimCandidateResponse"
+    },
+    "ConditionalFixedSubtotalResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "maxLength": 19,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "calculated_candidate_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Calculated Candidate Count",
+          "type": "integer"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "unresolved_candidate_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Unresolved Candidate Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "currency",
+        "amount",
+        "calculated_candidate_count",
+        "unresolved_candidate_count"
+      ],
+      "title": "ConditionalFixedSubtotalResponse",
+      "type": "object"
+    },
+    "IndemnitySummaryResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "calculated_candidate_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Calculated Candidate Count",
+          "type": "integer"
+        },
+        "candidate_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Candidate Count",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "NONE",
+            "CALCULATED",
+            "UNKNOWN"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unresolved_candidate_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Unresolved Candidate Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "status",
+        "candidate_count",
+        "calculated_candidate_count",
+        "unresolved_candidate_count"
+      ],
+      "title": "IndemnitySummaryResponse",
+      "type": "object"
+    },
+    "KnowledgeBenefitCalculationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "applied_limit": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Applied Limit"
+        },
+        "applied_rate": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Applied Rate"
+        },
+        "calculation_id": {
+          "format": "uuid",
+          "title": "Calculation Id",
+          "type": "string"
+        },
+        "calculation_publication_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Calculation Publication Id"
+        },
+        "conditional_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conditional Amount"
+        },
+        "confirmed_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Confirmed Amount"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Currency"
+        },
+        "deductible_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Deductible Amount"
+        },
+        "excluded_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Excluded Amount"
+        },
+        "hold_reason_code": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Hold Reason Code"
+        },
+        "kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "rounding_rule": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rounding Rule"
+        },
+        "status": {
+          "enum": [
+            "CALCULATED",
+            "UNKNOWN",
+            "NOT_APPLICABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeCalculationStepResponse"
+          },
+          "maxItems": 64,
+          "title": "Steps",
+          "type": "array"
+        }
+      },
+      "required": [
+        "calculation_id",
+        "calculation_publication_id",
+        "kind",
+        "status",
+        "currency",
+        "conditional_amount",
+        "confirmed_amount",
+        "excluded_amount",
+        "deductible_amount",
+        "applied_rate",
+        "applied_limit",
+        "rounding_rule",
+        "hold_reason_code",
+        "steps"
+      ],
+      "title": "KnowledgeBenefitCalculationResponse",
+      "type": "object"
+    },
+    "KnowledgeCalculationStepResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Currency"
+        },
+        "input_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Input Amount"
+        },
+        "operation": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "output_amount": {
+          "anyOf": [
+            {
+              "maxLength": 19,
+              "minLength": 1,
+              "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Output Amount"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "rounding_rule": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rounding Rule"
+        },
+        "step_number": {
+          "maximum": 64,
+          "minimum": 1,
+          "title": "Step Number",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step_number",
+        "operation",
+        "input_amount",
+        "output_amount",
+        "currency",
+        "rounding_rule",
+        "reason_code"
+      ],
+      "title": "KnowledgeCalculationStepResponse",
+      "type": "object"
+    },
+    "KnowledgeSnapshotVersionResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Catalog Import Run Id"
+        },
+        "event_fact_schema_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "title": "Event Fact Schema Version",
+          "type": "string"
+        },
+        "rule_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Rule Import Run Id"
+        }
+      },
+      "required": [
+        "catalog_import_run_id",
+        "rule_import_run_id",
+        "event_fact_schema_version"
+      ],
+      "title": "KnowledgeSnapshotVersionResponse",
+      "type": "object"
+    },
+    "OperationalCandidateResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Aggregate Result",
+          "type": "string"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "calculation": {
+          "title": "Calculation",
+          "type": "null"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "claim_start_ready": {
+          "title": "Claim Start Ready",
+          "type": "boolean"
+        },
+        "contract_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Contract Label",
+          "type": "string"
+        },
+        "coverage_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Coverage Label",
+          "type": "string"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Hold Reason Codes",
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/QuestionResponse"
+          },
+          "maxItems": 32,
+          "title": "Questions",
+          "type": "array"
+        },
+        "required_match_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required Match Count",
+          "type": "integer"
+        },
+        "required_no_match_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required No Match Count",
+          "type": "integer"
+        },
+        "required_unknown_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required Unknown Count",
+          "type": "integer"
+        },
+        "source": {
+          "$ref": "#/$defs/OperationalCandidateSourceResponse"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "contract_label",
+        "coverage_label",
+        "benefit_kind",
+        "aggregate_result",
+        "required_match_count",
+        "required_unknown_count",
+        "required_no_match_count",
+        "questions",
+        "hold_reason_codes",
+        "source",
+        "calculation",
+        "claim_start_ready"
+      ],
+      "title": "OperationalCandidateResponse",
+      "type": "object"
+    },
+    "OperationalCandidateSourceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "OPERATIONAL_RIDER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rider_id": {
+          "format": "uuid",
+          "title": "Rider Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "rider_id"
+      ],
+      "title": "OperationalCandidateSourceResponse",
+      "type": "object"
+    },
+    "OperationalEvaluationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/OperationalEvidenceCitationResponse"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Citations",
+          "type": "array"
+        },
+        "conflicting_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Conflicting Fields",
+          "type": "array"
+        },
+        "engine_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "fact_paths": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Fact Paths",
+          "type": "array"
+        },
+        "missing_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Missing Fields",
+          "type": "array"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/OperationalEvaluationSourceResponse"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "result",
+        "required",
+        "reason_code",
+        "fact_paths",
+        "missing_fields",
+        "conflicting_fields",
+        "engine_version",
+        "source",
+        "citations"
+      ],
+      "title": "OperationalEvaluationResponse",
+      "type": "object"
+    },
+    "OperationalEvaluationSourceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "OPERATIONAL_RIDER",
+          "title": "Kind",
+          "type": "string"
+        },
+        "rider_id": {
+          "format": "uuid",
+          "title": "Rider Id",
+          "type": "string"
+        },
+        "rule_version_id": {
+          "format": "uuid",
+          "title": "Rule Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "rider_id",
+        "rule_version_id"
+      ],
+      "title": "OperationalEvaluationSourceResponse",
+      "type": "object"
+    },
+    "OperationalEvidenceCitationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "anyOf": [
+            {
+              "maxItems": 4,
+              "minItems": 4,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Bbox"
+        },
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "document_version_id": {
+          "format": "uuid",
+          "title": "Document Version Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "extraction_id": {
+          "format": "uuid",
+          "title": "Extraction Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "OPERATIONAL_EVIDENCE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "physical_page": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Physical Page",
+          "type": "integer"
+        },
+        "review_state": {
+          "enum": [
+            "AI_VERIFIED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED"
+          ],
+          "title": "Review State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "evidence_id",
+        "document_version_id",
+        "extraction_id",
+        "content_sha256",
+        "physical_page",
+        "bbox",
+        "review_state"
+      ],
+      "title": "OperationalEvidenceCitationResponse",
+      "type": "object"
+    },
+    "PrivateKnowledgeCandidateResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "aggregate_result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Aggregate Result",
+          "type": "string"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "calculation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KnowledgeBenefitCalculationResponse"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "claim_start_ready": {
+          "const": false,
+          "title": "Claim Start Ready",
+          "type": "boolean"
+        },
+        "contract_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Contract Label",
+          "type": "string"
+        },
+        "coverage_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Coverage Label",
+          "type": "string"
+        },
+        "hold_reason_codes": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Hold Reason Codes",
+          "type": "array"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/QuestionResponse"
+          },
+          "maxItems": 32,
+          "title": "Questions",
+          "type": "array"
+        },
+        "required_match_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required Match Count",
+          "type": "integer"
+        },
+        "required_no_match_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required No Match Count",
+          "type": "integer"
+        },
+        "required_unknown_count": {
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Required Unknown Count",
+          "type": "integer"
+        },
+        "source": {
+          "$ref": "#/$defs/PrivateKnowledgeCandidateSourceResponse"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "contract_label",
+        "coverage_label",
+        "benefit_kind",
+        "aggregate_result",
+        "required_match_count",
+        "required_unknown_count",
+        "required_no_match_count",
+        "questions",
+        "hold_reason_codes",
+        "source",
+        "calculation",
+        "claim_start_ready"
+      ],
+      "title": "PrivateKnowledgeCandidateResponse",
+      "type": "object"
+    },
+    "PrivateKnowledgeCandidateSourceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PRIVATE_KNOWLEDGE_COVERAGE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "knowledge_contract_id": {
+          "format": "uuid",
+          "title": "Knowledge Contract Id",
+          "type": "string"
+        },
+        "knowledge_coverage_id": {
+          "format": "uuid",
+          "title": "Knowledge Coverage Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "knowledge_contract_id",
+        "knowledge_coverage_id"
+      ],
+      "title": "PrivateKnowledgeCandidateSourceResponse",
+      "type": "object"
+    },
+    "PrivateKnowledgeCitationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_purpose": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Evidence Purpose",
+          "type": "string"
+        },
+        "fact_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Fact Id"
+        },
+        "kind": {
+          "const": "PRIVATE_KNOWLEDGE_CITATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page_end": {
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "source_clause_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Clause Id"
+        },
+        "terms_section_id": {
+          "format": "uuid",
+          "title": "Terms Section Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "terms_section_id",
+        "source_clause_id",
+        "fact_id",
+        "evidence_purpose",
+        "page_start",
+        "page_end"
+      ],
+      "title": "PrivateKnowledgeCitationResponse",
+      "type": "object"
+    },
+    "PrivateKnowledgeEvaluationResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/PrivateKnowledgeCitationResponse"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Citations",
+          "type": "array"
+        },
+        "conflicting_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Conflicting Fields",
+          "type": "array"
+        },
+        "engine_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "title": "Engine Version",
+          "type": "string"
+        },
+        "evaluation_id": {
+          "format": "uuid",
+          "title": "Evaluation Id",
+          "type": "string"
+        },
+        "fact_paths": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Fact Paths",
+          "type": "array"
+        },
+        "missing_fields": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Missing Fields",
+          "type": "array"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/PrivateKnowledgeEvaluationSourceResponse"
+        }
+      },
+      "required": [
+        "evaluation_id",
+        "result",
+        "required",
+        "reason_code",
+        "fact_paths",
+        "missing_fields",
+        "conflicting_fields",
+        "engine_version",
+        "source",
+        "citations"
+      ],
+      "title": "PrivateKnowledgeEvaluationResponse",
+      "type": "object"
+    },
+    "PrivateKnowledgeEvaluationSourceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PRIVATE_KNOWLEDGE_COVERAGE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "knowledge_coverage_id": {
+          "format": "uuid",
+          "title": "Knowledge Coverage Id",
+          "type": "string"
+        },
+        "rule_publication_id": {
+          "format": "uuid",
+          "title": "Rule Publication Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "knowledge_coverage_id",
+        "rule_publication_id"
+      ],
+      "title": "PrivateKnowledgeEvaluationSourceResponse",
+      "type": "object"
+    },
+    "QuestionResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 3,
+          "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+          "title": "Field Path",
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_path",
+        "reason_code"
+      ],
+      "title": "QuestionResponse",
+      "type": "object"
+    },
+    "RuleEvaluationResponse": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OperationalEvaluationResponse"
+        },
+        {
+          "$ref": "#/$defs/PrivateKnowledgeEvaluationResponse"
+        }
+      ],
+      "title": "RuleEvaluationResponse"
+    }
+  },
+  "$id": "https://familycare.local/contracts/coverage-decision.v2.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Strict combined operational and private-knowledge decision output with bounded assistance.",
+  "properties": {
+    "analysis_completeness": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "UNAVAILABLE"
+      ],
+      "title": "Analysis Completeness",
+      "type": "string"
+    },
+    "assistance": {
+      "$ref": "#/$defs/AnalysisAssistanceResponse"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/ClaimCandidateResponse"
+      },
+      "maxItems": 10000,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "catalog_coverage": {
+      "$ref": "#/$defs/CatalogCoverageResponse"
+    },
+    "conditional_fixed_subtotals": {
+      "items": {
+        "$ref": "#/$defs/ConditionalFixedSubtotalResponse"
+      },
+      "maxItems": 32,
+      "title": "Conditional Fixed Subtotals",
+      "type": "array"
+    },
+    "engine_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "evaluations": {
+      "items": {
+        "$ref": "#/$defs/RuleEvaluationResponse"
+      },
+      "maxItems": 512,
+      "title": "Evaluations",
+      "type": "array"
+    },
+    "event_version": {
+      "minimum": 1,
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "indemnity_summary": {
+      "$ref": "#/$defs/IndemnitySummaryResponse"
+    },
+    "knowledge_snapshot_version": {
+      "$ref": "#/$defs/KnowledgeSnapshotVersionResponse"
+    },
+    "medical_event_id": {
+      "format": "uuid",
+      "title": "Medical Event Id",
+      "type": "string"
+    },
+    "policy_snapshot_at": {
+      "format": "date-time",
+      "title": "Policy Snapshot At",
+      "type": "string"
+    },
+    "rule_set_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "title": "Rule Set Version",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "2",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source_failure_codes": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Source Failure Codes",
+      "type": "array"
+    },
+    "stale": {
+      "title": "Stale",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "medical_event_id",
+    "event_version",
+    "engine_version",
+    "rule_set_version",
+    "knowledge_snapshot_version",
+    "policy_snapshot_at",
+    "stale",
+    "analysis_completeness",
+    "catalog_coverage",
+    "candidates",
+    "evaluations",
+    "conditional_fixed_subtotals",
+    "indemnity_summary",
+    "source_failure_codes",
+    "assistance"
+  ],
+  "title": "CoverageDecision",
+  "type": "object"
+}

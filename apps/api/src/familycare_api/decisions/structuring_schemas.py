@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from typing import Annotated, Any, Literal, Self, cast
 from uuid import UUID
 
@@ -16,7 +18,29 @@ FactFieldId = Literal[
     "admission",
     "outpatient",
     "pharmacy",
+    "diagnosis_code",
+    "procedure_code",
+    "anatomical_site_code",
+    "pathology_code",
+    "treatment_setting",
+    "treatment_context",
+    "separately_billed_treatment",
 ]
+_BOOLEAN_FACT_FIELDS = frozenset(
+    {"admission", "outpatient", "pharmacy", "separately_billed_treatment"}
+)
+_DATE_FACT_FIELDS = frozenset({"event_date", "visit_date"})
+_NORMALIZED_CODE_FACT_FIELDS = frozenset(
+    {
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+    }
+)
+_NORMALIZED_CODE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 FactSource = Literal["user", "ai", "system"]
 FactState = Literal["confirmed", "ambiguous", "missing", "conflict"]
 FactConfidence = Literal["high", "medium", "low"]
@@ -45,6 +69,25 @@ StructuringErrorCode = Literal[
     "STRUCTURING_RATE_LIMITED",
     "STRUCTURING_UNAVAILABLE",
 ]
+
+
+def is_valid_structured_fact_value(field_id: str, value: object | None) -> bool:
+    """Validate a bounded fact representation without coercion."""
+
+    if value is None:
+        return True
+    if field_id in _BOOLEAN_FACT_FIELDS:
+        return isinstance(value, bool)
+    if not isinstance(value, str) or not value.strip() or len(value) > 160:
+        return False
+    if field_id in _NORMALIZED_CODE_FACT_FIELDS:
+        return _NORMALIZED_CODE_PATTERN.fullmatch(value) is not None
+    if field_id in _DATE_FACT_FIELDS:
+        try:
+            date.fromisoformat(value)
+        except ValueError:
+            return False
+    return True
 
 
 class StrictModel(BaseModel):
@@ -131,4 +174,5 @@ __all__ = [
     "StructuringErrorCode",
     "StructuringJobResponse",
     "StructuringJobState",
+    "is_valid_structured_fact_value",
 ]

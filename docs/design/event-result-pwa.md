@@ -1,7 +1,7 @@
 # Event and result PWA design
 
-- 상태: Phase 5 구현 완료, PR 전체 검증 대기
-- 적용 단계: Phase 5
+- 상태: coverage decision v2 결과 UI와 assistance polling 구현 완료; 실제 브라우저 acceptance 대기
+- 적용 단계: Phase 5 + private knowledge decision publication
 - 선행 조건: MedicalEvent and decision API contracts
 
 ## Scope
@@ -39,17 +39,22 @@
 
 화면 순서:
 
-1. FamilyMember와 event summary
-2. `지금 할 일` primary action
-3. claim-review count와 needs-review count
-4. claim-review cards
-5. needs-more-information cards
-6. decisive mismatch cards
-7. calculation detail and Evidence drawer
+1. FamilyMember, event summary와 분석 범위 completeness
+2. `지금 할 일` primary action과 추가 확인 질문
+3. 통화별 `조건부 정액 합계`와 unresolved count
+4. 정액과 합산하지 않는 별도 실손 상태
+5. `MATCH`, `UNKNOWN`, `NO_MATCH`의 모든 담보 card
+6. 계산 trace와 증권·약관 page/Clause Evidence
+7. 별도 `관련 약관 추천`과 `DB 검색`/`LLM 보조` mode
 
 각 card는 Rider, result group, conditional estimate 또는 hold reason, missing facts, required-document checklist preview를 보여준다. Evidence drawer는 policy/terms document label, physical page, Clause와 bounded excerpt를 보여준다.
 
 `MATCH`를 지급 가능 또는 지급 확정으로 번역하지 않는다. 사용자 문구는 `청구 검토`, `추가 확인 필요`, `조건 불일치`를 사용한다.
+
+private knowledge candidate는 같은 이름이어도 coverage ID별로 모두 표시하며 claim-start action을
+제공하지 않는다. operational candidate만 기존 claim workflow 준비 조건을 만족할 때 action을
+유지한다. 가입 catalog가 있으나 publication이 미완료된 경우 빈 결과로 숨기지 않고
+`가입 담보는 확인됐지만 실행 규칙 검토가 완료되지 않음`을 표시한다.
 
 ## Data and cache behavior
 
@@ -58,6 +63,8 @@
 - API와 Evidence response는 `Cache-Control: no-store`다.
 - service worker는 hashed static app shell만 cache한다.
 - logout/session expiry는 query cache와 visible state를 지운다.
+- `LLM_PENDING` polling은 같은 immutable result GET만 bounded 횟수로 읽고 새 analyze 또는 provider
+  job을 만들지 않는다. 응답에서는 assistance만 교체하며 verified candidate와 합계는 유지한다.
 
 ## Stale and partial results
 
@@ -104,3 +111,5 @@ Natural-language structuring과 decision analysis는 별도 job/result다. AI st
 - login/session expiry and query cache clearing
 - no medical/result data in service-worker and Web Storage
 - browser E2E from event creation to ClaimCase start
+- complete/partial/unavailable catalog 표시와 모든 private coverage card 보존
+- DB 추천 즉시 표시, LLM 보조 전환과 timeout fallback 시 verified result 불변

@@ -33,6 +33,14 @@ ALLOWED_FIELDS = (
     "Rider.insured_amount",
     "ClaimHistory.counted_occurrence",
     "Receipt.confirmed_amount",
+    "MedicalEvent.diagnosis_code",
+    "MedicalEvent.procedure_code",
+    "MedicalEvent.anatomical_site_code",
+    "MedicalEvent.pathology_code",
+    "MedicalEvent.treatment_setting",
+    "MedicalEvent.treatment_context",
+    "MedicalEvent.separately_billed_treatment",
+    "Receipt.covered_amount",
 )
 
 EVIDENCE_INDEX = {
@@ -80,7 +88,7 @@ def _error_code(call: Any, *args: object, **kwargs: object) -> str:
 
 @pytest.mark.parametrize("field_path", ALLOWED_FIELDS)
 def test_field_registry_accepts_only_each_explicit_supported_path(field_path: str) -> None:
-    assert validate_field_path(field_path) is None
+    validate_field_path(field_path)
 
 
 @pytest.mark.parametrize(

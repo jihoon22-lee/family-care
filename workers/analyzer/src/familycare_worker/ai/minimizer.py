@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from familycare_worker.ai.provider import EvidenceSlice
 
 _REDACTED = "[REDACTED]"
+_MAX_PROVIDER_TEXT = 800
 _EMAIL_PATTERN = re.compile(
     r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,63}\b",
     re.IGNORECASE,
@@ -35,7 +36,7 @@ _FOLLOWING_FIELD_LABEL = (
 )
 _LABELLED_IDENTITY_PATTERN = re.compile(
     rf"(?P<label>(?<![가-힣A-Z])(?:{_IDENTITY_LABEL})(?![가-힣A-Z]))"
-    rf"\s*[:#]?\s*(?P<value>.{{2,160}}?)"
+    rf"\s*[:#]?\s*(?P<value>.{{2,{_MAX_PROVIDER_TEXT}}}?)"
     rf"(?=(?:[;|\r\n])|\s+(?:{_FOLLOWING_FIELD_LABEL})(?![가-힣A-Z])\s*[:#]?|$)",
     re.IGNORECASE,
 )
@@ -46,6 +47,20 @@ class EvidenceMinimizationError(RuntimeError):
 
     def __init__(self) -> None:
         super().__init__("EVIDENCE_MINIMIZATION_ERROR")
+
+
+def _bounded_terms(sensitive_terms: Sequence[str]) -> tuple[str, ...]:
+    bounded_terms = tuple(sensitive_terms)
+    if (
+        len(bounded_terms) > 16
+        or len(set(bounded_terms)) != len(bounded_terms)
+        or any(
+            not isinstance(term, str) or term != term.strip() or not 2 <= len(term) <= 160
+            for term in bounded_terms
+        )
+    ):
+        raise EvidenceMinimizationError
+    return bounded_terms
 
 
 def _redact(text: str, sensitive_terms: tuple[str, ...]) -> str:
@@ -64,6 +79,18 @@ def _redact(text: str, sensitive_terms: tuple[str, ...]) -> str:
     return minimized[:240]
 
 
+def minimize_text(
+    text: str,
+    *,
+    sensitive_terms: Sequence[str],
+) -> str:
+    """Redact one bounded provider projection before limiting its output size."""
+
+    if not isinstance(text, str) or not 1 <= len(text) <= _MAX_PROVIDER_TEXT:
+        raise EvidenceMinimizationError
+    return _redact(text, _bounded_terms(sensitive_terms))
+
+
 def minimize_evidence(
     evidence: Sequence[EvidenceSlice],
     *,
@@ -72,17 +99,11 @@ def minimize_evidence(
     """Return identity-preserving slices with unnecessary identifiers removed."""
 
     bounded_evidence = tuple(evidence)
-    bounded_terms = tuple(sensitive_terms)
+    bounded_terms = _bounded_terms(sensitive_terms)
     if (
         not 1 <= len(bounded_evidence) <= 64
         or any(not isinstance(item, EvidenceSlice) for item in bounded_evidence)
         or len({item.evidence_id for item in bounded_evidence}) != len(bounded_evidence)
-        or len(bounded_terms) > 16
-        or len(set(bounded_terms)) != len(bounded_terms)
-        or any(
-            not isinstance(term, str) or term != term.strip() or not 2 <= len(term) <= 160
-            for term in bounded_terms
-        )
     ):
         raise EvidenceMinimizationError
     minimized: list[EvidenceSlice] = []
@@ -103,4 +124,4 @@ def minimize_evidence(
     return tuple(minimized)
 
 
-__all__ = ["EvidenceMinimizationError", "minimize_evidence"]
+__all__ = ["EvidenceMinimizationError", "minimize_evidence", "minimize_text"]

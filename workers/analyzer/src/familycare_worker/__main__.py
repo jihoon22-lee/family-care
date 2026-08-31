@@ -22,6 +22,11 @@ from familycare_worker.ai.provider import (
     DEFAULT_VERIFIER_MODEL,
     OpenAiResponsesAdapter,
 )
+from familycare_worker.ai.recommender import (
+    DEFAULT_ASSISTANCE_MODEL,
+    RECOMMENDER_SCHEMA_NAME,
+    recommender_schema,
+)
 from familycare_worker.ai.schemas import openai_schema_registry
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
@@ -45,11 +50,13 @@ from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.policy_candidates import PolicyCandidatePublisher
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+from familycare_worker.recommendation_jobs import PostgresRecommendationJobQueue
 from familycare_worker.repository import BatchRepository, ExtractionRepository
 from familycare_worker.runner import (
     AnalysisJobRunner,
     EventStructuringJobRunner,
     PolicyStructuringJobRunner,
+    RecommendationJobRunner,
 )
 
 LOGGER = logging.getLogger("familycare.worker")
@@ -72,14 +79,16 @@ class FairJobRunner:
         self,
         *,
         events: JobRunner,
-        documents: JobRunner,
+        documents: JobRunner | None = None,
         imports: JobRunner | None = None,
+        recommendations: JobRunner | None = None,
     ) -> None:
         self.events = events
         self.documents = documents
         self.imports = imports
+        self.recommendations = recommendations
         self._runners = tuple(
-            runner for runner in (events, documents, imports) if runner is not None
+            runner for runner in (events, documents, imports, recommendations) if runner is not None
         )
         self._first = 0
 
@@ -163,6 +172,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     provider = OpenAiResponsesAdapter(
         {
             EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema(),
+            RECOMMENDER_SCHEMA_NAME: recommender_schema(),
             **openai_schema_registry(),
         }
     )
@@ -174,13 +184,27 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             DEFAULT_STRUCTURER_MODEL,
         ),
     )
+    recommendation_runner = RecommendationJobRunner(
+        queue=PostgresRecommendationJobQueue(database_url),
+        provider=provider,
+        model=os.getenv(
+            "FAMILYCARE_AI_ASSISTANCE_MODEL",
+            DEFAULT_ASSISTANCE_MODEL,
+        ),
+    )
     document_root = os.getenv("FAMILYCARE_DOCUMENT_ROOT")
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
     if not document_root:
-        base_runner: JobRunner = event_runner
+        base_runner: JobRunner = FairJobRunner(
+            events=event_runner,
+            recommendations=recommendation_runner,
+        )
     elif not work_root:
         LOGGER.error("document_runner_configuration_incomplete")
-        base_runner = event_runner
+        base_runner = FairJobRunner(
+            events=event_runner,
+            recommendations=recommendation_runner,
+        )
     else:
         queue = JobQueue(database_url)
         repository = ExtractionRepository(database_url)
@@ -192,7 +216,11 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             ocr_processor=_local_ocr_processor(),
             stop_requested=stop_event.is_set,
         )
-        base_runner = FairJobRunner(events=event_runner, documents=document_runner)
+        base_runner = FairJobRunner(
+            events=event_runner,
+            documents=document_runner,
+            recommendations=recommendation_runner,
+        )
 
     private_values = {
         "import_root": os.getenv("FAMILYCARE_IMPORT_ROOT"),

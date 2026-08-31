@@ -162,7 +162,6 @@ def contract_certificate_decision(contract: ContractRecord) -> str:
         and contract.group_review.confidence == "high"
         and contract.row_reconciliation.balanced
         and contract.row_reconciliation.certificate_rows_detected > 0
-        and contract.row_reconciliation.unresolved_enrollment_rows == 0
         and not contract.field_conflicts
     ):
         return "MATCH"

@@ -39,7 +39,6 @@ PRIVATE_KNOWLEDGE_FORBIDDEN_FIELDS = {
     "content_sha256",
     "document_version_id",
     "evidence_id",
-    "family_member_id",
     "household_space_id",
     "package_digest",
     "password",
@@ -145,8 +144,12 @@ RIDER_CLAUSE_LINK_REJECTION_REASONS = [
     "WRONG_EDITION",
     "NOT_APPLICABLE",
 ]
-DECISION_SCHEMA_PATH = ROOT / "packages/contracts/schemas/coverage-decision.v1.schema.json"
-DECISION_EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v1.json"
+DECISION_SCHEMA_PATH = ROOT / "packages/contracts/schemas/coverage-decision.v2.schema.json"
+DECISION_EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v2.json"
+HISTORICAL_DECISION_SCHEMA_PATH = (
+    ROOT / "packages/contracts/schemas/coverage-decision.v1.schema.json"
+)
+HISTORICAL_DECISION_EXAMPLE_PATH = ROOT / "packages/contracts/examples/coverage-decision.v1.json"
 DECISION_FORBIDDEN_FIELDS = RIDER_CLAUSE_RULES_FORBIDDEN_FIELDS | {
     "diagnosis_text",
     "file_id",
@@ -224,6 +227,13 @@ STRUCTURING_FACT_FIELD_IDS = [
     "admission",
     "outpatient",
     "pharmacy",
+    "diagnosis_code",
+    "procedure_code",
+    "anatomical_site_code",
+    "pathology_code",
+    "treatment_setting",
+    "treatment_context",
+    "separately_billed_treatment",
 ]
 STRUCTURING_FACT_SOURCES = ["user", "ai", "system"]
 STRUCTURING_FACT_STATES = ["confirmed", "ambiguous", "missing", "conflict"]
@@ -754,27 +764,46 @@ def validate_openapi() -> list[str]:
         "event_version",
         "engine_version",
         "rule_set_version",
+        "knowledge_snapshot_version",
         "policy_snapshot_at",
         "stale",
+        "analysis_completeness",
+        "catalog_coverage",
         "candidates",
         "evaluations",
+        "conditional_fixed_subtotals",
+        "indemnity_summary",
+        "source_failure_codes",
+        "assistance",
     }
     if set(decision_response.get("properties", {})) != expected_decision_fields:
-        errors.append("coverage decision response fields drifted from v1")
+        errors.append("coverage decision response fields drifted from v2")
     if (
         "amount"
         in json.dumps(
             [
                 event_request,
                 schemas.get("MedicalEventUpdateRequest", {}),
-                decision_response,
-                schemas.get("ClaimCandidateResponse", {}),
-                schemas.get("RuleEvaluationResponse", {}),
             ],
             sort_keys=True,
         ).lower()
     ):
-        errors.append("MedicalEvent and decision OpenAPI must not expose amount fields")
+        errors.append("MedicalEvent request OpenAPI must not expose amount fields")
+    for component_name in (
+        "OperationalCandidateResponse",
+        "PrivateKnowledgeCandidateResponse",
+        "OperationalEvaluationResponse",
+        "PrivateKnowledgeEvaluationResponse",
+        "AnalysisAssistanceResponse",
+    ):
+        if schemas.get(component_name, {}).get("additionalProperties") is not False:
+            errors.append(f"coverage decision {component_name} must be strict")
+    private_candidate = schemas.get("PrivateKnowledgeCandidateResponse", {})
+    if (
+        private_candidate.get("properties", {}).get("claim_start_ready", {}).get("const")
+        is not False
+    ):
+        errors.append("private knowledge candidates must not be claim-start ready")
     return errors
 
 
@@ -1413,7 +1442,7 @@ def _forbidden_decision_keys(value: Any, path: str = "$") -> list[str]:
     return [
         child_path
         for child_path, key in _nested_keys(value, path)
-        if key.lower() in DECISION_FORBIDDEN_FIELDS or key.lower() == "amount"
+        if key.lower() in DECISION_FORBIDDEN_FIELDS
     ]
 
 
@@ -1454,7 +1483,7 @@ def _validate_decision_example_ids(value: Any, path: str, errors: list[str]) -> 
     if isinstance(value, dict):
         for key, child in value.items():
             child_path = f"{path}.{key}"
-            if key == "run_id" or key.endswith("_id") or key == "id":
+            if (key == "run_id" or key.endswith("_id") or key == "id") and child is not None:
                 _validate_decision_example_uuid(child, child_path, errors)
             _validate_decision_example_ids(child, child_path, errors)
     elif isinstance(value, list):
@@ -1472,6 +1501,8 @@ def validate_decision_contract() -> list[str]:
         return [str(error)]
 
     errors: list[str] = []
+    if schema != json.loads(render_decision_schema()):
+        errors.append("coverage-decision v2 schema drift: regenerate the decision schema")
     if schema.get("$schema") != "https://json-schema.org/draft/2020-12/schema":
         errors.append("coverage-decision schema must use JSON Schema draft 2020-12")
     if schema.get("title") != "CoverageDecision":
@@ -1485,12 +1516,19 @@ def validate_decision_contract() -> list[str]:
         "event_version",
         "engine_version",
         "rule_set_version",
+        "knowledge_snapshot_version",
         "policy_snapshot_at",
         "stale",
+        "analysis_completeness",
+        "catalog_coverage",
         "candidates",
         "evaluations",
+        "conditional_fixed_subtotals",
+        "indemnity_summary",
+        "source_failure_codes",
+        "assistance",
     ]
-    if schema.get("required") != expected_required:
+    if set(schema.get("required", [])) != set(expected_required):
         errors.append("coverage-decision root required fields changed")
     object_schemas = _object_schemas(schema)
     if not object_schemas or any(
@@ -1507,19 +1545,47 @@ def validate_decision_contract() -> list[str]:
     )
 
     definitions = schema.get("$defs", {})
-    if definitions.get("TriState", {}).get("enum") != DECISION_TRI_STATES:
+    operational_evaluation = definitions.get("OperationalEvaluationResponse", {})
+    private_evaluation = definitions.get("PrivateKnowledgeEvaluationResponse", {})
+    if (
+        operational_evaluation.get("properties", {}).get("result", {}).get("enum")
+        != DECISION_TRI_STATES
+    ):
         errors.append("coverage-decision TriState enum changed")
-    evaluation_required = set(definitions.get("RuleEvaluation", {}).get("required", []))
-    if not {
-        "rule_version_id",
-        "result",
-        "reason_code",
-        "evidence",
-        "engine_version",
-    }.issubset(evaluation_required):
-        errors.append("coverage-decision RuleEvaluation lineage fields are incomplete")
-    if "amount" in json.dumps(schema, sort_keys=True):
-        errors.append("coverage-decision schema must not expose amount in v1")
+    for name, definition in (
+        ("operational", operational_evaluation),
+        ("private", private_evaluation),
+    ):
+        if not {"source", "result", "reason_code", "citations", "engine_version"}.issubset(
+            set(definition.get("required", []))
+        ):
+            errors.append(f"coverage-decision {name} evaluation lineage fields are incomplete")
+    subtotal_amount = (
+        definitions.get("ConditionalFixedSubtotalResponse", {})
+        .get("properties", {})
+        .get("amount", {})
+    )
+    if subtotal_amount.get("type") != "string" or not subtotal_amount.get("pattern"):
+        errors.append("coverage-decision fixed subtotal must use a decimal string")
+    if (
+        definitions.get("AnalysisAssistanceResponse", {})
+        .get("properties", {})
+        .get("recommendations", {})
+        .get("maxItems")
+        != 12
+    ):
+        errors.append("coverage-decision assistance recommendations must be bounded at 12")
+
+    try:
+        historical_schema = load_json(HISTORICAL_DECISION_SCHEMA_PATH)
+        historical_example = load_json(HISTORICAL_DECISION_EXAMPLE_PATH)
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        errors.append(f"historical coverage-decision.v1 is unavailable: {error}")
+    else:
+        if historical_schema.get("properties", {}).get("schema_version", {}).get("const") != "1":
+            errors.append("historical coverage-decision.v1 schema changed")
+        if historical_example.get("schema_version") != "1":
+            errors.append("historical coverage-decision.v1 example changed")
 
     _validate_decision_example_ids(example, "$", errors)
 
@@ -1528,12 +1594,58 @@ def validate_decision_contract() -> list[str]:
         for index, evaluation in enumerate(evaluations):
             if not isinstance(evaluation, dict):
                 continue
-            _validate_decision_example_evidence(
-                evaluation.get("evidence"), f"$.evaluations[{index}].evidence", errors
-            )
-            if evaluation.get("engine_version") != example.get("engine_version"):
-                errors.append("coverage-decision evaluation engine version must match the run")
+            source = evaluation.get("source")
+            source_kind = source.get("kind") if isinstance(source, dict) else None
+            citations = evaluation.get("citations")
+            if source_kind == "OPERATIONAL_RIDER":
+                _validate_decision_example_evidence(
+                    citations,
+                    f"$.evaluations[{index}].citations",
+                    errors,
+                )
+                if evaluation.get("engine_version") != example.get("engine_version"):
+                    errors.append(
+                        "coverage-decision operational evaluation engine must match the run"
+                    )
+            elif source_kind == "PRIVATE_KNOWLEDGE_COVERAGE":
+                if not isinstance(citations, list) or not 1 <= len(citations) <= 16:
+                    errors.append(
+                        "coverage-decision "
+                        f"$.evaluations[{index}].citations must contain 1 to 16 items"
+                    )
+            else:
+                errors.append(f"coverage-decision $.evaluations[{index}] source kind is invalid")
+
+    candidates = example.get("candidates")
+    if isinstance(candidates, list):
+        for index, candidate in enumerate(candidates):
+            if not isinstance(candidate, dict):
+                continue
+            source = candidate.get("source")
+            if (
+                isinstance(source, dict)
+                and source.get("kind") == "PRIVATE_KNOWLEDGE_COVERAGE"
+                and candidate.get("claim_start_ready") is not False
+            ):
+                errors.append(
+                    f"coverage-decision $.candidates[{index}] private claim start must be false"
+                )
     return errors
+
+
+def render_decision_schema() -> str:
+    """Render the canonical v2 decision schema from the live strict response model."""
+
+    from familycare_api.decisions.schemas import CoverageDecisionResponse
+
+    schema = CoverageDecisionResponse.model_json_schema()
+    schema["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    schema["$id"] = "https://familycare.local/contracts/coverage-decision.v2.schema.json"
+    schema["title"] = "CoverageDecision"
+    schema["description"] = (
+        "Strict combined operational and private-knowledge decision output with bounded assistance."
+    )
+    return json.dumps(schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
 def _forbidden_benefit_keys(value: Any, path: str = "$") -> list[str]:
@@ -2128,6 +2240,7 @@ def validate_insurance_document_inventory_contract() -> list[str]:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-openapi", action="store_true")
+    parser.add_argument("--write-decision-schema", action="store_true")
     return parser.parse_args()
 
 
@@ -2139,6 +2252,15 @@ def main() -> int:
         OPENAPI_PATH.parent.mkdir(parents=True, exist_ok=True)
         OPENAPI_PATH.write_text(render_openapi(), encoding="utf-8", newline="\n")
         print(f"wrote {OPENAPI_PATH.relative_to(ROOT)}")
+        return 0
+    if args.write_decision_schema:
+        DECISION_SCHEMA_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DECISION_SCHEMA_PATH.write_text(
+            render_decision_schema(),
+            encoding="utf-8",
+            newline="\n",
+        )
+        print(f"wrote {DECISION_SCHEMA_PATH.relative_to(ROOT)}")
         return 0
 
     errors = [
@@ -2167,7 +2289,8 @@ def main() -> int:
         "encrypted document batch, selective OCR, insurance-document-inventory.v1, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "private-knowledge.v1, "
-        "rider-clause-rules.v1, coverage-decision.v1, benefit-calculation.v1, "
+        "rider-clause-rules.v1, coverage-decision.v2 (plus historical v1), "
+        "benefit-calculation.v1, "
         "medical-event-structuring.v1, claim-workflow.v1, and generated Web contracts)"
     )
     return 0

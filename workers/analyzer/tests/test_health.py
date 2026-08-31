@@ -23,7 +23,11 @@ from familycare_worker.imports.secret_channel import BatchSecretReceiver
 from familycare_worker.ocr.engine import TesseractOcrEngine
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.repository import BatchRepository
-from familycare_worker.runner import EventStructuringJobRunner, PolicyStructuringJobRunner
+from familycare_worker.runner import (
+    EventStructuringJobRunner,
+    PolicyStructuringJobRunner,
+    RecommendationJobRunner,
+)
 from pytest import CaptureFixture, MonkeyPatch
 
 
@@ -297,6 +301,30 @@ def test_fair_runner_checks_both_queues_without_starvation() -> None:
     assert calls == ["events", "documents", "documents", "events"]
 
 
+def test_fair_runner_rotates_recommendations_with_existing_lanes() -> None:
+    calls: list[str] = []
+
+    class SyntheticRunner:
+        def __init__(self, name: str) -> None:
+            self.name = name
+
+        def run_once(self, worker_id: str) -> bool:
+            assert worker_id == "worker-a"
+            calls.append(self.name)
+            return True
+
+    runner = FairJobRunner(
+        events=SyntheticRunner("events"),
+        documents=SyntheticRunner("documents"),
+        imports=SyntheticRunner("imports"),
+        recommendations=SyntheticRunner("recommendations"),
+    )
+
+    for _ in range(4):
+        assert runner.run_once("worker-a") is True
+    assert calls == ["events", "documents", "imports", "recommendations"]
+
+
 def test_environment_builds_event_runner_without_document_roots(
     monkeypatch: MonkeyPatch,
 ) -> None:
@@ -304,9 +332,17 @@ def test_environment_builds_event_runner_without_document_roots(
     monkeypatch.delenv("FAMILYCARE_DOCUMENT_ROOT", raising=False)
     monkeypatch.delenv("FAMILYCARE_WORK_ROOT", raising=False)
 
+    monkeypatch.setenv("FAMILYCARE_AI_ASSISTANCE_MODEL", "synthetic-assistance-model")
+
     runner = _runner_from_environment(Event())
 
-    assert isinstance(runner, EventStructuringJobRunner)
+    assert isinstance(runner, FairJobRunner)
+    assert any(isinstance(item, EventStructuringJobRunner) for item in runner._runners)
+    recommendation_runners = [
+        item for item in runner._runners if isinstance(item, RecommendationJobRunner)
+    ]
+    assert len(recommendation_runners) == 1
+    assert recommendation_runners[0].model == "synthetic-assistance-model"
 
 
 def test_private_work_root_alone_does_not_enable_the_document_runner(
@@ -327,7 +363,9 @@ def test_private_work_root_alone_does_not_enable_the_document_runner(
 
     runner = _runner_from_environment(Event())
 
-    assert isinstance(runner, EventStructuringJobRunner)
+    assert isinstance(runner, FairJobRunner)
+    assert any(isinstance(item, EventStructuringJobRunner) for item in runner._runners)
+    assert any(isinstance(item, RecommendationJobRunner) for item in runner._runners)
     assert "document_runner_configuration_incomplete" not in caplog.messages
 
 
@@ -371,6 +409,7 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
         schemas = provider._schemas
         assert "policy_candidate_batch_structurer_v2" in schemas
         assert "policy_candidate_verifier_v1" in schemas
+        assert "event_clause_recommendations_v1" in schemas
     finally:
         runner.shutdown()
 

@@ -127,6 +127,20 @@ DSL은 data-only JSON이며 임의 code를 실행하지 않는다.
 
 자연어 입력은 구조화 facts와 확인 수준으로 변환한다. AI가 명확히 추출한 값은 즉시 분석에 사용할 수 있지만 화면에서 수정 가능하다. 불확실한 값은 null과 질문 후보로 남긴다. AI는 진단코드나 수술분류를 사용자 입력 또는 제공 Evidence 없이 추정 확정하지 않는다.
 
+## Optional event-clause assistance
+
+문서 structuring과 사건 결과의 관련 약관 추천은 서로 다른 job이다. deterministic decision이 먼저
+완료된 뒤, server-scoped current snapshot에서 해당 member의 증권 가입 `MATCH` 담보와 연결된
+section/fact만 구조화 검색한다. 추천에는 bounded label/excerpt와 exact page citation만 포함하며
+판정·금액·새 근거를 만들 수 없다.
+
+`OPENAI_API_KEY`가 Worker에 있으면 동일 event version과 candidate digest당 최대 한 번 strict-schema
+호출로 supplied `candidate-XX` token을 재정렬하고 bounded explanation code를 붙인다. 원문 PDF,
+path, source alias, household ID, API key와 verified calculation은 보내지 않는다. key가 없으면 provider
+client를 만들지 않고 `STRUCTURED_SEARCH`; timeout, rate limit, auth 또는 schema 오류는 retry 없이
+같은 DB 추천을 `SEARCH_READY`로 보존한다. raw prompt/response는 저장하지 않으며 result GET은 새
+job이나 외부 호출을 만들지 않는다.
+
 ## Failure behavior
 
 - timeout, rate limit, 일시적 provider 오류는 제한된 횟수만 재시도한다.
@@ -149,6 +163,8 @@ DSL은 data-only JSON이며 임의 code를 실행하지 않는다.
 - 두 단계 성공만 `AI_VERIFIED`가 되는 상태 전이
 - `NEEDS_REVIEW` rule이 decision engine에 들어가지 않는 통합 테스트
 - 외부 API 없는 합성 CI fixture
+- missing-key 0-call, supplied-token-only fake success와 one-attempt failure fallback
+- assistance 전후 candidate/evaluation/calculation/subtotal immutable result 동일성
 
 ## Invariants
 
@@ -158,3 +174,4 @@ DSL은 data-only JSON이며 임의 code를 실행하지 않는다.
 4. verifier는 입력 후보와 Evidence 밖의 사실을 발명할 수 없다.
 5. OpenAI key, PDF password, archive key는 request·DB·log에 없다.
 6. provider 장애가 기존 판정과 Evidence 조회를 중단시키지 않는다.
+7. assistance는 verified decision과 calculation을 생성하거나 수정하지 않는다.

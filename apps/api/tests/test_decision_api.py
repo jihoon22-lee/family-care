@@ -21,6 +21,9 @@ RIDER_ID = UUID("00000000-0000-4000-8000-000000000401")
 RULE_VERSION_ID = UUID("00000000-0000-4000-8000-000000000501")
 EVIDENCE_ID = UUID("00000000-0000-4000-8000-000000000601")
 DOCUMENT_VERSION_ID = UUID("00000000-0000-4000-8000-000000000602")
+KNOWLEDGE_CONTRACT_ID = UUID("00000000-0000-4000-8000-000000000603")
+KNOWLEDGE_COVERAGE_ID = UUID("00000000-0000-4000-8000-000000000604")
+KNOWLEDGE_RULE_ID = UUID("00000000-0000-4000-8000-000000000605")
 RAW_SENTINEL = "SYNTHETIC_RAW_EVENT_DESCRIPTION"
 
 
@@ -81,20 +84,38 @@ def _event_payload(
 
 def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
     return {
-        "schema_version": "1",
+        "schema_version": "2",
         "run_id": str(run_id),
         "medical_event_id": str(EVENT_ID),
         "event_version": event_version,
         "engine_version": "decision-engine-v1",
         "rule_set_version": "coverage-rules-v1",
+        "knowledge_snapshot_version": {
+            "catalog_import_run_id": str(UUID("00000000-0000-4000-8000-000000000611")),
+            "rule_import_run_id": str(UUID("00000000-0000-4000-8000-000000000612")),
+            "event_fact_schema_version": "medical-event-facts.v2",
+        },
         "policy_snapshot_at": "2026-08-25T09:00:00Z",
         "stale": False,
+        "analysis_completeness": "COMPLETE",
+        "catalog_coverage": {
+            "contract_count": 1,
+            "benefit_coverage_count": 1,
+            "published_coverage_count": 1,
+            "advisory_coverage_count": 0,
+            "blocked_coverage_count": 0,
+            "not_applicable_coverage_count": 0,
+        },
         "candidates": [
             {
                 "candidate_id": str(UUID("00000000-0000-4000-8000-000000000701")),
-                "rider_id": str(RIDER_ID),
-                "rider_label": "Sample Rider A",
-                "rider_type": "fixed",
+                "source": {
+                    "kind": "OPERATIONAL_RIDER",
+                    "rider_id": str(RIDER_ID),
+                },
+                "contract_label": "Registered sample policy",
+                "coverage_label": "Sample Rider A",
+                "benefit_kind": "FIXED",
                 "aggregate_result": "UNKNOWN",
                 "required_match_count": 0,
                 "required_unknown_count": 1,
@@ -106,21 +127,71 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
                     }
                 ],
                 "hold_reason_codes": ["MISSING_OR_CONFLICTING_FACT"],
-            }
+                "calculation": None,
+                "claim_start_ready": False,
+            },
+            {
+                "candidate_id": str(UUID("00000000-0000-4000-8000-000000000711")),
+                "source": {
+                    "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+                    "knowledge_contract_id": str(KNOWLEDGE_CONTRACT_ID),
+                    "knowledge_coverage_id": str(KNOWLEDGE_COVERAGE_ID),
+                },
+                "contract_label": "Sample Private Policy",
+                "coverage_label": "Sample Fixed Coverage",
+                "benefit_kind": "FIXED",
+                "aggregate_result": "MATCH",
+                "required_match_count": 1,
+                "required_unknown_count": 0,
+                "required_no_match_count": 0,
+                "questions": [],
+                "hold_reason_codes": [],
+                "calculation": {
+                    "calculation_id": str(UUID("00000000-0000-4000-8000-000000000712")),
+                    "calculation_publication_id": str(UUID("00000000-0000-4000-8000-000000000713")),
+                    "kind": "FIXED",
+                    "status": "CALCULATED",
+                    "currency": "KRW",
+                    "conditional_amount": "300000",
+                    "confirmed_amount": None,
+                    "excluded_amount": None,
+                    "deductible_amount": None,
+                    "applied_rate": None,
+                    "applied_limit": None,
+                    "rounding_rule": None,
+                    "hold_reason_code": None,
+                    "steps": [
+                        {
+                            "step_number": 1,
+                            "operation": "fixed_amount",
+                            "input_amount": None,
+                            "output_amount": "300000",
+                            "currency": "KRW",
+                            "rounding_rule": None,
+                            "reason_code": "FIXED_AMOUNT_CALCULATED",
+                        }
+                    ],
+                },
+                "claim_start_ready": False,
+            },
         ],
         "evaluations": [
             {
                 "evaluation_id": str(UUID("00000000-0000-4000-8000-000000000702")),
-                "rider_id": str(RIDER_ID),
-                "rule_version_id": str(RULE_VERSION_ID),
+                "source": {
+                    "kind": "OPERATIONAL_RIDER",
+                    "rider_id": str(RIDER_ID),
+                    "rule_version_id": str(RULE_VERSION_ID),
+                },
                 "result": "UNKNOWN",
                 "required": True,
                 "reason_code": "MISSING_OR_CONFLICTING_FACT",
                 "fact_paths": ["MedicalEvent.classification"],
                 "missing_fields": ["MedicalEvent.classification"],
                 "conflicting_fields": [],
-                "evidence": [
+                "citations": [
                     {
+                        "kind": "OPERATIONAL_EVIDENCE",
                         "evidence_id": str(EVIDENCE_ID),
                         "document_version_id": str(DOCUMENT_VERSION_ID),
                         "extraction_id": str(UUID("00000000-0000-4000-8000-000000000703")),
@@ -131,8 +202,76 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
                     }
                 ],
                 "engine_version": "decision-engine-v1",
+            },
+            {
+                "evaluation_id": str(UUID("00000000-0000-4000-8000-000000000714")),
+                "source": {
+                    "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+                    "knowledge_coverage_id": str(KNOWLEDGE_COVERAGE_ID),
+                    "rule_publication_id": str(KNOWLEDGE_RULE_ID),
+                },
+                "result": "MATCH",
+                "required": True,
+                "reason_code": "PRIVATE_RULE_MATCH",
+                "fact_paths": ["MedicalEvent.classification"],
+                "missing_fields": [],
+                "conflicting_fields": [],
+                "citations": [
+                    {
+                        "kind": "PRIVATE_KNOWLEDGE_CITATION",
+                        "terms_section_id": str(UUID("00000000-0000-4000-8000-000000000715")),
+                        "source_clause_id": str(UUID("00000000-0000-4000-8000-000000000716")),
+                        "fact_id": str(UUID("00000000-0000-4000-8000-000000000717")),
+                        "evidence_purpose": "ELIGIBILITY",
+                        "page_start": 7,
+                        "page_end": 7,
+                    }
+                ],
+                "engine_version": "private-knowledge-engine-v2",
+            },
+        ],
+        "conditional_fixed_subtotals": [
+            {
+                "currency": "KRW",
+                "amount": "300000",
+                "calculated_candidate_count": 1,
+                "unresolved_candidate_count": 0,
             }
         ],
+        "indemnity_summary": {
+            "status": "NONE",
+            "candidate_count": 0,
+            "calculated_candidate_count": 0,
+            "unresolved_candidate_count": 0,
+        },
+        "source_failure_codes": [],
+        "assistance": {
+            "mode": "STRUCTURED_SEARCH",
+            "state": "SEARCH_READY",
+            "outcome_code": "LOCAL_SEARCH_READY",
+            "model_label": None,
+            "recommendations": [
+                {
+                    "recommendation_id": str(UUID("00000000-0000-4000-8000-000000000721")),
+                    "rank": 1,
+                    "contract_label": "Sample Private Policy",
+                    "coverage_label": "Sample Fixed Coverage",
+                    "clause_label": "Sample Clause",
+                    "excerpt": "Synthetic bounded clause excerpt.",
+                    "reason_code": "TOKEN_OVERLAP",
+                    "explanation_code": None,
+                    "question_code": None,
+                    "citation": {
+                        "kind": "FACT_CITATION",
+                        "terms_section_id": str(UUID("00000000-0000-4000-8000-000000000715")),
+                        "source_clause_id": str(UUID("00000000-0000-4000-8000-000000000716")),
+                        "fact_id": str(UUID("00000000-0000-4000-8000-000000000717")),
+                        "page_start": 7,
+                        "page_end": 7,
+                    },
+                }
+            ],
+        },
     }
 
 
@@ -291,10 +430,10 @@ def _assert_value_free_error(response: Any, *, forbidden: str | None = None) -> 
 def _assert_safe_result(response: Any) -> None:
     serialized = response.text.lower()
     for forbidden in (
-        "amount",
         "guarantee",
         "guaranteed",
         "payment guaranteed",
+        "payable_amount",
         "지급 보장",
         "document_text",
         "/mnt/",
@@ -508,21 +647,66 @@ def test_analyze_returns_unknown_normally_with_exact_versions_and_evidence(
 
     assert response.status_code == 200
     body = response.json()
+    assert set(body) == {
+        "schema_version",
+        "run_id",
+        "medical_event_id",
+        "event_version",
+        "engine_version",
+        "rule_set_version",
+        "knowledge_snapshot_version",
+        "policy_snapshot_at",
+        "stale",
+        "analysis_completeness",
+        "catalog_coverage",
+        "candidates",
+        "evaluations",
+        "conditional_fixed_subtotals",
+        "indemnity_summary",
+        "source_failure_codes",
+        "assistance",
+    }
     assert body["run_id"] == str(RUN_ONE_ID)
     assert body["event_version"] == 1
     assert body["engine_version"] == "decision-engine-v1"
     assert body["rule_set_version"] == "coverage-rules-v1"
+    assert body["schema_version"] == "2"
+    assert body["analysis_completeness"] == "COMPLETE"
     assert body["policy_snapshot_at"] == "2026-08-25T09:00:00Z"
     assert body["candidates"][0]["aggregate_result"] == "UNKNOWN"
-    assert body["candidates"][0]["rider_label"] == "Sample Rider A"
+    assert body["candidates"][0]["source"] == {
+        "kind": "OPERATIONAL_RIDER",
+        "rider_id": str(RIDER_ID),
+    }
+    assert body["candidates"][0]["coverage_label"] == "Sample Rider A"
+    assert body["candidates"][1]["source"]["kind"] == "PRIVATE_KNOWLEDGE_COVERAGE"
+    assert body["candidates"][1]["claim_start_ready"] is False
     assert "evaluations" not in body["candidates"][0]
     evaluation = body["evaluations"][0]
-    assert evaluation["rule_version_id"] == str(RULE_VERSION_ID)
+    assert evaluation["source"]["rule_version_id"] == str(RULE_VERSION_ID)
     assert evaluation["result"] == "UNKNOWN"
-    assert evaluation["evidence"][0]["evidence_id"] == str(EVIDENCE_ID)
-    assert evaluation["evidence"][0]["extraction_id"]
-    assert evaluation["evidence"][0]["content_sha256"] == "a" * 64
-    assert evaluation["evidence"][0]["bbox"] is None
+    assert evaluation["citations"][0]["evidence_id"] == str(EVIDENCE_ID)
+    assert evaluation["citations"][0]["extraction_id"]
+    assert evaluation["citations"][0]["content_sha256"] == "a" * 64
+    assert evaluation["citations"][0]["bbox"] is None
+    assert body["conditional_fixed_subtotals"] == [
+        {
+            "currency": "KRW",
+            "amount": "300000",
+            "calculated_candidate_count": 1,
+            "unresolved_candidate_count": 0,
+        }
+    ]
+    assert body["indemnity_summary"]["status"] == "NONE"
+    assert body["assistance"]["state"] == "SEARCH_READY"
+    assert not {
+        "provider_request_id",
+        "prompt",
+        "raw_response",
+        "eligibility_result",
+        "payable_amount",
+        "claim_start_ready",
+    } & set(body["assistance"])
     assert service.analysis_calls == [EVENT_ID]
     _assert_no_store(response)
     _assert_safe_result(response)

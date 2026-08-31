@@ -114,6 +114,8 @@ jobs:
           uv run pytest -q
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run pytest -m integration -q
+          uv run python scripts/integration_test_database.py
+          uv run alembic -c apps/api/alembic.ini upgrade head
           uv run alembic -c apps/api/alembic.ini downgrade base
           uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Validate Web

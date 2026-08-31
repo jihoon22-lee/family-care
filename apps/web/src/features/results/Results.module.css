@@ -30,7 +30,8 @@
 }
 
 .pageHeading h1,
-.groupHeading h2 {
+.groupHeading h2,
+.groupHeadingText h2 {
   margin: 5px 0 0;
   font-family: Georgia, "Times New Roman", serif;
   font-weight: 500;
@@ -42,7 +43,8 @@
   line-height: 0.98;
 }
 
-.groupHeading h2 {
+.groupHeading h2,
+.groupHeadingText h2 {
   font-size: clamp(1.75rem, 5vw, 2.6rem);
   line-height: 1;
 }
@@ -132,6 +134,141 @@
   border-bottom: 1px solid var(--rule, #c8d6df);
 }
 
+.groupHeadingWithBadge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--rule, #c8d6df);
+}
+
+.scopePanel {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--ink, #10233f);
+  background: rgb(251 252 253 / 88%);
+}
+
+.scopeCopy,
+.scopeWarning,
+.summaryNotice,
+.recommendationDisclaimer,
+.assistancePending,
+.indemnityCard p,
+.recommendationContract,
+.recommendationExcerpt,
+.recommendationReason {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.scopeCopy,
+.summaryNotice,
+.indemnityCard p,
+.recommendationContract,
+.recommendationReason {
+  color: var(--quiet, #5d6b7d);
+}
+
+.scopeWarning,
+.assistancePending {
+  padding: 12px 14px;
+  border-left: 3px solid var(--caution, #d98500);
+  color: #6e4a14;
+  background: rgb(217 133 0 / 8%);
+}
+
+.scopeGrid,
+.subtotalCounts {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  gap: 1px;
+  background: var(--rule, #c8d6df);
+}
+
+.scopeGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.subtotalCounts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scopeGrid div,
+.subtotalCounts div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: rgb(251 252 253 / 96%);
+}
+
+.scopeGrid dt,
+.subtotalCounts dt {
+  color: var(--quiet, #5d6b7d);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.scopeGrid dd,
+.subtotalCounts dd {
+  margin: 4px 0 0;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+}
+
+.sourceFailures {
+  padding: 12px 14px;
+  border-left: 3px solid var(--caution, #d98500);
+  background: rgb(217 133 0 / 8%);
+}
+
+.sourceFailures strong {
+  font-size: 0.78rem;
+}
+
+.sourceFailures ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #6e4a14;
+  line-height: 1.5;
+}
+
+.subtotalGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.subtotalCard,
+.indemnityCard {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: var(--paper, #fbfcfd);
+}
+
+.subtotalCard {
+  border-top: 3px solid var(--confirmed, #087f6d);
+}
+
+.subtotalAmount {
+  color: var(--ink, #10233f);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(1.65rem, 5vw, 2.4rem);
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+}
+
+.indemnityCard {
+  border-top: 3px solid var(--evidence-blue, #246bfe);
+}
+
 .emptyGroup,
 .loading,
 .error,
@@ -183,8 +320,25 @@
   overflow-wrap: anywhere;
 }
 
+.contractLabel {
+  display: block;
+  margin-top: 4px;
+  color: var(--quiet, #5d6b7d);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.badgeStack {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .resultBadge,
-.calculationKind {
+.calculationKind,
+.benefitBadge,
+.modeBadge {
   display: inline-flex;
   align-items: center;
   min-height: 28px;
@@ -194,6 +348,16 @@
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.05em;
+}
+
+.benefitBadge {
+  color: var(--evidence-blue, #246bfe);
+}
+
+.modeBadge {
+  color: var(--ink, #10233f);
+  border-color: var(--evidence-blue, #246bfe);
+  background: rgb(36 107 254 / 5%);
 }
 
 .resultMATCH {
@@ -334,6 +498,120 @@
   min-width: 0;
 }
 
+.knowledgeCalculation {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: rgb(36 107 254 / 4%);
+}
+
+.calculationTraceHeading,
+.recommendationHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.calculationTraceHeading strong,
+.recommendationHeading strong {
+  display: block;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.conditionalAmount {
+  margin: 0;
+  color: var(--ink, #10233f);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+}
+
+.privateCitationList {
+  display: grid;
+  gap: 1px;
+  margin: 0;
+  padding: 1px;
+  background: var(--rule, #c8d6df);
+  list-style: none;
+}
+
+.privateCitationList li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--paper, #fbfcfd);
+}
+
+.privateCitationList span {
+  color: var(--quiet, #5d6b7d);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+
+.recommendationDisclaimer {
+  padding: 13px 15px;
+  border-left: 3px solid var(--evidence-blue, #246bfe);
+  color: #31445d;
+  background: rgb(36 107 254 / 7%);
+}
+
+.recommendationList {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recommendationCard {
+  display: grid;
+  gap: 11px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: var(--paper, #fbfcfd);
+}
+
+.recommendationHeading > span {
+  color: var(--quiet, #5d6b7d);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.recommendationExcerpt {
+  padding: 12px 14px;
+  border-left: 2px solid var(--rule, #c8d6df);
+  color: #31445d;
+  background: rgb(200 214 223 / 12%);
+  overflow-wrap: anywhere;
+}
+
+.citationDetails {
+  color: var(--quiet, #5d6b7d);
+}
+
+.citationDetails summary {
+  width: fit-content;
+  min-height: 44px;
+  padding: 11px 0;
+  color: var(--evidence-blue, #246bfe);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.citationDetails summary:focus-visible {
+  outline: 3px solid rgb(36 107 254 / 35%);
+  outline-offset: 2px;
+}
+
+.citationDetails p {
+  margin: 4px 0 0;
+}
+
 .amountList {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
@@ -376,7 +654,9 @@
   .eventSummary,
   .metadata,
   .countList,
-  .amountList {
+  .amountList,
+  .scopeGrid,
+  .subtotalCounts {
     grid-template-columns: 1fr;
   }
 

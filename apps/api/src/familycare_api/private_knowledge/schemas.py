@@ -41,13 +41,24 @@ class KnowledgeContractListItemResponse(BaseModel):
 
     id: UUID
     subject_id: UUID
+    family_member_id: UUID | None
+    subject_binding_decision: TriState
     family_alias: str = Field(min_length=1, max_length=240)
     insurer_display: str = Field(min_length=1, max_length=240)
     product_display: str = Field(min_length=1, max_length=800)
     contract_start: date | None
     contract_end: date | None
     certificate_decision: TriState
+    contract_document_completeness: Literal[
+        "CERTIFICATE_AND_TERMS",
+        "CERTIFICATE_ONLY",
+        "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS",
+        "UNVERIFIED",
+    ]
     current_status: Literal["active", "inactive", "lapsed", "terminated", "unknown"]
+    current_status_decision: TriState
+    current_status_authority: Literal["USER_CONFIRMED_CURRENT_ENROLLMENT"] | None
+    current_status_as_of: date | None
     coverage_count: int = Field(ge=0)
     enrollment_match_count: int = Field(ge=0)
     enrollment_no_match_count: int = Field(ge=0)
@@ -55,6 +66,9 @@ class KnowledgeContractListItemResponse(BaseModel):
     document_identity_decision: TriState
     edition_applicability_decision: TriState
     terms_overall_decision: TriState
+    terms_source_count: int = Field(ge=0, le=8)
+    semantic_section_count: int = Field(ge=0)
+    semantic_fact_count: int = Field(ge=0)
 
 
 class KnowledgeContractPageResponse(BaseModel):

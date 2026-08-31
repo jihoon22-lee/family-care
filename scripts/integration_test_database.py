@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from collections.abc import Callable, MutableMapping
 
 import psycopg
@@ -73,3 +74,38 @@ def configure_integration_test_database(
 
     target_environment[RUNTIME_DATABASE_URL_ENV] = database_url
     return database_url
+
+
+def _reset_public_schema(database_url: str) -> None:
+    with psycopg.connect(database_url) as connection:
+        connection.execute("DROP SCHEMA public CASCADE")
+        connection.execute("CREATE SCHEMA public")
+
+
+def reset_integration_test_database(
+    environment: MutableMapping[str, str] | None = None,
+    *,
+    database_name_reader: Callable[[str], str] = _read_current_database,
+    database_resetter: Callable[[str], None] = _reset_public_schema,
+) -> None:
+    """Reset only a guard-verified disposable test database schema."""
+
+    database_url = configure_integration_test_database(
+        environment,
+        database_name_reader=database_name_reader,
+    )
+    database_resetter(_psycopg_url(database_url))
+
+
+def main() -> int:
+    try:
+        reset_integration_test_database()
+    except IntegrationDatabaseGuardError as error:
+        print(f"integration test database reset refused: {error}", file=sys.stderr)
+        return 2
+    print("integration test database reset complete")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

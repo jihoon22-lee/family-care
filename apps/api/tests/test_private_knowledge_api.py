@@ -31,6 +31,7 @@ ASSIGNMENT_ID = UUID("00000000-0000-4000-8000-000000001966")
 SECTION_ID = UUID("00000000-0000-4000-8000-000000001967")
 FACT_ID = UUID("00000000-0000-4000-8000-000000001968")
 DOCUMENT_REF = UUID("00000000-0000-4000-8000-000000001969")
+FAMILY_MEMBER_ID = UUID("00000000-0000-4000-8000-000000001970")
 
 
 def _counts() -> dict[str, int]:
@@ -68,9 +69,11 @@ class _QueryService:
         *,
         limit: int,
         after: UUID | None,
+        family_member_id: UUID | None,
     ) -> KnowledgeContractPageResponse:
         assert limit == 50
         assert after is None
+        assert family_member_id in {None, FAMILY_MEMBER_ID}
         return KnowledgeContractPageResponse.model_validate(
             {
                 "schema_version": "1",
@@ -78,13 +81,19 @@ class _QueryService:
                     {
                         "id": CONTRACT_ID,
                         "subject_id": SUBJECT_ID,
+                        "family_member_id": FAMILY_MEMBER_ID,
+                        "subject_binding_decision": "MATCH",
                         "family_alias": "Family Member A",
                         "insurer_display": "Sample Insurer",
                         "product_display": "Sample Policy",
                         "contract_start": "2024-01-01",
                         "contract_end": None,
                         "certificate_decision": "MATCH",
-                        "current_status": "unknown",
+                        "contract_document_completeness": "CERTIFICATE_AND_TERMS",
+                        "current_status": "active",
+                        "current_status_decision": "MATCH",
+                        "current_status_authority": "USER_CONFIRMED_CURRENT_ENROLLMENT",
+                        "current_status_as_of": "2026-08-30",
                         "coverage_count": 1,
                         "enrollment_match_count": 1,
                         "enrollment_no_match_count": 0,
@@ -92,6 +101,9 @@ class _QueryService:
                         "document_identity_decision": "MATCH",
                         "edition_applicability_decision": "MATCH",
                         "terms_overall_decision": "MATCH",
+                        "terms_source_count": 1,
+                        "semantic_section_count": 1,
+                        "semantic_fact_count": 1,
                     }
                 ],
                 "next_cursor": None,
@@ -111,7 +123,11 @@ class _QueryService:
         return KnowledgeContractDetailResponse.model_validate(
             {
                 "schema_version": "1",
-                "contract": self.list_contracts(limit=50, after=None).items[0],
+                "contract": self.list_contracts(
+                    limit=50,
+                    after=None,
+                    family_member_id=None,
+                ).items[0],
                 "coverages": [
                     {
                         "id": COVERAGE_ID,
@@ -211,7 +227,10 @@ def test_current_and_contract_list_are_bounded_authenticated_and_no_store(
     client: TestClient,
 ) -> None:
     current = client.get("/api/v1/private-knowledge/current")
-    contracts = client.get("/api/v1/private-knowledge/current/contracts")
+    contracts = client.get(
+        "/api/v1/private-knowledge/current/contracts",
+        params={"family_member_id": str(FAMILY_MEMBER_ID)},
+    )
 
     assert current.status_code == 200
     assert contracts.status_code == 200
@@ -220,6 +239,12 @@ def test_current_and_contract_list_are_bounded_authenticated_and_no_store(
     assert current.json()["counts"] == _counts()
     assert len(contracts.json()["items"]) == 1
     assert contracts.json()["items"][0]["family_alias"] == "Family Member A"
+    assert contracts.json()["items"][0]["family_member_id"] == str(FAMILY_MEMBER_ID)
+    assert contracts.json()["items"][0]["contract_document_completeness"] == (
+        "CERTIFICATE_AND_TERMS"
+    )
+    assert contracts.json()["items"][0]["current_status"] == "active"
+    assert contracts.json()["items"][0]["current_status_decision"] == "MATCH"
 
 
 def test_contract_detail_exposes_semantics_and_citations_without_source_material(

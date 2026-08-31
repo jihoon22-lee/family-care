@@ -87,12 +87,20 @@ FIELD_PATHS = frozenset(
         "MedicalEvent.event_date",
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
+        "MedicalEvent.diagnosis_code",
+        "MedicalEvent.procedure_code",
+        "MedicalEvent.anatomical_site_code",
+        "MedicalEvent.pathology_code",
+        "MedicalEvent.treatment_setting",
+        "MedicalEvent.treatment_context",
+        "MedicalEvent.separately_billed_treatment",
         "PolicyContract.contract_start",
         "PolicyContract.contract_end",
         "Rider.status",
         "Rider.insured_amount",
         "ClaimHistory.counted_occurrence",
         "Receipt.confirmed_amount",
+        "Receipt.covered_amount",
     }
 )
 
@@ -206,7 +214,7 @@ class EvidenceIndex:
 
 @dataclass(frozen=True)
 class _FieldSpec:
-    kind: Literal["date", "string", "integer", "decimal"]
+    kind: Literal["date", "string", "boolean", "integer", "decimal"]
     units: frozenset[str]
 
 
@@ -214,12 +222,20 @@ _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "MedicalEvent.event_date": _FieldSpec("date", frozenset({"date"})),
     "MedicalEvent.classification": _FieldSpec("string", frozenset()),
     "MedicalEvent.admission_days": _FieldSpec("integer", frozenset({"days"})),
+    "MedicalEvent.diagnosis_code": _FieldSpec("string", frozenset()),
+    "MedicalEvent.procedure_code": _FieldSpec("string", frozenset()),
+    "MedicalEvent.anatomical_site_code": _FieldSpec("string", frozenset()),
+    "MedicalEvent.pathology_code": _FieldSpec("string", frozenset()),
+    "MedicalEvent.treatment_setting": _FieldSpec("string", frozenset()),
+    "MedicalEvent.treatment_context": _FieldSpec("string", frozenset()),
+    "MedicalEvent.separately_billed_treatment": _FieldSpec("boolean", frozenset()),
     "PolicyContract.contract_start": _FieldSpec("date", frozenset({"date"})),
     "PolicyContract.contract_end": _FieldSpec("date", frozenset({"date"})),
     "Rider.status": _FieldSpec("string", frozenset()),
     "Rider.insured_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
     "ClaimHistory.counted_occurrence": _FieldSpec("integer", frozenset({"occurrences"})),
     "Receipt.confirmed_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
+    "Receipt.covered_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
 }
 
 _RIDER_STATUSES = frozenset({"active", "inactive", "expired", "cancelled", "unknown"})
@@ -230,6 +246,17 @@ _EXECUTABLE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _REASON_CODE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_NORMALIZED_CODE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
+_NORMALIZED_CODE_FIELDS = frozenset(
+    {
+        "MedicalEvent.diagnosis_code",
+        "MedicalEvent.procedure_code",
+        "MedicalEvent.anatomical_site_code",
+        "MedicalEvent.pathology_code",
+        "MedicalEvent.treatment_setting",
+        "MedicalEvent.treatment_context",
+    }
+)
 
 
 def _reject_executable(value: object) -> None:
@@ -345,6 +372,12 @@ def _literal_for_field(field: str, spec: _FieldSpec, value: object) -> object:
             raise RuleValidationError("INVALID_RULE_TYPE")
         if field == "Rider.status" and value not in _RIDER_STATUSES:
             raise RuleValidationError("INVALID_VALUE")
+        if field in _NORMALIZED_CODE_FIELDS and _NORMALIZED_CODE_PATTERN.fullmatch(value) is None:
+            raise RuleValidationError("INVALID_VALUE")
+        return value
+    if spec.kind == "boolean":
+        if not isinstance(value, bool):
+            raise RuleValidationError("INVALID_RULE_TYPE")
         return value
     if spec.kind == "integer":
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:

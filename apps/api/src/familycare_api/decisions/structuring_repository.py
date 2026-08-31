@@ -24,6 +24,7 @@ from familycare_api.decisions.structuring_schemas import (
     FactState,
     StructuringErrorCode,
     StructuringJobState,
+    is_valid_structured_fact_value,
 )
 from familycare_api.decisions.structuring_service import (
     FactIssue,
@@ -44,6 +45,13 @@ _FACT_FIELDS = frozenset(
         "admission",
         "outpatient",
         "pharmacy",
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+        "separately_billed_treatment",
     }
 )
 _FACT_SOURCES = frozenset({"user", "ai", "system"})
@@ -246,9 +254,7 @@ def _facts(value: object) -> tuple[StructuredFact, ...]:
                 or confidence not in _FACT_CONFIDENCE
                 or not isinstance(raw_evidence, list)
                 or len(raw_evidence) > 8
-                or (isinstance(raw_value, int | float) and not isinstance(raw_value, bool))
-                or (raw_value is not None and not isinstance(raw_value, str | bool))
-                or (isinstance(raw_value, str) and not 1 <= len(raw_value) <= 160)
+                or not is_valid_structured_fact_value(field_id, raw_value)
             ):
                 raise ValueError
             result.append(
@@ -350,12 +356,7 @@ def _merge_user_overrides(
     for field_id, value in overrides.items():
         if field_id not in _FACT_FIELDS:
             raise DecisionInvalid
-        if field_id in {"admission", "outpatient", "pharmacy"}:
-            if value is not None and not isinstance(value, bool):
-                raise DecisionInvalid
-        elif value is not None and (
-            not isinstance(value, str) or not value.strip() or len(value) > 160
-        ):
+        if not is_valid_structured_fact_value(field_id, value):
             raise DecisionInvalid
         previous = facts.get(field_id)
         if previous is not None and previous.get("value") != value:

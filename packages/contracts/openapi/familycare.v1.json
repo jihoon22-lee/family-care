@@ -41,6 +41,66 @@
         "title": "AnalysisAcceptedResponse",
         "type": "object"
       },
+      "AnalysisAssistanceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "STRUCTURED_SEARCH",
+              "LLM_ASSISTED",
+              "NONE"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "model_label": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Label"
+          },
+          "outcome_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Outcome Code",
+            "type": "string"
+          },
+          "recommendations": {
+            "items": {
+              "$ref": "#/components/schemas/AnalysisRecommendationResponse"
+            },
+            "maxItems": 12,
+            "title": "Recommendations",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "SEARCH_READY",
+              "LLM_PENDING",
+              "LLM_READY"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "state",
+          "outcome_code",
+          "model_label",
+          "recommendations"
+        ],
+        "title": "AnalysisAssistanceResponse",
+        "type": "object"
+      },
       "AnalysisJobStatusResponse": {
         "additionalProperties": false,
         "examples": [
@@ -136,6 +196,143 @@
           "attempts"
         ],
         "title": "AnalysisJobStatusResponse",
+        "type": "object"
+      },
+      "AnalysisRecommendationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "citation": {
+            "$ref": "#/components/schemas/AssistanceCitationResponse"
+          },
+          "clause_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Clause Label",
+            "type": "string"
+          },
+          "contract_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Contract Label",
+            "type": "string"
+          },
+          "coverage_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Coverage Label",
+            "type": "string"
+          },
+          "excerpt": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "explanation_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation Code"
+          },
+          "question_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question Code"
+          },
+          "rank": {
+            "maximum": 12.0,
+            "minimum": 1.0,
+            "title": "Rank",
+            "type": "integer"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "recommendation_id": {
+            "format": "uuid",
+            "title": "Recommendation Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recommendation_id",
+          "rank",
+          "contract_label",
+          "coverage_label",
+          "clause_label",
+          "excerpt",
+          "reason_code",
+          "explanation_code",
+          "question_code",
+          "citation"
+        ],
+        "title": "AnalysisRecommendationResponse",
+        "type": "object"
+      },
+      "AssistanceCitationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "fact_id": {
+            "format": "uuid",
+            "title": "Fact Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "FACT_CITATION",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_end": {
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "source_clause_id": {
+            "format": "uuid",
+            "title": "Source Clause Id",
+            "type": "string"
+          },
+          "terms_section_id": {
+            "format": "uuid",
+            "title": "Terms Section Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "terms_section_id",
+          "source_clause_id",
+          "fact_id",
+          "page_start",
+          "page_end"
+        ],
+        "title": "AssistanceCitationResponse",
         "type": "object"
       },
       "AuthErrorResponse": {
@@ -1173,6 +1370,57 @@
         "title": "CandidateSnapshotResponse",
         "type": "object"
       },
+      "CatalogCoverageResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "advisory_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Advisory Coverage Count",
+            "type": "integer"
+          },
+          "benefit_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Benefit Coverage Count",
+            "type": "integer"
+          },
+          "blocked_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Blocked Coverage Count",
+            "type": "integer"
+          },
+          "contract_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Contract Count",
+            "type": "integer"
+          },
+          "not_applicable_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Not Applicable Coverage Count",
+            "type": "integer"
+          },
+          "published_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Published Coverage Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contract_count",
+          "benefit_coverage_count",
+          "published_coverage_count",
+          "advisory_coverage_count",
+          "blocked_coverage_count",
+          "not_applicable_coverage_count"
+        ],
+        "title": "CatalogCoverageResponse",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1224,85 +1472,15 @@
         "type": "object"
       },
       "ClaimCandidateResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "aggregate_result": {
-            "enum": [
-              "MATCH",
-              "NO_MATCH",
-              "UNKNOWN"
-            ],
-            "title": "Aggregate Result",
-            "type": "string"
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OperationalCandidateResponse"
           },
-          "candidate_id": {
-            "format": "uuid",
-            "title": "Candidate Id",
-            "type": "string"
-          },
-          "hold_reason_codes": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Hold Reason Codes",
-            "type": "array"
-          },
-          "questions": {
-            "items": {
-              "$ref": "#/components/schemas/QuestionResponse"
-            },
-            "title": "Questions",
-            "type": "array"
-          },
-          "required_match_count": {
-            "minimum": 0.0,
-            "title": "Required Match Count",
-            "type": "integer"
-          },
-          "required_no_match_count": {
-            "minimum": 0.0,
-            "title": "Required No Match Count",
-            "type": "integer"
-          },
-          "required_unknown_count": {
-            "minimum": 0.0,
-            "title": "Required Unknown Count",
-            "type": "integer"
-          },
-          "rider_id": {
-            "format": "uuid",
-            "title": "Rider Id",
-            "type": "string"
-          },
-          "rider_label": {
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Rider Label",
-            "type": "string"
-          },
-          "rider_type": {
-            "enum": [
-              "fixed",
-              "indemnity"
-            ],
-            "title": "Rider Type",
-            "type": "string"
+          {
+            "$ref": "#/components/schemas/PrivateKnowledgeCandidateResponse"
           }
-        },
-        "required": [
-          "candidate_id",
-          "rider_id",
-          "rider_label",
-          "rider_type",
-          "aggregate_result",
-          "required_match_count",
-          "required_unknown_count",
-          "required_no_match_count",
-          "questions",
-          "hold_reason_codes"
         ],
-        "title": "ClaimCandidateResponse",
-        "type": "object"
+        "title": "ClaimCandidateResponse"
       },
       "ClaimCaseListResponse": {
         "additionalProperties": false,
@@ -2355,17 +2533,81 @@
         "title": "ComponentCreateRequest",
         "type": "object"
       },
+      "ConditionalFixedSubtotalResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "maxLength": 19,
+            "minLength": 1,
+            "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+            "title": "Amount",
+            "type": "string"
+          },
+          "calculated_candidate_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Calculated Candidate Count",
+            "type": "integer"
+          },
+          "currency": {
+            "pattern": "^[A-Z]{3}$",
+            "title": "Currency",
+            "type": "string"
+          },
+          "unresolved_candidate_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Unresolved Candidate Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "currency",
+          "amount",
+          "calculated_candidate_count",
+          "unresolved_candidate_count"
+        ],
+        "title": "ConditionalFixedSubtotalResponse",
+        "type": "object"
+      },
       "CoverageDecisionResponse": {
         "additionalProperties": false,
         "properties": {
+          "analysis_completeness": {
+            "enum": [
+              "COMPLETE",
+              "PARTIAL",
+              "UNAVAILABLE"
+            ],
+            "title": "Analysis Completeness",
+            "type": "string"
+          },
+          "assistance": {
+            "$ref": "#/components/schemas/AnalysisAssistanceResponse"
+          },
           "candidates": {
             "items": {
               "$ref": "#/components/schemas/ClaimCandidateResponse"
             },
+            "maxItems": 10000,
             "title": "Candidates",
             "type": "array"
           },
+          "catalog_coverage": {
+            "$ref": "#/components/schemas/CatalogCoverageResponse"
+          },
+          "conditional_fixed_subtotals": {
+            "items": {
+              "$ref": "#/components/schemas/ConditionalFixedSubtotalResponse"
+            },
+            "maxItems": 32,
+            "title": "Conditional Fixed Subtotals",
+            "type": "array"
+          },
           "engine_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
             "title": "Engine Version",
             "type": "string"
           },
@@ -2373,6 +2615,7 @@
             "items": {
               "$ref": "#/components/schemas/RuleEvaluationResponse"
             },
+            "maxItems": 512,
             "title": "Evaluations",
             "type": "array"
           },
@@ -2380,6 +2623,12 @@
             "minimum": 1.0,
             "title": "Event Version",
             "type": "integer"
+          },
+          "indemnity_summary": {
+            "$ref": "#/components/schemas/IndemnitySummaryResponse"
+          },
+          "knowledge_snapshot_version": {
+            "$ref": "#/components/schemas/KnowledgeSnapshotVersionResponse"
           },
           "medical_event_id": {
             "format": "uuid",
@@ -2392,6 +2641,9 @@
             "type": "string"
           },
           "rule_set_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
             "title": "Rule Set Version",
             "type": "string"
           },
@@ -2401,10 +2653,20 @@
             "type": "string"
           },
           "schema_version": {
-            "const": "1",
-            "default": "1",
+            "const": "2",
             "title": "Schema Version",
             "type": "string"
+          },
+          "source_failure_codes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Source Failure Codes",
+            "type": "array"
           },
           "stale": {
             "title": "Stale",
@@ -2412,15 +2674,23 @@
           }
         },
         "required": [
+          "schema_version",
           "run_id",
           "medical_event_id",
           "event_version",
           "engine_version",
           "rule_set_version",
+          "knowledge_snapshot_version",
           "policy_snapshot_at",
           "stale",
+          "analysis_completeness",
+          "catalog_coverage",
           "candidates",
-          "evaluations"
+          "evaluations",
+          "conditional_fixed_subtotals",
+          "indemnity_summary",
+          "source_failure_codes",
+          "assistance"
         ],
         "title": "CoverageDecisionResponse",
         "type": "object"
@@ -2950,6 +3220,77 @@
         "title": "EvidenceDetailResponse",
         "type": "object"
       },
+      "EvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "physical_page": {
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "document_version_id",
+          "content_sha256",
+          "physical_page",
+          "bbox",
+          "review_state"
+        ],
+        "title": "EvidenceResponse",
+        "type": "object"
+      },
       "EvidenceSnapshotResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3345,6 +3686,46 @@
           "encrypted"
         ],
         "title": "ImportSourceResponse",
+        "type": "object"
+      },
+      "IndemnitySummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calculated_candidate_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Calculated Candidate Count",
+            "type": "integer"
+          },
+          "candidate_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Candidate Count",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "NONE",
+              "CALCULATED",
+              "UNKNOWN"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unresolved_candidate_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Unresolved Candidate Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "candidate_count",
+          "calculated_candidate_count",
+          "unresolved_candidate_count"
+        ],
+        "title": "IndemnitySummaryResponse",
         "type": "object"
       },
       "InsuranceDocumentComponentResponse": {
@@ -3761,6 +4142,284 @@
         "title": "InventorySummaryResponse",
         "type": "object"
       },
+      "KnowledgeBenefitCalculationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "applied_limit": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Limit"
+          },
+          "applied_rate": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Applied Rate"
+          },
+          "calculation_id": {
+            "format": "uuid",
+            "title": "Calculation Id",
+            "type": "string"
+          },
+          "calculation_publication_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calculation Publication Id"
+          },
+          "conditional_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conditional Amount"
+          },
+          "confirmed_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Amount"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "deductible_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deductible Amount"
+          },
+          "excluded_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Amount"
+          },
+          "hold_reason_code": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hold Reason Code"
+          },
+          "kind": {
+            "enum": [
+              "FIXED",
+              "INDEMNITY",
+              "UNKNOWN"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rounding_rule": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Rule"
+          },
+          "status": {
+            "enum": [
+              "CALCULATED",
+              "UNKNOWN",
+              "NOT_APPLICABLE",
+              "FAILED"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeCalculationStepResponse"
+            },
+            "maxItems": 64,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "calculation_id",
+          "calculation_publication_id",
+          "kind",
+          "status",
+          "currency",
+          "conditional_amount",
+          "confirmed_amount",
+          "excluded_amount",
+          "deductible_amount",
+          "applied_rate",
+          "applied_limit",
+          "rounding_rule",
+          "hold_reason_code",
+          "steps"
+        ],
+        "title": "KnowledgeBenefitCalculationResponse",
+        "type": "object"
+      },
+      "KnowledgeCalculationStepResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Z]{3}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "input_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Amount"
+          },
+          "operation": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Operation",
+            "type": "string"
+          },
+          "output_amount": {
+            "anyOf": [
+              {
+                "maxLength": 19,
+                "minLength": 1,
+                "pattern": "^(?:0|[1-9][0-9]{0,11})(?:\\.[0-9]{1,6})?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Amount"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "rounding_rule": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounding Rule"
+          },
+          "step_number": {
+            "maximum": 64.0,
+            "minimum": 1.0,
+            "title": "Step Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "step_number",
+          "operation",
+          "input_amount",
+          "output_amount",
+          "currency",
+          "rounding_rule",
+          "reason_code"
+        ],
+        "title": "KnowledgeCalculationStepResponse",
+        "type": "object"
+      },
       "KnowledgeContractDetailResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3841,6 +4500,16 @@
             "title": "Certificate Decision",
             "type": "string"
           },
+          "contract_document_completeness": {
+            "enum": [
+              "CERTIFICATE_AND_TERMS",
+              "CERTIFICATE_ONLY",
+              "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS",
+              "UNVERIFIED"
+            ],
+            "title": "Contract Document Completeness",
+            "type": "string"
+          },
           "contract_end": {
             "anyOf": [
               {
@@ -3879,6 +4548,39 @@
               "unknown"
             ],
             "title": "Current Status",
+            "type": "string"
+          },
+          "current_status_as_of": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status As Of"
+          },
+          "current_status_authority": {
+            "anyOf": [
+              {
+                "const": "USER_CONFIRMED_CURRENT_ENROLLMENT",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Status Authority"
+          },
+          "current_status_decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Current Status Decision",
             "type": "string"
           },
           "document_identity_decision": {
@@ -3920,6 +4622,18 @@
             "title": "Family Alias",
             "type": "string"
           },
+          "family_member_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family Member Id"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -3937,6 +4651,25 @@
             "title": "Product Display",
             "type": "string"
           },
+          "semantic_fact_count": {
+            "minimum": 0.0,
+            "title": "Semantic Fact Count",
+            "type": "integer"
+          },
+          "semantic_section_count": {
+            "minimum": 0.0,
+            "title": "Semantic Section Count",
+            "type": "integer"
+          },
+          "subject_binding_decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Subject Binding Decision",
+            "type": "string"
+          },
           "subject_id": {
             "format": "uuid",
             "title": "Subject Id",
@@ -3950,25 +4683,40 @@
             ],
             "title": "Terms Overall Decision",
             "type": "string"
+          },
+          "terms_source_count": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Terms Source Count",
+            "type": "integer"
           }
         },
         "required": [
           "id",
           "subject_id",
+          "family_member_id",
+          "subject_binding_decision",
           "family_alias",
           "insurer_display",
           "product_display",
           "contract_start",
           "contract_end",
           "certificate_decision",
+          "contract_document_completeness",
           "current_status",
+          "current_status_decision",
+          "current_status_authority",
+          "current_status_as_of",
           "coverage_count",
           "enrollment_match_count",
           "enrollment_no_match_count",
           "enrollment_unknown_count",
           "document_identity_decision",
           "edition_applicability_decision",
-          "terms_overall_decision"
+          "terms_overall_decision",
+          "terms_source_count",
+          "semantic_section_count",
+          "semantic_fact_count"
         ],
         "title": "KnowledgeContractListItemResponse",
         "type": "object"
@@ -4504,6 +5252,49 @@
           "citations"
         ],
         "title": "KnowledgeFactResponse",
+        "type": "object"
+      },
+      "KnowledgeSnapshotVersionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_import_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Import Run Id"
+          },
+          "event_fact_schema_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Event Fact Schema Version",
+            "type": "string"
+          },
+          "rule_import_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Import Run Id"
+          }
+        },
+        "required": [
+          "catalog_import_run_id",
+          "rule_import_run_id",
+          "event_fact_schema_version"
+        ],
+        "title": "KnowledgeSnapshotVersionResponse",
         "type": "object"
       },
       "KnowledgeTermsAssignmentResponse": {
@@ -5065,6 +5856,339 @@
         "title": "MoneyResponse",
         "type": "object"
       },
+      "OperationalCandidateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregate_result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Aggregate Result",
+            "type": "string"
+          },
+          "benefit_kind": {
+            "enum": [
+              "FIXED",
+              "INDEMNITY",
+              "UNKNOWN"
+            ],
+            "title": "Benefit Kind",
+            "type": "string"
+          },
+          "calculation": {
+            "title": "Calculation",
+            "type": "null"
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "claim_start_ready": {
+            "title": "Claim Start Ready",
+            "type": "boolean"
+          },
+          "contract_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Contract Label",
+            "type": "string"
+          },
+          "coverage_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Coverage Label",
+            "type": "string"
+          },
+          "hold_reason_codes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Hold Reason Codes",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionResponse"
+            },
+            "maxItems": 32,
+            "title": "Questions",
+            "type": "array"
+          },
+          "required_match_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required Match Count",
+            "type": "integer"
+          },
+          "required_no_match_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required No Match Count",
+            "type": "integer"
+          },
+          "required_unknown_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required Unknown Count",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/OperationalCandidateSourceResponse"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "contract_label",
+          "coverage_label",
+          "benefit_kind",
+          "aggregate_result",
+          "required_match_count",
+          "required_unknown_count",
+          "required_no_match_count",
+          "questions",
+          "hold_reason_codes",
+          "source",
+          "calculation",
+          "claim_start_ready"
+        ],
+        "title": "OperationalCandidateResponse",
+        "type": "object"
+      },
+      "OperationalCandidateSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "OPERATIONAL_RIDER",
+            "title": "Kind",
+            "type": "string"
+          },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rider_id"
+        ],
+        "title": "OperationalCandidateSourceResponse",
+        "type": "object"
+      },
+      "OperationalEvaluationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/OperationalEvidenceCitationResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "conflicting_fields": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Conflicting Fields",
+            "type": "array"
+          },
+          "engine_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "format": "uuid",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "fact_paths": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Fact Paths",
+            "type": "array"
+          },
+          "missing_fields": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/OperationalEvaluationSourceResponse"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "result",
+          "required",
+          "reason_code",
+          "fact_paths",
+          "missing_fields",
+          "conflicting_fields",
+          "engine_version",
+          "source",
+          "citations"
+        ],
+        "title": "OperationalEvaluationResponse",
+        "type": "object"
+      },
+      "OperationalEvaluationSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "OPERATIONAL_RIDER",
+            "title": "Kind",
+            "type": "string"
+          },
+          "rider_id": {
+            "format": "uuid",
+            "title": "Rider Id",
+            "type": "string"
+          },
+          "rule_version_id": {
+            "format": "uuid",
+            "title": "Rule Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "rider_id",
+          "rule_version_id"
+        ],
+        "title": "OperationalEvaluationSourceResponse",
+        "type": "object"
+      },
+      "OperationalEvidenceCitationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "content_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Sha256",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "evidence_id": {
+            "format": "uuid",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "extraction_id": {
+            "format": "uuid",
+            "title": "Extraction Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "OPERATIONAL_EVIDENCE",
+            "title": "Kind",
+            "type": "string"
+          },
+          "physical_page": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Physical Page",
+            "type": "integer"
+          },
+          "review_state": {
+            "enum": [
+              "AI_VERIFIED",
+              "NEEDS_REVIEW",
+              "USER_CONFIRMED"
+            ],
+            "title": "Review State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "evidence_id",
+          "document_version_id",
+          "extraction_id",
+          "content_sha256",
+          "physical_page",
+          "bbox",
+          "review_state"
+        ],
+        "title": "OperationalEvidenceCitationResponse",
+        "type": "object"
+      },
       "OptionalQuestionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -5077,7 +6201,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"
@@ -5091,7 +6222,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Question Code",
             "type": "string"
@@ -5366,7 +6504,7 @@
             "title": "Effective To"
           },
           "evidence": {
-            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
+            "$ref": "#/components/schemas/EvidenceResponse"
           },
           "family_member_id": {
             "format": "uuid",
@@ -5483,7 +6621,7 @@
             "type": "string"
           },
           "source_evidence": {
-            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
+            "$ref": "#/components/schemas/EvidenceResponse"
           },
           "status": {
             "enum": [
@@ -5499,7 +6637,7 @@
           "status_evidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
+                "$ref": "#/components/schemas/EvidenceResponse"
               },
               {
                 "type": "null"
@@ -5725,6 +6863,212 @@
         "title": "PolicyUpdateRequest",
         "type": "object"
       },
+      "PrivateKnowledgeCandidateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregate_result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Aggregate Result",
+            "type": "string"
+          },
+          "benefit_kind": {
+            "enum": [
+              "FIXED",
+              "INDEMNITY",
+              "UNKNOWN"
+            ],
+            "title": "Benefit Kind",
+            "type": "string"
+          },
+          "calculation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeBenefitCalculationResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "candidate_id": {
+            "format": "uuid",
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "claim_start_ready": {
+            "const": false,
+            "title": "Claim Start Ready",
+            "type": "boolean"
+          },
+          "contract_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Contract Label",
+            "type": "string"
+          },
+          "coverage_label": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Coverage Label",
+            "type": "string"
+          },
+          "hold_reason_codes": {
+            "items": {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Hold Reason Codes",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionResponse"
+            },
+            "maxItems": 32,
+            "title": "Questions",
+            "type": "array"
+          },
+          "required_match_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required Match Count",
+            "type": "integer"
+          },
+          "required_no_match_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required No Match Count",
+            "type": "integer"
+          },
+          "required_unknown_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Required Unknown Count",
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PrivateKnowledgeCandidateSourceResponse"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "contract_label",
+          "coverage_label",
+          "benefit_kind",
+          "aggregate_result",
+          "required_match_count",
+          "required_unknown_count",
+          "required_no_match_count",
+          "questions",
+          "hold_reason_codes",
+          "source",
+          "calculation",
+          "claim_start_ready"
+        ],
+        "title": "PrivateKnowledgeCandidateResponse",
+        "type": "object"
+      },
+      "PrivateKnowledgeCandidateSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "PRIVATE_KNOWLEDGE_COVERAGE",
+            "title": "Kind",
+            "type": "string"
+          },
+          "knowledge_contract_id": {
+            "format": "uuid",
+            "title": "Knowledge Contract Id",
+            "type": "string"
+          },
+          "knowledge_coverage_id": {
+            "format": "uuid",
+            "title": "Knowledge Coverage Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "knowledge_contract_id",
+          "knowledge_coverage_id"
+        ],
+        "title": "PrivateKnowledgeCandidateSourceResponse",
+        "type": "object"
+      },
+      "PrivateKnowledgeCitationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_purpose": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Evidence Purpose",
+            "type": "string"
+          },
+          "fact_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fact Id"
+          },
+          "kind": {
+            "const": "PRIVATE_KNOWLEDGE_CITATION",
+            "title": "Kind",
+            "type": "string"
+          },
+          "page_end": {
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "source_clause_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Clause Id"
+          },
+          "terms_section_id": {
+            "format": "uuid",
+            "title": "Terms Section Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "terms_section_id",
+          "source_clause_id",
+          "fact_id",
+          "evidence_purpose",
+          "page_start",
+          "page_end"
+        ],
+        "title": "PrivateKnowledgeCitationResponse",
+        "type": "object"
+      },
       "PrivateKnowledgeErrorResponse": {
         "additionalProperties": false,
         "properties": {
@@ -5758,14 +7102,143 @@
         "title": "PrivateKnowledgeErrorResponse",
         "type": "object"
       },
+      "PrivateKnowledgeEvaluationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/PrivateKnowledgeCitationResponse"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Citations",
+            "type": "array"
+          },
+          "conflicting_fields": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Conflicting Fields",
+            "type": "array"
+          },
+          "engine_version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+            "title": "Engine Version",
+            "type": "string"
+          },
+          "evaluation_id": {
+            "format": "uuid",
+            "title": "Evaluation Id",
+            "type": "string"
+          },
+          "fact_paths": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Fact Paths",
+            "type": "array"
+          },
+          "missing_fields": {
+            "items": {
+              "maxLength": 160,
+              "minLength": 3,
+              "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Missing Fields",
+            "type": "array"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "required": {
+            "title": "Required",
+            "type": "boolean"
+          },
+          "result": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Result",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/PrivateKnowledgeEvaluationSourceResponse"
+          }
+        },
+        "required": [
+          "evaluation_id",
+          "result",
+          "required",
+          "reason_code",
+          "fact_paths",
+          "missing_fields",
+          "conflicting_fields",
+          "engine_version",
+          "source",
+          "citations"
+        ],
+        "title": "PrivateKnowledgeEvaluationResponse",
+        "type": "object"
+      },
+      "PrivateKnowledgeEvaluationSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "PRIVATE_KNOWLEDGE_COVERAGE",
+            "title": "Kind",
+            "type": "string"
+          },
+          "knowledge_coverage_id": {
+            "format": "uuid",
+            "title": "Knowledge Coverage Id",
+            "type": "string"
+          },
+          "rule_publication_id": {
+            "format": "uuid",
+            "title": "Rule Publication Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "knowledge_coverage_id",
+          "rule_publication_id"
+        ],
+        "title": "PrivateKnowledgeEvaluationSourceResponse",
+        "type": "object"
+      },
       "QuestionResponse": {
         "additionalProperties": false,
         "properties": {
           "field_path": {
+            "maxLength": 160,
+            "minLength": 3,
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,63}\\.[A-Za-z][A-Za-z0-9_]{0,95}$",
             "title": "Field Path",
             "type": "string"
           },
           "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
             "title": "Reason Code",
             "type": "string"
           }
@@ -6487,7 +7960,7 @@
             "title": "Renewable"
           },
           "source_evidence": {
-            "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
+            "$ref": "#/components/schemas/EvidenceResponse"
           },
           "status": {
             "enum": [
@@ -6503,7 +7976,7 @@
           "status_evidence": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/familycare_api__policies__schemas__EvidenceResponse"
+                "$ref": "#/components/schemas/EvidenceResponse"
               },
               {
                 "type": "null"
@@ -6583,88 +8056,15 @@
         "type": "object"
       },
       "RuleEvaluationResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "conflicting_fields": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Conflicting Fields",
-            "type": "array"
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/OperationalEvaluationResponse"
           },
-          "engine_version": {
-            "title": "Engine Version",
-            "type": "string"
-          },
-          "evaluation_id": {
-            "format": "uuid",
-            "title": "Evaluation Id",
-            "type": "string"
-          },
-          "evidence": {
-            "items": {
-              "$ref": "#/components/schemas/familycare_api__decisions__schemas__EvidenceResponse"
-            },
-            "title": "Evidence",
-            "type": "array"
-          },
-          "fact_paths": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Fact Paths",
-            "type": "array"
-          },
-          "missing_fields": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Missing Fields",
-            "type": "array"
-          },
-          "reason_code": {
-            "title": "Reason Code",
-            "type": "string"
-          },
-          "required": {
-            "title": "Required",
-            "type": "boolean"
-          },
-          "result": {
-            "enum": [
-              "MATCH",
-              "NO_MATCH",
-              "UNKNOWN"
-            ],
-            "title": "Result",
-            "type": "string"
-          },
-          "rider_id": {
-            "format": "uuid",
-            "title": "Rider Id",
-            "type": "string"
-          },
-          "rule_version_id": {
-            "format": "uuid",
-            "title": "Rule Version Id",
-            "type": "string"
+          {
+            "$ref": "#/components/schemas/PrivateKnowledgeEvaluationResponse"
           }
-        },
-        "required": [
-          "evaluation_id",
-          "rider_id",
-          "rule_version_id",
-          "result",
-          "required",
-          "reason_code",
-          "fact_paths",
-          "missing_fields",
-          "conflicting_fields",
-          "evidence",
-          "engine_version"
         ],
-        "title": "RuleEvaluationResponse",
-        "type": "object"
+        "title": "RuleEvaluationResponse"
       },
       "RuleSnapshotResponse": {
         "additionalProperties": false,
@@ -6743,7 +8143,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"
@@ -6807,7 +8214,14 @@
               "treatment_kind",
               "admission",
               "outpatient",
-              "pharmacy"
+              "pharmacy",
+              "diagnosis_code",
+              "procedure_code",
+              "anatomical_site_code",
+              "pathology_code",
+              "treatment_setting",
+              "treatment_context",
+              "separately_billed_treatment"
             ],
             "title": "Field Id",
             "type": "string"
@@ -7261,84 +8675,6 @@
         "title": "ExpectedVersionRequest",
         "type": "object"
       },
-      "familycare_api__decisions__schemas__EvidenceResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "bbox": {
-            "anyOf": [
-              {
-                "maxItems": 4,
-                "minItems": 4,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bbox"
-          },
-          "content_sha256": {
-            "pattern": "^[0-9a-f]{64}$",
-            "title": "Content Sha256",
-            "type": "string"
-          },
-          "document_version_id": {
-            "format": "uuid",
-            "title": "Document Version Id",
-            "type": "string"
-          },
-          "evidence_id": {
-            "format": "uuid",
-            "title": "Evidence Id",
-            "type": "string"
-          },
-          "extraction_id": {
-            "format": "uuid",
-            "title": "Extraction Id",
-            "type": "string"
-          },
-          "physical_page": {
-            "maximum": 500.0,
-            "minimum": 1.0,
-            "title": "Physical Page",
-            "type": "integer"
-          },
-          "review_state": {
-            "enum": [
-              "AI_VERIFIED",
-              "NEEDS_REVIEW",
-              "USER_CONFIRMED"
-            ],
-            "title": "Review State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "evidence_id",
-          "document_version_id",
-          "extraction_id",
-          "content_sha256",
-          "physical_page",
-          "bbox",
-          "review_state"
-        ],
-        "title": "EvidenceResponse",
-        "type": "object"
-      },
       "familycare_api__decisions__schemas__ExpectedVersionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -7352,77 +8688,6 @@
           "expected_version"
         ],
         "title": "ExpectedVersionRequest",
-        "type": "object"
-      },
-      "familycare_api__policies__schemas__EvidenceResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "bbox": {
-            "anyOf": [
-              {
-                "maxItems": 4,
-                "minItems": 4,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bbox"
-          },
-          "content_sha256": {
-            "pattern": "^[0-9a-f]{64}$",
-            "title": "Content Sha256",
-            "type": "string"
-          },
-          "document_version_id": {
-            "format": "uuid",
-            "title": "Document Version Id",
-            "type": "string"
-          },
-          "evidence_id": {
-            "format": "uuid",
-            "title": "Evidence Id",
-            "type": "string"
-          },
-          "physical_page": {
-            "minimum": 1.0,
-            "title": "Physical Page",
-            "type": "integer"
-          },
-          "review_state": {
-            "enum": [
-              "AI_VERIFIED",
-              "NEEDS_REVIEW",
-              "USER_CONFIRMED"
-            ],
-            "title": "Review State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "evidence_id",
-          "document_version_id",
-          "content_sha256",
-          "physical_page",
-          "bbox",
-          "review_state"
-        ],
-        "title": "EvidenceResponse",
         "type": "object"
       },
       "familycare_api__policies__schemas__ExpectedVersionRequest": {
@@ -13287,6 +14552,23 @@
                 }
               ],
               "title": "After"
+            }
+          },
+          {
+            "in": "query",
+            "name": "family_member_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Family Member Id"
             }
           }
         ],

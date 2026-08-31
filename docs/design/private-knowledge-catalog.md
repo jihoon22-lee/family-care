@@ -240,6 +240,28 @@ fact-citation의 동일 section 폐쇄성, mapping과 선택 문서 alias 관계
 `SHARE` 잠금으로 고정해 dry-run 재대사와 삽입 사이의 혼합 snapshot을 막는다. commit 결과가 불명확하면
 자동 재적용하지 않고 package digest로 DB를 조회해 결과를 판별한다.
 
+## Current-enrollment confirmation boundary
+
+증권에서 계약과 가입 담보를 확인하는 것과, 해당 계약이 특정 기준일에 현재 가입 상태라는
+확인을 분리한다. 증권 근거의 `certificate_decision`과 담보별
+`enrollment_decision`은 분석 snapshot에 보존하고, 사용자의 현재 가입 확인은
+append-only confirmation으로 보존한다.
+
+confirmation은 current knowledge contract, HouseholdSpace, 확인한 AppUser, 확인 시각,
+`status_as_of`, 상태, 3값 판정, bounded reason code와 authority를 가진다. 새 확인은 이전
+이력을 수정하지 않고 기존 current confirmation을 비현재로 전환한 뒤 새 행을 추가한다.
+`active` 표시는 current confirmation의 decision이 `MATCH`일 때만 사용한다. confirmation이
+없으면 증권 계약 자체는 가입 계약으로 표시할 수 있지만 현재 상태는 `unknown`으로 남긴다.
+
+가족 연결도 같은 권위 경계를 따른다. package family alias와 실제 FamilyMember는 정확한
+binding manifest 또는 인증된 사용자의 명시적 확인으로만 연결한다. 한 snapshot의 모든
+subject binding과 current-status confirmation은 snapshot digest와 DB baseline을 포함한
+read-only dry-run을 먼저 통과하고 한 transaction으로 적용한다.
+
+이 confirmation은 약관 판본 적용성, 개별 보험금 자격, 지급액을 확인하지 않는다. 따라서
+현재 가입 확인이 있어도 edition applicability나 coverage-to-section mapping의
+`UNKNOWN`을 `MATCH`로 바꾸지 않는다.
+
 ## Compatibility and query boundary
 
 첫 단계의 API는 `GET /api/v1/private-knowledge/current`, `GET
@@ -262,6 +284,33 @@ household 안에서 bounded citation과 함께 제공하며 `Cache-Control: no-s
 - current status는 정확한 상태 Evidence가 없으면 `unknown`
 
 Knowledge snapshot 자체는 분석·대사·검토의 권위 기록이며 보험금 지급 결정이 아니다.
+
+Web의 가족별 전체 가입 보험 목록은 current knowledge snapshot과 명시적으로 binding된
+FamilyMember를 기준으로 조회한다. 기존 policy/rider 원장과 document inventory는 내부
+Evidence 연결과 청구 실행 준비가 끝난 일부 계약을 다루는 운영 subset이다. 두 projection의
+건수가 같다는 가정을 하지 않으며, 운영 subset을 전체 가입 보험 수로 표시하지 않는다.
+가족별 필터에는 앱의 다른 가족 API와 동일한 opaque `family_member_id`만 노출하며,
+실제 이름·생년월일·외부 Drive ID·package alias는 binding 식별자로 사용하거나 응답하지 않는다.
+
+## Verified publication and event decision boundary
+
+catalog import의 모든 semantic fact는 계속 `executable=false`다. 실행 권위는 exact current snapshot에
+묶인 별도 `private-knowledge-rule-publication.sol-v1` package에만 있다. package는 모든 coverage의
+`PUBLISHED | BLOCKED | NOT_APPLICABLE` disposition, 사건일 status interval, allowlisted rule와
+calculation document, exact section/clause/fact/page citation을 포함한다. dry-run은 snapshot digest,
+confirmation, disposition closure, citation lineage와 count를 검증하며 apply는 append-only current
+publication을 만든다. 같은 package의 재적용은 `NO_OP`이고 과거 package 재활성화는 차단한다.
+
+event analysis는 operational 원장과 publication-backed private catalog를 독립 평가해 v2 응답에서만
+합친다. private candidate/evaluation/calculation은 별도 immutable table에 저장되며 다른 household의
+행이나 운영 Rider ID로 바뀌지 않는다. catalog coverage count는 전체 가입 지식 범위,
+published/blocked count는 실행 준비 범위를 뜻한다. 고정형 conditional subtotal과 실손 unresolved
+summary는 분리하고 모든 evaluation은 exact private citation을 가져야 한다.
+
+합성 PostgreSQL acceptance는 package apply -> exact subject/current confirmation -> publication apply ->
+event create/update -> combined analyze -> immutable reload를 통과한다. 두 fixed 담보 및 네 fixed 담보와
+별도 indemnity `UNKNOWN`, idempotent apply, cross-household 0행을 검증했다. 이는 실제 보호 package나
+실제 보험금 결과 acceptance를 대신하지 않는다.
 
 ## CLI boundary
 

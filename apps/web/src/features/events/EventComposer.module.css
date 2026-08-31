@@ -247,6 +247,16 @@
   list-style: none;
 }
 
+.factAdd {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: rgb(36 107 254 / 4%);
+}
+
 .factCard,
 .questionItem,
 .receiptItem,
@@ -332,6 +342,10 @@
   }
 
   .dateGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .factAdd {
     grid-template-columns: 1fr;
   }
 

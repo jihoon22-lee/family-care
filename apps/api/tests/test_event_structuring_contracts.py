@@ -109,6 +109,13 @@ def test_event_structuring_schema_is_recursive_strict_and_bounded() -> None:
         "admission",
         "outpatient",
         "pharmacy",
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+        "separately_billed_treatment",
     ]
     assert definitions["FactSource"]["enum"] == ["user", "ai", "system"]
     assert definitions["FactState"]["enum"] == [

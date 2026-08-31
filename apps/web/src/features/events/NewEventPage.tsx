@@ -83,10 +83,14 @@ function updateInput(event: MedicalEvent, draft: EventDraftView) {
     expected_version: event.version,
     mode: draft.mode,
     situation: draft.situation,
-    structured_facts: draft.facts.map((fact) => ({
-      field_id: fact.field_id,
-      value: fact.value,
-    })),
+    ...(draft.facts.length > 0
+      ? {
+          structured_facts: draft.facts.map((fact) => ({
+            field_id: fact.field_id,
+            value: fact.value,
+          })),
+        }
+      : {}),
     visit_date: draft.visit_date,
   };
 }

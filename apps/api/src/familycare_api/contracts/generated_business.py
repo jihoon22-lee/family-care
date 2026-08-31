@@ -283,21 +283,35 @@ class KnowledgeContractDetailResponse(TypedDict):
 
 class KnowledgeContractListItemResponse(TypedDict):
     certificate_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    contract_document_completeness: Literal[
+        "CERTIFICATE_AND_TERMS",
+        "CERTIFICATE_ONLY",
+        "CERTIFICATE_REVIEW_REQUIRED_AND_TERMS",
+        "UNVERIFIED",
+    ]
     contract_end: str | None
     contract_start: str | None
     coverage_count: int
     current_status: Literal["active", "inactive", "lapsed", "terminated", "unknown"]
+    current_status_as_of: str | None
+    current_status_authority: Literal["USER_CONFIRMED_CURRENT_ENROLLMENT"] | None
+    current_status_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
     document_identity_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
     edition_applicability_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
     enrollment_match_count: int
     enrollment_no_match_count: int
     enrollment_unknown_count: int
     family_alias: str
+    family_member_id: str | None
     id: str
     insurer_display: str
     product_display: str
+    semantic_fact_count: int
+    semantic_section_count: int
+    subject_binding_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
     subject_id: str
     terms_overall_decision: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    terms_source_count: int
 
 
 class KnowledgeCoverageMappingResponse(TypedDict):

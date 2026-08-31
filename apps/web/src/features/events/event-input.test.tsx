@@ -117,6 +117,114 @@ describe("hybrid medical event input", () => {
     );
   });
 
+  it("reaches analysis after saving an event with no structured facts", async () => {
+    const user = userEvent.setup();
+    const baseEvent = {
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000202",
+      id: "00000000-0000-4000-8000-000000000201",
+      mode: "post_treatment",
+      optional_questions: [],
+      situation: "Synthetic post-treatment situation",
+      structured_facts: [],
+      visit_date: null,
+    };
+    let analyzeRequests = 0;
+    let updateBody: Record<string, unknown> | undefined;
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        if (
+          url.pathname === "/api/v1/medical-events" &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({ ...baseEvent, version: 1 }, 201);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "PATCH"
+        ) {
+          updateBody = JSON.parse(String(init.body)) as Record<string, unknown>;
+          if ("structured_facts" in updateBody) {
+            return jsonResponse(
+              { error_code: "VALIDATION_ERROR", message: "invalid update" },
+              422,
+            );
+          }
+          return jsonResponse({ ...baseEvent, version: 2 });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/analyze` &&
+          init?.method === "POST"
+        ) {
+          analyzeRequests += 1;
+          return jsonResponse(
+            { error_code: "ANALYSIS_UNAVAILABLE", message: "unavailable" },
+            503,
+          );
+        }
+        return jsonResponse(
+          { error_code: "NOT_FOUND", message: "not found" },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    window.history.replaceState({}, "", "/app/events/new?mode=post_treatment");
+
+    render(<NewEventPage memberId={baseEvent.family_member_id} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      baseEvent.situation,
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    await user.click(await screen.findByRole("button", { name: "결과 확인" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "결과를 확인하지 못했습니다",
+    );
+    expect(updateBody).not.toHaveProperty("structured_facts");
+    expect(analyzeRequests).toBe(1);
+  });
+
+  it("clears a stale success message when a later save fails", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi
+      .fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("synthetic failure"));
+
+    render(<EventComposer memberId="synthetic-member-a" onSubmit={onSubmit} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      "Synthetic post-treatment situation",
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    expect(
+      await screen.findByText(
+        "현재 입력을 저장했습니다. 추가 확인 질문은 선택 사항입니다.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "현재 상황을 저장하지 못했습니다",
+    );
+    expect(
+      screen.queryByText(
+        "현재 입력을 저장했습니다. 추가 확인 질문은 선택 사항입니다.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps the manual editor mounted when optional structuring fails", async () => {
     const user = userEvent.setup();
     const baseEvent = {
@@ -332,6 +440,76 @@ describe("hybrid medical event input", () => {
         state: "confirmed",
       }),
     ]);
+  });
+
+  it("can add and user-confirm every extended v2 fact field", async () => {
+    const user = userEvent.setup();
+    let currentFacts: EventFactView[] = [];
+
+    function FactHarness() {
+      const [facts, setFacts] = useState<EventFactView[]>([]);
+      return (
+        <StructuredFactEditor
+          facts={facts}
+          onChange={(nextFacts) => {
+            currentFacts = nextFacts;
+            setFacts(nextFacts);
+          }}
+        />
+      );
+    }
+
+    render(<FactHarness />);
+    const fields = [
+      ["diagnosis_code", "진단 코드", "sample-diagnosis-code"],
+      ["procedure_code", "처치·수술 코드", "sample-procedure-code"],
+      ["anatomical_site_code", "신체 부위 코드", "sample-site-code"],
+      ["pathology_code", "병리 코드", "sample-pathology-code"],
+      ["treatment_setting", "치료 환경", "sample-setting"],
+      ["treatment_context", "치료 맥락", "sample-context"],
+    ] as const;
+
+    for (const [fieldId, label, value] of fields) {
+      await user.selectOptions(
+        screen.getByRole("combobox", { name: "직접 추가할 정보" }),
+        fieldId,
+      );
+      await user.click(screen.getByRole("button", { name: "정보 추가" }));
+      await user.type(screen.getByRole("textbox", { name: label }), value);
+    }
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "직접 추가할 정보" }),
+      "separately_billed_treatment",
+    );
+    await user.click(screen.getByRole("button", { name: "정보 추가" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "별도 결제 치료 여부" }),
+      "true",
+    );
+
+    expect(currentFacts).toHaveLength(7);
+    expect(currentFacts).toEqual(
+      expect.arrayContaining(
+        fields.map(([fieldId, , value]) =>
+          expect.objectContaining({
+            field_id: fieldId,
+            source: "user",
+            state: "confirmed",
+            value,
+          }),
+        ),
+      ),
+    );
+    expect(currentFacts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field_id: "separately_billed_treatment",
+          source: "user",
+          state: "confirmed",
+          value: true,
+        }),
+      ]),
+    );
   });
 
   it("blocks a negative, exponent, or currency-mismatched receipt line", async () => {

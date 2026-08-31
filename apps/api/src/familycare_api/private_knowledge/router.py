@@ -64,9 +64,14 @@ def list_current_private_knowledge_contracts(
     service: ServiceDependency,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     after: UUID | None = None,
+    family_member_id: UUID | None = None,
 ) -> KnowledgeContractPageResponse:
     response.headers["Cache-Control"] = "no-store"
-    return service.list_contracts(limit=limit, after=after)
+    return service.list_contracts(
+        limit=limit,
+        after=after,
+        family_member_id=family_member_id,
+    )
 
 
 @router.get(

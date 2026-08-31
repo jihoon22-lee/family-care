@@ -1,7 +1,10 @@
 import type {
   BenefitCalculationsResponse,
   CoverageDecisionResponse,
+  OperationalCandidateResponse,
 } from "../../api/generated";
+import { AnalysisCompleteness } from "./AnalysisCompleteness";
+import { BenefitSummaries } from "./BenefitSummaries";
 import { CalculationDetails } from "./CalculationDetails";
 import {
   PartialResultBanner,
@@ -9,6 +12,7 @@ import {
   partialReasonCodes,
 } from "./PartialResultBanner";
 import { ResultGroup } from "./ResultGroup";
+import { RelatedClauseRecommendations } from "./RelatedClauseRecommendations";
 import { StaleResultBanner } from "./StaleResultBanner";
 import styles from "./Results.module.css";
 
@@ -38,16 +42,19 @@ export function ActionFirstResult({
   const calculationValues = calculations?.calculations ?? [];
   const claimStartEnabled = !result.stale;
   const firstReviewCandidate = result.candidates.find(
-    (candidate) => candidate.aggregate_result === "MATCH",
+    (candidate): candidate is OperationalCandidateResponse =>
+      candidate.source.kind === "OPERATIONAL_RIDER" &&
+      candidate.aggregate_result === "MATCH" &&
+      candidate.claim_start_ready,
   );
   const firstReviewLabel = firstReviewCandidate
-    ? (riderLabels?.[firstReviewCandidate.rider_id] ??
-      firstReviewCandidate.rider_label ??
-      `가입 담보 ${String.fromCharCode(65 + result.candidates.indexOf(firstReviewCandidate))}`)
+    ? (riderLabels?.[firstReviewCandidate.source.rider_id] ??
+      firstReviewCandidate.coverage_label)
     : null;
 
   return (
     <div className={styles.resultBody}>
+      <AnalysisCompleteness result={result} />
       <section
         className={styles.actionSection}
         aria-labelledby="result-actions"
@@ -64,7 +71,7 @@ export function ActionFirstResult({
           <button
             type="button"
             className={styles.primaryButton}
-            onClick={() => onStartClaim(firstReviewCandidate.rider_id)}
+            onClick={() => onStartClaim(firstReviewCandidate.source.rider_id)}
           >
             {firstReviewLabel} 청구 검토 시작
           </button>
@@ -80,6 +87,8 @@ export function ActionFirstResult({
         />
         <StaleResultBanner result={result} onReanalyze={onReanalyze} />
       </section>
+
+      <BenefitSummaries result={result} />
 
       <ResultGroup
         calculations={calculationValues}
@@ -152,6 +161,7 @@ export function ActionFirstResult({
           </div>
         </section>
       ) : null}
+      <RelatedClauseRecommendations assistance={result.assistance} />
     </div>
   );
 }

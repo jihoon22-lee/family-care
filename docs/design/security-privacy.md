@@ -150,6 +150,9 @@ npm, Python, Docker, GitHub Action 의존성이 빌드와 공개 이미지를 �
 - 브라우저 cache와 로그를 데이터 저장소로 간주해 같은 최소화 원칙을 적용합니다.
 - GitHub workflow는 외부 PR 코드와 write 권한·secret이 만나는 경로를 만들지 않습니다.
 - v0.1 OpenAI 연동은 Worker만 수행하며 PDF binary·image·password·path 없이 필요한 page text와 Evidence token만 전송합니다.
+- 사건 관련 약관 assistance는 local member-scoped 검색 후보를 먼저 만들고, Worker가 bounded
+  situation/fact와 최대 12개 tokenized excerpt만 event digest당 한 번 전송할 수 있습니다. key 미설정과
+  provider 실패는 외부 호출·retry 없이 같은 DB 추천을 유지하며 verified 판정과 금액을 바꾸지 않습니다.
 - Google Drive API와 자동 동기화는 v0.1에 추가하지 않습니다.
 
 ## v0.1 pragmatic runtime baseline
@@ -240,6 +243,8 @@ Tailscale device access는 Secure cookie를 사용할 수 있는 HTTPS gateway�
 10. PDF password, archive master key, OpenAI key는 DB, persisted job, log, Git, image에 없습니다.
 11. `AI_VERIFIED` 또는 `USER_CONFIRMED`가 아닌 rule은 실행되지 않습니다.
 12. LUKS, BitLocker와 WSL swap 변경은 v0.1 완료 조건이 아닙니다.
+13. assistance prompt/response, 검색어, provider request ID와 model label은 판정 근거나 일반 로그가
+    아니며 browser에는 사용자용 mode와 bounded 추천만 노출합니다.
 
 ## Failure behavior
 
@@ -261,6 +266,7 @@ Tailscale device access는 Secure cookie를 사용할 수 있는 HTTPS gateway�
 - family-scoped batch password one-time reuse, failed-file re-prompt, memory-only lifecycle
 - managed archive encrypt/decrypt, tamper, wrong/missing key와 wrapped-key rotation
 - OpenAI payload allowlist와 key/prompt/response log 부재
+- assistance missing-key 0-call, 최대 1회 fake provider, zero-retry fallback과 decision 불변
 - local two-admin session, CSRF, object scope
 - Tailscale/Compose single gateway와 internal service exposure
 - selective OCR image cleanup

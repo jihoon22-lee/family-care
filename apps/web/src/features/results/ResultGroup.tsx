@@ -4,9 +4,15 @@ import type {
   RuleEvaluationResponse,
 } from "../../api/generated";
 import { ClaimCandidateCard } from "./ClaimCandidateCard";
+import { evaluationMatchesCandidate } from "./resultPresentation";
 import styles from "./Results.module.css";
 
 export type ResultGroupKey = "claim_review" | "needs_information" | "mismatch";
+
+const CATALOG_ONLY_HOLD_REASONS = new Set([
+  "COVERAGE_PUBLICATION_ADVISORY",
+  "COVERAGE_PUBLICATION_BLOCKED",
+]);
 
 export interface ResultGroupProps {
   claimStartEnabled: boolean;
@@ -33,59 +39,31 @@ export function groupTitle(group: ResultGroupKey): string {
   return "조건 불일치";
 }
 
-export function resultCopy(
-  result: ClaimCandidateResponse["aggregate_result"],
-): string {
-  if (result === "MATCH")
-    return "확인된 조건이 규칙과 일치합니다. 청구 검토를 시작할 수 있습니다.";
-  if (result === "NO_MATCH") return "확인된 조건과 규칙이 일치하지 않습니다.";
-  return "필요한 정보를 더 확인해야 합니다.";
-}
-
-export function resultTechnicalLabel(
-  result: ClaimCandidateResponse["aggregate_result"],
-): string {
-  return result;
-}
-
-export function fieldLabel(path: string): string {
-  const labels: Record<string, string> = {
-    "MedicalEvent.event_date": "사건일",
-    "MedicalEvent.visit_date": "방문일",
-    "MedicalEvent.classification": "상황 분류",
-    "MedicalEvent.admission_days": "입원 일수",
-    "PolicyContract.contract_start": "계약 시작일",
-    "PolicyContract.contract_end": "계약 종료일",
-    "Rider.status": "담보 상태",
-    "ClaimHistory.counted_occurrence": "기존 청구 이력",
-  };
-  if (labels[path]) return labels[path];
-  const short = path.includes(".")
-    ? path.slice(path.lastIndexOf(".") + 1)
-    : path;
-  return short.replaceAll("_", " ");
-}
-
-export function reasonLabel(reasonCode: string): string {
-  const labels: Record<string, string> = {
-    EVIDENCE_UNAVAILABLE: "근거 문서를 확인할 수 없어 결과를 보류합니다.",
-    RULE_READER_UNAVAILABLE:
-      "보장 규칙을 불러오지 못했습니다. 다시 확인해 주세요.",
-    RULE_RUNTIME_INVALID:
-      "보장 규칙을 실행하지 못했습니다. 다시 확인해 주세요.",
-    NO_EXECUTABLE_DECISION_RULE:
-      "판정에 사용할 규칙이 없어 추가 확인이 필요합니다.",
-    NO_EXECUTABLE_RULE: "확인 가능한 규칙이 없어 추가 확인이 필요합니다.",
-    CONFLICTING_POLICY_SNAPSHOT:
-      "계약 상태가 서로 달라 추가 확인이 필요합니다.",
-  };
-  return labels[reasonCode] ?? "판정에 필요한 조건을 확인할 수 없습니다.";
-}
-
 function emptyCopy(group: ResultGroupKey): string {
   if (group === "claim_review") return "현재 청구 검토 대상이 없습니다.";
   if (group === "needs_information") return "추가로 확인할 항목이 없습니다.";
   return "조건이 맞지 않는 항목이 없습니다.";
+}
+
+function isCatalogOnlyCandidate(
+  candidate: ClaimCandidateResponse,
+  evaluations: RuleEvaluationResponse[],
+): boolean {
+  if (
+    candidate.source.kind !== "PRIVATE_KNOWLEDGE_COVERAGE" ||
+    !candidate.hold_reason_codes.some((code) =>
+      CATALOG_ONLY_HOLD_REASONS.has(code),
+    )
+  ) {
+    return false;
+  }
+  const hasEvaluation = evaluations.some((evaluation) =>
+    evaluationMatchesCandidate(candidate, evaluation),
+  );
+  const hasCalculatedConditionalAmount =
+    candidate.calculation?.status === "CALCULATED" &&
+    candidate.calculation.conditional_amount != null;
+  return !hasEvaluation && !hasCalculatedConditionalAmount;
 }
 
 export function ResultGroup({
@@ -99,7 +77,9 @@ export function ResultGroup({
   riderLabels,
 }: ResultGroupProps) {
   const grouped = candidates.filter(
-    (candidate) => resultGroupFor(candidate.aggregate_result) === group,
+    (candidate) =>
+      resultGroupFor(candidate.aggregate_result) === group &&
+      !isCatalogOnlyCandidate(candidate, evaluations),
   );
 
   return (
@@ -123,13 +103,15 @@ export function ResultGroup({
                     (calculation) =>
                       calculation.claim_candidate_id === candidate.candidate_id,
                   )}
-                  evaluations={evaluations.filter(
-                    (evaluation) => evaluation.rider_id === candidate.rider_id,
+                  evaluations={evaluations.filter((evaluation) =>
+                    evaluationMatchesCandidate(candidate, evaluation),
                   )}
                   label={
-                    riderLabels?.[candidate.rider_id] ??
-                    candidate.rider_label ??
-                    `가입 담보 ${String.fromCharCode(65 + candidateIndex)}`
+                    candidate.source.kind === "OPERATIONAL_RIDER"
+                      ? (riderLabels?.[candidate.source.rider_id] ??
+                        candidate.coverage_label ??
+                        `가입 담보 ${String.fromCharCode(65 + candidateIndex)}`)
+                      : candidate.coverage_label
                   }
                   onOpenEvidence={onOpenEvidence}
                   onStartClaim={onStartClaim}

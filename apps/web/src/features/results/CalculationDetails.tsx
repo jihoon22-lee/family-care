@@ -1,5 +1,5 @@
 import type { BenefitCalculationResponse } from "../../api/generated";
-import { reasonLabel } from "./ResultGroup";
+import { reasonLabel } from "./resultPresentation";
 import styles from "./Results.module.css";
 
 function moneyLabel(
