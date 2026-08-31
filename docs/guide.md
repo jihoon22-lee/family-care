@@ -525,7 +525,18 @@ Foundation 릴리스 workflow는 `vMAJOR.MINOR.PATCH` 태그에서 다음 이미
 
 릴리스 workflow는 정확한 `vMAJOR.MINOR.PATCH`만 허용하며, 게시 전 문서·민감정보 경계·계약·Web·Python·PostgreSQL·세 컨테이너 빌드를 다시 검증합니다. 성공 시 각 이미지에는 버전 태그와 12자리 commit SHA 태그가 생성되며 `latest`는 생성하지 않습니다.
 
-현재 CD 범위는 GHCR 게시까지입니다. Cloud Run 설정, 운영 비밀값, 운영 데이터베이스 마이그레이션, 실제 트래픽 전환은 포함하지 않습니다.
+세 이미지가 게시되면 version 태그와 commit SHA 태그의 OCI digest를 이미지별로 비교합니다. 세 쌍이 모두 일치하고 서로 다른 이미지가 digest를 공유하지 않을 때만 최종 GitHub Release 작업이 진행됩니다. 이 작업은 같은 검증을 한 번 더 수행해 mode `0600`의 공개 가능한 JSON 증거를 만들고, 태그 checkout의 `CHANGELOG.md`에서 해당 버전 섹션을 정확히 추출합니다.
+
+공개 Release 본문은 다음 순서를 사용합니다.
+
+1. CHANGELOG 해당 버전의 `Added`·`Changed`·`Deprecated`·`Removed`·`Fixed`·`Security` 중 존재하는 분류와 항목
+2. 전체 commit SHA와 GitHub Actions 실행 URL
+3. Web/API/Worker의 immutable `sha256` digest reference
+4. GHCR 게시와 운영 배포·실제 보험 문서 검증을 구분하는 경계
+
+본문은 `scripts/release_notes.py`가 새 mode `0600` Markdown 파일에 만들고 GitHub CLI의 `--notes-file`로만 전달합니다. 기존 Release가 있으면 같은 생성물로 수정하고, 없으면 원격 태그를 확인한 뒤 생성합니다. CHANGELOG 버전 누락·중복, 빈 분류, 허용되지 않은 분류, digest 불일치, 문자 그대로의 `\n`이 하나라도 있으면 공개하지 않습니다.
+
+현재 CD 범위는 GHCR 이미지와 그 검증 증거를 담은 GitHub Release 게시까지입니다. Cloud Run 설정, 운영 비밀값, 운영 데이터베이스 마이그레이션, 실제 트래픽 전환은 포함하지 않습니다.
 
 ## Troubleshooting
 

@@ -1,11 +1,14 @@
 import json
+import stat
 from collections.abc import Mapping
 from email.message import Message
+from pathlib import Path
 from urllib.error import HTTPError
 from urllib.request import Request
 
 import pytest
 
+from scripts import verify_release_images
 from scripts.release_audit import OCI_ACCEPT, verify_image_digests
 from scripts.verify_release_images import RegistryHttpClient, SameHostRedirectHandler
 
@@ -217,3 +220,146 @@ def test_registry_client_rejects_unapproved_token_realm() -> None:
             "https://ghcr.io/v2/synthetic-owner/synthetic-repo-web/manifests/0.1.0",
             {"Accept": OCI_ACCEPT},
         )
+
+
+class _SyntheticRegistryClient:
+    def __init__(self, http_get=_success_get) -> None:  # type: ignore[no-untyped-def]
+        self.get = http_get
+
+
+def _main_arguments(output: Path) -> list[str]:
+    return [
+        "--registry",
+        "ghcr.io",
+        "--repository",
+        "synthetic-owner/synthetic-repo",
+        "--version",
+        VERSION,
+        "--commit-sha",
+        COMMIT_SHA,
+        "--evidence-output",
+        str(output),
+    ]
+
+
+def test_cli_writes_exact_mode_0600_image_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = tmp_path / "release-image-evidence.json"
+    monkeypatch.setattr(
+        verify_release_images,
+        "RegistryHttpClient",
+        lambda **_kwargs: _SyntheticRegistryClient(),
+    )
+
+    result = verify_release_images.main(_main_arguments(output))
+
+    assert result == 0
+    assert capsys.readouterr().out == "release-images-ok: web api worker\n"
+    assert stat.S_IMODE(output.stat().st_mode) == 0o600
+    assert json.loads(output.read_text(encoding="utf-8")) == {
+        "schema_version": "release-image-evidence.v1",
+        "version": VERSION,
+        "commit_sha": COMMIT_SHA,
+        "images": [
+            {"component": component, "digest": DIGESTS[component]}
+            for component in ("web", "api", "worker")
+        ],
+    }
+
+
+def test_cli_does_not_write_evidence_when_digest_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "release-image-evidence.json"
+
+    def mismatch_get(
+        url: str,
+        headers: Mapping[str, str],
+    ) -> tuple[int, Mapping[str, str], bytes]:
+        status, response_headers, body = _success_get(url, headers)
+        if "-repo-api/" in url and url.endswith(f"sha-{COMMIT_SHA[:12]}"):
+            response_headers = {"Docker-Content-Digest": "sha256:" + "4" * 64}
+        return status, response_headers, body
+
+    monkeypatch.setattr(
+        verify_release_images,
+        "RegistryHttpClient",
+        lambda **_kwargs: _SyntheticRegistryClient(mismatch_get),
+    )
+
+    result = verify_release_images.main(_main_arguments(output))
+
+    assert result == 1
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("output_name", ["relative.json", "existing.json"])
+def test_cli_rejects_relative_or_existing_evidence_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    output_name: str,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    output = Path(output_name) if output_name == "relative.json" else tmp_path / output_name
+    if output.is_absolute():
+        output.write_text("keep me", encoding="utf-8")
+    monkeypatch.setattr(
+        verify_release_images,
+        "RegistryHttpClient",
+        lambda **_kwargs: _SyntheticRegistryClient(),
+    )
+
+    result = verify_release_images.main(_main_arguments(output))
+
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "evidence-output:" in captured.out
+    if output.is_absolute():
+        assert output.read_text(encoding="utf-8") == "keep me"
+    else:
+        assert not output.exists()
+
+
+def test_cli_rejects_repository_contained_evidence_output(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    output = verify_release_images.ROOT / ".synthetic-release-image-evidence.json"
+    assert not output.exists()
+    monkeypatch.setattr(
+        verify_release_images,
+        "RegistryHttpClient",
+        lambda **_kwargs: _SyntheticRegistryClient(),
+    )
+
+    result = verify_release_images.main(_main_arguments(output))
+
+    assert result == 1
+    assert "evidence-output: output path must be outside the repository" in capsys.readouterr().out
+    assert not output.exists()
+
+
+def test_cli_rejects_symlink_evidence_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "target.json"
+    output = tmp_path / "release-image-evidence.json"
+    target.write_text("keep me", encoding="utf-8")
+    output.symlink_to(target)
+    monkeypatch.setattr(
+        verify_release_images,
+        "RegistryHttpClient",
+        lambda **_kwargs: _SyntheticRegistryClient(),
+    )
+
+    result = verify_release_images.main(_main_arguments(output))
+
+    assert result == 1
+    assert output.is_symlink()
+    assert target.read_text(encoding="utf-8") == "keep me"

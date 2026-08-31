@@ -49,6 +49,14 @@ class ReleaseFinding:
     detail: str
 
 
+@dataclass(frozen=True)
+class ReleaseImageDigest:
+    """One verified immutable digest for a release image component."""
+
+    component: str
+    digest: str
+
+
 def _python_version(path: Path) -> str:
     module = ast.parse(path.read_text(encoding="utf-8"))
     versions = [
@@ -133,14 +141,14 @@ def _header(headers: Mapping[str, str], name: str) -> str | None:
     return None
 
 
-def verify_image_digests(
+def inspect_image_digests(
     registry: str,
     repository: str,
     version: str,
     commit_sha: str,
     http_get: ManifestGet,
-) -> tuple[ReleaseFinding, ...]:
-    """Compare OCI manifest digests for version and short commit tags."""
+) -> tuple[tuple[ReleaseImageDigest, ...], tuple[ReleaseFinding, ...]]:
+    """Return ordered immutable digests only when all release tags verify."""
 
     input_findings: list[ReleaseFinding] = []
     if registry != "ghcr.io":
@@ -154,7 +162,7 @@ def verify_image_digests(
     if COMMIT_PATTERN.fullmatch(commit_sha) is None:
         input_findings.append(ReleaseFinding("invalid-commit", "commit is not immutable"))
     if input_findings:
-        return tuple(input_findings)
+        return (), tuple(input_findings)
 
     tags = (("version", version), ("commit", f"sha-{commit_sha[:12]}"))
     findings: list[ReleaseFinding] = []
@@ -195,7 +203,34 @@ def verify_image_digests(
         version_digests
     ):
         findings.append(ReleaseFinding("cross-image-digest", "release images share a manifest"))
-    return tuple(findings)
+    if findings:
+        return (), tuple(findings)
+    return (
+        tuple(
+            ReleaseImageDigest(component=component, digest=digests[(component, "version")])
+            for component in IMAGE_COMPONENTS
+        ),
+        (),
+    )
+
+
+def verify_image_digests(
+    registry: str,
+    repository: str,
+    version: str,
+    commit_sha: str,
+    http_get: ManifestGet,
+) -> tuple[ReleaseFinding, ...]:
+    """Compatibility wrapper returning only OCI verification findings."""
+
+    _digests, findings = inspect_image_digests(
+        registry,
+        repository,
+        version,
+        commit_sha,
+        http_get,
+    )
+    return findings
 
 
 def _parser() -> argparse.ArgumentParser:

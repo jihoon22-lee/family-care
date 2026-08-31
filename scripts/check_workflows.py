@@ -249,6 +249,12 @@ def validate_release(content: str) -> list[str]:
         "release identity audit": "scripts/release_audit.py",
         "release Compose smoke": "scripts/release_compose_smoke.py",
         "published digest verification": "scripts/verify_release_images.py",
+        "changelog release renderer": "scripts/release_notes.py",
+        "verified image evidence output": '--evidence-output "$RELEASE_EVIDENCE"',
+        "release notes file publication": '--notes-file "$RELEASE_NOTES"',
+        "GitHub Release creation": "gh release create",
+        "GitHub Release update": "gh release edit",
+        "exact release cleanup": "scripts/cleanup_release_files.py",
         "dedicated test database URL": "FAMILYCARE_TEST_DATABASE_URL:",
         "destructive test opt-in": 'FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"',
     }
@@ -258,12 +264,21 @@ def validate_release(content: str) -> list[str]:
 
     publish = _job_block(content, "publish")
     verify = _job_block(content, "verify-publication")
+    release = _job_block(content, "publish-release")
     validate = _job_block(content, "validate-foundation")
 
     if content.count("packages: write") != 1 or "packages: write" not in publish:
         errors.append(f"{relative}: packages: write must appear only on the publish job")
-    if content.count("packages: read") != 1 or "packages: read" not in verify:
+    if (
+        content.count("packages: read") != 2
+        or "packages: read" not in verify
+        or "packages: read" not in release
+    ):
+        errors.append(f"{relative}: packages: read must be limited to image verification jobs")
+    if "packages: read" not in verify:
         errors.append(f"{relative}: verification job requires packages: read")
+    if content.count("contents: write") != 1 or "contents: write" not in release:
+        errors.append(f"{relative}: contents: write must appear only on the GitHub Release job")
     if _release_matrix(publish) != EXPECTED_RELEASE_MATRIX:
         errors.append(f"{relative}: exact release image matrix is required")
     if content.count("latest=false") != 1 or re.search(
@@ -277,10 +292,43 @@ def validate_release(content: str) -> list[str]:
         errors.append(f"{relative}: release Compose smoke must run before publication")
     if "scripts/verify_release_images.py" not in verify:
         errors.append(f"{relative}: published digest verification is required")
+    if (
+        "scripts/verify_release_images.py" not in release
+        or '--evidence-output "$RELEASE_EVIDENCE"' not in release
+    ):
+        errors.append(f"{relative}: GitHub Release requires fresh verified image evidence")
+    if "scripts/release_notes.py" not in release:
+        errors.append(f"{relative}: GitHub Release must render the CHANGELOG section")
     if not re.search(r"(?m)^    needs: publish\s*$", verify):
         errors.append(f"{relative}: verification must depend on publish")
+    if not re.search(r"(?m)^    needs: verify-publication\s*$", release):
+        errors.append(f"{relative}: GitHub Release must depend on image verification")
     if "GHCR_TOKEN: ${{ github.token }}" not in verify:
         errors.append(f"{relative}: verification must use the automatic GitHub token")
+    if "GHCR_TOKEN: ${{ github.token }}" not in release:
+        errors.append(f"{relative}: GitHub Release verification must use the automatic token")
+    if "GH_TOKEN: ${{ github.token }}" not in release:
+        errors.append(f"{relative}: GitHub Release publication must use the automatic token")
+    if "          persist-credentials: false" not in release:
+        errors.append(f"{relative}: GitHub Release checkout must not persist credentials")
+    if (
+        release.count('--notes-file "$RELEASE_NOTES"') != 2
+        or "gh release create" not in release
+        or "gh release edit" not in release
+    ):
+        errors.append(f"{relative}: release publication must use --notes-file")
+    if re.search(r"(?<![A-Za-z-])--notes(?:[ =])", release):
+        errors.append(f"{relative}: inline release notes are forbidden")
+    if "      if: always()" not in release:
+        errors.append(f"{relative}: release temporary files require always cleanup")
+    if (
+        release.count("scripts/cleanup_release_files.py") != 1
+        or release.count('--path "$RELEASE_EVIDENCE"') != 1
+        or release.count('--path "$RELEASE_NOTES"') != 1
+        or re.search(r"(?m)^\s+(?:find|rm)\s+", release)
+        or "|| true" in release
+    ):
+        errors.append(f"{relative}: release temporary files require exact no-follow cleanup")
     if "pull_request" in content or re.search(r"(?m)^\s+branches:\s*$", content):
         errors.append(f"{relative}: release must trigger only from semantic-version tags")
     if re.search(r"\$\{\{\s*secrets\.", content):
@@ -291,12 +339,23 @@ def validate_release(content: str) -> list[str]:
     validate_index = content.find("  validate-foundation:")
     publish_index = content.find("  publish:")
     verify_index = content.find("  verify-publication:")
+    release_index = content.find("  publish-release:")
     login_index = content.find("docker/login-action@")
     push_index = content.find("push: true")
-    if min(validate_index, publish_index, verify_index, login_index, push_index) < 0 or not (
-        validate_index < publish_index < login_index < push_index < verify_index
+    if min(
+        validate_index,
+        publish_index,
+        verify_index,
+        release_index,
+        login_index,
+        push_index,
+    ) < 0 or not (
+        validate_index < publish_index < login_index < push_index < verify_index < release_index
     ):
-        errors.append(f"{relative}: validation, publish, and verification jobs must remain ordered")
+        errors.append(
+            f"{relative}: validation, image publish, verification, and release jobs must "
+            "remain ordered"
+        )
     return errors
 
 
