@@ -2,3 +2,19 @@ title = "FamilyCare public repository secret scanning"
 
 [extend]
 useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+    [[rules.allowlists]]
+    description = "Exact synthetic private-knowledge fixture identifiers"
+    condition = "AND"
+    regexTarget = "line"
+    paths = [
+      '''^apps/api/tests/test_private_knowledge_confirmations\.py$''',
+      '''^apps/api/tests/test_private_knowledge_decision_repository\.py$''',
+      '''^apps/api/tests/private_knowledge_publication_fixtures\.py$''',
+    ]
+    regexes = [
+      '''["']synthetic-(?:subject-001|citation-001|normalizer-001|calculation-001|rule-citation-001|calculation-citation-001)["']''',
+    ]
