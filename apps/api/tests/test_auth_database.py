@@ -25,28 +25,29 @@ def _database_url() -> str:
     return value.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
+def _reset_identity_database(connection: psycopg.Connection[object]) -> None:
+    connection.execute("TRUNCATE TABLE household_spaces RESTART IDENTITY CASCADE")
+
+
 @pytest.fixture
 def identity_database() -> Iterator[str]:
     database_url = _database_url()
     with psycopg.connect(database_url) as connection:
-        connection.execute("TRUNCATE app_sessions, app_users CASCADE")
-        connection.execute("DELETE FROM household_spaces")
+        _reset_identity_database(connection)
         connection.execute(
             "INSERT INTO household_spaces (id, space_key, display_name) VALUES (%s, %s, %s)",
             (HOUSEHOLD_ID, "synthetic-household", "Synthetic Household"),
         )
     yield database_url
     with psycopg.connect(database_url) as connection:
-        connection.execute("TRUNCATE app_sessions, app_users CASCADE")
-        connection.execute("DELETE FROM household_spaces")
+        _reset_identity_database(connection)
 
 
 @pytest.mark.integration
 def test_first_run_initialization_creates_login_ready_household() -> None:
     database_url = _database_url()
     with psycopg.connect(database_url) as connection:
-        connection.execute("TRUNCATE app_sessions, app_users CASCADE")
-        connection.execute("DELETE FROM household_spaces")
+        _reset_identity_database(connection)
 
     try:
         admin = AdminProvisioner(database_url).initialize(
@@ -100,8 +101,7 @@ def test_first_run_initialization_creates_login_ready_household() -> None:
         assert login.status_code == 200
     finally:
         with psycopg.connect(database_url) as connection:
-            connection.execute("TRUNCATE app_sessions, app_users CASCADE")
-            connection.execute("DELETE FROM household_spaces")
+            _reset_identity_database(connection)
 
 
 @pytest.mark.integration
