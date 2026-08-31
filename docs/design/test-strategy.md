@@ -1,6 +1,6 @@
 # Test strategy
 
-- 상태: Phase 0~8 구현 및 v0.1/v0.2 합성 release 검증 반영
+- 상태: Phase 0~8, private knowledge/advisory 구현과 `v0.1.0`~`v0.3.2` release 검증 반영
 - 원칙: 최신 실행 증거 없는 완료 주장을 하지 않음
 
 ## Scope
@@ -30,8 +30,11 @@
 - 비밀 검사는 실제 credential이 아닌 분할·조립한 합성 문자열을 사용합니다.
 - Phase 1 테스트는 reportlab으로 만든 wholly synthetic PDF를 checkout 밖 임시 root에 복사하고, `FAMILYCARE_DOCUMENT_ROOT`를 그 임시 root로만 설정합니다.
 - Phase 1 구현과 CI는 실제 PDF와 private external root를 열지 않습니다.
-- v0.1 공개 CI는 OpenAI를 호출하지 않고 처음부터 만든 request/response fixture로 structurer·verifier 계약을 검증합니다.
-- 실제 PDF와 OpenAI acceptance는 사용자가 지정한 저장소 밖 source와 local key로만 실행하고 CI 결과와 분리합니다.
+- 공개 CI는 OpenAI를 호출하지 않고 처음부터 만든 request/response fixture로
+  structurer·verifier·assistance 계약을 검증합니다.
+- 보호된 package/runtime acceptance는 사용자 승인 범위의 저장소 밖 source와 local key로만
+  실행하고 CI 결과와 분리합니다. 실제 document-structuring provider acceptance는 아직 별도
+  미검증 경계입니다.
 
 ## Test layers
 
@@ -45,6 +48,11 @@
 - 계약 생성 drift
 
 빠르고 외부 서비스가 없어야 하므로 모든 PR의 첫 관문으로 실행합니다.
+
+`scripts/check_workflows.py`는 저장소 정책을 검사하지만 GitHub expression context의 모든 위치
+규칙을 대신하지 않습니다. 2026-09-01 `actionlint`가 release workflow의 job-level
+`runner.temp` 오류를 찾았으므로 해당 결함이 고쳐질 때까지 release workflow 변경과 새 tag 전에는
+`actionlint -oneline .github/workflows/*.yml`도 실행합니다.
 
 ### Unit tests
 
@@ -149,6 +157,7 @@ WSL의 측정된 메모리 압력에서는 Vitest worker 시작 timeout을 피�
 | Migrations | `uv run alembic ... upgrade head` | 합성 로컬 DB |
 | Containers | 개별 `docker compose ... build` | 없음 |
 | Workflows | `uv run python scripts/check_workflows.py` (Dependabot ignore policy 포함) | 없음 |
+| Release parser preflight | `actionlint -oneline .github/workflows/*.yml` | 없음 |
 
 Phase 1 feature branches also run:
 
@@ -230,7 +239,7 @@ CI 성공은 실제 보험 판정 정확도나 운영 배포를 증명하지 않
 - 인증과 객체 scope
 - 비공개 실제 자료 수동 검수 보고
 
-## v0.1 acceptance matrix
+## Current acceptance matrix
 
 - synthetic contract-to-claim E2E without external secrets
 - encrypted synthetic batch with one-time password and partial failure
@@ -239,8 +248,11 @@ CI 성공은 실제 보험 판정 정확도나 운영 배포를 증명하지 않
 - fixed and partial indemnity decision tables
 - two-admin login, CSRF, session expiry and device revoke
 - Docker Compose migration, restart, DB/archive persistence and job recovery
-- Tailscale address and real mobile PWA as separately reported manual checks
-- user-approved real PDF review without committing source, extraction or result
+- Tailscale HTTPS and authenticated local-browser checks, reported separately from CI
+- protected package validation, restored-database/apply checks and catalog/result acceptance without
+  committing source, extraction or result
+- Windows browser, mobile PWA, other-device and full disaster-recovery checks explicitly left
+  unverified until executed
 
 ## Tests
 
@@ -248,4 +260,6 @@ CI 성공은 실제 보험 판정 정확도나 운영 배포를 증명하지 않
 
 ## Deferred decisions
 
-검색 품질 지표 목표, 실제 자료 acceptance 표본 수, 운영 부하 목표는 각 feature plan에서 합성 baseline을 먼저 정합니다. Google Drive, public deployment와 multi-provider AI acceptance는 v0.1 이후로 남깁니다.
+검색 품질 지표 목표, 남은 실제 형식 acceptance와 운영 부하 목표는 각 feature plan에서 합성
+baseline을 먼저 정합니다. Google Drive, public deployment, multi-provider AI, Windows/mobile과
+전체 재해 복구는 별도 승인 전까지 남깁니다.

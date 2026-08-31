@@ -1,6 +1,7 @@
 # Policy ledger design
 
-- 상태: 원장·candidate review 구현 및 합성 PostgreSQL 검증 완료, 실제 자료 acceptance 별도 진행
+- 상태: 원장·candidate review 구현·합성 검증 완료; 보호된 전체 catalog는 별도 immutable
+  private-knowledge layer로 수용, 남은 암호/legacy source와 최신 계약 상태는 `UNKNOWN` 유지
 - 적용 단계: Phase 2
 - 선행 조건: Phase 1 DocumentVersion과 Evidence contract
 

@@ -4,7 +4,8 @@
 - 작성일: 2026-08-23
 - 적용 범위: 공개 저장소의 문서, 개발환경, 최소 실행 골격, CI, GHCR 릴리스
 - 완료 근거: PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, PR 및 post-merge CI 일곱 required job 성공
-- 후속 상태: Phase 1 완료, Phase 2~8 기준은 `docs/design/v0.1-product.md`
+- 후속 상태: Phase 1~8과 private knowledge/advisory 결과 구현, 공개 버전 `v0.3.2`;
+  현재 전달 상태는 `docs/plan/000-project-roadmap.md`
 
 ## 1. 목적
 
@@ -276,6 +277,12 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
   전달하며 인라인 문자열과 문자 그대로의 `\n`을 허용하지 않는다.
 - 실패한 구성 요소가 있으면 어떤 이미지도 완료된 릴리스로 선언하지 않는다.
 - GHCR 게시 성공은 운영 배포 성공을 의미하지 않는다.
+
+구현 기록은 PR #49에 merge되었고 기존 `v0.1.0`~`v0.3.2` Release 본문도 같은 형식으로
+정비되었다. 다만 2026-09-01 현재 `publish-release` job-level `env`의 `runner.temp` 참조를
+GitHub가 허용하지 않아 workflow 파일이 파싱되지 않는다. 다음 tag 전에 별도 fix PR로 step-level
+환경 변수나 허용된 context로 옮기고, `actionlint`, 저장소 workflow 검사, GitHub tag run을 모두
+확인해야 한다. 이 알려진 결함은 이미 성공한 다섯 tag workflow와 공개 artifact를 변경하지 않는다.
 
 ### 12.3 Protect main ruleset
 

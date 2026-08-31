@@ -4,6 +4,14 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+### Changed
+
+- Project status, architecture, security, roadmap, design, release, and contract documentation now
+  reflects the v0.3.2 product baseline, protected acceptance boundaries, and remaining platform and
+  recovery gaps.
+- Development tooling now uses Ruff 0.16.5, `@testing-library/react` 16.3.3, and
+  `@vitejs/plugin-react` 6.1.1 with synchronized Python and pnpm lockfiles.
+
 ### Fixed
 
 - GitHub Release notes now derive their change list from the matching CHANGELOG section, append

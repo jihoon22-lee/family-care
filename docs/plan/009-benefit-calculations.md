@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #20 merged as `4867bd37ff11232c4fecf89e668fc644a913e1c3`; later
+advisory estimates remain explicitly conditional and keep indemnity separate.
+
 **Goal:** Add deterministic Decimal-based fixed-benefit and indemnity calculation traces, manual receipt-line inputs, partial results, and multiple-indemnity handling without presenting an unsupported amount as guaranteed payment.
 
 **Architecture:** Extend the existing `familycare_api.decisions` boundary after the tri-state engine. Persist only normalized manual `ReceiptLine` values and immutable `BenefitCalculation`/step rows; call pure fixed/indemnity calculators from the service; and attach results to `ClaimCandidate` without changing rule evaluation semantics. The calculation layer reads verified executable rules and confirmed facts, uses `Decimal`, and explicitly separates confirmed, additional, and excluded amounts. It never sums independent indemnity contracts when allocation is unknown.

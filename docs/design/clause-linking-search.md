@@ -1,6 +1,7 @@
 # Clause linking and search design
 
-- 상태: v0.1 대화 설계 승인 완료, Phase 4 Clause search와 Phase 5 Rider-Clause/CoverageRule review boundary 구현 기록
+- 상태: PR #17~#18 Clause search와 Rider-Clause/CoverageRule review boundary 구현·합성 검증
+  완료; private knowledge publication은 별도 append-only 경계 사용
 - 적용 단계: Phase 4–5
 - 선행 조건: Phase 2 candidate review (main PR #16 merged), verified PolicyContract and Rider ledger
 

@@ -1,6 +1,7 @@
 # Data model design
 
-- 상태: native ingestion·업무 모델·encrypted import는 main 반영, selective OCR 확장은 feature branch 구현·문서화, private runtime 검토 대기
+- 상태: native/encrypted ingestion, selective OCR, 업무 모델, private knowledge publication과
+  advisory disposition까지 `main` 반영; migration head `0023_advisory_disposition`
 - 적용 단계: Phase 1 ingestion 모델과 Phase 2~8 업무 모델
 - 상위 기준: `docs/design/v0.1-product.md`
 

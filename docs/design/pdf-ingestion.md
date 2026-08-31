@@ -1,6 +1,7 @@
 # PDF ingestion design
 
-- 상태: Phase 1 native ingestion 완료 기준, encrypted import·selective OCR·private import reliability 구현 문서화, private runtime acceptance 대기
+- 상태: Phase 1 native ingestion, encrypted import·selective OCR·private import reliability 구현;
+  protected runtime/catalog acceptance 완료, 남은 암호·legacy source를 포함한 전체 format 검증 대기
 - 적용 단계: Phase 1 baseline과 Phase 8 encrypted private import
 - 구현 계획: `docs/plan/002-synthetic-pdf-ingestion.md`
 - 기술 결정: `docs/adr/0006-permissive-pdf-parser-stack.md`
@@ -13,14 +14,17 @@ Phase 1 asynchronous API는 local synthetic-only 개발 기능이며 production-
 
 ## v0.1 encrypted batch extension
 
-`docs/design/private-data-runtime.md`가 Phase 8의 권위 있는 runtime 설계입니다. v0.1 extension은 다음 경계를 사용합니다. 아래 private runtime과 실제 자료·Compose·mobile·Windows·Tailscale·provider·OCR acceptance는 아직 완료로 주장하지 않습니다.
+`docs/design/private-data-runtime.md`가 Phase 8의 권위 있는 runtime 설계입니다. 다음 extension
+경계는 구현되었고 WSL Compose/Tailscale와 보호된 catalog/result acceptance도 완료했습니다.
+다만 모든 실제 PDF/OCR 형식, 실제 document-structuring provider, Windows/mobile과 다른 기기
+acceptance는 완료로 주장하지 않습니다.
 
 1. 한 batch는 정확히 한 `FamilyMember`를 가집니다.
 2. private batch source는 `FAMILYCARE_IMPORT_ROOT` 아래에서 API와 Worker가 read-only로 공유합니다. API는 opaque source ID를 목록화·해석하고 Worker는 descriptor-safe intake를 수행합니다. Phase 1의 `FAMILYCARE_DOCUMENT_ROOT`는 checkout 밖 합성 PDF만을 위한 synthetic-only root입니다.
 3. password는 인증된 request에서 Worker의 batch runtime으로 one-time Unix-domain socket을 통해 전달하고 process memory에서 동일 batch file에 재사용합니다. socket server는 Worker가 소유하고 API는 client로 연결합니다.
 4. password는 Phase 1 `AnalysisJob` payload를 확장해 저장하지 않으며 DB·log·response에 없습니다.
 5. password failure file만 새 password를 요청하고 다른 성공 file은 계속 처리합니다. Worker 반복은 expiry를 정리하고 replacement는 이전 값을 폐기합니다. 실행 중인 batch의 cancellation·stop·lease loss는 해당 batch registry scope를 폐기하고 secret-server identity를 deactivate하며, Worker shutdown은 전체 registry를 폐기합니다. 정상 성공한 sibling을 위해 scope를 바로 폐기하지 않습니다. Worker가 아직 잡지 않은 대기 batch의 API 취소는 최대 5분 expiry에서 정리됩니다.
-6. native extraction 뒤 품질 규칙이 `OCR_REQUIRED`로 분류한 page만 local Korean/English OCR을 실행합니다. 이 branch에는 separate OCR layer persistence, descriptor-derived PDFium renderer, direct no-shell Tesseract adapter, cleanup, and synthetic acceptance가 있습니다. 실제 private PDF와 private runtime acceptance는 아직 pending입니다.
+6. native extraction 뒤 품질 규칙이 `OCR_REQUIRED`로 분류한 page만 local Korean/English OCR을 실행합니다. Separate OCR layer persistence, descriptor-derived PDFium renderer, direct no-shell Tesseract adapter, cleanup, synthetic acceptance와 protected runtime boundary가 구현되어 있습니다. 남은 암호·legacy source를 포함한 전체 실제 형식 검증은 pending입니다.
 7. 성공 source는 document별 data key로 암호화해 Worker 전용 managed archive에 저장하고 key는 Worker 전용 runtime master key로 wrap합니다. master-key file은 저장소 밖 absolute regular file, 정확히 32 bytes, mode `0600`입니다.
 8. 정상 import 뒤 재분석은 archive를 사용하므로 원본 password를 매번 요구하지 않습니다.
 9. import source와 Google Drive 원본은 수정·삭제하지 않으며 Drive API를 호출하지 않습니다.
@@ -138,7 +142,7 @@ def parse_local_pdf(source_fd: int, settings_json: str) -> ExtractionResult: ...
 
 `settings_json`은 intake 이후 Worker가 만드는 내부 계약입니다. 허용 필드는 `document_version_id`, `content_sha256`, `extractor_config_hash`, `quality_rule_version`, `table_strategy`뿐이며 exact canonical JSON object로 검증합니다. source path, source key, password, document body는 이 경계를 통과하지 않습니다. 이 내부 계약은 API request나 DB에 저장되는 pre-intake AnalysisJob settings와 구분됩니다.
 
-child에는 CPU 90초, address space 1536 MiB, file size 64 MiB, open descriptors 64개의 OS resource limit을 적용하고, supervisor에는 120초 parent wall timeout을 적용합니다. Fork 후 parser를 호출하기 전에 source와 supervisor control pipe를 제외한 inherited application file·socket descriptor를 닫습니다. Child 결과는 JSON 값만 허용하고 canonical UTF-8 JSON으로 직렬화하며, parent는 64 MiB를 넘는 결과를 읽지 않습니다. 격리 경계를 넘어 임의 객체 생성을 허용하는 `pickle` 역직렬화는 사용하지 않습니다. OS-level egress enforcement는 production hardening 항목입니다. 승인된 runtime boundary가 마련되기 전에는 실제 private-data acceptance를 수행하지 않습니다. Windows descriptor passing과 `RLIMIT_*` 동작은 미검증입니다.
+child에는 CPU 90초, address space 1536 MiB, file size 64 MiB, open descriptors 64개의 OS resource limit을 적용하고, supervisor에는 120초 parent wall timeout을 적용합니다. Fork 후 parser를 호출하기 전에 source와 supervisor control pipe를 제외한 inherited application file·socket descriptor를 닫습니다. Child 결과는 JSON 값만 허용하고 canonical UTF-8 JSON으로 직렬화하며, parent는 64 MiB를 넘는 결과를 읽지 않습니다. 격리 경계를 넘어 임의 객체 생성을 허용하는 `pickle` 역직렬화는 사용하지 않습니다. OS-level egress enforcement는 future production hardening입니다. Private runtime boundary와 보호된 acceptance는 마련되었지만, 승인된 외부 source 범위에서만 실행하며 모든 실제 형식의 parser/OCR 검증으로 확대하지 않습니다. Windows descriptor passing과 `RLIMIT_*` 동작은 미검증입니다.
 
 ## Parser stack
 
@@ -309,10 +313,17 @@ v0.1 extension tests:
 - Intake opens the final source with descriptor-based no-follow semantics after component checks and never validates then reopens a path. Linux child receives an inherited or duplicated read-only descriptor, not a reopenable path.
 - 원본 root는 읽기 전용으로, work root는 작업별 mode `0700`으로 제공합니다.
 - Child applies `RLIMIT_FSIZE=64 MiB` in addition to CPU, address-space, and descriptor limits; Windows descriptor passing and `RLIMIT_*` behavior remain unverified.
-- OS egress enforcement는 production hardening이며, approved runtime boundary가 없으면 private-data acceptance를 수행하지 않습니다.
+- OS egress enforcement는 future production hardening입니다. 현재 private acceptance는 승인된 로컬
+  runtime과 지정된 외부 source 범위에만 한정합니다.
 - 로그는 request/job ID, error code, duration, attempt 같은 allowlist만 사용합니다.
 - 정적 코드 검사만 통과한 경우 malicious PDF 동적 공격 재현을 완료했다고 표현하지 않습니다.
 
 ## Deferred decisions
 
-Phase 1 native extraction remains complete and synthetic-only. The branch now implements and tests selective local OCR plus encrypted-batch OCR progress, but actual private PDFs, private Compose mounts, mobile, Windows, Tailscale, provider, and private OCR acceptance are still pending. The private runtime PR is the next gate before any real-data acceptance. This item follows `docs/design/private-data-runtime.md` and `docs/design/authentication.md`; OS-level egress enforcement, Google Drive automation, Windows descriptor behavior, and a public production sandbox remain separately deferred.
+Phase 1 native extraction remains complete and synthetic-only. Encrypted batch import, selective local
+OCR, private Compose/Tailscale and protected package/catalog acceptance are now implemented. This does
+not prove every actual PDF, encryption, font, table or OCR format: the remaining password/legacy sources,
+Windows descriptor behavior, Windows/mobile clients, OS-level egress enforcement, Google Drive
+automation, public production sandbox and full disaster recovery remain deferred. The authoritative
+runtime boundary is `docs/design/private-data-runtime.md` and authentication remains governed by
+`docs/design/authentication.md`.

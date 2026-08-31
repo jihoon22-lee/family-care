@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #22 merged as `a86a51d7ff3aa6f105239ffeb9f20f859b724143`; insurer
+submission and medical-file storage remain intentionally out of scope.
+
 **Goal:** Track insurer-specific claim preparation, manually recorded submission/payment outcomes, required-document checklist metadata, and future ClaimHistory without storing medical files or changing a historical result snapshot.
 
 **Architecture:** Add a scoped `familycare_api.claims` module with an explicit ClaimStatus state machine, immutable ClaimCase snapshot rows, checklist metadata, status-transition audit events, and a minimal ClaimHistory projection consumed by the decision engine. ClaimCase is created from a MedicalEvent/ClaimCandidate but never submits to an insurer. A later reanalysis creates a comparison/result version; it cannot rewrite the snapshot captured at claim creation.

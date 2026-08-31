@@ -1,6 +1,7 @@
 # AI document analysis design
 
-- 상태: 구현 및 합성 provider/PostgreSQL 검증 완료, 실제 provider·보험 자료 acceptance 미검증
+- 상태: 구현·합성 provider/PostgreSQL 및 provider-zero protected result fallback 검증 완료;
+  실제 document structuring provider·전체 보험 형식 acceptance 미검증
 - 적용 단계: Policy Ledger, Clause Linking, Coverage Rule, Event Structuring
 - 권위 경계: AI는 후보를 구조화·검증하지만 보험 자격과 금액을 직접 판정하지 않음
 

@@ -1,6 +1,8 @@
 # Private Knowledge Import Implementation Plan
 
-**Status:** Tasks 1–8 complete; integration is tracked by PR #39 with merge gated on required CI
+**Status:** Complete — PR #39 merged as `cf26c83f8cbc8ea24ae975783d2c83ce0eb0e4fc` after all
+required CI; protected validation, backup/restore rehearsal, atomic apply, idempotency and authenticated
+read acceptance completed outside Git. Publication and decision execution continue in PR #42.
 
 **Goal:** Import the externally reviewed insurance-analysis package into PostgreSQL as a lossless, immutable, household-scoped knowledge snapshot; make it safely queryable; and keep enrollment, terms applicability, semantic facts, and executable rules as separate authorities.
 

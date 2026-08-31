@@ -1,6 +1,7 @@
 # Advisory Coverage Calculation Design
 
-**Status:** Approved and amended by the user for fixed certificate estimates
+**Status:** Implemented in PR #42, hardened in PR #44/#47, and released through `v0.3.2`;
+conditional estimates remain non-authoritative by design.
 
 ## Goal
 

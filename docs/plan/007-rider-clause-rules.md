@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #18 merged as `399f120a45d7c17bf623fd1348d6af9e9b653bc1` with required CI.
+
 **Goal:** Connect verified subscribed Riders to applicable Terms Clauses and validate versioned, data-only CoverageRule candidates without executing arbitrary code or making a coverage decision.
 
 **Architecture:** Extend `familycare_api.clauses` with Rider-Clause link repositories, an allowlist DSL validator, and a transactional CoverageRule publisher. This plan consumes the policy ledger, candidate-review status, TermsEdition hierarchy, and Evidence lineage; it produces only executable rule versions marked `AI_VERIFIED` or `USER_CONFIRMED`. The deterministic evaluation of a rule against MedicalEvent facts belongs to `008-coverage-decision-engine.md`.

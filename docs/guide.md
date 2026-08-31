@@ -1,6 +1,10 @@
 # FamilyCare guide
 
-이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부 계산, Event/Result PWA와 수동 Claim workflow, 그리고 구현된 encrypted document batch·selective local OCR 계약까지 현재 개발환경의 경계를 설명합니다. 업무 API는 로컬 인증 session이 없으면 fail-closed이며, 합성 자료로 검증된 기능을 실제 보험 자료 분석 기능으로 과장하지 않습니다. 구현·검증에 실제 문서를 연결하지 않습니다.
+이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부
+계산, Event/Result PWA, 수동 Claim workflow, encrypted document batch·selective local OCR,
+private knowledge catalog/publication과 `v0.3.2` 결과 흐름까지 현재 개발환경의 경계를 설명합니다.
+업무 API는 로컬 인증 session이 없으면 fail-closed입니다. 공개 개발·CI에는 합성 자료만 사용하며,
+저장소 밖 보호된 acceptance와 아직 실행하지 않은 실제 문서·기기 검증을 구분합니다.
 
 ## Local development
 
@@ -331,7 +335,11 @@ POST /api/v1/auth/sessions/{session_id}/revoke
 
 Tailscale은 private network 접근 경로일 뿐 app login을 대체하지 않습니다. Tailscale에 연결된 기기도 FamilyCare 로그인과 유효한 session cookie, state-changing 요청의 CSRF 검사를 통과해야 합니다.
 
-이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS 브라우저 흐름으로 확인했습니다. Windows 실제 브라우저, 실제 모바일 PWA, 다른 실제 기기, 실제 private document acceptance는 아직 검증하지 않았습니다. PR #27과 #28의 merge 및 CI/post-merge 검증과 `v0.1.0`·`v0.2.0` GHCR 게시가 완료됐지만 운영 배포는 별도 단계로 남아 있습니다.
+이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS
+브라우저 흐름으로 확인했습니다. 보호된 catalog/result acceptance도 인증 session으로 수행했지만
+Windows 실제 브라우저, 모바일 PWA와 다른 실제 기기는 검증하지 않았습니다. `v0.1.0`부터
+`v0.3.2`까지 GHCR 게시와 GitHub Release는 완료됐으며, 이는 Cloud Run이나 공개 운영 배포가
+아닙니다.
 
 ### Use the local synthetic document-analysis API
 
@@ -382,7 +390,14 @@ native extraction 뒤에는 `OCR_REQUIRED`로 분류된 1-based page만 선택�
 
 각 page의 PNG는 recognition 직후 삭제되고 outer Worker workspace도 성공·실패·취소·timeout·shutdown 경로에서 삭제됩니다. batch status는 `ocr_state`, 0..500 `ocr_pages_processed`, 최대 8개의 unique warning codes만 projection하며 OCR text, coordinates, image path, filename, stderr는 노출하지 않습니다. 합성 테스트는 선택 page, provenance separation, cleanup, atomic rollback을 검증하고 Worker image smoke check는 `eng`/`kor` language availability를 요구하지만, 실제 private PDF acceptance를 대신하지 않습니다.
 
-encrypted batch와 selective OCR은 `main`에 병합되었습니다. private-runtime PR #27과 Tailscale inspection 보완 PR #28도 merge되었고, WSL Compose·Tailscale HTTPS·인증 브라우저 login/navigation/logout·synthetic OpenAI pipeline acceptance가 통과했습니다. `v0.1.0`과 `v0.2.0` GHCR 게시도 완료됐습니다. 실제 private data와 OCR, mobile, Windows, 다른 기기는 아직 pending입니다. 합성 테스트나 localhost HTTP를 해당 실제 환경 검증으로 대체하지 않습니다. 자세한 `v0.1.0` 상태는 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 기록합니다.
+encrypted batch와 selective OCR은 `main`에 병합되었습니다. private-runtime PR #27과 Tailscale
+inspection 보완 PR #28 이후 WSL Compose·Tailscale HTTPS·인증 브라우저
+login/navigation/logout·synthetic OpenAI pipeline acceptance가 통과했습니다. 후속 PR #39, #42,
+#47은 저장소 밖 보호 package의 validation, DB rehearsal/apply와 authenticated catalog/result
+acceptance를 추가했습니다. 모든 실제 문서 형식의 import/OCR, mobile, Windows, 다른 기기와 전체
+재해 복구는 여전히 pending입니다. 합성 테스트나 localhost HTTP를 해당 검증으로 대체하지
+않습니다. 자세한 초기 릴리스 경계는
+[`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 보존합니다.
 
 종료:
 
@@ -515,7 +530,8 @@ docker compose --env-file .env -f infra/compose/compose.yaml build worker
 
 ## Releases
 
-Foundation 릴리스 workflow는 `vMAJOR.MINOR.PATCH` 태그에서 다음 이미지를 GHCR에 게시합니다.
+릴리스 workflow는 `vMAJOR.MINOR.PATCH` 태그에서 다음 이미지를 GHCR에 게시하도록 설계되어
+있습니다.
 
 - `family-care-web`
 - `family-care-api`
@@ -537,6 +553,19 @@ Foundation 릴리스 workflow는 `vMAJOR.MINOR.PATCH` 태그에서 다음 이미
 본문은 `scripts/release_notes.py`가 새 mode `0600` Markdown 파일에 만들고 GitHub CLI의 `--notes-file`로만 전달합니다. 기존 Release가 있으면 같은 생성물로 수정하고, 없으면 원격 태그를 확인한 뒤 생성합니다. CHANGELOG 버전 누락·중복, 빈 분류, 허용되지 않은 분류, digest 불일치, 문자 그대로의 `\n`이 하나라도 있으면 공개하지 않습니다.
 
 현재 CD 범위는 GHCR 이미지와 그 검증 증거를 담은 GitHub Release 게시까지입니다. Cloud Run 설정, 운영 비밀값, 운영 데이터베이스 마이그레이션, 실제 트래픽 전환은 포함하지 않습니다.
+
+### Current release status
+
+- 공개 릴리스 `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.3.2`의 tag workflow와 세 image
+  digest 검증은 성공했습니다.
+- 다섯 GitHub Release 본문은 같은 `Changes`/`Release evidence`/`Privacy and deployment
+  boundary` 구조이며 실제 줄바꿈과 서로 다른 세 digest를 확인했습니다.
+- PR #49 이후 `main`의 release workflow는 job-level `env`에서 `${{ runner.temp }}`를
+  참조합니다. GitHub는 이 context를 해당 위치에서 허용하지 않아 일반 push마다 job 없는 실패
+  run을 만들고, 다음 tag workflow도 파싱할 수 없습니다.
+- 따라서 새 tag는 별도 fix PR, `actionlint`와 repository workflow 검사, PR/`main` CI, 실제 tag
+  workflow 성공을 차례로 확인하기 전까지 만들지 않습니다. 기존 tag, image와 Release는 이
+  알려진 결함으로 변경되지 않았습니다.
 
 ## Troubleshooting
 

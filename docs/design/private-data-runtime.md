@@ -1,6 +1,8 @@
 # Private data and local runtime design
 
-- 상태: encrypted import·selective OCR·private runtime은 구현·병합, offline backup-set packaging과 read-only archive audit 구현, 실제 snapshot/restore drill·자료 acceptance 일부 대기
+- 상태: encrypted import·selective OCR·private runtime, offline backup-set packaging과 read-only
+  archive audit 구현; 보호된 backup/restore·catalog/result acceptance 완료, 전체 disaster-recovery
+  drill·남은 문서 형식·Windows/mobile 검증 대기
 - 적용 단계: 암호 PDF batch, selective OCR, Phase 8 private-data acceptance
 - 실행 위치: 개인 PC의 WSL Docker Compose
 

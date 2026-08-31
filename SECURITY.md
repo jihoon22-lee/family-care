@@ -31,12 +31,19 @@ FamilyCare는 보험과 의료 관련 정보를 다루므로 일반적인 개인
 
 ## Supported versions
 
-현재는 출시 전 Foundation 단계이므로 `main`의 최신 커밋만 보안 수정 대상입니다. 정식 버전 지원 범위는 첫 릴리스 전에 CHANGELOG와 함께 갱신합니다.
+현재 공개 실행 기준은 `v0.3.2`이며 개발 기준은 `main`입니다. 프로젝트는 아직 `1.0.0` 이전이므로
+이전 `v0.1.x`~`v0.3.1`에 대한 별도 backport를 약속하지 않습니다. 보안 수정은 우선 `main`에
+적용하고 검증된 다음 릴리스에 포함하며, 공개된 특정 버전에 긴급 backport가 필요하면 해당
+보안 공지에서 범위를 명시합니다.
 
 ## Security boundaries
 
 - 공개 CI에는 운영 비밀값이 없습니다.
 - 실제 PDF와 파생 데이터는 저장소 밖에 있습니다.
-- AI와 Google Drive는 Foundation에 연결하지 않습니다.
+- Google Drive 자동 연동은 구현하지 않았습니다.
+- 선택적 OpenAI 호출은 Worker 경계에서만 수행하며 PDF binary·image·password·archive key·실제
+  path·Drive ID를 보내지 않습니다. 공개 CI는 provider를 호출하지 않습니다.
+- 보호된 private package, backup, report와 runtime acceptance artifact는 저장소 밖에 두며 공개
+  문서에는 식별값이나 실제 내용을 기록하지 않습니다.
 - GHCR 이미지 게시와 운영 배포는 별개의 완료 경계입니다.
 - 발견 사항은 source에서 sink까지 확인하고, 실행하지 않은 동적 검증을 통과로 보고하지 않습니다.

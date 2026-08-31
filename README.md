@@ -6,15 +6,39 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가 `main`에 순차 merge되었습니다.
+`main`은 공개 버전 `v0.3.2`의 제품 기능에 아직 릴리스되지 않은 유지보수 변경을 더한
+상태입니다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion부터 정책 원장·candidate
+review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result
+PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가
+구현되어 있습니다. 이후 immutable private knowledge snapshot, 전체 보험 catalog, publication별
+`PUBLISHED`/`ADVISORY`/`BLOCKED`/`NOT_APPLICABLE` 상태, 조건부 정액 추정, 관련 담보만 보여 주는
+결과와 선택적 one-call assistance까지 `main`에 합쳐졌습니다.
 
-Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. `v0.1.0`과 `v0.2.0` 컨테이너 릴리스는 게시되었으며 다음 릴리스 버전은 아직 정하지 않았습니다.
+Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는
+1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면
+`401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. Web/API/Worker의 현재 제품 버전은
+`0.3.2`이고, `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.3.2` 컨테이너와 GitHub Release가
+게시되어 있습니다. 다섯 Release 본문은 CHANGELOG 변경사항, workflow·commit 증거와 서로 다른
+Web/API/Worker digest를 같은 형식으로 기록합니다. 다음 릴리스 버전은 아직 정하지 않았습니다.
 
-WSL Docker Compose private runtime, Tailscale HTTPS, 인증된 브라우저 login·주요 화면 navigation·logout, synthetic OpenAI pipeline은 확인되었습니다. 실제 보험 PDF와 파생 데이터, Windows 브라우저, 모바일 PWA, 다른 실제 기기는 아직 검증하지 않았습니다. `v0.1.0`의 workflow·GHCR digest·GitHub Release 증거는 [`docs/release/v0.1.0-verification.md`](docs/release/v0.1.0-verification.md), `v0.2.0` 기록은 [`workthrough/2026-08-27-v0-2-0-release-metadata.md`](workthrough/2026-08-27-v0-2-0-release-metadata.md)에 있습니다.
+WSL Docker Compose private runtime, Tailscale HTTPS, 인증된 브라우저 login·navigation·logout,
+synthetic OpenAI pipeline을 확인했습니다. 저장소 밖의 보호된 package에 대해서는 validation,
+백업·복원 DB rehearsal, atomic apply와 인증된 catalog/result acceptance를 수행했으며 공개
+문서에는 그 경계만 기록합니다. 남은 암호·legacy-font source를 포함한 모든 실제 문서 형식의
+end-to-end import/OCR, Windows 브라우저, 모바일 PWA, 다른 실제 기기와 전체 재해 복구 훈련은
+검증하지 않았습니다. `v0.1.0`의 상세 증거는
+[`docs/release/v0.1.0-verification.md`](docs/release/v0.1.0-verification.md), `v0.2.0` 기록은
+[`workthrough/2026-08-27-v0-2-0-release-metadata.md`](workthrough/2026-08-27-v0-2-0-release-metadata.md)에
+보존합니다.
+
+2026-09-01 현재 일반 PR/`main` CI는 동작하지만, PR #49에서 추가된 release workflow의
+job-level `env`가 허용되지 않는 `runner.temp` context를 참조해 GitHub가 workflow 파일을
+파싱하지 못합니다. 이 문서 변경은 그 workflow를 수정하지 않으므로 다음 tag는 별도 fix PR과
+성공한 tag workflow 확인 전까지 만들지 않습니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
-v0.1에서 구현하지 않는 범위:
+현재 구현·운영 범위에서 제외하는 항목:
 
 - Google Drive 자동 연동
 - 보험사 직접 청구와 의료 문서 file 보관
@@ -22,7 +46,10 @@ v0.1에서 구현하지 않는 범위:
 - LUKS, BitLocker, WSL swap과 고정 크기 암호화 volume 변경
 - 다중 가정, 공개 가입, 계정 초대와 역할 관리
 
-v0.1은 기존 WSL의 `OPENAI_API_KEY`를 Worker에서 문서·입력 구조화와 별도 검증에 사용합니다. AI는 `MATCH / NO_MATCH / UNKNOWN`이나 보험금 예상액을 직접 결정하지 않으며, 약관 Evidence와 검증된 규칙을 결정론적 엔진이 평가합니다. 공개 CI는 외부 AI와 실제 secret을 사용하지 않습니다.
+선택적 OpenAI 연동은 기존 WSL의 `OPENAI_API_KEY`를 Worker에서만 사용합니다. 문서·입력
+구조화와 결과 설명을 보조하지만 `MATCH / NO_MATCH / UNKNOWN`이나 보험금 예상액을 직접
+결정하지 않습니다. 약관 Evidence와 검증된 규칙은 결정론적 엔진이 평가하며, 공개 CI는 외부
+AI와 실제 secret을 사용하지 않습니다.
 
 ## Privacy boundary
 
@@ -111,6 +138,10 @@ ENV_FILE=.env.private make down
 정확한 `vMAJOR.MINOR.PATCH` Git 태그를 push하면 CI와 동일한 전체 검증 후 Web, API, Worker 이미지를 GHCR에 게시합니다. Git 태그는 되돌리기 어려운 공개 릴리스 메타데이터이므로 생성과 push는 사용자의 명시적인 릴리스 결정이 있을 때만 수행합니다.
 
 게시 성공은 운영 배포 성공을 뜻하지 않습니다. 현재 자동화의 경계는 GHCR 이미지 게시까지이며, Cloud Run을 포함한 운영 배포는 모든 개발이 끝난 뒤 별도로 설계하고 승인합니다. `1.0.0` 이전에는 `latest` 태그를 만들지 않습니다.
+
+현재 공개 릴리스는 `v0.1.0`부터 `v0.3.2`까지입니다. 위 Current status의 release-workflow
+파싱 결함을 해결하고 GitHub가 tag-only workflow를 정상 인식하는 증거를 확보하기 전에는 새
+태그를 만들지 않습니다.
 
 ## License
 

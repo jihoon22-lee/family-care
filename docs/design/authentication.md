@@ -1,6 +1,7 @@
 # Local authentication design
 
-- 상태: v0.1 대화 설계 승인 완료, 문서 검토 대기
+- 상태: PR #23 구현·합성 검증 및 private Tailscale HTTPS browser acceptance 완료;
+  Windows/mobile·다른 실제 기기 검증 대기
 - 적용 단계: Phase 7
 - 배포 전제: 개인 WSL Docker Compose와 Tailscale private access
 

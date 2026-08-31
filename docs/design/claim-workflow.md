@@ -1,6 +1,7 @@
 # Claim workflow design
 
-- 상태: v0.1 구현 경계 반영, PR·통합 릴리스 검증 대기
+- 상태: PR #22 구현·합성 API/Web/PostgreSQL 검증 및 `v0.1.0` 통합 릴리스 완료;
+  보험사 직접 제출은 계속 범위 밖
 - 적용 단계: Phase 6
 - 선행 조건: versioned ClaimCandidate and Evidence result
 

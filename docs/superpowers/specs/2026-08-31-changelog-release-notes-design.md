@@ -1,6 +1,7 @@
 # Changelog-derived GitHub Release Notes Design
 
-- 상태: 승인됨
+- 상태: PR #49 구현·기존 `v0.1.0`~`v0.3.2` Release 정비 완료; 다음 tag 전
+  job-level `runner.temp` GitHub parser regression 수정 필요
 - 작성일: 2026-08-31
 - 적용 범위: `CHANGELOG.md`, 릴리스 노트 생성 도구, GHCR 태그 검증, GitHub Release 게시, 기존 v0.1.0~v0.3.2 본문 정비
 
@@ -8,14 +9,16 @@
 
 FamilyCare의 GitHub Release 본문을 버전마다 수기로 다시 쓰거나 GitHub 자동 PR 목록으로 생성하지 않는다. 태그에 포함된 `CHANGELOG.md`의 해당 버전 섹션을 사용자 영향 변경사항의 단일 원본으로 사용하고, 검증된 워크플로·커밋·컨테이너 digest 정보만 별도 증거 섹션으로 추가한다.
 
-## 확인된 문제
+## 구현 전 확인된 문제와 현재 결과
 
-- v0.1.0과 v0.2.0은 각각 다른 수기 양식을 사용한다.
-- v0.3.0과 v0.3.1은 `What's Changed` PR 목록만 사용해 Keep a Changelog 분류와 사용자 영향 설명을 잃었다.
-- v0.3.2는 실제 줄바꿈 대신 문자 그대로의 `\n`을 포함한다.
-- 현재 태그 workflow는 GHCR 이미지만 게시하고 GitHub Release를 만들거나 갱신하지 않는다.
-- 현재 release audit와 workflow policy는 CHANGELOG 버전 섹션과 공개 Release 본문을 검사하지 않는다.
-- v0.1.0 CHANGELOG는 구현 이력을 과도하게 나열하고 비어 있는 `Deprecated`·`Removed` 분류를 포함한다.
+- v0.1.0과 v0.2.0의 서로 다른 수기 양식, v0.3.0/v0.3.1의 PR 목록, v0.3.2의 문자
+  그대로인 `\n`은 PR #49 merge 뒤 공통 CHANGELOG-derived 본문으로 교체했다.
+- 다섯 Release를 API로 다시 읽어 `Changes`, `Release evidence`,
+  `Privacy and deployment boundary`, 실제 줄바꿈과 서로 다른 세 image digest를 확인했다.
+- renderer, digest evidence, release audit, workflow policy와 v0.1.0 CHANGELOG 정규화는 구현됐다.
+- 후속 검토에서 `publish-release` job-level `env`의 `${{ runner.temp }}` context가 GitHub에서
+  허용되지 않음을 확인했다. 이 parser regression은 기존 Release 정비 결과를 바꾸지 않지만 다음
+  tag 자동화를 차단하므로 별도 fix와 tag-run 검증이 필요하다.
 
 ## 결정
 

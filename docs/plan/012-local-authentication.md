@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #23 merged as `135a569d4360d0c6cd3e6bc7894d64394601fbf3`; private
+Tailscale HTTPS login/navigation/logout acceptance passed, while Windows/mobile remain unverified.
+
 **Goal:** Replace the unauthenticated private-use boundary with two equal local administrators, server-side sessions, CSRF protection, and safe administrative provisioning.
 
 **Architecture:** The API owns `AppUser`, `AppSession`, `HouseholdSpace` scope resolution, and the authentication routes. Passwords are verified with Argon2id, opaque cookies carry only a random session token, and PostgreSQL stores only hashes and lifecycle metadata. The Web app keeps no bearer or session token in persistent browser storage; all business routes receive the server-derived `AuthContext`.

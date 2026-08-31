@@ -1,8 +1,9 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: Phase 0~8 구현·합성 CI 완료, `v0.1.0`·`v0.2.0` 컨테이너 릴리스 완료, 실제 자료 acceptance 일부 미검증
+- 상태: Phase 0~8과 private knowledge/advisory 결과 구현, `v0.1.0`~`v0.3.2` 컨테이너·GitHub
+  Release 완료; 보호된 acceptance와 남은 실제 형식·기기·복구 경계 분리
 - 기준 설계: `docs/design/v0.1-product.md`
-- 목표 릴리스: 다음 버전 미지정
+- 현재 공개 버전: `v0.3.2`; 다음 버전 미지정
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
 ## Plan rules
@@ -21,15 +22,21 @@
 |---|---|---|
 | Phase 0 — Project Foundation | Complete | PR #1, merge `0f632989df891ae944c012bfcce6c838009867a9`, required CI passed. |
 | Phase 1 — Synthetic PDF Ingestion | Complete | PR #8~#12 implementation and PR #13 completion record; synthetic ingestion regression remains in CI. |
-| Phase 2 — Policy Ledger | Implemented; private acceptance pending | Family, contract, party, Rider, candidate review, Evidence and insurance-document inventory are implemented; external family-by-family comparison remains. |
+| Phase 2 — Policy Ledger | Complete with explicit residual UNKNOWNs | Family, contract, party, Rider, candidate review and inventory are implemented; the complete protected catalog is preserved in the separate private-knowledge layer, while unresolved source/status edges remain UNKNOWN. |
 | Phase 3 — Clause Linking and Search | Complete in synthetic boundary | TermsEdition, Clause, full-text search, Rider links and validated rule candidates are implemented. |
 | Phase 4 — Coverage Decision Engine | Complete in synthetic boundary | MedicalEvent, tri-state engine and fixed/indemnity calculation are implemented and regression-tested. |
 | Phase 5 — Event and Result PWA | Complete in synthetic boundary | Hybrid input, action-first results and bounded Evidence disclosure are implemented. |
 | Phase 6 — Claim Workflow | Complete in synthetic boundary | Checklist, manual submission state and outcome history are implemented. |
 | Phase 7 — Local Authentication | Complete in local boundary | Two equal local admins, server-side sessions, CSRF and private HTTPS login flow are implemented. |
-| Phase 8 — Private Local Acceptance | Implemented; device/data/recovery checks remain | Encrypted batch import, managed archive, selective OCR, WSL/Tailscale runtime, offline backup-set packaging and count-only archive audit are implemented; actual restore drill, actual documents, Windows/mobile and other-device checks remain unverified. |
+| Phase 8 — Private Local Acceptance | Protected server/browser acceptance complete; residual platform/recovery checks remain | Encrypted import, archive, OCR, WSL/Tailscale, backup tooling and audit are implemented. Protected package validation, backup/restore rehearsal, atomic DB apply and authenticated catalog/result checks passed; all source formats, full disaster recovery, Windows/mobile and other devices remain unverified. |
 | v0.1.0 — Container release | Complete | Release workflow run `32951939190`; Web/API/Worker images and GitHub Release published on 2026-08-26. |
 | v0.2.0 — Container release | Complete | Release workflow run `33090324105`; Web/API/Worker images and GitHub Release published on 2026-08-27. |
+| Private knowledge catalog | Complete | PR #39, merge `cf26c83f8cbc8ea24ae975783d2c83ce0eb0e4fc`; immutable import/query boundary and protected apply acceptance. |
+| Advisory decision publication | Complete | PR #42, merge `80fb1f1d3b9619dd70a659f690ab917441630d0f`; publication dispositions, conditional calculation and v2 results. |
+| v0.3.0 — Container release | Complete | Release workflow run `33350051878`; catalog/advisory baseline published on 2026-08-31. |
+| v0.3.1 — Container release | Complete | Release workflow run `33374796485`; relevant-result and bounded structuring corrections published on 2026-08-31. |
+| v0.3.2 — Container release | Complete | Release workflow run `33389763777`; live benefit regressions and exact-token authority corrections published on 2026-08-31. |
+| Release-note normalization | Implemented; next-tag parser fix required | PR #49 normalized all five GitHub Release bodies. Current workflow has an invalid job-level `runner.temp` context and must be fixed before another tag. |
 
 ## Dependency flow
 
@@ -44,7 +51,11 @@ Phase 0 Foundation [complete]
   -> Phase 7 Two-admin authentication and session boundary [implemented]
   -> Phase 8 Encrypted import, local OCR and WSL/Tailscale runtime [implemented]
   -> v0.1.0 and v0.2.0 GHCR releases [complete]
-  -> Root-owned private family comparison and remaining device checks [pending]
+  -> Immutable private knowledge catalog and complete member projection [complete]
+  -> Advisory publication, conditional estimates and v2 result assistance [complete]
+  -> v0.3.0, v0.3.1 and v0.3.2 GHCR/GitHub releases [complete]
+  -> Release workflow parser correction [pending before next tag]
+  -> Remaining source-format, Windows/mobile and disaster-recovery checks [pending]
 ```
 
 AI adapters, encrypted archive, and OCR can be developed earlier with wholly synthetic fixtures, but actual private PDF use waits until the authenticated Phase 8 runtime boundary is present.
@@ -305,7 +316,35 @@ The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0
 9. The GHCR workflow published version and commit-SHA tags for all three images.
 10. GHCR success is recorded as a container release, not Cloud Run deployment.
 
-## Deferred after v0.1
+## Post-v0.2 delivery record
+
+### Private knowledge and complete catalog
+
+- PR #39 imported an externally reviewed package into an immutable household-scoped snapshot after
+  protected validation, read-only dry run, backup/restore rehearsal and atomic apply. Imported facts
+  and mappings remain non-executable.
+- PR #42 added exact subject/enrollment authority, append-only rule and calculation publication,
+  `PUBLISHED`/`ADVISORY`/`BLOCKED`/`NOT_APPLICABLE`, deterministic private decisions, conditional fixed
+  estimates, separate indemnity candidates, structured-search fallback and the v2 Web result flow.
+- PR #44 and PR #47 corrected event relevance, one-attempt provider cost bounds, stale assistance,
+  exact-token normalization and conditional subtotal regressions without changing eligibility
+  authority.
+
+### Releases and maintenance
+
+- `v0.3.0`, `v0.3.1`, and `v0.3.2` each passed the tag workflow and published immutable
+  Web/API/Worker version/SHA image pairs plus GitHub Release metadata.
+- PR #49 made CHANGELOG the Release change source and repaired the public bodies for `v0.1.0` through
+  `v0.3.2`. The bodies now share three headings, contain real newlines, and record three distinct
+  image digests.
+- PR #50 updated `@testing-library/react` and `@vitejs/plugin-react`; PR #51 updated Ruff and the
+  Python lockfile. Both replacement PRs passed all seven required CI checks and superseded the stale
+  Dependabot PRs.
+- The current release workflow cannot be parsed by GitHub because job-level `env` uses
+  `${{ runner.temp }}`. This is a known unreleased blocker, not a failed `v0.3.2` publication. A
+  separate fix PR must pass before any new tag.
+
+## Deferred after the current baseline
 
 - Google Drive read-only automatic synchronization
 - multi-provider AI and Gemini failover

@@ -1,6 +1,7 @@
 # Private Knowledge Decision Publication Design
 
-- 상태: 합성 publication/decision/assistance와 v2 UI 구현·수용 완료; 실제 보호 package/runtime acceptance 진행 전
+- 상태: 합성 publication/decision/assistance, v2 UI와 보호된 package/database/runtime acceptance
+  완료(PR #42); 관련 결과·조건부 subtotal 회귀는 PR #44/#47과 `v0.3.2`에서 보완
 - 범위: current private knowledge snapshot을 deterministic event decision과 benefit calculation에 연결
 - 선행 설계: `docs/design/private-knowledge-catalog.md`,
   `docs/design/coverage-decision-engine.md`, `docs/design/event-result-pwa.md`

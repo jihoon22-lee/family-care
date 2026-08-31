@@ -18,6 +18,13 @@
 | `MedicalEvent` | 질병·상해, 진단, 수술, 입원, 통원 등 사용자가 검색하려는 사건입니다. |
 | `ClaimCandidate` | 실제 가입 Rider와 사건·규칙을 비교해 만든 청구 검토 후보입니다. 지급 결정이 아닙니다. |
 | `ClaimCase` | 준비, 접수, 보완, 심사, 지급, 거절 등 실제 청구 진행 기록입니다. |
+| `PrivateKnowledgeSnapshot` | 저장소 밖에서 검토한 보험 지식을 lossless·immutable하게 보존하는 household-scoped catalog version입니다. Operational 원장을 덮어쓰거나 자동 실행 권한을 만들지 않습니다. |
+| `Coverage disposition` | Private knowledge coverage의 실행 경계인 `PUBLISHED`, `ADVISORY`, `BLOCKED`, `NOT_APPLICABLE` 중 하나입니다. |
+| `PUBLISHED` | 검토된 eligibility rule과 필요한 citation/calculation이 publication gate를 통과해 결정론적 평가에 사용할 수 있는 상태입니다. |
+| `ADVISORY` | catalog와 관련 검색에는 포함하지만 eligibility는 `UNKNOWN`으로 유지하며 허용된 조건부 정보만 보여 주는 상태입니다. |
+| `BLOCKED` | 실행 근거나 검토가 부족해 자동 규칙 평가에서 제외하는 상태입니다. |
+| `NOT_APPLICABLE` | 검토 결과 benefit execution 대상이 아닌 상태입니다. `NO_MATCH`와 같지 않습니다. |
+| 조건부 정액 추정 | 검토된 formula 또는 제한된 증권 가입금액 근거로 계산하지만 eligibility와 `confirmed_amount`는 확정하지 않는 금액 trace입니다. |
 | `MATCH` | 현재 확인된 사실이 평가한 조건과 일치합니다. 전체 지급 확정을 뜻하지 않습니다. |
 | `NO_MATCH` | 확인 가능한 근거가 평가한 조건과 결정적으로 일치하지 않습니다. |
 | `UNKNOWN` | 입력, 근거, 계약 상태가 부족하거나 충돌해 해당 조건을 판단할 수 없습니다. |
