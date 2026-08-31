@@ -4,6 +4,29 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-31
+
+### Changed
+
+- Structured clause search reuses only reviewed exact normalizer tokens and keeps the list of
+  coverages whose automatic rules actually ran, while hiding all-unknown rows from result cards and
+  related-clause recommendations.
+- Conditional fixed-benefit subtotals include certificate-derived estimates that still carry an
+  explicit amount-evidence review hold; those values remain unconfirmed and indemnity candidates
+  stay separate.
+
+### Fixed
+
+- Event results no longer flood the additional-review section with every catalog coverage or retain
+  stale recommendations whose rules were all unrelated to the event.
+- Reviewed fixed-benefit rules now surface every relevant component in the conditional subtotal,
+  including the protected two-scenario acceptance baseline used for release verification.
+
+### Security
+
+- Authoritative exact-token normalizers never widen to arbitrary Korean compound prefixes; a
+  compound alias must be an explicit reviewed, digest-covered private publication record.
+
 ## [0.3.1] - 2026-08-31
 
 ### Changed
