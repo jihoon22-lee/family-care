@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #21 merged as `ba3447245c5569de043433a53a59a0e493a0d628`; v2
+private-knowledge results and assistance were added later without changing the app-shell-only cache boundary.
+
 **Goal:** Provide a mobile-first flow from a short pre-visit situation or detailed post-treatment receipt lines to evidence-backed, action-first results without requiring optional questions and without storing medical data in persistent browser storage.
 
 **Architecture:** The Worker reuses the provider-neutral AI boundary to structure a bounded natural-language situation into non-authoritative fact candidates. A dedicated PostgreSQL event-structuring queue keeps that work separate from PDF jobs; the API persists the user text, candidate facts, conflicts, and audit versions but owns no provider calls. The Web owns event drafting, editable AI facts, manual receipt-line input, result presentation, Evidence disclosure, and navigation to ClaimCase creation. The deterministic API engine alone owns tri-state evaluation, calculations, versioning, and stale detection. A failed structuring job never prevents manual analysis. The Web uses generated OpenAPI types, a no-store fetch boundary, and the memory-only query cache introduced by the policy-candidate Web plan.

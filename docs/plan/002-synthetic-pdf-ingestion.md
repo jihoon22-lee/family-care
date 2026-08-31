@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
+**Status:** Complete — implementation PR #8~#12 and completion record PR #13 merged with the
+synthetic ingestion regression retained in CI. Explicit private-data boundaries below remain valid.
+
 **Goal:** Build a synthetic-only, evidence-preserving PDF intake and asynchronous analysis path with explicit path, parser, resource, password, lease, and cleanup boundaries.
 
 **Architecture:** The API accepts a relative source key and creates an AnalysisJob in PostgreSQL. The Analyzer Worker resolves that key below an absolute document root, validates the local PDF, and invokes pdfplumber in a dedicated child process with pypdf structural checks and fixed resource limits. Extraction results are stored in the minimum document model; no Policy Ledger or insurance decision rule is introduced.

@@ -8,7 +8,10 @@
 
 **Scope:** This is an independent corrective PR between selective OCR and private local runtime. The approved v0.1 runtime is one household with one shared import root. Multi-household source-root partitioning, archive orphan reconciliation UI, Cloud Run, Google Drive API, Tailscale mutation, and actual private documents remain out of scope.
 
-**Implementation status:** Tasks 1–4 and Task 5 documentation are implemented. The complete serial local gate, task-owned PostgreSQL integration suite, and concentrated root review passed. PR/CI, merge, and private runtime acceptance remain pending.
+**Implementation status:** Complete — PR #26 merged as
+`4c7057dcf58ca1fccf0eb49cd36a2311acab1fd3`. Tasks 1–5, serial local gate, PostgreSQL integration,
+required CI and private-runtime handoff completed; remaining real-format/device boundaries are tracked
+by Plan 015 and the roadmap.
 
 **Current capacity:** Private source, decrypted plaintext extent, and managed archive payload are each bounded to 128 MiB. Parser limits remain 500 pages, 64 MiB output/`RLIMIT_FSIZE`, 1536 MiB address space, 90-second child CPU, 120-second parent wall timeout, and 64 open descriptors.
 

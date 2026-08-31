@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #15 merged as `14aa9b5abf1e8301a07aca714672836836d56aa1` with required
+CI. Private knowledge later extends, but does not replace, this operational ledger boundary.
+
 **Goal:** Build a household-scoped, evidence-backed ledger of FamilyMember, PolicyContract, PolicyParty, and actually subscribed Rider records without changing the Phase 1 document-ingestion contract.
 
 **Architecture:** Keep the FastAPI modular-monolith boundary and the existing direct `psycopg` repository pattern. Add a common server-derived `HouseholdScope`, a reusable Evidence lineage table, and policy repositories that publish only records whose source DocumentVersion and Evidence satisfy the policy invariants. Authentication is not implemented in this plan; tests inject a scope resolver and later authentication replaces that resolver without accepting a client-provided household ID.

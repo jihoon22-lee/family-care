@@ -8,6 +8,9 @@
 
 **Tech Stack:** FastAPI, Pydantic, psycopg/PostgreSQL, Alembic, React/TypeScript, Vitest, Testing Library, JSON Schema/OpenAPI generation.
 
+**Status:** Complete — implementation and protected acceptance were incorporated into PR #42 and
+merged as `80fb1f1d3b9619dd70a659f690ab917441630d0f`. No protected source or artifact was added to Git.
+
 ---
 
 ## Privacy and completion gates

@@ -1,6 +1,7 @@
 # Event and result PWA design
 
-- 상태: coverage decision v2 결과 UI와 assistance polling 구현 완료; 실제 브라우저 acceptance 대기
+- 상태: coverage decision v2 결과 UI와 assistance polling 구현, protected authenticated browser
+  acceptance 완료; Windows/mobile·다른 실제 기기 검증 대기
 - 적용 단계: Phase 5 + private knowledge decision publication
 - 선행 조건: MedicalEvent and decision API contracts
 

@@ -8,7 +8,14 @@ FamilyCare v0.1을 한 가구의 비공개 로컬 런타임으로 실행한다. 
 
 **Current status**
 
-암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy, bounded read-only Tailscale inspector는 PR #27과 PR #28로 `main`에 merge되었다. 두 PR의 CI/post-merge 검증과 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline acceptance는 통과했다. pre-created snapshot용 offline backup-set packaging과 deletion-free archive audit도 합성 경계에서 구현했다. 실제 backup 취득·PostgreSQL restore drill·archive cleanup, 실제 보험 PDF·파생 데이터·OCR, Windows/mobile, 다른 실제 기기는 별도 acceptance이며 완료로 주장하지 않는다.
+암호화 document-import의 API·Worker 계약, gateway-only Compose, private mount/readiness policy와
+bounded read-only Tailscale inspector는 PR #27/#28로 `main`에 merge되었다. WSL Compose,
+Tailscale HTTPS, 인증 브라우저 login/navigation/logout와 synthetic OpenAI pipeline acceptance가
+통과했다. PR #34는 pre-created snapshot용 authenticated offline backup-set packaging과
+deletion-free archive audit를 추가했다. 후속 PR #39/#42/#47에서 보호된 backup/restore rehearsal,
+atomic database apply와 authenticated catalog/result acceptance까지 수행했다. 모든 실제 document
+format의 import/OCR, 남은 암호·legacy visual source, Windows/mobile, 다른 실제 기기와 전체
+disaster-recovery drill은 별도 acceptance이며 완료로 주장하지 않는다.
 
 **Architecture**
 

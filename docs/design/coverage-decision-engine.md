@@ -1,6 +1,7 @@
 # Coverage decision engine design
 
-- 상태: operational 및 private knowledge deterministic 실행, v2 결과와 선택적 assistance 구현 완료; 실제 보호 자료 acceptance 대기
+- 상태: operational/private knowledge deterministic 실행, v2 결과와 선택적 assistance 구현 완료;
+  보호된 restored-DB·authenticated result acceptance 완료, 미검증 문서·기기 경계 유지
 - 적용 단계: Phase 6 — Coverage Decision Engine
 - 상위 기준: `docs/design/v0.1-product.md`
 

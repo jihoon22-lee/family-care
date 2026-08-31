@@ -10,6 +10,11 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-30-private-knowledge-decision-publication-design.md`
 
+**Overall status:** Complete — synthetic implementation, protected package/database/runtime
+acceptance and the full repository gate completed in PR #42, merged as
+`80fb1f1d3b9619dd70a659f690ab917441630d0f`. PR #44/#47 then corrected relevant-result and conditional
+subtotal behavior, released in `v0.3.1`/`v0.3.2`. Protected values remain outside Git and this plan.
+
 ## Global Constraints
 
 - No actual insurance document, extracted text, page image, diagnosis, event, identifier, amount, Drive ID, package row, or acceptance value enters Git, tests, logs, or command output.
@@ -1071,7 +1076,7 @@ corepack pnpm@11.22.0 --filter @familycare/web test -- src/features/events/event
 TMPDIR=/tmp uv run pytest apps/api/tests/test_private_knowledge_publication_migration.py apps/api/tests/test_private_knowledge_publication_package.py apps/api/tests/test_private_knowledge_publication_reconciliation.py apps/api/tests/test_private_knowledge_engine.py apps/api/tests/test_private_knowledge_decision_integration.py apps/api/tests/test_analysis_assistance_search.py apps/api/tests/test_private_knowledge_decision_acceptance.py workers/analyzer/tests/test_recommendation_jobs.py -q
 ```
 
-- [ ] **Step 4: Run the full required repository gate**
+- [x] **Step 4: Run the full required repository gate**
 
 Run this gate once in the final runtime-verification turn instead of repeating it before and after the protected
 apply. Task 12 used the already-green Web Task 11 gate plus the focused Python, acceptance, documentation,
@@ -1110,23 +1115,23 @@ git commit -m "test(decisions): prove multi-coverage acceptance"
 - Consumes: the current external private-analysis package and certificate/terms source set already authorized by the user.
 - Produces: one exact `private-knowledge-rule-publication.sol-v1` package and one protected actual-acceptance manifest.
 
-- [ ] **Step 1: Reconfirm the protected source inventory without outputting private values**
+- [x] **Step 1: Reconfirm the protected source inventory without outputting private values**
 
 Compare current Drive/object inventory, external package manifest, current DB snapshot digest, paired certificate/terms counts, coverage count, section/clause/fact closure, subject binding count, and current confirmation count. Output only aggregate counts and stable mismatch codes.
 
-- [ ] **Step 2: Create per-coverage disposition closure**
+- [x] **Step 2: Create per-coverage disposition closure**
 
 For every current coverage component, record exactly one `PUBLISHED`, `BLOCKED`, or `NOT_APPLICABLE` disposition. `PUBLISHED` requires certificate enrollment MATCH, current confirmation MATCH, supported benefit type, exact terms identity/edition/mapping MATCH, and direct clause citations. Never promote a generic semantic fact or label similarity.
 
-- [ ] **Step 3: Directly review and publish exact rules/calculations**
+- [x] **Step 3: Directly review and publish exact rules/calculations**
 
 Read the paired certificate and terms locally, without a model API. Create eligibility, definition, exclusion, temporal, frequency, and calculation rules only when directly supported. Add exact-token fact normalizers for reviewed user vocabulary without committing or logging phrases. Preserve every unresolved cross-reference, status interval, receipt dependency, and coordination issue as BLOCKED/UNKNOWN.
 
-- [ ] **Step 4: Validate both actual acceptance cases outside Git**
+- [x] **Step 4: Validate both actual acceptance cases outside Git**
 
 Use the user-provided historical outcomes only in a protected acceptance manifest. Compare candidate count, per-coverage result, conditional fixed subtotal by currency, separate indemnity status, and exact clause/page citations. Do not print or commit names, event text, diagnosis, products, source aliases, IDs, or amounts; report only pass/fail and mismatch reason codes.
 
-- [ ] **Step 5: Run actual package validate and zero-write dry-run**
+- [x] **Step 5: Run actual package validate and zero-write dry-run**
 
 Use environment-only paths and IDs:
 
@@ -1145,26 +1150,26 @@ Verify mode/hash/counts, exact knowledge snapshot digest, complete disposition m
 - Consumes: exact approved package/report digest from Task 13.
 - Produces: migrated real PostgreSQL, current publication run, rebuilt FamilyCare API/Web, and live acceptance evidence.
 
-- [ ] **Step 1: Resolve exact runtime targets and impact**
+- [x] **Step 1: Resolve exact runtime targets and impact**
 
 Read-only checks must identify FamilyCare DB/API/Web containers, migration head, ports, active sessions, free disk, memory, swap, package digest, household, and actor. Do not stop or alter unrelated processes, containers, volumes, sessions, archives, or services.
 
-- [ ] **Step 2: Create and validate a recoverable backup**
+- [x] **Step 2: Create and validate a recoverable backup**
 
 Create a timestamped custom-format PostgreSQL dump outside Git with mode `0600`, compute its SHA-256 without printing secrets, and validate it with `pg_restore --list`. Record only backup success, size, and entry count.
 
-- [ ] **Step 3: Restore and apply in a disposable database**
+- [x] **Step 3: Restore and apply in a disposable database**
 
 Restore the exact backup into a safely named disposable integration database, migrate through revisions
 0020/0021/0022, apply the exact publication report, and run `publication-verify`. Compare all counts, digests,
 disposition matrices, FK closure, rule/citation/calculation closure, assistance-table isolation, and idempotent
 second apply.
 
-- [ ] **Step 4: Apply once to the real DB**
+- [x] **Step 4: Apply once to the real DB**
 
 Re-run the actual dry-run and compare its full expected values to the approved report. If unchanged, run `publication-apply` once. On uncertain commit outcome, query by package digest; never blindly retry. Do not physically delete or rewrite prior snapshots/publications.
 
-- [ ] **Step 5: Rebuild only FamilyCare API and Web and verify runtime**
+- [x] **Step 5: Rebuild only FamilyCare API and Web and verify runtime**
 
 Rebuild/recreate API, Worker, then Web serially while preserving DB, sessions, archives, and unrelated
 containers. Verify readiness, migration head, current snapshot/publication uniqueness, member isolation,
@@ -1172,12 +1177,12 @@ no-store headers, result v2, provider-disabled structured-search fallback, two p
 explicit partial states, and absence of sensitive logs. Do not spend a live provider call on protected data;
 the provider-on path is covered by synthetic fake-provider acceptance unless a separate minimal smoke is needed.
 
-- [ ] **Step 6: Perform browser acceptance and final repository verification**
+- [x] **Step 6: Perform browser acceptance and final repository verification**
 
 With an authenticated browser session, reproduce event create/save/analyze/result for synthetic and protected actual acceptance without taking or committing private screenshots. Verify keyboard/focus behavior and that the result is non-empty. If browser attachment is unavailable, report it as unverified rather than inferring success from API tests.
 
 Re-run the complete repository gate from Task 12 in the same final turn.
 
-- [ ] **Step 7: Final review and branch completion**
+- [x] **Step 7: Final review and branch completion**
 
 Use `superpowers:verification-before-completion`, then `superpowers:finishing-a-development-branch`. Report purpose, user impact, files, migration/API/package contracts, exact verification results, actual-data/privacy boundary, backup/restore/apply outcome, runtime/browser status, commits, PR/CI/merge state, and explicitly that no tag or deployment beyond the approved local runtime was performed.

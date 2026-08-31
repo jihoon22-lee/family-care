@@ -1,6 +1,8 @@
 # Insurance Document Inventory Implementation Plan
 
-**Status:** Tasks 1–4 and synthetic grouped verification complete; Task 5 private family comparison items 6–7 remain
+**Status:** Tasks 1–4 and post-release hardening are complete. The full protected family catalog
+comparison moved to Plan 019 and PR #39/#42 and passed there; Task 5 items 6–7 below remain only for
+linking the operational upload inventory and must not be treated as missing enrollment authority.
 
 **Goal:** Show each FamilyMember's certificate-backed policies and document completeness while keeping terms-only and product-explanation-only materials outside the enrolled policy ledger.
 

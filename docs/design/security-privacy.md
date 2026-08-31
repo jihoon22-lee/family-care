@@ -1,6 +1,7 @@
 # Security and privacy design
 
-- 상태: Foundation·Phase 1 기준과 v0.1 pragmatic baseline 승인
+- 상태: Foundation·Phase 1 기준, v0.1 pragmatic baseline과 v0.3.2 private knowledge 경계 구현;
+  공개 CI는 계속 합성 전용
 - 대상: 공개 저장소, WSL Docker Compose, Tailscale private family use
 
 ## Scope

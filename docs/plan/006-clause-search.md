@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #17 merged as `5dc33bc64096623ee65d74004d771eff9f5b1acc` with required CI.
+
 **Goal:** Structure synthetic and later private TermsEdition content into Evidence-backed Clause hierarchies and provide PostgreSQL full-text/trigram search without treating a search hit as an insurance decision.
 
 **Architecture:** Extend the existing `familycare_api.clauses` module with a terms repository, Unicode normalization, PostgreSQL `simple` full-text search, and `pg_trgm` title relevance. Search returns bounded Clause excerpts and Evidence references; Rider subscription and CoverageRule publication remain separate use cases in `007-rider-clause-rules.md`. The migration is additive after policy/candidate review and preserves all Phase 1 document/extraction contracts.

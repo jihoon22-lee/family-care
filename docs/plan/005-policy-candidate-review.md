@@ -1,6 +1,7 @@
 # Policy Candidate Review Implementation Plan
 
-**Status:** Implemented; post-release Evidence-lineage and authenticated-audit hardening verified with synthetic tests
+**Status:** Complete — PR #16 merged as `21b24f038619d2f94a08dfe112ee2090202ad3a5`;
+post-release Evidence-lineage and authenticated-audit hardening is verified with synthetic tests.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

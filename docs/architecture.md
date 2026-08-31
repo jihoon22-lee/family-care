@@ -1,6 +1,13 @@
 # FamilyCare architecture
 
-이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Foundation, synthetic PDF ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정과 계산·Event/Result PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·selective local OCR·private import reliability·private local Compose·bounded read-only Tailscale inspection은 `main`에 구현되어 있다. PR #27과 PR #28의 merge 및 CI/post-merge 검증은 완료되었다. WSL Compose, Tailscale HTTPS, 인증 브라우저의 login/navigation/logout, synthetic OpenAI pipeline도 확인되었지만 실제 보험 PDF, Windows/mobile, 다른 기기 acceptance는 아직 검증하지 않았다. 이 기능들과 release는 첫 사용 가능 버전인 `v0.1.0`을 구성하며, 상세 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서는 `docs/plan/000-project-roadmap.md`를 따른다.
+이 문서는 FamilyCare의 장기 시스템 구조와 변경 경계를 설명한다. Foundation, synthetic PDF
+ingestion, 정책 원장·candidate review·약관 검색·Rider/규칙 검토·결정론적 판정과 계산,
+Event/Result PWA, 수동 Claim workflow, 로컬 인증, 암호화 document batch, selective local OCR,
+private import reliability, private local Compose와 bounded Tailscale inspection이 `main`에 구현되어
+있다. 현재 구조에는 immutable private knowledge snapshot, 전체 catalog projection, append-only
+rule/calculation publication, advisory decision stream과 선택적 one-call result assistance도 포함된다.
+공개 제품 기준은 `v0.3.2`이고 이후 변경은 아직 릴리스되지 않았다. 상세 초기 제품 기준은
+`docs/design/v0.1-product.md`, 현재 전달 상태는 `docs/plan/000-project-roadmap.md`를 따른다.
 
 ## Architectural goals
 
@@ -32,7 +39,10 @@ PostgreSQL <------ Analyzer Worker      encrypted managed archive
                          +---- OpenAI structurer + verifier
 ```
 
-원본 PDF는 Google Drive에 계속 보관하지만 v0.1은 Drive API를 사용하지 않는다. 사용자가 저장소 밖 import directory로 수동 다운로드한 문서를 FamilyCare가 처리하고, 성공한 문서는 application-level encrypted archive에 관리한다. Cloud Run과 공용 인터넷 운영 배포는 별도 미래 설계이며 v0.1의 선행 조건이 아니다.
+원본 PDF는 Google Drive에 계속 보관하지만 FamilyCare는 Drive API를 사용하지 않는다. 사용자가
+저장소 밖 import directory로 수동 다운로드한 문서를 처리하고, 성공한 문서는
+application-level encrypted archive에 관리한다. Cloud Run과 공용 인터넷 운영 배포는 별도 미래
+설계이며 현재 로컬 제품의 완료 조건이 아니다.
 
 ## Trust boundaries
 
@@ -58,9 +68,14 @@ Phase 1 parser isolation의 descriptor-only input, 128 MiB input/500 page, paren
 
 ### External AI boundary
 
-OpenAI는 v0.1 document structuring 기능이다. Worker만 외부 호출을 수행하고 기존 WSL `OPENAI_API_KEY`를 runtime에 주입한다. PDF binary, image, password, archive key, local path, Drive ID는 보내지 않는다. 필요한 page text와 Evidence token만 bounded batch로 보내며 별도 verifier와 deterministic validator를 모두 통과한 후보만 실행할 수 있다.
+OpenAI는 선택적인 document/event structuring과 result assistance 기능이다. Worker만 외부 호출을
+수행하고 기존 WSL `OPENAI_API_KEY`를 runtime에 주입한다. PDF binary, image, password, archive
+key, local path, Drive ID는 보내지 않는다. 필요한 page text, Evidence token 또는 이미
+server-scoped된 최소 event/candidate만 bounded request로 보내며 별도 verifier와 deterministic
+validator를 모두 통과한 후보만 실행할 수 있다. Provider가 없거나 안전한 최소화를 증명하지
+못하면 외부 호출 없이 구조화 검색으로 끝낸다.
 
-Google Drive 자동 연동과 Gemini provider는 v0.1에 없다.
+Google Drive 자동 연동과 Gemini provider는 현재 없다.
 
 ## Runtime components
 
@@ -128,7 +143,11 @@ import 성공 문서는 document별 data key로 암호화하고, data key는 저
 
 ### Contracts
 
-FastAPI OpenAPI가 동기 HTTP 계약의 기준이다. Worker job, AI candidate, Rider-Clause/CoverageRule review payload, CoverageRule DSL은 versioned JSON Schema를 사용한다. TypeScript와 Python 소비자는 계약에서 생성하거나 검증하고 구조를 수동 복제하지 않는다. CoverageRule version 목록은 optimistic publication에 필요한 `expected_version`을 함께 반환한다.
+FastAPI OpenAPI가 동기 HTTP 계약의 기준이다. Worker job, document batch/OCR, AI candidate,
+Rider-Clause/CoverageRule review, coverage-decision v1/v2, benefit, medical-event, claim workflow와
+private-knowledge payload는 versioned JSON Schema를 사용한다. TypeScript와 Python 소비자는
+계약에서 생성하거나 검증하고 구조를 수동 복제하지 않는다. CoverageRule version 목록은
+optimistic publication에 필요한 `expected_version`을 함께 반환한다.
 
 ### Rider-Clause and CoverageRule review boundary
 
@@ -137,6 +156,27 @@ FastAPI OpenAPI가 동기 HTTP 계약의 기준이다. Worker job, AI candidate,
 CoverageRule 후보는 버전이 지정된 data-only DSL allowlist로 구조·필드·연산자·단위와 Evidence 참조를 검증한다. 검증기는 규칙을 저장할 수 있는 형태로 정리할 뿐 MedicalEvent를 평가하거나 `MATCH`·`NO_MATCH`·`UNKNOWN`을 계산하지 않는다. 정확한 Clause/Policy Evidence를 가진 저장 후보 중 `AI_VERIFIED` 또는 `USER_CONFIRMED`인 버전만 immutable executable version으로 게시할 수 있다. `NEEDS_REVIEW`, 지원하지 않는 DSL, 상충·손실 Evidence는 정보성 후보이며 결정 엔진이 소비하지 않는다.
 
 사용자 검토 화면 `/app/clauses/review`는 Rider-Clause 연결과 CoverageRule 예외를 별도 대기열로 제공한다. 화면은 bounded Evidence drawer와 생성된 typed field/operator/unit control만 사용하며 raw DSL textarea나 원문 문서·private path·provider payload를 노출하지 않는다. 후보 수정은 원 버전을 덮어쓰지 않고 typed child version을 만든다. Rule version 목록의 `expected_version`과 저장된 `version_id`를 함께 제출해야 게시되므로 충돌 시 최신 근거를 다시 확인해야 한다.
+
+### Private knowledge publication boundary
+
+저장소 밖에서 검토한 package는 operational `PolicyContract`/`Rider` 원장을 덮어쓰지 않고
+immutable household-scoped snapshot으로 import한다. Subject binding, certificate enrollment,
+current-status confirmation, terms applicability, semantic fact와 coverage mapping은 서로 다른
+authority와 tri-state를 유지한다. Dry run은 read-only baseline/report digest를 만들고, 승인된
+apply는 같은 baseline을 다시 확인한 뒤 한 transaction에서 current snapshot을 바꾼다.
+
+실행은 별도의 append-only publication layer가 소유한다. 각 coverage는 다음 disposition 중 하나를
+가지며 raw imported fact나 mapping은 계속 `executable=false`다.
+
+- `PUBLISHED`: 검토된 eligibility rule과 필요한 citation/calculation을 실행할 수 있다.
+- `ADVISORY`: catalog에는 포함하지만 eligibility는 `UNKNOWN`을 유지하고 허용된 조건부 정보만
+  보여 준다.
+- `BLOCKED`: publication 근거가 부족해 자동 실행하지 않는다.
+- `NOT_APPLICABLE`: 검토 결과 benefit execution 대상이 아니다.
+
+Operational Rider stream과 private knowledge stream은 v2 result API에서만 합쳐진다. 동일 coverage의
+여러 mapping은 보수적으로 집계하고, 조건부 정액 추정은 confirmed eligibility나
+`confirmed_amount`를 만들지 않는다. 실손 후보는 영수증과 자기부담 조건 없이 합산하지 않는다.
 
 ## Core data flows
 
@@ -161,11 +201,12 @@ AI-verified candidate는 즉시 사용할 수 있고 예외만 사용자에게 �
 
 ```text
 natural-language situation
-  -> AI structured, user-editable MedicalEvent facts
-  -> incident-date actual/valid Rider filter
-  -> published CoverageRule evaluation
+  -> optional AI-structured, user-editable MedicalEvent facts
+  -> operational Rider stream + current private knowledge publication stream
+  -> incident-date authority and coverage disposition filters
+  -> published or advisory deterministic rule evaluation
   -> MATCH | NO_MATCH | UNKNOWN per rule
-  -> fixed-benefit or indemnity calculation
+  -> confirmed or explicitly conditional fixed-benefit trace; indemnity kept separate
   -> action-first ClaimCandidate with Evidence and questions
 ```
 
@@ -222,13 +263,25 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
 
 ## Deployment and release boundaries
 
-- v0.1 runtime은 개인 WSL Docker Compose와 Tailscale private access다.
+- 현재 runtime은 개인 WSL Docker Compose와 Tailscale private access다.
 - LUKS, BitLocker, WSL swap, 고정 크기 encrypted volume 변경은 수행하지 않는다.
 - `vMAJOR.MINOR.PATCH` tag는 Web/API/Worker image를 GHCR에 publish한다.
-- `v0.1.0` tag는 Phase 2~8 기능·local acceptance 완료 뒤 만든다.
+- `v0.1.0`부터 `v0.3.2`까지 tag, immutable image와 GitHub Release가 게시되었다.
+- `CHANGELOG.md` 버전 섹션이 Release 변경사항의 단일 원본이며 검증된 workflow, commit과 세
+  image digest를 별도 증거로 붙인다.
 - GHCR publish는 running service deployment를 의미하지 않는다.
 - Cloud Run과 public production deployment는 별도 승인 전까지 구성하지 않는다.
+- 2026-09-01 현재 release workflow의 job-level `runner.temp` 참조가 GitHub parser에서 거부된다.
+  다음 tag는 별도 fix와 성공한 workflow 증거 전까지 차단한다.
 
 ## Verification boundaries
 
-PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지 않는다. OCR contract/renderer/engine/cleanup tests use synthetic inputs only, and the Worker image workflow contains a synthetic `tesseract --list-langs` smoke requiring `eng` and `kor`; these are not private-document acceptance. 로컬 private-runtime acceptance에서는 WSL Compose, Tailscale HTTPS, 인증 브라우저 login/navigation/logout, synthetic OpenAI pipeline을 확인했으며, 실제 보험 PDF·Windows/mobile·다른 기기는 미검증으로 남긴다. Rider-Clause/CoverageRule review의 합성 Web 시나리오는 320px viewport에서 Evidence disclosure, stored-version publication, no-store/browser-storage 경계를 확인한다. Private Compose의 합성 permission smoke와 위 acceptance는 실제 보험 format·OCR·운영 배포를 대체하지 않으며 실행 증거와 미검증 범위를 [`docs/release/v0.1.0-verification.md`](release/v0.1.0-verification.md)에 각각 기록한다.
+PR/main CI는 합성 PDF와 합성 AI response만 사용하고 외부 secret, OpenAI, Google Drive를 호출하지
+않는다. OCR contract/renderer/engine/cleanup tests use synthetic inputs only, and the Worker image
+workflow contains a synthetic `tesseract --list-langs` smoke requiring `eng` and `kor`; these are not
+private-document acceptance. 로컬 acceptance에서는 WSL Compose, Tailscale HTTPS, 인증 브라우저,
+synthetic OpenAI pipeline을 확인했다. 저장소 밖 보호 package에 대해서는 validation,
+backup/restore rehearsal, atomic apply와 authenticated catalog/result 흐름을 검증했지만 그 실제
+내용이나 식별값은 공개 증거에 포함하지 않는다. 남은 암호·legacy-font source를 포함한 모든 실제
+문서 형식의 import/OCR, Windows/mobile, 다른 실제 기기와 전체 재해 복구는 미검증이다. 합성
+permission smoke와 보호된 acceptance는 Cloud Run이나 공개 운영 배포 증거가 아니다.

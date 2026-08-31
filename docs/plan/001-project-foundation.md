@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #1 merged as `0f632989df891ae944c012bfcce6c838009867a9` and all seven
+required PR/post-merge CI jobs passed. Checkboxes below preserve the original execution procedure.
+Exact dependency values embedded in those historical steps describe the Foundation baseline; the current
+source of truth is `package.json`, `pnpm-lock.yaml`, `pyproject.toml`, and `uv.lock`.
+
 **Goal:** Build the documented, privacy-safe, locally runnable FamilyCare repository foundation with minimal Web/API/Worker services, PostgreSQL development infrastructure, CI, and GHCR tag releases.
 
 **Architecture:** Use a pnpm workspace for the React PWA and a uv workspace for the FastAPI API and analyzer Worker. PostgreSQL is the only initial stateful service; public automation uses synthetic data and no external credentials. The repository enforces privacy boundaries before application validation and publishes three independent container images only from semantic-version tags.

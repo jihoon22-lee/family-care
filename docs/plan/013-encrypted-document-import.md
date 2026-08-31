@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (- [ ]) syntax for tracking.
 
+**Status:** Complete — PR #24 merged as `b9db83e580b375e61c7aa7446e9ed4d30dda1c32`; reliability
+hardening, OCR and private runtime acceptance continued in Plans 014~015.
+
 **Goal:** Add an authenticated Web flow for one-FamilyMember document batches that decrypt each PDF only in Worker memory/workspace, archive successful plaintext through per-document AES-GCM with AES-KW-wrapped keys, and never persist a PDF password.
 
 **Architecture:** The authenticated Web lists bounded import-inbox entries as opaque source IDs, creates a one-member batch, prompts once for a password, and shows per-file progress/retry without uploads or browser persistence. The API resolves opaque IDs beneath the configured import root, creates a household-scoped batch, and sends a password through a one-time Unix-domain socket handoff to the Worker. The Worker owns the in-memory batch secret, opens source files through the existing descriptor-safe intake, decrypts encrypted PDFs into a mode-0700/mode-0600 workspace, extracts them, writes an application-encrypted managed archive, and removes every plaintext intermediate before reporting success. PostgreSQL stores batch/item state and archive metadata but never stores the password, archive master key, plaintext PDF, or source absolute path.

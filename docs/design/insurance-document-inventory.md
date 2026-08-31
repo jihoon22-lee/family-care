@@ -1,6 +1,7 @@
 # Insurance document inventory design
 
-- 상태: 구현 및 합성 API/Web/PostgreSQL 검증 완료, 실제 가족별 비교 acceptance 미완료
+- 상태: operational inventory 구현·합성 검증 완료; 전체 private catalog 비교·authenticated 조회는
+  후속 PR #39/#42에서 수용, 남은 source 연결·판독 edge case는 별도 유지
 - 적용 단계: Private policy structuring 후속
 - 선행 조건: FamilyMember, private document batch, PolicyContract, Evidence
 

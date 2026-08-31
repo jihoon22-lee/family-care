@@ -10,9 +10,9 @@
 
 **Spec:** `docs/superpowers/specs/2026-08-31-advisory-coverage-calculation-design.md`
 
-**Status:** In progress — conditional calculation, presentation, publication-scoped enrollment
-authority, and protected restored-database acceptance are implemented; final integration,
-release, and protected live cutover remain.
+**Status:** Complete — PR #42 merged the advisory publication and protected acceptance; PR #43
+released the baseline as `v0.3.0`. PR #44/#45 and PR #47/#48 hardened relevant conditional results
+and released `v0.3.1`/`v0.3.2`. Protected values and acceptance artifacts remain outside Git.
 
 ## Global Constraints
 
@@ -87,15 +87,15 @@ release, and protected live cutover remain.
   reconciliation counts.
 - [x] Back up the current database and validate the backup.
 - [x] Dry-run, restore into a disposable database, migrate, apply, and verify the new publication.
-- [ ] Apply once to the real database and verify zero current ordinary blocked rows.
-- [ ] Rebuild the local runtime and verify authenticated result generation and conditional calculations.
+- [x] Apply once to the real database and verify zero current ordinary blocked rows.
+- [x] Rebuild the local runtime and verify authenticated result generation and conditional calculations.
 
 ### Task 5: Integrate and release
 
 **Files:** Version metadata, changelog, release evidence, and roadmap only after the feature PR merges.
 
 - [x] Run the complete serial repository gate and privacy review.
-- [ ] Push the feature branch, create the PR, wait for CI, and merge.
-- [ ] Create `release/v0-3-1`, update all product versions and release records, run the complete gate, open a release PR, wait for CI, and merge.
-- [ ] Tag the release merge as `v0.3.1`, verify the release workflow and all three version/SHA image digests.
-- [ ] Back up the current Compose database, stop only the FamilyCare stack, deploy the digest-pinned v0.3.1 images, migrate, and verify health, data counts, and the result path.
+- [x] Push the feature branch, create the PR, wait for CI, and merge.
+- [x] Create `release/v0-3-1`, update all product versions and release records, run the complete gate, open a release PR, wait for CI, and merge.
+- [x] Tag the release merge as `v0.3.1`, verify the release workflow and all three version/SHA image digests.
+- [x] Back up the current Compose database, stop only the FamilyCare stack, deploy the digest-pinned v0.3.1 images, migrate, and verify health, data counts, and the result path. The later `v0.3.2` acceptance supersedes this runtime baseline.

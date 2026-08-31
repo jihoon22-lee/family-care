@@ -8,7 +8,9 @@
 
 **Tech Stack:** Python 3.14, pdfplumber 0.11.10, pypdf 6.16.2, pypdfium2==5.13.0, Pillow==12.3.0, the fixed `/usr/bin/tesseract` command with Debian English and Korean language packages, PostgreSQL 18, Alembic 1.19.1, and the existing Worker workspace/cleanup boundary. The Worker does not depend on `pytesseract` and does not create a Tesseract artifact file: it requests TSV on stdout through a no-shell subprocess boundary.
 
-**Branch status:** The contract, migration, local adapters, selective processor, provenance persistence, bounded batch progress, synthetic Worker language smoke checks, full Root PR gate, and concentrated pre-PR review are complete on this branch. PR CI/merge evidence, private Compose runtime, and private-document acceptance remain pending.
+**Status:** Complete — PR #25 merged as `b263475d5bd63d876d22204bd68cf00db44ef537`. Contract,
+migration, local adapters, provenance, cleanup, synthetic language smoke and required CI passed. Remaining
+actual format coverage is recorded separately and is not inferred from synthetic OCR tests.
 
 **Spec:** docs/design/pdf-ingestion.md, docs/design/private-data-runtime.md, docs/design/security-privacy.md, docs/design/test-strategy.md, docs/design/v0.1-product.md, docs/plan/003-v0.1-implementation-index.md
 

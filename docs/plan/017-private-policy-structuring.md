@@ -1,6 +1,8 @@
 # Private policy structuring implementation plan
 
-**Status:** In progress
+**Status:** Implementation and the root-owned family review are complete except for five remaining
+password/legacy-visual source candidates and current/renewal confirmation. Those unresolved items
+remain `UNKNOWN`; the complete protected catalog is tracked by Plans 018–019 and PR #39.
 
 **Goal:** Connect an authenticated private PDF batch to explicit document classification, durable Evidence, retryable AI candidate structuring, human review, and a family-scoped policy/rider ledger without exposing source paths or document content through HTTP, logs, fixtures, or Git.
 

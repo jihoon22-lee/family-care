@@ -2,6 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status:** Complete — PR #19 merged as `0b51e1d2161040c5fa37971fdd82ffa8a6c1687f`; the later
+private-knowledge v2 stream preserves this tri-state authority.
+
 **Goal:** Evaluate structured MedicalEvent facts against actually subscribed Riders and executable CoverageRule versions with reproducible `MATCH`, `NO_MATCH`, and `UNKNOWN` results and complete Evidence lineage.
 
 **Architecture:** Add a deterministic `familycare_api.decisions` module that reads scoped policy/Rider snapshots and executable rules through ports, evaluates allowlisted expressions without AI, persists immutable rule evaluations and a versioned decision run, and aggregates Rider candidates. The engine never infers facts, never calculates an unsupported amount, and never treats missing history or Evidence as a mismatch. Claim-history access is a protocol in this plan and the actual projection is added by the claim-workflow plan.
