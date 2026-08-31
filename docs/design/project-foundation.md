@@ -265,8 +265,15 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 - `vMAJOR.MINOR.PATCH` 형식 태그만 릴리스를 시작한다.
 - CI와 같은 전체 검증이 통과한 뒤 이미지를 빌드한다.
 - 이미지는 `ghcr.io/<owner>/<repository>-web`, `-api`, `-worker`에 게시한다.
-- 각 이미지는 전체 버전, 주·부 버전, 커밋 SHA 태그를 갖는다.
-- 릴리스 작업만 `packages: write`를 사용하고 `GITHUB_TOKEN` 이외의 장기 비밀값을 요구하지 않는다.
+- 각 이미지는 전체 버전과 12자리 커밋 SHA 태그를 가지며 `latest`는 만들지 않는다.
+- 이미지 게시 작업만 `packages: write`를 사용한다. 게시 검증과 GitHub Release 작업은 각각
+  `packages: read`, GitHub Release 작업만 `contents: write`를 추가하며 장기 비밀값 없이
+  `GITHUB_TOKEN`만 사용한다.
+- 게시된 version/SHA 태그의 OCI digest가 이미지별로 일치한 뒤에만 GitHub Release를 만든다.
+- GitHub Release 변경사항은 태그 checkout의 `CHANGELOG.md` 해당 버전 섹션을 그대로 사용하고,
+  전체 커밋 SHA·workflow URL·Web/API/Worker immutable digest를 증거로 덧붙인다.
+- 릴리스 본문은 mode `0600` Markdown 파일로 렌더링해 `gh release create|edit --notes-file`로
+  전달하며 인라인 문자열과 문자 그대로의 `\n`을 허용하지 않는다.
 - 실패한 구성 요소가 있으면 어떤 이미지도 완료된 릴리스로 선언하지 않는다.
 - GHCR 게시 성공은 운영 배포 성공을 의미하지 않는다.
 
@@ -288,7 +295,8 @@ Required approving review count는 `0`입니다. Ruleset 상태와 required chec
 
 - `README.md`: 프로젝트 목적, 안전 경고, 빠른 시작, 현재 범위
 - `AGENTS.md`: 작업 순서, 보안 금지사항, 디렉터리 책임, 필수 검증, 완료 보고 기준
-- `CHANGELOG.md`: Keep a Changelog 형식의 사용자 영향 변경 내역
+- `CHANGELOG.md`: Keep a Changelog 형식의 사용자 영향 변경 내역이자 GitHub Release 변경사항의
+  단일 원본
 - `docs/architecture.md`: 장기 시스템 구조와 주요 흐름
 - `docs/guide.md`: 개발·관리 사용법과 안전한 로컬 데이터 연결 방법
 - `docs/design/*.md`: 하위 시스템별 계약과 상세 설계

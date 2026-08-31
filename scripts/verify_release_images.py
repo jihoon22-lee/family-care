@@ -25,11 +25,13 @@ from urllib.request import (
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.release_audit import verify_image_digests  # noqa: E402
+from scripts.release_audit import ReleaseImageDigest, inspect_image_digests  # noqa: E402
 
 REQUEST_TIMEOUT_SECONDS = 10.0
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_TOKEN_BYTES = 64 * 1024
+ROOT = Path(__file__).resolve().parents[1]
+EVIDENCE_SCHEMA = "release-image-evidence.v1"
 
 
 class SameHostRedirectHandler(HTTPRedirectHandler):
@@ -147,15 +149,68 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--commit-sha", required=True)
+    parser.add_argument("--evidence-output", type=Path)
     return parser
+
+
+def _validated_evidence_output(path: Path) -> Path:
+    if not path.is_absolute():
+        raise ValueError("output path must be absolute")
+    if os.path.lexists(path):
+        raise ValueError("output path already exists")
+    resolved = path.resolve(strict=False)
+    try:
+        resolved.relative_to(ROOT)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("output path must be outside the repository")
+    if not resolved.parent.is_dir():
+        raise ValueError("output parent does not exist")
+    return resolved
+
+
+def _write_image_evidence(
+    path: Path,
+    version: str,
+    commit_sha: str,
+    digests: tuple[ReleaseImageDigest, ...],
+) -> None:
+    payload = {
+        "schema_version": EVIDENCE_SCHEMA,
+        "version": version,
+        "commit_sha": commit_sha,
+        "images": [{"component": item.component, "digest": item.digest} for item in digests],
+    }
+    content = json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    file_descriptor = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(file_descriptor, 0o600)
+        with os.fdopen(file_descriptor, "w", encoding="utf-8", newline="\n") as output:
+            file_descriptor = -1
+            output.write(content)
+    except BaseException:
+        if file_descriptor >= 0:
+            os.close(file_descriptor)
+        path.unlink(missing_ok=True)
+        raise
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Verify all three version and commit tags without printing credentials."""
 
     args = _parser().parse_args(argv)
+    evidence_output: Path | None = None
+    if args.evidence_output is not None:
+        try:
+            evidence_output = _validated_evidence_output(args.evidence_output)
+        except ValueError as exc:
+            print(f"evidence-output: {exc}")
+            return 1
+
     client = RegistryHttpClient(actor=os.getenv("GITHUB_ACTOR"), token=os.getenv("GHCR_TOKEN"))
-    findings = verify_image_digests(
+    digests, findings = inspect_image_digests(
         args.registry,
         args.repository,
         args.version,
@@ -166,6 +221,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         for finding in findings:
             print(f"{finding.code}: {finding.detail}")
         return 1
+    if evidence_output is not None:
+        try:
+            _write_image_evidence(evidence_output, args.version, args.commit_sha, digests)
+        except OSError:
+            print("evidence-output: output could not be created")
+            return 1
     print("release-images-ok: web api worker")
     return 0
 

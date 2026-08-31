@@ -187,6 +187,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install uv and Python
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
@@ -205,3 +207,78 @@ jobs:
             --repository "${RELEASE_REPOSITORY,,}" \
             --version "$RELEASE_VERSION" \
             --commit-sha "$GITHUB_SHA"
+
+  publish-release:
+    name: Publish changelog-derived GitHub Release
+    needs: verify-publication
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    env:
+      RELEASE_EVIDENCE: ${{ runner.temp }}/familycare-release-image-evidence.json
+      RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          python-version: "3.14.7"
+          enable-cache: false
+      - name: Record verified image digests
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          uv run --no-sync python scripts/verify_release_images.py \
+            --registry ghcr.io \
+            --repository "${RELEASE_REPOSITORY,,}" \
+            --version "$RELEASE_VERSION" \
+            --commit-sha "$GITHUB_SHA" \
+            --evidence-output "$RELEASE_EVIDENCE"
+      - name: Render changelog-derived release notes
+        env:
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          RELEASE_REPOSITORY_LOWER="${RELEASE_REPOSITORY,,}"
+          uv run --no-sync python scripts/release_notes.py \
+            --version "$RELEASE_VERSION" \
+            --commit-sha "$GITHUB_SHA" \
+            --repository "$RELEASE_REPOSITORY_LOWER" \
+            --workflow-url "https://github.com/${RELEASE_REPOSITORY_LOWER}/actions/runs/${GITHUB_RUN_ID}" \
+            --changelog "$GITHUB_WORKSPACE/CHANGELOG.md" \
+            --image-evidence "$RELEASE_EVIDENCE" \
+            --output "$RELEASE_NOTES"
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "FamilyCare $RELEASE_TAG" \
+              --draft=false \
+              --prerelease=false \
+              --notes-file "$RELEASE_NOTES"
+          else
+            gh release create "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "FamilyCare $RELEASE_TAG" \
+              --notes-file "$RELEASE_NOTES"
+          fi
+      - name: Remove release temporary files
+        if: always()
+        run: |
+          uv run --no-sync python scripts/cleanup_release_files.py \
+            --path "$RELEASE_EVIDENCE" \
+            --path "$RELEASE_NOTES"
