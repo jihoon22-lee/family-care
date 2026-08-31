@@ -215,9 +215,6 @@ jobs:
     permissions:
       contents: write
       packages: read
-    env:
-      RELEASE_EVIDENCE: ${{ runner.temp }}/familycare-release-image-evidence.json
-      RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -232,6 +229,7 @@ jobs:
       - name: Record verified image digests
         env:
           GHCR_TOKEN: ${{ github.token }}
+          RELEASE_EVIDENCE: ${{ runner.temp }}/familycare-release-image-evidence.json
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -244,6 +242,8 @@ jobs:
             --evidence-output "$RELEASE_EVIDENCE"
       - name: Render changelog-derived release notes
         env:
+          RELEASE_EVIDENCE: ${{ runner.temp }}/familycare-release-image-evidence.json
+          RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
@@ -260,6 +260,7 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -278,6 +279,9 @@ jobs:
           fi
       - name: Remove release temporary files
         if: always()
+        env:
+          RELEASE_EVIDENCE: ${{ runner.temp }}/familycare-release-image-evidence.json
+          RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md
         run: |
           uv run --no-sync python scripts/cleanup_release_files.py \
             --path "$RELEASE_EVIDENCE" \

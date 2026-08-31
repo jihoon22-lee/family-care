@@ -19,6 +19,31 @@ def test_release_workflow_has_a_post_publish_verification_gate() -> None:
     assert validate_release(content) == []
 
 
+def test_release_workflow_rejects_runner_context_in_job_level_env() -> None:
+    content = _current_release().replace(
+        "  publish-release:\n"
+        "    name: Publish changelog-derived GitHub Release\n"
+        "    needs: verify-publication\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "      packages: read\n"
+        "    steps:\n",
+        "  publish-release:\n"
+        "    name: Publish changelog-derived GitHub Release\n"
+        "    needs: verify-publication\n"
+        "    runs-on: ubuntu-latest\n"
+        "    permissions:\n"
+        "      contents: write\n"
+        "      packages: read\n"
+        "    env:\n"
+        "      RELEASE_NOTES: ${{ runner.temp }}/familycare-release-notes.md\n"
+        "    steps:\n",
+    )
+
+    assert "job-level env cannot use the runner context" in _messages(content)
+
+
 def test_release_workflow_requires_exact_image_matrix() -> None:
     content = _current_release().replace(
         "          - name: worker\n            dockerfile: infra/containers/worker.Dockerfile\n",

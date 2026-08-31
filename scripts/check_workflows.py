@@ -214,6 +214,18 @@ def _job_block(content: str, name: str) -> str:
     return match.group("body") if match is not None else ""
 
 
+def _job_level_env_blocks(content: str) -> tuple[str, ...]:
+    """Return only four-space job-level env mappings, excluding step env mappings."""
+
+    return tuple(
+        match.group("body")
+        for match in re.finditer(
+            r"(?ms)^    env:\s*$\n(?P<body>(?:^      [^\n]*$\n?)*)",
+            content,
+        )
+    )
+
+
 def _release_matrix(publish: str) -> tuple[tuple[str, str], ...]:
     return tuple(
         (match.group("name"), match.group("dockerfile"))
@@ -266,6 +278,9 @@ def validate_release(content: str) -> list[str]:
     verify = _job_block(content, "verify-publication")
     release = _job_block(content, "publish-release")
     validate = _job_block(content, "validate-foundation")
+
+    if any(re.search(r"\$\{\{\s*runner\.", block) for block in _job_level_env_blocks(content)):
+        errors.append(f"{relative}: job-level env cannot use the runner context")
 
     if content.count("packages: write") != 1 or "packages: write" not in publish:
         errors.append(f"{relative}: packages: write must appear only on the publish job")

@@ -271,8 +271,9 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
   image digest를 별도 증거로 붙인다.
 - GHCR publish는 running service deployment를 의미하지 않는다.
 - Cloud Run과 public production deployment는 별도 승인 전까지 구성하지 않는다.
-- 2026-09-01 현재 release workflow의 job-level `runner.temp` 참조가 GitHub parser에서 거부된다.
-  다음 tag는 별도 fix와 성공한 workflow 증거 전까지 차단한다.
+- 2026-09-01 release workflow의 `runner.temp` 경로는 step-level `env`로 이동했고 저장소 검사도
+  job-level `runner` context를 거부한다. 수정 과정에서 tag를 만들지 않았으므로 다음 실제 tag
+  workflow 결과는 별도 릴리스 증거로 남긴다.
 
 ## Verification boundaries
 

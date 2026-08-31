@@ -279,10 +279,11 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 - GHCR 게시 성공은 운영 배포 성공을 의미하지 않는다.
 
 구현 기록은 PR #49에 merge되었고 기존 `v0.1.0`~`v0.3.2` Release 본문도 같은 형식으로
-정비되었다. 다만 2026-09-01 현재 `publish-release` job-level `env`의 `runner.temp` 참조를
-GitHub가 허용하지 않아 workflow 파일이 파싱되지 않는다. 다음 tag 전에 별도 fix PR로 step-level
-환경 변수나 허용된 context로 옮기고, `actionlint`, 저장소 workflow 검사, GitHub tag run을 모두
-확인해야 한다. 이 알려진 결함은 이미 성공한 다섯 tag workflow와 공개 artifact를 변경하지 않는다.
+정비되었다. 2026-09-01 후속 수정은 `publish-release` 임시 경로의 `runner.temp` 참조를 허용되는
+step-level `env`로 옮기고, 저장소 workflow 검사에 job-level `runner` context 회귀 검사를
+추가했다. `actionlint`와 저장소 정책 검사는 통과했지만 새 tag는 만들지 않았으므로 다음 실제
+tag workflow는 별도 릴리스 증거로 확인한다. 이 수정은 기존 다섯 tag와 공개 artifact를 바꾸지
+않는다.
 
 ### 12.3 Protect main ruleset
 
