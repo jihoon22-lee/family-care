@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from typing import Literal, Protocol, cast
 from uuid import UUID
@@ -14,6 +14,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_worker.ai.event_structurer import (
+    EventFactField,
     EventStructuringPayloadInvalid,
     EventStructuringProviderError,
     EventStructuringResult,
@@ -30,6 +31,10 @@ DEFAULT_STRUCTURING_LEASE_SECONDS = 180
 MAX_STRUCTURING_LEASE_SECONDS = 3_600
 MAX_STRUCTURING_BACKOFF_SECONDS = 300
 MAX_STRUCTURING_ATTEMPTS = 10
+# The browser falls back to deterministic local analysis after 60 seconds. A
+# provider result must become terminal before that boundary so it can never
+# arrive later and replace the event version used by the local result.
+MAX_STRUCTURING_JOB_AGE_SECONDS = 55
 _WORKER_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _PROVIDER_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 _STRUCTURING_ERROR_CODES = frozenset(
@@ -57,6 +62,18 @@ type StructuringJobState = Literal[
     "permanently_failed",
     "cancelled",
 ]
+_NORMALIZATION_HINT_FIELDS = frozenset(
+    {
+        "condition_class",
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+        "separately_billed_treatment",
+    }
+)
 
 
 class StructuringJobQueueError(RuntimeError):
@@ -99,6 +116,10 @@ class EventStructuringJobRecord:
     situation: str = field(repr=False)
     event_date: date | None = field(repr=False)
     visit_date: date | None = field(repr=False)
+    normalization_hints: Mapping[EventFactField, tuple[str | bool, ...]] = field(
+        default_factory=dict,
+        repr=False,
+    )
 
 
 class EventStructuringQueue(Protocol):
@@ -264,8 +285,8 @@ def _project_confirmed_facts(
     The fact-version row retains every validated candidate, including
     ambiguous values.  Only confirmed AI values with a deterministic mapping
     are copied to ``medical_events``; an existing user confirmation always
-    wins.  Dates are separate event columns, so an existing date is treated as
-    an already supplied value and is never replaced by a candidate.
+    wins.  Dates remain candidate facts because projecting an AI date into the
+    authoritative event columns would incorrectly upgrade its provenance.
     """
 
     projected_facts = dict(facts)
@@ -295,18 +316,6 @@ def _project_confirmed_facts(
                 projected_facts[field] = 0
                 projected_confirmations[field] = "ai_structured"
                 changed.add(field)
-        elif candidate.field_id in {"event_date", "visit_date"}:
-            parsed = _parse_candidate_date(candidate.value)
-            field = f"MedicalEvent.{candidate.field_id}"
-            if parsed is None or _has_user_confirmation(projected_confirmations, field):
-                continue
-            if candidate.field_id == "event_date":
-                if projected_event_date is None:
-                    projected_event_date = parsed
-                    changed.add(field)
-            elif projected_visit_date is None:
-                projected_visit_date = parsed
-                changed.add(field)
 
     return (
         projected_facts,
@@ -320,15 +329,6 @@ def _project_confirmed_facts(
 def _has_user_confirmation(confirmations: Mapping[str, object], field: str) -> bool:
     short_field = field.partition(".")[2]
     return confirmations.get(field) == "user" or confirmations.get(short_field) == "user"
-
-
-def _parse_candidate_date(value: object | None) -> date | None:
-    if not isinstance(value, str):
-        return None
-    try:
-        return date.fromisoformat(value)
-    except ValueError:
-        return None
 
 
 class EventStructuringJobQueue:
@@ -396,6 +396,21 @@ class EventStructuringJobQueue:
             connection.execute(
                 """
                 UPDATE medical_event_structuring_jobs
+                SET state = 'permanently_failed',
+                    lease_owner = NULL,
+                    lease_expires_at = NULL,
+                    heartbeat_at = NULL,
+                    error_code = 'STRUCTURING_PROVIDER_TIMEOUT',
+                    completed_at = NULL,
+                    updated_at = clock_timestamp()
+                WHERE state IN ('queued', 'running', 'retryable_failed')
+                  AND created_at + (%s * interval '1 second') <= clock_timestamp()
+                """,
+                (MAX_STRUCTURING_JOB_AGE_SECONDS,),
+            )
+            connection.execute(
+                """
+                UPDATE medical_event_structuring_jobs
                 SET state = CASE
                         WHEN attempts >= max_attempts THEN 'permanently_failed'
                         ELSE 'retryable_failed'
@@ -433,6 +448,7 @@ class EventStructuringJobQueue:
                     WHERE job.state IN ('queued', 'retryable_failed')
                       AND job.available_at <= clock_timestamp()
                       AND job.attempts < job.max_attempts
+                      AND job.created_at + (%s * interval '1 second') > clock_timestamp()
                     ORDER BY job.available_at, job.created_at, job.id
                     FOR UPDATE OF job SKIP LOCKED
                     LIMIT 1
@@ -449,7 +465,7 @@ class EventStructuringJobQueue:
                 WHERE job.id = candidate.id
                 RETURNING job.id
                 """,
-                (owner, lease),
+                (MAX_STRUCTURING_JOB_AGE_SECONDS, owner, lease),
             ).fetchone()
             if row is None:
                 return None
@@ -459,7 +475,14 @@ class EventStructuringJobQueue:
             if claimed is None:
                 return None
             try:
-                return _row_to_job(claimed)
+                job = _row_to_job(claimed)
+                return replace(
+                    job,
+                    normalization_hints=self._normalization_hints(
+                        connection,
+                        job.household_space_id,
+                    ),
+                )
             except InvalidStructuringJob:
                 connection.execute(
                     """
@@ -475,6 +498,51 @@ class EventStructuringJobQueue:
                     (row["id"],),
                 )
                 return None
+
+    @staticmethod
+    def _normalization_hints(
+        connection: psycopg.Connection[dict[str, object]],
+        household_space_id: UUID,
+    ) -> Mapping[EventFactField, tuple[str | bool, ...]]:
+        rows = connection.execute(
+            """
+            SELECT normalizer.field_path, normalizer.normalized_value_json
+            FROM private_knowledge_fact_normalizer_publications AS normalizer
+            JOIN private_knowledge_rule_import_runs AS run
+              ON run.id = normalizer.rule_import_run_id
+             AND run.knowledge_import_run_id = normalizer.knowledge_import_run_id
+             AND run.household_space_id = normalizer.household_space_id
+             AND run.state = 'APPLIED'
+             AND run.is_current = true
+            JOIN private_knowledge_import_runs AS knowledge
+              ON knowledge.id = run.knowledge_import_run_id
+             AND knowledge.household_space_id = run.household_space_id
+             AND knowledge.state = 'APPLIED'
+             AND knowledge.is_current = true
+            WHERE normalizer.household_space_id = %s
+              AND normalizer.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
+            ORDER BY normalizer.field_path, normalizer.priority DESC, normalizer.id
+            LIMIT 512
+            """,
+            (household_space_id,),
+        ).fetchall()
+        values: dict[EventFactField, list[str | bool]] = {}
+        for row in rows:
+            field_path = row.get("field_path")
+            raw_value = row.get("normalized_value_json")
+            if field_path == "MedicalEvent.classification":
+                field_id = "condition_class"
+            elif isinstance(field_path, str) and field_path.startswith("MedicalEvent."):
+                field_id = field_path.removeprefix("MedicalEvent.")
+            else:
+                continue
+            if field_id not in _NORMALIZATION_HINT_FIELDS or not isinstance(raw_value, str | bool):
+                continue
+            typed_field = cast(EventFactField, field_id)
+            field_values = values.setdefault(typed_field, [])
+            if raw_value not in field_values and len(field_values) < 32:
+                field_values.append(raw_value)
+        return {field_id: tuple(items) for field_id, items in values.items()}
 
     def heartbeat(
         self,
@@ -693,17 +761,22 @@ class EventStructuringJobQueue:
             row = connection.execute(
                 """
                 SELECT state, lease_owner,
-                       lease_expires_at > clock_timestamp() AS lease_valid
+                       lease_expires_at > clock_timestamp() AS lease_valid,
+                       created_at + (%s * interval '1 second') > clock_timestamp()
+                         AS deadline_valid
                 FROM medical_event_structuring_jobs
                 WHERE id = %s
                 FOR UPDATE
                 """,
-                (job.id,),
+                (MAX_STRUCTURING_JOB_AGE_SECONDS, job.id),
             ).fetchone()
             if row is None:
                 raise StructuringJobNotFound
             if row["state"] != "running" or row["lease_owner"] != owner or not row["lease_valid"]:
                 raise StructuringJobStateConflict
+            if not row["deadline_valid"]:
+                self._expire_locked(connection, job.id)
+                return False
             event_row = connection.execute(
                 """
                 SELECT version, event_date, visit_date, facts_json, confirmation_json
@@ -748,6 +821,13 @@ class EventStructuringJobQueue:
                   AND household_space_id = %s
                   AND version = %s
                   AND deleted_at IS NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM medical_event_structuring_jobs AS live_job
+                    WHERE live_job.id = %s
+                      AND live_job.created_at + (%s * interval '1 second')
+                            > clock_timestamp()
+                  )
                 RETURNING version
                 """,
                 (
@@ -758,10 +838,12 @@ class EventStructuringJobQueue:
                     job.medical_event_id,
                     job.household_space_id,
                     job.event_version,
+                    job.id,
+                    MAX_STRUCTURING_JOB_AGE_SECONDS,
                 ),
             ).fetchone()
             if updated_event is None:
-                self._cancel_locked(connection, job.id)
+                self._expire_locked(connection, job.id)
                 return False
             new_event_version = int(updated_event["version"])
             previous = connection.execute(
@@ -873,6 +955,23 @@ class EventStructuringJobQueue:
             (job_id,),
         )
 
+    @staticmethod
+    def _expire_locked(connection: psycopg.Connection[dict[str, object]], job_id: UUID) -> None:
+        connection.execute(
+            """
+            UPDATE medical_event_structuring_jobs
+            SET state = 'permanently_failed',
+                lease_owner = NULL,
+                lease_expires_at = NULL,
+                heartbeat_at = NULL,
+                error_code = 'STRUCTURING_PROVIDER_TIMEOUT',
+                completed_at = NULL,
+                updated_at = clock_timestamp()
+            WHERE id = %s
+            """,
+            (job_id,),
+        )
+
 
 __all__ = [
     "DEFAULT_STRUCTURING_LEASE_SECONDS",
@@ -881,6 +980,7 @@ __all__ = [
     "EventStructuringQueue",
     "InvalidStructuringJob",
     "MAX_STRUCTURING_ATTEMPTS",
+    "MAX_STRUCTURING_JOB_AGE_SECONDS",
     "StructuringErrorCode",
     "StructuringJobNotFound",
     "StructuringJobQueueError",

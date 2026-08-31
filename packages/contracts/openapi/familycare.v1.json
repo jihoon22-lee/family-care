@@ -4190,6 +4190,35 @@
             ],
             "title": "Calculation Publication Id"
           },
+          "certificate_amount_decision": {
+            "default": "UNKNOWN",
+            "enum": [
+              "ALIGNMENT_REVIEW",
+              "MATCH",
+              "NOT_APPLICABLE",
+              "UNKNOWN"
+            ],
+            "title": "Certificate Amount Decision",
+            "type": "string"
+          },
+          "certificate_amount_evidence_state": {
+            "default": "UNAVAILABLE",
+            "enum": [
+              "DIRECT",
+              "REVIEW_REQUIRED",
+              "UNAVAILABLE"
+            ],
+            "title": "Certificate Amount Evidence State",
+            "type": "string"
+          },
+          "certificate_evidence": {
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeCertificateEvidenceResponse"
+            },
+            "maxItems": 16,
+            "title": "Certificate Evidence",
+            "type": "array"
+          },
           "conditional_amount": {
             "anyOf": [
               {
@@ -4418,6 +4447,34 @@
           "reason_code"
         ],
         "title": "KnowledgeCalculationStepResponse",
+        "type": "object"
+      },
+      "KnowledgeCertificateEvidenceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "document_alias": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Document Alias",
+            "type": "string"
+          },
+          "evidence_pages": {
+            "items": {
+              "maximum": 500.0,
+              "minimum": 1.0,
+              "type": "integer"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "title": "Evidence Pages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "document_alias",
+          "evidence_pages"
+        ],
+        "title": "KnowledgeCertificateEvidenceResponse",
         "type": "object"
       },
       "KnowledgeContractDetailResponse": {
@@ -5583,6 +5640,11 @@
       "MedicalEventResponse": {
         "additionalProperties": false,
         "properties": {
+          "auto_structuring_attempted": {
+            "default": false,
+            "title": "Auto Structuring Attempted",
+            "type": "boolean"
+          },
           "deleted": {
             "title": "Deleted",
             "type": "boolean"
@@ -8113,7 +8175,14 @@
             "type": "string"
           },
           "state": {
-            "const": "queued",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "retryable_failed",
+              "permanently_failed",
+              "cancelled"
+            ],
             "title": "State",
             "type": "string"
           },

@@ -330,6 +330,10 @@ class DecisionRepository:
                     row["structured_facts_json"] = structured_values
                     row["structured_questions_json"] = structured_questions
                     row["structured_issues_json"] = structured_issues
+                if row is not None:
+                    row["auto_structuring_attempted"] = bool(
+                        current.get("auto_structuring_attempted", False)
+                    )
         except MedicalEventNotFound, VersionConflict:
             raise
         except psycopg.Error:
@@ -400,6 +404,10 @@ class DecisionRepository:
                     """,
                     (event_id, scope.household_space_id, expected_version),
                 ).fetchone()
+                if row is not None:
+                    row["auto_structuring_attempted"] = bool(
+                        visible.get("auto_structuring_attempted", False)
+                    )
         except MedicalEventNotFound, VersionConflict:
             raise
         except psycopg.Error:
@@ -640,6 +648,13 @@ class DecisionRepository:
         return connection.execute(
             f"""
             SELECT event.*,
+                   EXISTS (
+                     SELECT 1
+                     FROM medical_event_structuring_jobs AS job
+                     WHERE job.medical_event_id = event.id
+                       AND job.household_space_id = event.household_space_id
+                       AND (job.state <> 'cancelled' OR job.attempts > 0)
+                   ) AS auto_structuring_attempted,
                    version.id AS structured_fact_version_id,
                    version.version AS structured_fact_version,
                    version.facts_json AS structured_facts_json,
@@ -1239,6 +1254,7 @@ def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:
             {"question_code": item.question_code, "field_id": item.field_id}
             for item in optional_questions
         ),
+        auto_structuring_attempted=bool(row.get("auto_structuring_attempted", False)),
         confirmation=cast(Mapping[str, FactConfirmation], confirmations),
         version=int(row["version"]),
         created_at=cast(datetime, row["created_at"]),

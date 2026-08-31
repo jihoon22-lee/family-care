@@ -14,6 +14,7 @@ from familycare_worker.ai.event_structurer import (
     EventStructuringRequest,
     OptionalQuestion,
     StructuredFactCandidate,
+    event_structurer_schema,
     structure_event,
 )
 from familycare_worker.ai.provider import ProviderResponse, RetryableProviderError
@@ -96,6 +97,99 @@ def _valid_payload() -> dict[str, object]:
             ),
         ],
         "questions": [_question("admission")],
+    }
+
+
+def test_provider_schema_declares_version_type_and_all_supported_fact_fields() -> None:
+    schema = event_structurer_schema()
+    properties = schema["properties"]
+    assert isinstance(properties, Mapping)
+    assert properties["schema_version"] == {"const": "1", "type": "string"}
+
+    facts = properties["facts"]
+    assert isinstance(facts, Mapping)
+    items = facts["items"]
+    assert isinstance(items, Mapping)
+    fact_properties = items["properties"]
+    assert isinstance(fact_properties, Mapping)
+    field = fact_properties["field_id"]
+    assert isinstance(field, Mapping)
+    assert {
+        "anatomical_site_code",
+        "diagnosis_code",
+        "pathology_code",
+        "procedure_code",
+        "separately_billed_treatment",
+        "treatment_context",
+        "treatment_setting",
+    }.issubset(set(field["enum"]))
+
+
+def test_normalized_decision_fact_candidates_survive_provider_validation() -> None:
+    payload = {
+        "schema_version": "1",
+        "facts": [
+            _fact(
+                "00000000-0000-4000-8000-000000000a10",
+                "anatomical_site_code",
+                "sample_site",
+                "confirmed",
+                "high",
+            ),
+            _fact(
+                "00000000-0000-4000-8000-000000000a11",
+                "treatment_setting",
+                "sample_setting",
+                "confirmed",
+                "high",
+            ),
+            _fact(
+                "00000000-0000-4000-8000-000000000a12",
+                "separately_billed_treatment",
+                True,
+                "confirmed",
+                "high",
+            ),
+        ],
+        "questions": [],
+    }
+
+    result = structure_event(
+        request=_request(),
+        provider=FakeProvider(payload),
+        model="synthetic",
+    )
+
+    assert [(fact.field_id, fact.value) for fact in result.facts] == [
+        ("anatomical_site_code", "sample_site"),
+        ("treatment_setting", "sample_setting"),
+        ("separately_billed_treatment", True),
+    ]
+
+
+def test_provider_receives_bounded_reviewed_normalization_hints() -> None:
+    provider = FakeProvider(_valid_payload())
+    request = EventStructuringRequest(
+        situation="Synthetic procedure situation",
+        mode="post_treatment",
+        normalization_hints={
+            "anatomical_site_code": ("sample_site",),
+            "treatment_setting": ("sample_setting",),
+        },
+    )
+
+    structure_event(request=request, provider=provider, model="synthetic")
+
+    assert provider.calls[0]["input_payload"] == {
+        "schema_version": "1",
+        "situation": "Synthetic procedure situation",
+        "mode": "post_treatment",
+        "event_date": None,
+        "visit_date": None,
+        "normalization_hints": {
+            "anatomical_site_code": ["sample_site"],
+            "treatment_setting": ["sample_setting"],
+        },
     }
 
 

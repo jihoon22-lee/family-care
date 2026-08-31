@@ -73,6 +73,8 @@ function privateCalculation(
   return {
     applied_limit: null,
     applied_rate: null,
+    certificate_amount_decision: "MATCH",
+    certificate_amount_evidence_state: "DIRECT",
     calculation_id: "00000000-0000-4000-8000-000000000901",
     calculation_publication_id: "00000000-0000-4000-8000-000000000902",
     conditional_amount: "300000",
@@ -169,6 +171,37 @@ function evaluation(
     },
     ...overrides,
   };
+}
+
+function privateEvaluation(
+  coverageId: string,
+  result: RuleEvaluationResponse["result"] = "MATCH",
+): RuleEvaluationResponse {
+  return {
+    citations: [],
+    conflicting_fields: [],
+    engine_version: "private-knowledge-engine-v2",
+    evaluation_id: `synthetic-private-evaluation-${coverageId.slice(-3)}`,
+    fact_paths: ["MedicalEvent.classification"],
+    missing_fields: [],
+    reason_code: "SYNTHETIC_PRIVATE_MATCH",
+    required: true,
+    result,
+    source: {
+      kind: "PRIVATE_KNOWLEDGE_COVERAGE",
+      knowledge_coverage_id: coverageId,
+      rule_publication_id: `synthetic-private-rule-${coverageId.slice(-3)}`,
+    },
+  };
+}
+
+function renderedCandidateCard(label: string): HTMLElement {
+  const cards = screen.getAllByText(label).flatMap((element) => {
+    const card = element.closest("article");
+    return card ? [card] : [];
+  });
+  expect(cards).toHaveLength(1);
+  return cards[0]!;
 }
 
 function result(
@@ -459,7 +492,7 @@ describe("action-first event results", () => {
     expect(summary).not.toBeNull();
     expect(
       within(summary!).getByText(
-        /검토된 계산식으로 산출한 정액형 조건부 예상액.*판정이 추가 확인으로 남은 자문 담보의 조건부 예상액도 포함될 수 있습니다/,
+        /검토된 계산식 또는 증권의 정액 가입금액으로 산출한 조건부 예상액.*판정이 추가 확인으로 남은 자문 담보의 조건부 예상액도 포함될 수 있습니다/,
       ),
     ).toBeInTheDocument();
     expect(
@@ -552,6 +585,53 @@ describe("action-first event results", () => {
     expect(screen.queryByText(/현재 상태 확인/)).not.toBeInTheDocument();
   });
 
+  it("names every coverage behind the automatic-rule count", () => {
+    const firstCoverage = "00000000-0000-4000-8000-000000000671";
+    const secondCoverage = "00000000-0000-4000-8000-000000000672";
+    const first = privateCandidate(
+      "00000000-0000-4000-8000-000000000371",
+      firstCoverage,
+      "MATCH",
+      "Synthetic Reviewed Coverage A",
+    );
+    const second = privateCandidate(
+      "00000000-0000-4000-8000-000000000372",
+      secondCoverage,
+      "UNKNOWN",
+      "Synthetic Reviewed Coverage B",
+    );
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          candidates: [first, second],
+          catalog_coverage: catalogCoverage({
+            benefit_coverage_count: 2,
+            published_coverage_count: 2,
+          }),
+          evaluations: [
+            privateEvaluation(firstCoverage),
+            privateEvaluation(secondCoverage, "UNKNOWN"),
+          ],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const reviewed = screen
+      .getByRole("heading", { name: "자동 판정 규칙이 준비된 담보" })
+      .closest("section");
+    expect(reviewed).not.toBeNull();
+    expect(
+      within(reviewed!).getByText("Synthetic Reviewed Coverage A"),
+    ).toBeInTheDocument();
+    expect(
+      within(reviewed!).getByText("Synthetic Reviewed Coverage B"),
+    ).toBeInTheDocument();
+  });
+
   it("keeps catalog-only advisory and legacy exception rows out of event cards", () => {
     const advisoryOnly = privateCandidate(
       "00000000-0000-4000-8000-000000000351",
@@ -560,6 +640,11 @@ describe("action-first event results", () => {
       "Synthetic Advisory Catalog Row",
     );
     advisoryOnly.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    advisoryOnly.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000907",
+      calculation_publication_id: null,
+      hold_reason_code: "COVERAGE_PUBLICATION_ADVISORY",
+    });
     const blockedOnly = privateCandidate(
       "00000000-0000-4000-8000-000000000352",
       "00000000-0000-4000-8000-000000000652",
@@ -656,7 +741,14 @@ describe("action-first event results", () => {
       <ActionFirstResult
         result={result({
           candidates: [conditional, confirmed, unresolved],
-          evaluations: [],
+          evaluations: [
+            privateEvaluation("00000000-0000-4000-8000-000000000653"),
+            privateEvaluation("00000000-0000-4000-8000-000000000654"),
+            privateEvaluation(
+              "00000000-0000-4000-8000-000000000656",
+              "UNKNOWN",
+            ),
+          ],
         })}
         onStartClaim={vi.fn()}
         onOpenEvidence={vi.fn()}
@@ -664,18 +756,13 @@ describe("action-first event results", () => {
       />,
     );
 
-    const conditionalCard = screen
-      .getByText("Synthetic Conditional Coverage")
-      .closest("article");
-    const confirmedCard = screen
-      .getByText("Synthetic Confirmed Coverage")
-      .closest("article");
-    const unresolvedCard = screen
-      .getByText("Synthetic Unresolved Coverage")
-      .closest("article");
-    expect(conditionalCard).not.toBeNull();
-    expect(confirmedCard).not.toBeNull();
-    expect(unresolvedCard).not.toBeNull();
+    const conditionalCard = renderedCandidateCard(
+      "Synthetic Conditional Coverage",
+    );
+    const confirmedCard = renderedCandidateCard("Synthetic Confirmed Coverage");
+    const unresolvedCard = renderedCandidateCard(
+      "Synthetic Unresolved Coverage",
+    );
     expect(
       within(conditionalCard!).getByText("조건부 약관 예상액"),
     ).toBeInTheDocument();
@@ -697,6 +784,114 @@ describe("action-first event results", () => {
     expect(
       within(unresolvedCard!).queryByText(/확인된 계산 금액/),
     ).not.toBeInTheDocument();
+  });
+
+  it("labels a certificate insured amount as an estimate, not a confirmed payment", () => {
+    const coverageId = "00000000-0000-4000-8000-000000000657";
+    const certificateEstimate = privateCandidate(
+      "00000000-0000-4000-8000-000000000357",
+      coverageId,
+      "MATCH",
+      "Synthetic Certificate Amount Coverage",
+    );
+    certificateEstimate.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000907",
+      calculation_publication_id: null,
+      confirmed_amount: null,
+      certificate_evidence: [
+        {
+          document_alias: "Sample Certificate",
+          evidence_pages: [4],
+        },
+      ],
+      steps: [
+        {
+          currency: "KRW",
+          input_amount: "300000",
+          operation: "certificate_insured_amount",
+          output_amount: "300000",
+          reason_code: "CERTIFICATE_INSURED_AMOUNT_ESTIMATE",
+          rounding_rule: null,
+          step_number: 1,
+        },
+      ],
+    });
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          candidates: [certificateEstimate],
+          evaluations: [privateEvaluation(coverageId)],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const card = renderedCandidateCard("Synthetic Certificate Amount Coverage");
+    expect(within(card!).getByText("증권 기준 예상액")).toBeInTheDocument();
+    expect(
+      within(card!).getByText("예상 금액: 300000 KRW"),
+    ).toBeInTheDocument();
+    expect(within(card!).getByText(/증권 가입 금액 적용/)).toBeInTheDocument();
+    expect(
+      within(card!).getByText("증권 가입금액 직접 근거"),
+    ).toBeInTheDocument();
+    expect(within(card!).getByText("Sample Certificate")).toBeInTheDocument();
+    expect(within(card!).getByText("4쪽")).toBeInTheDocument();
+    expect(
+      within(card!).queryByText("확인된 계산 결과"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows an estimate while separating certificate pages that need amount review", () => {
+    const coverageId = "00000000-0000-4000-8000-000000000658";
+    const certificateEstimate = privateCandidate(
+      "00000000-0000-4000-8000-000000000358",
+      coverageId,
+      "MATCH",
+      "Synthetic Certificate Review Coverage",
+    );
+    certificateEstimate.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000908",
+      calculation_publication_id: null,
+      certificate_amount_decision: "UNKNOWN",
+      certificate_amount_evidence_state: "REVIEW_REQUIRED",
+      certificate_evidence: [
+        {
+          document_alias: "Sample Certificate",
+          evidence_pages: [6],
+        },
+      ],
+      confirmed_amount: null,
+      hold_reason_code: "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED",
+    });
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          candidates: [certificateEstimate],
+          evaluations: [privateEvaluation(coverageId)],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const card = renderedCandidateCard("Synthetic Certificate Review Coverage");
+    expect(
+      within(card!).getByText("예상 금액: 300000 KRW"),
+    ).toBeInTheDocument();
+    expect(
+      within(card!).getByText("증권 담보 근거 · 가입금액 위치 확인 필요"),
+    ).toBeInTheDocument();
+    expect(
+      within(card!).getByText(
+        "가입금액이 적힌 위치를 직접 확인하기 전의 참고 예상액입니다.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("keeps unknown questions and private clause pages keyboard accessible", async () => {

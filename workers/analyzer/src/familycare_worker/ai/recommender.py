@@ -158,7 +158,7 @@ def recommender_schema() -> dict[str, object]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "schema_version": {"const": "1"},
+            "schema_version": {"type": "string", "const": "1"},
             "recommendations": {
                 "type": "array",
                 "minItems": 1,

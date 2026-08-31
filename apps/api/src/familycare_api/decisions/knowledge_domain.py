@@ -30,6 +30,17 @@ KnowledgeCalculationStatus = Literal[
     "NOT_APPLICABLE",
     "FAILED",
 ]
+KnowledgeCertificateAmountDecision = Literal[
+    "ALIGNMENT_REVIEW",
+    "MATCH",
+    "NOT_APPLICABLE",
+    "UNKNOWN",
+]
+KnowledgeCertificateAmountEvidenceState = Literal[
+    "DIRECT",
+    "REVIEW_REQUIRED",
+    "UNAVAILABLE",
+]
 
 _TRUSTED_PROVENANCE = frozenset({"USER_CONFIRMED", "DOCUMENT_REVIEWED", "DERIVED_CONFIRMED"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -105,6 +116,23 @@ class KnowledgeCitation:
             raise ValueError("invalid citation digest")
         if not isinstance(self.lineage_valid, bool):
             raise ValueError("invalid citation lineage state")
+
+
+@dataclass(frozen=True)
+class KnowledgeCertificateEvidence:
+    document_alias: str
+    evidence_pages: tuple[int, ...]
+
+    def __post_init__(self) -> None:
+        if not self.document_alias or len(self.document_alias) > 800:
+            raise ValueError("invalid certificate evidence document")
+        if (
+            not self.evidence_pages
+            or len(self.evidence_pages) > 128
+            or any(isinstance(page, bool) or not 1 <= page <= 500 for page in self.evidence_pages)
+            or len(self.evidence_pages) != len(set(self.evidence_pages))
+        ):
+            raise ValueError("invalid certificate evidence pages")
 
 
 @dataclass(frozen=True)
@@ -189,6 +217,9 @@ class KnowledgeCoverageContext:
     status_intervals: tuple[KnowledgeStatusInterval, ...]
     rules: tuple[KnowledgeRulePublication, ...]
     calculation: KnowledgeCalculationPublication | None
+    certificate_amount_decision: KnowledgeCertificateAmountDecision = "UNKNOWN"
+    certificate_amount_evidence_state: KnowledgeCertificateAmountEvidenceState = "UNAVAILABLE"
+    certificate_evidence: tuple[KnowledgeCertificateEvidence, ...] = ()
     claim_history_counted_occurrence: KnowledgeFact | None = None
 
     def __post_init__(self) -> None:
@@ -210,6 +241,10 @@ class KnowledgeCoverageContext:
             and self.contract_end < self.contract_start
         ):
             raise ValueError("invalid contract dates")
+        if self.certificate_amount_evidence_state == "DIRECT" and (
+            self.certificate_amount_decision != "MATCH" or not self.certificate_evidence
+        ):
+            raise ValueError("direct certificate amount evidence requires a matched review")
 
 
 @dataclass(frozen=True)
@@ -315,12 +350,19 @@ class KnowledgeBenefitCalculation:
     rounding_rule: str | None = None
     hold_reason_code: str | None = None
     steps: tuple[KnowledgeCalculationStep, ...] = ()
+    certificate_amount_decision: KnowledgeCertificateAmountDecision = "UNKNOWN"
+    certificate_amount_evidence_state: KnowledgeCertificateAmountEvidenceState = "UNAVAILABLE"
+    certificate_evidence: tuple[KnowledgeCertificateEvidence, ...] = ()
 
     def __post_init__(self) -> None:
         if self.confirmed_amount is not None and (
             self.status != "CALCULATED" or self.hold_reason_code is not None
         ):
             raise ValueError("confirmed amount requires a calculated result without a hold reason")
+        if self.certificate_amount_evidence_state == "DIRECT" and (
+            self.certificate_amount_decision != "MATCH" or not self.certificate_evidence
+        ):
+            raise ValueError("direct certificate amount evidence requires a matched review")
 
 
 @dataclass(frozen=True)
@@ -361,6 +403,8 @@ __all__ = [
     "KnowledgeBenefitType",
     "KnowledgeCalculationPublication",
     "KnowledgeCalculationStatus",
+    "KnowledgeCertificateAmountDecision",
+    "KnowledgeCertificateAmountEvidenceState",
     "KnowledgeCalculationStep",
     "KnowledgeCitation",
     "KnowledgeClaimCandidate",

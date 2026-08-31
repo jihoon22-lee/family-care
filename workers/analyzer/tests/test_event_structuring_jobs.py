@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from datetime import UTC, date, datetime
+from threading import Event, Thread
+from time import sleep
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +24,7 @@ from familycare_worker.ai.provider import (
     RetryableProviderError,
 )
 from familycare_worker.event_jobs import (
+    MAX_STRUCTURING_JOB_AGE_SECONDS,
     STRUCTURING_ERROR_CODES,
     EventStructuringJobQueue,
     EventStructuringJobRecord,
@@ -263,6 +266,7 @@ def test_runner_calls_provider_with_only_bounded_event_context_and_persists_vali
         "mode": "pre_visit",
         "event_date": "2026-08-25",
         "visit_date": None,
+        "normalization_hints": {},
     }
     assert queue.completed is not None
     persisted_job, result = queue.completed
@@ -358,13 +362,9 @@ def test_confirmed_event_facts_project_only_supported_values_and_preserve_users(
         "MedicalEvent.classification": "user",
         "MedicalEvent.admission_days": "ai_structured",
     }
-    assert event_date == date(2026, 8, 25)
-    assert visit_date == date(2026, 8, 26)
-    assert changed_fields == (
-        "MedicalEvent.admission_days",
-        "MedicalEvent.event_date",
-        "MedicalEvent.visit_date",
-    )
+    assert event_date is None
+    assert visit_date is None
+    assert changed_fields == ("MedicalEvent.admission_days",)
 
 
 def test_queue_rejects_invalid_database_and_lease_configuration() -> None:
@@ -380,6 +380,32 @@ def test_completed_job_reads_do_not_require_the_claimed_event_version() -> None:
 
     assert "event.version = job.event_version" not in read_sql
     assert "event.version = job.event_version" in claim_sql
+
+
+def test_normalization_hints_require_the_current_applied_knowledge_snapshot() -> None:
+    class _Rows:
+        def fetchall(self) -> list[dict[str, object]]:
+            return []
+
+    class _Connection:
+        query = ""
+
+        def execute(self, query: str, _: object) -> _Rows:
+            self.query = query
+            return _Rows()
+
+    connection = _Connection()
+
+    assert (
+        EventStructuringJobQueue._normalization_hints(  # noqa: SLF001
+            connection,  # type: ignore[arg-type]
+            HOUSEHOLD_ID,
+        )
+        == {}
+    )
+    assert "private_knowledge_import_runs" in connection.query
+    assert "knowledge.state = 'APPLIED'" in connection.query
+    assert "knowledge.is_current = true" in connection.query
 
 
 def _psycopg_url(database_url: str) -> str:
@@ -489,6 +515,168 @@ def test_postgres_queue_claims_heartbeats_and_retries(seeded_database: Any) -> N
 
 
 @pytest.mark.integration
+def test_postgres_queue_expires_a_job_before_a_delayed_provider_claim(
+    seeded_database: Any,
+) -> None:
+    database_url, household_id, event_id = seeded_database
+    job_id = UUID("00000000-0000-4000-8000-000000000507")
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO medical_event_structuring_jobs (
+              id, household_space_id, medical_event_id, event_version,
+              state, structurer_version, available_at, max_attempts, created_at
+            ) VALUES (
+              %s, %s, %s, 1, 'queued', 'synthetic-event-v1',
+              clock_timestamp(), 3,
+              clock_timestamp() - (%s * interval '1 second')
+            )
+            """,
+            (
+                job_id,
+                household_id,
+                event_id,
+                MAX_STRUCTURING_JOB_AGE_SECONDS + 1,
+            ),
+        )
+
+    queue = EventStructuringJobQueue(database_url, default_lease_seconds=30)
+
+    assert queue.claim_next_job("worker-a") is None
+    stored = queue.get_job(job_id)
+    assert stored is not None
+    assert stored.state == "permanently_failed"
+    assert stored.attempts == 0
+    assert stored.error_code == "STRUCTURING_PROVIDER_TIMEOUT"
+
+
+@pytest.mark.integration
+def test_postgres_queue_rejects_a_provider_result_after_the_absolute_deadline(
+    seeded_database: Any,
+) -> None:
+    database_url, household_id, event_id = seeded_database
+    job_id = UUID("00000000-0000-4000-8000-000000000508")
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO medical_event_structuring_jobs (
+              id, household_space_id, medical_event_id, event_version,
+              state, structurer_version, available_at, max_attempts
+            ) VALUES (%s, %s, %s, 1, 'queued', 'synthetic-event-v1', clock_timestamp(), 3)
+            """,
+            (job_id, household_id, event_id),
+        )
+
+    queue = EventStructuringJobQueue(database_url, default_lease_seconds=30)
+    claimed = queue.claim_next_job("worker-a")
+    assert claimed is not None
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            UPDATE medical_event_structuring_jobs
+            SET created_at = clock_timestamp() - (%s * interval '1 second')
+            WHERE id = %s
+            """,
+            (MAX_STRUCTURING_JOB_AGE_SECONDS + 1, job_id),
+        )
+
+    assert queue.complete_job(claimed, "worker-a", _result()) is False
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        stored = connection.execute(
+            """
+            SELECT state, attempts, error_code
+            FROM medical_event_structuring_jobs
+            WHERE id = %s
+            """,
+            (job_id,),
+        ).fetchone()
+        event = connection.execute(
+            "SELECT version FROM medical_events WHERE id = %s",
+            (event_id,),
+        ).fetchone()
+        fact_version_count = connection.execute(
+            "SELECT count(*) FROM medical_event_fact_versions WHERE structuring_job_id = %s",
+            (job_id,),
+        ).fetchone()
+    assert stored == {
+        "state": "permanently_failed",
+        "attempts": 1,
+        "error_code": "STRUCTURING_PROVIDER_TIMEOUT",
+    }
+    assert event == {"version": 1}
+    assert fact_version_count == {"count": 0}
+
+
+@pytest.mark.integration
+def test_postgres_queue_rechecks_the_deadline_after_waiting_for_the_event_lock(
+    seeded_database: Any,
+) -> None:
+    database_url, household_id, event_id = seeded_database
+    job_id = UUID("00000000-0000-4000-8000-000000000509")
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO medical_event_structuring_jobs (
+              id, household_space_id, medical_event_id, event_version,
+              state, structurer_version, available_at, max_attempts
+            ) VALUES (%s, %s, %s, 1, 'queued', 'synthetic-event-v1', clock_timestamp(), 3)
+            """,
+            (job_id, household_id, event_id),
+        )
+
+    queue = EventStructuringJobQueue(database_url, default_lease_seconds=30)
+    claimed = queue.claim_next_job("worker-a")
+    assert claimed is not None
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            UPDATE medical_event_structuring_jobs
+            SET created_at = clock_timestamp() - (%s * interval '1 second')
+            WHERE id = %s
+            """,
+            (MAX_STRUCTURING_JOB_AGE_SECONDS - 1, job_id),
+        )
+
+    started = Event()
+    completed: list[bool] = []
+
+    def finish_provider_result() -> None:
+        started.set()
+        completed.append(queue.complete_job(claimed, "worker-a", _result()))
+
+    with psycopg.connect(_psycopg_url(database_url)) as blocker:
+        blocker.execute(
+            "SELECT id FROM medical_events WHERE id = %s FOR UPDATE",
+            (event_id,),
+        )
+        thread = Thread(target=finish_provider_result, daemon=True)
+        thread.start()
+        assert started.wait(timeout=1)
+        sleep(0.1)
+        assert thread.is_alive() is True
+        sleep(1.1)
+        blocker.commit()
+        thread.join(timeout=3)
+
+    assert thread.is_alive() is False
+    assert completed == [False]
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        stored = connection.execute(
+            "SELECT state, error_code FROM medical_event_structuring_jobs WHERE id = %s",
+            (job_id,),
+        ).fetchone()
+        event = connection.execute(
+            "SELECT version FROM medical_events WHERE id = %s",
+            (event_id,),
+        ).fetchone()
+    assert stored == {
+        "state": "permanently_failed",
+        "error_code": "STRUCTURING_PROVIDER_TIMEOUT",
+    }
+    assert event == {"version": 1}
+
+
+@pytest.mark.integration
 def test_postgres_runner_persists_validated_facts_and_not_raw_situation(
     seeded_database: Any,
 ) -> None:
@@ -563,8 +751,8 @@ def test_postgres_runner_persists_validated_facts_and_not_raw_situation(
     assert version["issue_codes_json"] == [{"code": "INVALID_VALUE"}]
     assert event == {
         "version": 2,
-        "event_date": date(2026, 8, 25),
-        "visit_date": date(2026, 8, 26),
+        "event_date": None,
+        "visit_date": None,
         "facts_json": {
             "MedicalEvent.admission_days": 0,
             "MedicalEvent.classification": "synthetic-condition",

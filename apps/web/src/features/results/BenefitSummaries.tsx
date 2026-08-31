@@ -26,10 +26,10 @@ export function BenefitSummaries({
           <h2 id="fixed-summary-title">조건부 정액 합계</h2>
         </div>
         <p className={styles.summaryNotice}>
-          검토된 계산식으로 산출한 정액형 조건부 예상액을 통화별로 모았습니다.
-          조건이 일치한 후보뿐 아니라, 판정이 추가 확인으로 남은 자문 담보의
-          조건부 예상액도 포함될 수 있습니다. 실제 지급액을 확정하는 합계가
-          아닙니다.
+          검토된 계산식 또는 증권의 정액 가입금액으로 산출한 조건부 예상액을
+          통화별로 모았습니다. 조건이 일치한 후보뿐 아니라, 판정이 추가 확인으로
+          남은 자문 담보의 조건부 예상액도 포함될 수 있습니다. 실제 지급액을
+          확정하는 합계가 아닙니다.
         </p>
         {result.conditional_fixed_subtotals.length > 0 ? (
           <div className={styles.subtotalGrid}>

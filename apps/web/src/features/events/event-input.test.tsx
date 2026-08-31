@@ -194,6 +194,276 @@ describe("hybrid medical event input", () => {
     expect(analyzeRequests).toBe(1);
   });
 
+  it("structures an unstructured event before requesting its result", async () => {
+    const user = userEvent.setup();
+    const baseEvent = {
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000212",
+      id: "00000000-0000-4000-8000-000000000211",
+      mode: "post_treatment",
+      optional_questions: [],
+      situation: "Synthetic post-treatment procedure",
+      structured_facts: [],
+      visit_date: null,
+    };
+    const jobId = "00000000-0000-4000-8000-000000000213";
+    const statusUrl = `/api/v1/medical-event-structuring-jobs/${jobId}`;
+    const requestOrder: string[] = [];
+    let statusPolls = 0;
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        if (
+          url.pathname === "/api/v1/medical-events" &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({ ...baseEvent, version: 1 }, 201);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "PATCH"
+        ) {
+          requestOrder.push("save");
+          return jsonResponse({ ...baseEvent, version: 2 });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/structure` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("structure");
+          return jsonResponse(
+            {
+              job_id: jobId,
+              schema_version: "1",
+              state: "queued",
+              status_url: statusUrl,
+            },
+            202,
+          );
+        }
+        if (url.pathname === statusUrl && init?.method === "GET") {
+          requestOrder.push("wait-for-structure");
+          statusPolls += 1;
+          return jsonResponse({
+            attempts: 1,
+            error_code:
+              statusPolls === 1 ? "STRUCTURING_PROVIDER_TIMEOUT" : null,
+            facts: [],
+            issues: [],
+            job_id: jobId,
+            questions: [],
+            schema_version: "1",
+            state: statusPolls === 1 ? "retryable_failed" : "succeeded",
+          });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "GET"
+        ) {
+          requestOrder.push("reload-structured-event");
+          return jsonResponse({
+            ...baseEvent,
+            structured_facts: [SYNTHETIC_FACT],
+            version: 3,
+          });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/analyze` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("analyze");
+          return jsonResponse(
+            { error_code: "ANALYSIS_UNAVAILABLE", message: "unavailable" },
+            503,
+          );
+        }
+        return jsonResponse(
+          { error_code: "NOT_FOUND", message: "not found" },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewEventPage memberId={baseEvent.family_member_id} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      baseEvent.situation,
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    await user.click(await screen.findByRole("button", { name: "결과 확인" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "결과를 확인하지 못했습니다",
+    );
+    expect(requestOrder).toEqual([
+      "save",
+      "structure",
+      "wait-for-structure",
+      "wait-for-structure",
+      "reload-structured-event",
+      "analyze",
+    ]);
+  });
+
+  it("does not repeat automatic structuring after an earlier attempt", async () => {
+    const user = userEvent.setup();
+    const baseEvent = {
+      auto_structuring_attempted: true,
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000232",
+      id: "00000000-0000-4000-8000-000000000231",
+      mode: "post_treatment",
+      optional_questions: [],
+      situation: "Synthetic previously attempted procedure",
+      structured_facts: [],
+      visit_date: null,
+    };
+    const requestOrder: string[] = [];
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        if (
+          url.pathname === "/api/v1/medical-events" &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({ ...baseEvent, version: 1 }, 201);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "PATCH"
+        ) {
+          requestOrder.push("save");
+          return jsonResponse({ ...baseEvent, version: 2 });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/structure` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("structure");
+          return jsonResponse({}, 500);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/analyze` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("analyze");
+          return jsonResponse(
+            { error_code: "ANALYSIS_UNAVAILABLE", message: "unavailable" },
+            503,
+          );
+        }
+        return jsonResponse(
+          { error_code: "NOT_FOUND", message: "not found" },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewEventPage memberId={baseEvent.family_member_id} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      baseEvent.situation,
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    await user.click(await screen.findByRole("button", { name: "결과 확인" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "결과를 확인하지 못했습니다",
+    );
+    expect(requestOrder).toEqual(["save", "analyze"]);
+  });
+
+  it("does not spend another structuring call when structured facts already exist", async () => {
+    const user = userEvent.setup();
+    const baseEvent = {
+      deleted: false,
+      event_date: null,
+      facts: {},
+      family_member_id: "00000000-0000-4000-8000-000000000222",
+      id: "00000000-0000-4000-8000-000000000221",
+      mode: "post_treatment",
+      optional_questions: [],
+      situation: "Synthetic structured procedure",
+      structured_facts: [SYNTHETIC_FACT],
+      visit_date: null,
+    };
+    const requestOrder: string[] = [];
+    const jsonResponse = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = new URL(String(input), window.location.origin);
+        if (
+          url.pathname === "/api/v1/medical-events" &&
+          init?.method === "POST"
+        ) {
+          return jsonResponse({ ...baseEvent, version: 1 }, 201);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}` &&
+          init?.method === "PATCH"
+        ) {
+          requestOrder.push("save");
+          return jsonResponse({ ...baseEvent, version: 2 });
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/structure` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("structure");
+          return jsonResponse({}, 500);
+        }
+        if (
+          url.pathname === `/api/v1/medical-events/${baseEvent.id}/analyze` &&
+          init?.method === "POST"
+        ) {
+          requestOrder.push("analyze");
+          return jsonResponse(
+            { error_code: "ANALYSIS_UNAVAILABLE", message: "unavailable" },
+            503,
+          );
+        }
+        return jsonResponse(
+          { error_code: "NOT_FOUND", message: "not found" },
+          404,
+        );
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<NewEventPage memberId={baseEvent.family_member_id} />);
+    await user.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      baseEvent.situation,
+    );
+    await user.click(screen.getByRole("button", { name: "현재 후보 보기" }));
+    await user.click(await screen.findByRole("button", { name: "결과 확인" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "결과를 확인하지 못했습니다",
+    );
+    expect(requestOrder).toEqual(["save", "analyze"]);
+  });
+
   it("clears a stale success message when a later save fails", async () => {
     const user = userEvent.setup();
     const onSubmit = vi

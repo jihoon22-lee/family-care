@@ -101,6 +101,10 @@ def test_recommender_schema_forbids_extra_decision_and_amount_fields() -> None:
     schema = recommender_schema()
 
     assert schema["additionalProperties"] is False
+    assert schema["properties"]["schema_version"] == {  # type: ignore[index]
+        "const": "1",
+        "type": "string",
+    }
     item = schema["properties"]["recommendations"]["items"]  # type: ignore[index]
     assert item["additionalProperties"] is False
     assert set(item["properties"]) == {  # type: ignore[arg-type]

@@ -14,6 +14,7 @@ from familycare_api.decisions.domain import FactValue, MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
     KnowledgeBenefitCalculation,
     KnowledgeCalculationPublication,
+    KnowledgeCertificateEvidence,
     KnowledgeCitation,
     KnowledgeCoverageContext,
     KnowledgeDecisionContext,
@@ -232,6 +233,14 @@ def _coverage(
                 ),
             )
         ),
+        certificate_evidence=(
+            KnowledgeCertificateEvidence(
+                document_alias=f"Sample Certificate {offset}",
+                evidence_pages=(3,),
+            ),
+        ),
+        certificate_amount_decision="MATCH",
+        certificate_amount_evidence_state="DIRECT",
         rules=(rules if rules is not None else (rule or _eligibility_rule(offset),)),
         calculation=(
             calculation
@@ -403,6 +412,7 @@ def test_non_executable_catalog_rows_do_not_pollute_benefit_summaries() -> None:
     assert result.fixed_subtotals[0].amount == Decimal("100")
     assert result.fixed_subtotals[0].calculated_candidate_count == 1
     assert result.fixed_subtotals[0].unresolved_candidate_count == 0
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 0
     assert result.indemnity_summary.candidate_count == 1
     assert result.indemnity_summary.calculated_candidate_count == 0
     assert result.indemnity_summary.unresolved_candidate_count == 1
@@ -569,7 +579,7 @@ def test_advisory_no_match_still_carries_publication_hold() -> None:
     assert result.calculations[0].confirmed_amount is None
 
 
-def test_advisory_amount_without_reviewed_formula_is_never_calculated() -> None:
+def test_reviewed_fixed_rule_uses_certificate_amount_when_formula_is_absent() -> None:
     amount_only = replace(
         _coverage(19, "100"),
         disposition="ADVISORY",
@@ -580,12 +590,89 @@ def test_advisory_amount_without_reviewed_formula_is_never_calculated() -> None:
 
     assert result.candidates[0].result == "UNKNOWN"
     assert "COVERAGE_PUBLICATION_ADVISORY" in result.candidates[0].hold_reason_codes
-    assert result.calculations[0].status == "UNKNOWN"
-    assert result.calculations[0].conditional_amount is None
+    assert result.calculations[0].status == "CALCULATED"
+    assert result.calculations[0].calculation_publication_id is None
+    assert result.calculations[0].conditional_amount == Decimal("100")
     assert result.calculations[0].confirmed_amount is None
-    assert result.fixed_subtotals[0].amount == 0
+    assert result.calculations[0].hold_reason_code == "COVERAGE_PUBLICATION_ADVISORY"
+    assert result.calculations[0].steps[0].operation == "certificate_insured_amount"
+    assert result.calculations[0].certificate_evidence == amount_only.certificate_evidence
+    assert result.calculations[0].certificate_amount_decision == "MATCH"
+    assert result.calculations[0].certificate_amount_evidence_state == "DIRECT"
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
+
+
+def test_unreviewed_certificate_amount_is_visible_but_excluded_from_the_subtotal() -> None:
+    amount_only = replace(
+        _coverage(25, "100"),
+        calculation=None,
+        certificate_amount_decision="UNKNOWN",
+        certificate_amount_evidence_state="REVIEW_REQUIRED",
+    )
+
+    result = _evaluate(_event(), amount_only)
+
+    calculation = result.calculations[0]
+    assert calculation.status == "CALCULATED"
+    assert calculation.conditional_amount == Decimal("100")
+    assert calculation.confirmed_amount is None
+    assert calculation.hold_reason_code == "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
+    assert calculation.certificate_amount_decision == "UNKNOWN"
+    assert calculation.certificate_amount_evidence_state == "REVIEW_REQUIRED"
+    assert result.fixed_subtotals[0].amount == Decimal("0")
     assert result.fixed_subtotals[0].calculated_candidate_count == 0
     assert result.fixed_subtotals[0].unresolved_candidate_count == 1
+
+
+@pytest.mark.parametrize(
+    ("amount_decision", "evidence_state"),
+    [
+        ("UNKNOWN", "REVIEW_REQUIRED"),
+        ("NOT_APPLICABLE", "REVIEW_REQUIRED"),
+        ("MATCH", "REVIEW_REQUIRED"),
+        ("UNKNOWN", "UNAVAILABLE"),
+    ],
+)
+def test_published_formula_keeps_unreviewed_certificate_amount_conditional(
+    amount_decision: str,
+    evidence_state: str,
+) -> None:
+    coverage = replace(
+        _coverage(26, "100"),
+        certificate_amount_decision=amount_decision,  # type: ignore[arg-type]
+        certificate_amount_evidence_state=evidence_state,  # type: ignore[arg-type]
+        certificate_evidence=(
+            _coverage(26, "100").certificate_evidence if evidence_state == "REVIEW_REQUIRED" else ()
+        ),
+    )
+
+    result = _evaluate(_event(), coverage)
+
+    calculation = result.calculations[0]
+    assert result.candidates[0].result == "MATCH"
+    assert calculation.status == "CALCULATED"
+    assert calculation.conditional_amount == Decimal("100")
+    assert calculation.confirmed_amount is None
+    assert calculation.hold_reason_code == "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
+    assert result.fixed_subtotals[0].amount == Decimal("0")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 0
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 1
+
+
+def test_published_certificate_amount_remains_an_estimate_without_a_formula() -> None:
+    amount_only = replace(_coverage(24, "100"), calculation=None)
+
+    result = _evaluate(_event(), amount_only)
+
+    assert result.candidates[0].result == "MATCH"
+    assert result.calculations[0].status == "CALCULATED"
+    assert result.calculations[0].calculation_publication_id is None
+    assert result.calculations[0].conditional_amount == Decimal("100")
+    assert result.calculations[0].confirmed_amount is None
+    assert result.calculations[0].hold_reason_code is None
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
 
 
 def test_calculation_authority_rejects_confirmed_amount_for_holds_and_unresolved_status() -> None:
@@ -742,7 +829,46 @@ def test_every_coverage_authority_gate_fails_closed() -> None:
 def test_untrusted_fact_missing_event_status_and_invalid_citation_fail_closed() -> None:
     suggested = _evaluate(_event(confirmation="ai_structured"), _coverage(1, "100"))
     assert suggested.candidates[0].result == "UNKNOWN"
-    assert "MedicalEvent.classification" in suggested.evaluations[0].missing_fields
+    assert "AI_STRUCTURED_FACTS_UNCONFIRMED" in suggested.candidates[0].hold_reason_codes
+    assert suggested.evaluations[0].result == "MATCH"
+    assert suggested.evaluations[0].missing_fields == ()
+    assert suggested.calculations[0].status == "CALCULATED"
+    assert suggested.calculations[0].conditional_amount == Decimal("100")
+    assert suggested.calculations[0].confirmed_amount is None
+    assert suggested.fixed_subtotals[0].amount == Decimal("100")
+
+    suggested_mismatch = _evaluate(
+        _event("different_category", confirmation="ai_structured"),
+        _coverage(31, "100"),
+    )
+    assert suggested_mismatch.evaluations[0].result == "NO_MATCH"
+    assert suggested_mismatch.candidates[0].result == "UNKNOWN"
+    assert "AI_STRUCTURED_FACTS_UNCONFIRMED" in (suggested_mismatch.candidates[0].hold_reason_codes)
+    assert suggested_mismatch.calculations[0].status == "UNKNOWN"
+    assert suggested_mismatch.calculations[0].conditional_amount is None
+
+    suggested_exclusion = _evaluate(
+        _event(confirmation="ai_structured"),
+        _coverage(32, "100", rule=_eligibility_rule(32, exclusion=True)),
+    )
+    assert suggested_exclusion.evaluations[0].result == "NO_MATCH"
+    assert suggested_exclusion.candidates[0].result == "UNKNOWN"
+    assert "AI_STRUCTURED_FACTS_UNCONFIRMED" in (
+        suggested_exclusion.candidates[0].hold_reason_codes
+    )
+    assert suggested_exclusion.calculations[0].status == "UNKNOWN"
+    assert suggested_exclusion.calculations[0].conditional_amount is None
+
+    missing_event_date = _evaluate(
+        replace(_event(), event_date=None, visit_date=None),
+        _coverage(33, "100"),
+    )
+    assert missing_event_date.candidates[0].result == "UNKNOWN"
+    assert "EVENT_DATE_REQUIRED" in missing_event_date.candidates[0].hold_reason_codes
+    assert missing_event_date.calculations[0].status == "CALCULATED"
+    assert missing_event_date.calculations[0].conditional_amount == Decimal("100")
+    assert missing_event_date.calculations[0].confirmed_amount is None
+    assert missing_event_date.calculations[0].hold_reason_code == "EVENT_DATE_REQUIRED"
 
     no_status = _evaluate(_event(), _coverage(2, "100", status_intervals=()))
     assert no_status.candidates[0].result == "UNKNOWN"

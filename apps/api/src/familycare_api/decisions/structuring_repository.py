@@ -125,7 +125,7 @@ class EventStructuringRepository:
                     WHERE household_space_id = %s
                       AND medical_event_id = %s
                       AND event_version = %s
-                      AND state IN ('queued', 'running')
+                      AND state <> 'cancelled'
                     ORDER BY created_at DESC, id DESC
                     LIMIT 1
                     """,
@@ -138,7 +138,7 @@ class EventStructuringRepository:
                     INSERT INTO medical_event_structuring_jobs (
                       household_space_id, medical_event_id, event_version, state,
                       structurer_version, available_at, max_attempts
-                    ) VALUES (%s, %s, %s, 'queued', %s, clock_timestamp(), 3)
+                    ) VALUES (%s, %s, %s, 'queued', %s, clock_timestamp(), 1)
                     RETURNING *
                     """,
                     (

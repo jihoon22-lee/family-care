@@ -51,6 +51,12 @@ function isConditionalPolicyEstimate(
 function calculationStatusLabel(
   calculation: KnowledgeBenefitCalculationResponse,
 ): string {
+  if (
+    calculation.status === "CALCULATED" &&
+    calculation.calculation_publication_id === null
+  ) {
+    return "증권 기준 예상액";
+  }
   if (isConditionalPolicyEstimate(calculation)) return "조건부 약관 예상액";
   if (calculation.status === "CALCULATED") {
     return calculation.confirmed_amount === null
@@ -68,6 +74,7 @@ function calculationOperationLabel(operation: string): string {
     apply_limit: "보장 한도 적용",
     apply_rate: "보장 비율 적용",
     exclude_amount: "제외 금액 반영",
+    certificate_insured_amount: "증권 가입 금액 적용",
     fixed_amount: "정액 금액 적용",
     round: "약관 기준 반올림",
     sum_eligible_receipts: "대상 영수증 합계",
@@ -97,6 +104,7 @@ function KnowledgeCalculationTrace({
         ? calculation.conditional_amount
         : (calculation.confirmed_amount ?? calculation.conditional_amount)
       : null;
+  const certificateEvidence = calculation.certificate_evidence ?? [];
 
   return (
     <div className={styles.knowledgeCalculation}>
@@ -115,12 +123,14 @@ function KnowledgeCalculationTrace({
       </div>
       {amount && calculation.currency ? (
         <p className={styles.conditionalAmount}>
-          {conditionalPolicyEstimate
-            ? "조건부 예상액"
-            : calculation.status === "CALCULATED" &&
-                calculation.confirmed_amount !== null
-              ? "확인된 계산 금액"
-              : "조건부 계산"}
+          {calculation.calculation_publication_id === null
+            ? "예상 금액"
+            : conditionalPolicyEstimate
+              ? "조건부 예상액"
+              : calculation.status === "CALCULATED" &&
+                  calculation.confirmed_amount !== null
+                ? "확인된 계산 금액"
+                : "조건부 계산"}
           : {amount} {calculation.currency}
         </p>
       ) : (
@@ -154,6 +164,34 @@ function KnowledgeCalculationTrace({
             </li>
           ))}
         </ol>
+      ) : null}
+      {certificateEvidence.length > 0 ? (
+        <div className={styles.certificateEvidence}>
+          <strong>
+            {calculation.certificate_amount_evidence_state === "DIRECT"
+              ? "증권 가입금액 직접 근거"
+              : "증권 담보 근거 · 가입금액 위치 확인 필요"}
+          </strong>
+          <ul>
+            {certificateEvidence.map((evidence) => (
+              <li
+                key={`${evidence.document_alias}:${evidence.evidence_pages.join("-")}`}
+              >
+                <span>{evidence.document_alias}</span>
+                <small>
+                  {evidence.evidence_pages
+                    .map((page) => `${page}쪽`)
+                    .join(", ")}
+                </small>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : calculation.calculation_publication_id === null &&
+        calculation.certificate_amount_evidence_state === "UNAVAILABLE" ? (
+        <p className={styles.calculationStatus}>
+          가입금액 근거 페이지가 아직 구조화되지 않았습니다.
+        </p>
       ) : null}
     </div>
   );

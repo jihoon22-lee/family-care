@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Activate every reviewed certificate coverage as an advisory search result and automatically provide a conditional fixed-benefit amount only when a cited, reviewed formula is executable.
+**Goal:** Activate every reviewed certificate coverage as an advisory search result and automatically provide a conditional fixed-benefit estimate from either a cited reviewed formula or, for rule-matched fixed coverage only, the certificate insured amount.
 
 **Architecture:** Add `ADVISORY` beside the strict `PUBLISHED` execution state, preserve append-only publication history, and let the deterministic engine compute conditional amounts without converting unresolved eligibility to `MATCH`. Persist and expose advisory counts through the decision snapshot and render the distinction in the Web result page.
 
@@ -20,7 +20,8 @@ release, and protected live cutover remain.
 - Do not weaken the exact-rule and citation requirements for `PUBLISHED` coverage.
 - Do not treat a conditional amount as confirmed eligibility. Include it only in the explicitly named
   conditional fixed subtotal, with `confirmed_amount` left null.
-- Never substitute a certificate insured amount for a missing payment formula.
+- A rule-matched fixed coverage may use the certificate insured amount only as a conditional
+  estimate with `calculation_publication_id` and `confirmed_amount` left null and an explicit trace.
 - Do not estimate indemnity payment without receipt and cost-sharing inputs.
 - Apply private data only through backup, dry run, restored-database verification, and one real apply.
 
@@ -53,6 +54,11 @@ release, and protected live cutover remain.
 - [x] Add RED tests for reviewed conditional calculation, decisive no-match suppression, indemnity suppression, catalog-only suppression, and conditional subtotal behavior.
 - [x] Run the focused engine tests and confirm the expected failures.
 - [x] Implement conditional execution of reviewed fixed calculations while keeping the candidate `UNKNOWN` and `confirmed_amount` null.
+- [x] Add the user-approved certificate fixed-amount estimate fallback only after a reviewed rule
+  matches; exclude catalog-only, decisive no-match, and indemnity rows.
+- [x] Keep every AI-suggested rule outcome non-authoritative, retain AI dates as candidate facts,
+  and preserve conditional fixed estimates when only the event date is missing.
+- [x] Attach the bound certificate document alias and evidence pages to amount calculations.
 - [x] Run focused and decision integration tests to GREEN.
 
 ### Task 3: Present advisory and conditional results clearly
@@ -66,6 +72,10 @@ release, and protected live cutover remain.
 - [x] Add RED component tests for advisory coverage counts and conditional amount wording.
 - [x] Run the focused Vitest tests and confirm the expected failures.
 - [x] Implement the labels without changing candidate authority.
+- [x] Name the automatically evaluated coverages, hide catalog-only event cards, and label the
+  certificate fallback as an estimate rather than a confirmed calculation.
+- [x] Make automatic structuring a single bounded attempt, keep retryable polling non-terminal,
+  and persist an event-level attempted marker so failed or empty runs do not spend another call.
 - [x] Run focused Web tests and `web:check` to GREEN.
 
 ### Task 4: Supersede the private publication and verify live behavior
@@ -84,8 +94,8 @@ release, and protected live cutover remain.
 
 **Files:** Version metadata, changelog, release evidence, and roadmap only after the feature PR merges.
 
-- [ ] Run the complete serial repository gate and privacy review.
+- [x] Run the complete serial repository gate and privacy review.
 - [ ] Push the feature branch, create the PR, wait for CI, and merge.
-- [ ] Create `release/v0-3-0`, update all product versions and release records, run the complete gate, open a release PR, wait for CI, and merge.
-- [ ] Tag the release merge as `v0.3.0`, verify the release workflow and all three version/SHA image digests.
-- [ ] Back up the current Compose database, stop only the FamilyCare stack, deploy the digest-pinned v0.3.0 images, migrate, and verify health, data counts, and the result path.
+- [ ] Create `release/v0-3-1`, update all product versions and release records, run the complete gate, open a release PR, wait for CI, and merge.
+- [ ] Tag the release merge as `v0.3.1`, verify the release workflow and all three version/SHA image digests.
+- [ ] Back up the current Compose database, stop only the FamilyCare stack, deploy the digest-pinned v0.3.1 images, migrate, and verify health, data counts, and the result path.

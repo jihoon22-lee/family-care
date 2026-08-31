@@ -19,6 +19,8 @@ EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME = "event_clause_recommendations_v1"
 DEFAULT_RECOMMENDER_OUTPUT_TOKENS = 1_200
 MAX_RECOMMENDER_OUTPUT_TOKENS = 4_000
 PROVIDER_REQUEST_TIMEOUT_SECONDS = 120.0
+EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS = 50.0
+DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS = 2_000
 DEFAULT_STRUCTURER_MODEL = "gpt-5.6-luna"
 DEFAULT_VERIFIER_MODEL = "gpt-5.6-terra"
 _FORBIDDEN_INPUT_KEYS = frozenset(
@@ -186,12 +188,14 @@ class OpenAiResponsesAdapter:
         schema_registry: Mapping[str, Mapping[str, object]],
         *,
         output_token_limits: Mapping[str, int] | None = None,
+        request_timeouts: Mapping[str, float] | None = None,
         client_factory: ClientFactory = _default_client_factory,
     ) -> None:
         if not schema_registry or _forbidden_keys(schema_registry):
             raise ProviderConfigurationError
         requested_limits = dict(output_token_limits or {})
-        if set(requested_limits) - set(schema_registry):
+        requested_timeouts = dict(request_timeouts or {})
+        if (set(requested_limits) | set(requested_timeouts)) - set(schema_registry):
             raise ProviderConfigurationError
         resolved_limits: dict[str, int] = {}
         for name in schema_registry:
@@ -211,10 +215,22 @@ class OpenAiResponsesAdapter:
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= maximum:
                 raise ProviderConfigurationError
             resolved_limits[name] = value
+        resolved_timeouts: dict[str, float] = {}
+        for name in schema_registry:
+            timeout = requested_timeouts.get(name, PROVIDER_REQUEST_TIMEOUT_SECONDS)
+            if (
+                isinstance(timeout, bool)
+                or not isinstance(timeout, int | float)
+                or not math.isfinite(timeout)
+                or not 0 < timeout <= PROVIDER_REQUEST_TIMEOUT_SECONDS
+            ):
+                raise ProviderConfigurationError
+            resolved_timeouts[name] = float(timeout)
         self._schemas = MappingProxyType(
             {name: MappingProxyType(dict(schema)) for name, schema in schema_registry.items()}
         )
         self._output_token_limits = MappingProxyType(resolved_limits)
+        self._request_timeouts = MappingProxyType(resolved_timeouts)
         self._client_factory = client_factory
 
     def complete(
@@ -252,7 +268,7 @@ class OpenAiResponsesAdapter:
                     }
                 },
                 store=False,
-                timeout=PROVIDER_REQUEST_TIMEOUT_SECONDS,
+                timeout=self._request_timeouts[schema_name],
             )
         except openai.APITimeoutError:
             raise ProviderTimeoutError from None
@@ -295,6 +311,7 @@ __all__ = [
     "DEFAULT_STRUCTURER_MODEL",
     "DEFAULT_VERIFIER_MODEL",
     "DEFAULT_RECOMMENDER_OUTPUT_TOKENS",
+    "DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS",
     "EvidenceSlice",
     "EVENT_CLAUSE_RECOMMENDER_SCHEMA_NAME",
     "MAX_PROVIDER_OUTPUT_TOKENS",
@@ -308,6 +325,7 @@ __all__ = [
     "ProviderUnavailableError",
     "ProviderValidationError",
     "PROVIDER_REQUEST_TIMEOUT_SECONDS",
+    "EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS",
     "RetryableProviderError",
     "provider_payload",
 ]

@@ -71,7 +71,14 @@ def test_provider_request_contains_only_event_situation_and_temporal_context() -
 
     assert provider.request is not None
     keys, scalars = _walk(provider.request)
-    assert keys == {"schema_version", "situation", "mode", "event_date", "visit_date"}
+    assert keys == {
+        "schema_version",
+        "situation",
+        "mode",
+        "event_date",
+        "visit_date",
+        "normalization_hints",
+    }
     assert "Synthetic situation" in scalars
     assert not {
         "source_path",

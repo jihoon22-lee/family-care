@@ -229,6 +229,40 @@
   font-size: 0.78rem;
 }
 
+.reviewedCoveragePanel {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-left: 3px solid var(--confirmed, #087f6d);
+  background: rgb(8 127 109 / 6%);
+}
+
+.reviewedCoveragePanel h3,
+.reviewedCoveragePanel p,
+.reviewedCoveragePanel ul {
+  margin: 0;
+}
+
+.reviewedCoveragePanel p,
+.reviewedCoveragePanel span {
+  color: var(--quiet, #5d6b7d);
+}
+
+.reviewedCoveragePanel ul {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.reviewedCoveragePanel li {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule, #c8d6df);
+  background: var(--paper, #fbfcfd);
+}
+
 .sourceFailures ul {
   margin: 8px 0 0;
   padding-left: 18px;
@@ -293,6 +327,26 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.certificateEvidence {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.certificateEvidence ul {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.certificateEvidence li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
 }
 
 .candidateCard,
