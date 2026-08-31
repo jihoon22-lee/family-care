@@ -11,7 +11,10 @@ from familycare_api.private_knowledge.confirmations import (
     AppliedConfirmationSet,
     ConfirmationDryRunReport,
 )
-from familycare_api.private_knowledge.publication_models import PublicationCounts
+from familycare_api.private_knowledge.publication_models import (
+    PublicationCounts,
+    PublicationCountsV2,
+)
 from familycare_api.private_knowledge.publication_reconciliation import (
     DispositionCounts,
     PublicationBlockCounts,
@@ -331,5 +334,22 @@ def test_publication_commands_use_separate_paths_and_print_only_counts(
     assert "status=PUBLICATION_APPLIED" in output.out
     assert "status=PUBLICATION_VERIFIED" in output.out
     assert "published=1" in output.out
+    assert "advisory=0" in output.out
     for private_value in (str(package_root), str(report_path), "private-dsn", "a" * 64):
         assert private_value not in output.out
+
+
+def test_v2_publication_counts_expose_user_confirmed_enrollment_total(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    counts = PublicationCountsV2(
+        **PublicationCounts.zero().model_dump(),
+        advisory_disposition_count=3,
+        user_confirmed_enrollment_count=2,
+    )
+
+    cli._print_publication_counts(status="SYNTHETIC_V2", counts=counts)  # noqa: SLF001
+
+    output = capsys.readouterr()
+    assert "advisory=3" in output.out
+    assert "user_confirmed_enrollment=2" in output.out

@@ -89,24 +89,44 @@ def _seed_decision_foundation(
             "b" * 64,
         ),
     )
-    connection.execute(
+    disposition_id = UUID("00000000-0000-4000-8000-000000003010")
+    has_authority_columns = connection.execute(
         """
-        INSERT INTO private_knowledge_coverage_execution_dispositions (
-          id, rule_import_run_id, knowledge_import_run_id,
-          household_space_id, knowledge_coverage_id, disposition,
-          reason_codes_json
-        ) VALUES (
-          %s, %s, %s, %s, %s, 'PUBLISHED', '[]'::jsonb
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'private_knowledge_coverage_execution_dispositions'
+          AND column_name = 'enrollment_authority'
+        """
+    ).fetchone()
+    if has_authority_columns is None:
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_coverage_execution_dispositions (
+              id, rule_import_run_id, knowledge_import_run_id,
+              household_space_id, knowledge_coverage_id, disposition,
+              reason_codes_json
+            ) VALUES (
+              %s, %s, %s, %s, %s, 'PUBLISHED', '[]'::jsonb
+            )
+            """,
+            (disposition_id, RULE_RUN_ID, RUN_ID, HOUSEHOLD_ID, COVERAGE_ID),
         )
-        """,
-        (
-            UUID("00000000-0000-4000-8000-000000003010"),
-            RULE_RUN_ID,
-            RUN_ID,
-            HOUSEHOLD_ID,
-            COVERAGE_ID,
-        ),
-    )
+    else:
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_coverage_execution_dispositions (
+              id, rule_import_run_id, knowledge_import_run_id,
+              household_space_id, knowledge_coverage_id, disposition,
+              reason_codes_json, enrollment_decision_snapshot,
+              enrollment_authority
+            ) VALUES (
+              %s, %s, %s, %s, %s, 'PUBLISHED', '[]'::jsonb,
+              'MATCH', 'CERTIFICATE_SNAPSHOT'
+            )
+            """,
+            (disposition_id, RULE_RUN_ID, RUN_ID, HOUSEHOLD_ID, COVERAGE_ID),
+        )
     connection.execute(
         """
         INSERT INTO private_knowledge_rule_publications (

@@ -163,21 +163,30 @@ class PostgresKnowledgeDecisionRepository:
                      AS contract_end,
                    disposition.disposition,
                    subject.binding_decision AS subject_binding_decision,
-                   coverage.enrollment_decision,
+                   coverage.enrollment_decision
+                     AS raw_certificate_enrollment_decision,
+                   CASE
+                     WHEN disposition.enrollment_authority =
+                            'USER_CONFIRMED_COVERAGE_ENROLLMENT'
+                      AND disposition.enrollment_confirmed_by IS NOT NULL
+                     THEN 'MATCH'
+                     ELSE coverage.enrollment_decision
+                   END AS effective_enrollment_decision,
+                   disposition.enrollment_decision_snapshot
+                     AS publication_enrollment_decision_snapshot,
+                   disposition.enrollment_authority
+                     AS publication_enrollment_authority,
+                   disposition.enrollment_confirmed_by
+                     AS publication_enrollment_confirmed_by,
                    coverage.component_classification,
-                   count(mapping.id)::integer AS mapping_count,
-                   min(mapping.mapping_applicability) AS mapping_applicability,
-                   min(mapping.enrollment_decision) AS mapping_enrollment_decision,
-                   min(mapping.document_identity_decision)
-                     AS document_identity_decision,
-                   min(mapping.edition_applicability_decision)
-                     AS edition_applicability_decision,
-                   min(mapping.section_mapping_decision)
-                     AS section_mapping_decision,
-                   min(mapping.overall_decision) AS overall_mapping_decision,
-                   (array_agg(mapping.terms_section_id ORDER BY mapping.id)
-                     FILTER (WHERE mapping.terms_section_id IS NOT NULL))[1]
-                     AS mapped_terms_section_id,
+                   mapping.mapping_count,
+                   mapping.mapping_applicability,
+                   mapping.mapping_enrollment_decision,
+                   mapping.document_identity_decision,
+                   mapping.edition_applicability_decision,
+                   mapping.section_mapping_decision,
+                   mapping.overall_mapping_decision,
+                   mapping.mapped_terms_section_id,
                    confirmation.decision AS current_confirmation_decision,
                    confirmation.confirmed_status AS current_confirmed_status,
                    confirmation.confirmation_digest_sha256,
@@ -190,9 +199,60 @@ class PostgresKnowledgeDecisionRepository:
             JOIN private_knowledge_coverages AS coverage
               ON coverage.knowledge_contract_id = contract.id
              AND coverage.import_run_id = contract.import_run_id
-            LEFT JOIN private_knowledge_coverage_terms_mappings AS mapping
-              ON mapping.coverage_id = coverage.id
-             AND mapping.import_run_id = coverage.import_run_id
+            LEFT JOIN LATERAL (
+              SELECT count(*)::integer AS mapping_count,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.mapping_applicability = 'NOT_APPLICABLE')
+                         THEN 'NOT_APPLICABLE'
+                       WHEN bool_and(item.mapping_applicability = 'APPLICABLE')
+                         THEN 'APPLICABLE'
+                       ELSE 'UNKNOWN'
+                     END AS mapping_applicability,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.enrollment_decision = 'NO_MATCH')
+                         THEN 'NO_MATCH'
+                       WHEN bool_and(item.enrollment_decision = 'MATCH') THEN 'MATCH'
+                       ELSE 'UNKNOWN'
+                     END AS mapping_enrollment_decision,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.document_identity_decision = 'NO_MATCH')
+                         THEN 'NO_MATCH'
+                       WHEN bool_and(item.document_identity_decision = 'MATCH')
+                         THEN 'MATCH'
+                       ELSE 'UNKNOWN'
+                     END AS document_identity_decision,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.edition_applicability_decision = 'NO_MATCH')
+                         THEN 'NO_MATCH'
+                       WHEN bool_and(item.edition_applicability_decision = 'MATCH')
+                         THEN 'MATCH'
+                       ELSE 'UNKNOWN'
+                     END AS edition_applicability_decision,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.section_mapping_decision = 'NO_MATCH')
+                         THEN 'NO_MATCH'
+                       WHEN bool_and(item.section_mapping_decision = 'MATCH')
+                         THEN 'MATCH'
+                       ELSE 'UNKNOWN'
+                     END AS section_mapping_decision,
+                     CASE
+                       WHEN count(*) = 0 THEN 'UNKNOWN'
+                       WHEN bool_or(item.overall_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                       WHEN bool_and(item.overall_decision = 'MATCH') THEN 'MATCH'
+                       ELSE 'UNKNOWN'
+                     END AS overall_mapping_decision,
+                     (array_agg(item.terms_section_id ORDER BY item.id)
+                       FILTER (WHERE item.terms_section_id IS NOT NULL))[1]
+                       AS mapped_terms_section_id
+              FROM private_knowledge_coverage_terms_mappings AS item
+              WHERE item.coverage_id = coverage.id
+                AND item.import_run_id = coverage.import_run_id
+            ) AS mapping ON true
             LEFT JOIN private_knowledge_contract_confirmations AS confirmation
               ON confirmation.knowledge_contract_id = contract.id
              AND confirmation.import_run_id = contract.import_run_id
@@ -208,8 +268,6 @@ class PostgresKnowledgeDecisionRepository:
               AND subject.binding_decision = 'MATCH'
               AND contract.household_space_id = %(household)s
               AND coverage.household_space_id = %(household)s
-            GROUP BY contract.id, coverage.id, subject.id,
-                     disposition.disposition, confirmation.id
             ORDER BY contract.id, coverage.id
             """,
             {
@@ -244,8 +302,14 @@ class PostgresKnowledgeDecisionRepository:
         if any(
             row.get("disposition") == "PUBLISHED"
             and (
-                int(row.get("mapping_count") or 0) != 1
+                int(row.get("mapping_count") or 0) < 1
                 or row.get("mapped_terms_section_id") is None
+                or row.get("mapping_applicability") != "APPLICABLE"
+                or row.get("mapping_enrollment_decision") != "MATCH"
+                or row.get("document_identity_decision") != "MATCH"
+                or row.get("edition_applicability_decision") != "MATCH"
+                or row.get("section_mapping_decision") != "MATCH"
+                or row.get("overall_mapping_decision") != "MATCH"
             )
             for row in benefit_rows
         ):
@@ -392,7 +456,7 @@ class PostgresKnowledgeDecisionRepository:
                     contract_end=cast(date | None, row.get("contract_end")),
                     disposition=cast(Any, row["disposition"]),
                     subject_binding_decision=cast(Any, row["subject_binding_decision"]),
-                    enrollment_decision=cast(Any, row["enrollment_decision"]),
+                    enrollment_decision=cast(Any, row["effective_enrollment_decision"]),
                     component_classification=cast(Any, row["component_classification"]),
                     mapping_applicability=cast(Any, row["mapping_applicability"]),
                     mapping_enrollment_decision=cast(Any, row["mapping_enrollment_decision"]),
@@ -456,6 +520,7 @@ class PostgresKnowledgeDecisionRepository:
             contract_count=len(contract_ids),
             benefit_coverage_count=len(benefits),
             published_coverage_count=sum(row.get("disposition") == "PUBLISHED" for row in benefits),
+            advisory_coverage_count=sum(row.get("disposition") == "ADVISORY" for row in benefits),
             blocked_coverage_count=sum(row.get("disposition") == "BLOCKED" for row in benefits),
             not_applicable_coverage_count=sum(
                 row.get("disposition") == "NOT_APPLICABLE" for row in benefits
@@ -525,14 +590,22 @@ class PostgresKnowledgeDecisionRepository:
                 "knowledge_run": header["knowledge_import_run_id"],
                 "rule_run": header.get("rule_import_run_id"),
                 "rule_projection": header.get("rule_projection_digest_sha256"),
-                "confirmations": sorted(
-                    {
+                "coverage_admission": sorted(
+                    (
+                        str(row["knowledge_contract_id"]),
+                        str(row["knowledge_coverage_id"]),
+                        row.get("raw_certificate_enrollment_decision"),
+                        row.get("effective_enrollment_decision"),
+                        row.get("publication_enrollment_decision_snapshot"),
+                        row.get("publication_enrollment_authority"),
                         (
-                            str(row["knowledge_contract_id"]),
-                            row.get("confirmation_digest_sha256"),
-                        )
-                        for row in coverage_rows
-                    }
+                            str(row["publication_enrollment_confirmed_by"])
+                            if row.get("publication_enrollment_confirmed_by") is not None
+                            else None
+                        ),
+                        row.get("confirmation_digest_sha256"),
+                    )
+                    for row in coverage_rows
                 ),
                 "intervals": sorted(
                     (
@@ -565,7 +638,55 @@ class PostgresKnowledgeDecisionRepository:
                    citation.evidence_purpose, citation.page_start,
                    citation.page_end, citation.source_text_sha256,
                    (
-                     mapping.terms_section_id = citation.terms_section_id
+                     (
+                       EXISTS (
+                         SELECT 1
+                         FROM private_knowledge_coverage_terms_mappings AS mapping
+                         WHERE mapping.coverage_id = publication.knowledge_coverage_id
+                           AND mapping.import_run_id = publication.knowledge_import_run_id
+                           AND mapping.terms_section_id = citation.terms_section_id
+                           AND mapping.overall_decision = 'MATCH'
+                       )
+                       OR EXISTS (
+                         SELECT 1
+                         FROM private_knowledge_coverage_execution_dispositions
+                              AS disposition
+                         JOIN private_knowledge_coverages AS coverage
+                           ON coverage.id = disposition.knowledge_coverage_id
+                          AND coverage.import_run_id =
+                              disposition.knowledge_import_run_id
+                         JOIN private_knowledge_terms_assignments AS assignment
+                           ON assignment.import_run_id = coverage.import_run_id
+                          AND assignment.household_space_id =
+                              disposition.household_space_id
+                          AND assignment.knowledge_contract_id =
+                              coverage.knowledge_contract_id
+                          AND assignment.document_identity_decision = 'MATCH'
+                          AND assignment.edition_applicability_decision = 'MATCH'
+                          AND assignment.overall_decision = 'MATCH'
+                         JOIN private_knowledge_terms_assignment_sources
+                              AS assignment_source
+                           ON assignment_source.import_run_id = assignment.import_run_id
+                          AND assignment_source.terms_assignment_id = assignment.id
+                         JOIN private_knowledge_terms_sections AS assigned_section
+                           ON assigned_section.id = citation.terms_section_id
+                          AND assigned_section.import_run_id =
+                              assignment_source.import_run_id
+                          AND assigned_section.terms_source_alias_digest_sha256 =
+                              assignment_source.source_alias_digest_sha256
+                          AND assigned_section.review_state IN
+                              ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                         WHERE disposition.knowledge_coverage_id =
+                               publication.knowledge_coverage_id
+                           AND disposition.knowledge_import_run_id =
+                               publication.knowledge_import_run_id
+                           AND disposition.rule_import_run_id =
+                               publication.rule_import_run_id
+                           AND disposition.household_space_id =
+                               publication.household_space_id
+                           AND disposition.disposition = 'ADVISORY'
+                       )
+                     )
                      AND (
                        citation.source_clause_id IS NULL OR EXISTS (
                          SELECT 1 FROM private_knowledge_source_clauses AS clause
@@ -589,10 +710,6 @@ class PostgresKnowledgeDecisionRepository:
              AND citation.rule_import_run_id = publication.rule_import_run_id
              AND citation.knowledge_import_run_id = publication.knowledge_import_run_id
              AND citation.household_space_id = publication.household_space_id
-            LEFT JOIN private_knowledge_coverage_terms_mappings AS mapping
-              ON mapping.coverage_id = publication.knowledge_coverage_id
-             AND mapping.import_run_id = publication.knowledge_import_run_id
-             AND mapping.overall_decision = 'MATCH'
             WHERE publication.household_space_id = %(household)s
               AND publication.knowledge_import_run_id = %(knowledge_run)s
               AND publication.rule_import_run_id = %(rule_run)s
@@ -630,7 +747,55 @@ class PostgresKnowledgeDecisionRepository:
                    citation.evidence_purpose, citation.page_start,
                    citation.page_end, citation.source_text_sha256,
                    (
-                     mapping.terms_section_id = citation.terms_section_id
+                     (
+                       EXISTS (
+                         SELECT 1
+                         FROM private_knowledge_coverage_terms_mappings AS mapping
+                         WHERE mapping.coverage_id = publication.knowledge_coverage_id
+                           AND mapping.import_run_id = publication.knowledge_import_run_id
+                           AND mapping.terms_section_id = citation.terms_section_id
+                           AND mapping.overall_decision = 'MATCH'
+                       )
+                       OR EXISTS (
+                         SELECT 1
+                         FROM private_knowledge_coverage_execution_dispositions
+                              AS disposition
+                         JOIN private_knowledge_coverages AS coverage
+                           ON coverage.id = disposition.knowledge_coverage_id
+                          AND coverage.import_run_id =
+                              disposition.knowledge_import_run_id
+                         JOIN private_knowledge_terms_assignments AS assignment
+                           ON assignment.import_run_id = coverage.import_run_id
+                          AND assignment.household_space_id =
+                              disposition.household_space_id
+                          AND assignment.knowledge_contract_id =
+                              coverage.knowledge_contract_id
+                          AND assignment.document_identity_decision = 'MATCH'
+                          AND assignment.edition_applicability_decision = 'MATCH'
+                          AND assignment.overall_decision = 'MATCH'
+                         JOIN private_knowledge_terms_assignment_sources
+                              AS assignment_source
+                           ON assignment_source.import_run_id = assignment.import_run_id
+                          AND assignment_source.terms_assignment_id = assignment.id
+                         JOIN private_knowledge_terms_sections AS assigned_section
+                           ON assigned_section.id = citation.terms_section_id
+                          AND assigned_section.import_run_id =
+                              assignment_source.import_run_id
+                          AND assigned_section.terms_source_alias_digest_sha256 =
+                              assignment_source.source_alias_digest_sha256
+                          AND assigned_section.review_state IN
+                              ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                         WHERE disposition.knowledge_coverage_id =
+                               publication.knowledge_coverage_id
+                           AND disposition.knowledge_import_run_id =
+                               publication.knowledge_import_run_id
+                           AND disposition.rule_import_run_id =
+                               publication.rule_import_run_id
+                           AND disposition.household_space_id =
+                               publication.household_space_id
+                           AND disposition.disposition = 'ADVISORY'
+                       )
+                     )
                      AND (
                        citation.source_clause_id IS NULL OR EXISTS (
                          SELECT 1 FROM private_knowledge_source_clauses AS clause
@@ -654,10 +819,6 @@ class PostgresKnowledgeDecisionRepository:
              AND citation.rule_import_run_id = publication.rule_import_run_id
              AND citation.knowledge_import_run_id = publication.knowledge_import_run_id
              AND citation.household_space_id = publication.household_space_id
-            LEFT JOIN private_knowledge_coverage_terms_mappings AS mapping
-              ON mapping.coverage_id = publication.knowledge_coverage_id
-             AND mapping.import_run_id = publication.knowledge_import_run_id
-             AND mapping.overall_decision = 'MATCH'
             WHERE publication.household_space_id = %(household)s
               AND publication.knowledge_import_run_id = %(knowledge_run)s
               AND publication.rule_import_run_id = %(rule_run)s
@@ -921,7 +1082,23 @@ class PostgresKnowledgeDecisionRepository:
         confirmation_rows = connection.execute(
             """
             /* private-knowledge:stale-confirmations */
-            SELECT DISTINCT contract.id AS knowledge_contract_id,
+            SELECT contract.id AS knowledge_contract_id,
+                   coverage.id AS knowledge_coverage_id,
+                   coverage.enrollment_decision
+                     AS raw_certificate_enrollment_decision,
+                   CASE
+                     WHEN disposition.enrollment_authority =
+                            'USER_CONFIRMED_COVERAGE_ENROLLMENT'
+                      AND disposition.enrollment_confirmed_by IS NOT NULL
+                     THEN 'MATCH'
+                     ELSE coverage.enrollment_decision
+                   END AS effective_enrollment_decision,
+                   disposition.enrollment_decision_snapshot
+                     AS publication_enrollment_decision_snapshot,
+                   disposition.enrollment_authority
+                     AS publication_enrollment_authority,
+                   disposition.enrollment_confirmed_by
+                     AS publication_enrollment_confirmed_by,
                    confirmation.confirmation_digest_sha256
             FROM private_knowledge_subjects AS subject
             JOIN private_knowledge_contracts AS contract
@@ -934,20 +1111,28 @@ class PostgresKnowledgeDecisionRepository:
               ON confirmation.knowledge_contract_id = contract.id
              AND confirmation.import_run_id = contract.import_run_id
              AND confirmation.is_current
+            LEFT JOIN private_knowledge_coverage_execution_dispositions AS disposition
+              ON disposition.knowledge_coverage_id = coverage.id
+             AND disposition.knowledge_import_run_id = coverage.import_run_id
+             AND disposition.rule_import_run_id = %(rule_run)s
+             AND disposition.household_space_id = %(household)s
             WHERE subject.household_space_id = %(household)s
               AND subject.import_run_id = %(knowledge_run)s
               AND subject.family_member_id = %(member)s
               AND subject.binding_decision = 'MATCH'
               AND coverage.component_classification = 'BENEFIT_COVERAGE'
-            ORDER BY contract.id
+            ORDER BY contract.id, coverage.id
             """,
             {
                 "household": scope.household_space_id,
                 "knowledge_run": current_knowledge,
+                "rule_run": current_rule,
                 "member": event.family_member_id,
             },
         ).fetchall()
-        contract_ids = [row["knowledge_contract_id"] for row in confirmation_rows]
+        contract_ids = list(
+            dict.fromkeys(row["knowledge_contract_id"] for row in confirmation_rows)
+        )
         interval_rows = connection.execute(
             """
             /* private-knowledge:stale-status-intervals */

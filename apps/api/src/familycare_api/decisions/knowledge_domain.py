@@ -22,7 +22,7 @@ KnowledgeFactProvenance = Literal[
     "CONFLICTING",
 ]
 KnowledgeBenefitType = Literal["FIXED", "INDEMNITY", "UNKNOWN"]
-KnowledgeDisposition = Literal["PUBLISHED", "BLOCKED", "NOT_APPLICABLE"]
+KnowledgeDisposition = Literal["PUBLISHED", "ADVISORY", "BLOCKED", "NOT_APPLICABLE"]
 KnowledgeAnalysisCompleteness = Literal["COMPLETE", "PARTIAL", "UNAVAILABLE"]
 KnowledgeCalculationStatus = Literal[
     "CALCULATED",
@@ -265,7 +265,7 @@ class KnowledgeRuleEvaluation:
     missing_fields: tuple[str, ...] = ()
     conflicting_fields: tuple[str, ...] = ()
     citations: tuple[KnowledgeCitation, ...] = ()
-    evaluator_version: str = "private-knowledge-engine-v1"
+    evaluator_version: str = "private-knowledge-engine-v2"
 
 
 @dataclass(frozen=True)
@@ -315,6 +315,12 @@ class KnowledgeBenefitCalculation:
     rounding_rule: str | None = None
     hold_reason_code: str | None = None
     steps: tuple[KnowledgeCalculationStep, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.confirmed_amount is not None and (
+            self.status != "CALCULATED" or self.hold_reason_code is not None
+        ):
+            raise ValueError("confirmed amount requires a calculated result without a hold reason")
 
 
 @dataclass(frozen=True)

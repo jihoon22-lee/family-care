@@ -250,3 +250,95 @@ def write_synthetic_rule_publication_package(root: Path) -> Path:
     )
     refresh_publication_manifest(root)
     return root
+
+
+def convert_to_v2_advisory_publication_package(
+    root: Path, *, include_reviewed_artifacts: bool = False
+) -> Path:
+    """Convert the wholly synthetic v1 fixture into an advisory-only v2 package."""
+
+    disposition_path = root / "coverage-dispositions.jsonl"
+    disposition = json.loads(disposition_path.read_text(encoding="utf-8"))
+    disposition["disposition"] = "ADVISORY"
+    disposition["enrollment_authority"] = "CERTIFICATE_SNAPSHOT"
+    disposition["reason_codes"] = ["SYNTHETIC_ADVISORY_ONLY"]
+    _write_private_file(
+        disposition_path,
+        (_canonical_json(disposition) + "\n").encode("utf-8"),
+    )
+    if not include_reviewed_artifacts:
+        for role in (
+            "rule-publications.jsonl",
+            "rule-citations.jsonl",
+            "calculation-publications.jsonl",
+            "calculation-citations.jsonl",
+        ):
+            _write_private_file(root / role, b"")
+
+    counts_path = root / "reconciliation.json"
+    counts = json.loads(counts_path.read_text(encoding="utf-8"))
+    counts.update(
+        {
+            "published_disposition_count": 0,
+            "advisory_disposition_count": 1,
+            "user_confirmed_enrollment_count": 0,
+            "rule_publication_count": int(include_reviewed_artifacts),
+            "rule_citation_count": int(include_reviewed_artifacts),
+            "calculation_publication_count": int(include_reviewed_artifacts),
+            "calculation_citation_count": int(include_reviewed_artifacts),
+        }
+    )
+    _write_private_file(counts_path, (_canonical_json(counts) + "\n").encode("utf-8"))
+
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = "private-knowledge-rule-publication.sol-v2"
+    manifest["publisher_version"] = "synthetic-publisher-v2"
+    manifest["counts"] = counts
+    _write_private_file(
+        manifest_path,
+        (_canonical_json(manifest) + "\n").encode("utf-8"),
+    )
+    refresh_publication_manifest(root)
+    return root
+
+
+def set_v2_coverage_disposition(
+    root: Path,
+    *,
+    disposition: str,
+    enrollment_authority: str | None,
+    reason_codes: list[str],
+) -> None:
+    """Rewrite the one-row synthetic v2 disposition and its aggregate counts."""
+
+    disposition_path = root / "coverage-dispositions.jsonl"
+    row = json.loads(disposition_path.read_text(encoding="utf-8"))
+    row["disposition"] = disposition
+    row["enrollment_authority"] = enrollment_authority
+    row["reason_codes"] = reason_codes
+    _write_private_file(disposition_path, (_canonical_json(row) + "\n").encode("utf-8"))
+
+    counts_path = root / "reconciliation.json"
+    counts = json.loads(counts_path.read_text(encoding="utf-8"))
+    counts.update(
+        {
+            "published_disposition_count": int(disposition == "PUBLISHED"),
+            "advisory_disposition_count": int(disposition == "ADVISORY"),
+            "blocked_disposition_count": int(disposition == "BLOCKED"),
+            "not_applicable_disposition_count": int(disposition == "NOT_APPLICABLE"),
+            "user_confirmed_enrollment_count": int(
+                enrollment_authority == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+            ),
+        }
+    )
+    _write_private_file(counts_path, (_canonical_json(counts) + "\n").encode("utf-8"))
+
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["counts"] = counts
+    _write_private_file(
+        manifest_path,
+        (_canonical_json(manifest) + "\n").encode("utf-8"),
+    )
+    refresh_publication_manifest(root)

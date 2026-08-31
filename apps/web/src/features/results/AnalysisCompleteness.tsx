@@ -16,9 +16,9 @@ export function AnalysisCompleteness({
   result: CoverageDecisionResponse;
 }) {
   const catalog = result.catalog_coverage;
-  const enrolledButUnpublished =
-    catalog.benefit_coverage_count > 0 &&
-    catalog.published_coverage_count === 0;
+  const advisoryCoverageCount = catalog.advisory_coverage_count;
+  const hasAdvisoryCoverage = advisoryCoverageCount > 0;
+  const hasLegacyExceptions = catalog.blocked_coverage_count > 0;
 
   return (
     <section className={styles.group} aria-labelledby="analysis-scope-title">
@@ -28,16 +28,22 @@ export function AnalysisCompleteness({
       </div>
       <div className={styles.scopePanel}>
         <strong>{completenessLabel(result.analysis_completeness)}</strong>
-        {enrolledButUnpublished ? (
-          <p className={styles.scopeWarning}>
-            가입 담보는 확인됐지만 실행 규칙 검토가 완료되지 않았습니다.
+        {hasAdvisoryCoverage ? (
+          <p className={styles.scopeCopy}>
+            가입 담보와 관련 약관을 검색할 수 있지만, 자동 판정 규칙은 아직
+            완전하지 않습니다.
           </p>
         ) : (
           <p className={styles.scopeCopy}>
-            증권에서 확인한 가입 담보와 검토 완료된 실행 규칙을 서로 구분해
-            표시합니다.
+            증권에서 확인한 가입 담보와 자동 판정 규칙이 준비된 담보를 서로
+            구분해 표시합니다.
           </p>
         )}
+        {hasLegacyExceptions ? (
+          <p className={styles.scopeWarning}>
+            일부 이전 실행 항목은 예외 확인이 필요합니다.
+          </p>
+        ) : null}
         <dl className={styles.scopeGrid}>
           <div>
             <dt>구조화 계약</dt>
@@ -48,13 +54,19 @@ export function AnalysisCompleteness({
             <dd>{catalog.benefit_coverage_count}개</dd>
           </div>
           <div>
-            <dt>규칙 검토 완료</dt>
+            <dt>자동 판정 규칙 준비</dt>
             <dd>{catalog.published_coverage_count}개</dd>
           </div>
           <div>
-            <dt>검토 대기</dt>
-            <dd>{catalog.blocked_coverage_count}개</dd>
+            <dt>가입·검색 가능 · 자동 규칙 미완료</dt>
+            <dd>{advisoryCoverageCount}개</dd>
           </div>
+          {hasLegacyExceptions ? (
+            <div>
+              <dt>예외 확인</dt>
+              <dd>{catalog.blocked_coverage_count}개</dd>
+            </div>
+          ) : null}
         </dl>
         {result.source_failure_codes.length > 0 ? (
           <div className={styles.sourceFailures}>

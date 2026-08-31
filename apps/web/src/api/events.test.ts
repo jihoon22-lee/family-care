@@ -46,6 +46,7 @@ const SYNTHETIC_DECISION: CoverageDecisionResponse = {
   },
   candidates: [],
   catalog_coverage: {
+    advisory_coverage_count: 0,
     benefit_coverage_count: 0,
     blocked_coverage_count: 0,
     contract_count: 0,

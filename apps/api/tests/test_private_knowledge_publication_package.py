@@ -20,8 +20,10 @@ from familycare_api.private_knowledge.publication_package import (
 
 from apps.api.tests.private_knowledge_publication_fixtures import (
     append_publication_jsonl,
+    convert_to_v2_advisory_publication_package,
     mutate_publication_jsonl,
     refresh_publication_manifest,
+    set_v2_coverage_disposition,
     write_synthetic_rule_publication_package,
 )
 
@@ -46,6 +48,9 @@ def test_loads_referentially_closed_reviewed_publication_package(tmp_path: Path)
     assert package.fact_normalizers[0].value.normalized_value == "sample_category"
     assert package.reconciliation.rule_publication_count == 1
     assert package.package_digest_sha256 == canonical_rule_publication_digest(package)
+    assert package.package_digest_sha256 == (
+        "18cad8882bb5796540744c7c58edee4777116742970ea6b04ae49d4bdfe861b6"
+    )
 
     manifest_path = root / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -55,6 +60,198 @@ def test_loads_referentially_closed_reviewed_publication_package(tmp_path: Path)
 
     reordered = _load(root, tmp_path / "repository")
     assert reordered.package_digest_sha256 == package.package_digest_sha256
+
+
+def test_v1_rejects_advisory_without_changing_its_digest_contract(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "publication-package")
+    mutate_publication_jsonl(
+        root,
+        "coverage-dispositions.jsonl",
+        lambda row: row.__setitem__("disposition", "ADVISORY"),
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INVALID_RECORD
+    assert caught.value.file_role == "coverage-dispositions.jsonl"
+
+
+def test_v2_accepts_advisory_with_domain_separated_digest(tmp_path: Path) -> None:
+    v1_root = write_synthetic_rule_publication_package(tmp_path / "v1-package")
+    v1_package = _load(v1_root, tmp_path / "repository")
+    v2_root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(v2_root)
+
+    package = _load(v2_root, tmp_path / "repository")
+
+    assert package.schema_version == "private-knowledge-rule-publication.sol-v2"
+    assert package.coverage_dispositions[0].value.disposition == "ADVISORY"
+    assert package.reconciliation.advisory_disposition_count == 1
+    assert package.package_digest_sha256 == canonical_rule_publication_digest(package)
+    assert package.package_digest_sha256 != v1_package.package_digest_sha256
+
+
+def test_v2_advisory_requires_publication_scoped_enrollment_authority(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    mutate_publication_jsonl(
+        root,
+        "coverage-dispositions.jsonl",
+        lambda row: row.pop("enrollment_authority"),
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INVALID_RECORD
+    assert caught.value.file_role == "coverage-dispositions.jsonl"
+
+
+def test_v2_advisory_accepts_explicit_user_enrollment_authority_with_reason(
+    tmp_path: Path,
+) -> None:
+    certificate_root = write_synthetic_rule_publication_package(tmp_path / "v2-certificate-package")
+    convert_to_v2_advisory_publication_package(certificate_root)
+    certificate_package = _load(certificate_root, tmp_path / "repository")
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+
+    set_v2_coverage_disposition(
+        root,
+        disposition="ADVISORY",
+        enrollment_authority="USER_CONFIRMED_COVERAGE_ENROLLMENT",
+        reason_codes=["USER_CONFIRMED_COVERAGE_ENROLLMENT"],
+    )
+
+    package = _load(root, tmp_path / "repository")
+
+    assert package.coverage_dispositions[0].value.enrollment_authority == (
+        "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+    )
+    assert package.reconciliation.user_confirmed_enrollment_count == 1
+    assert package.package_digest_sha256 != certificate_package.package_digest_sha256
+
+
+@pytest.mark.parametrize("disposition", ["BLOCKED", "NOT_APPLICABLE"])
+def test_v2_non_executable_dispositions_require_null_enrollment_authority(
+    tmp_path: Path,
+    disposition: str,
+) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    set_v2_coverage_disposition(
+        root,
+        disposition=disposition,
+        enrollment_authority="CERTIFICATE_SNAPSHOT",
+        reason_codes=["SYNTHETIC_NON_EXECUTABLE"],
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INVALID_RECORD
+    assert caught.value.file_role == "coverage-dispositions.jsonl"
+
+
+@pytest.mark.parametrize("disposition", ["BLOCKED", "NOT_APPLICABLE"])
+def test_v2_non_executable_dispositions_accept_explicit_null_enrollment_authority(
+    tmp_path: Path,
+    disposition: str,
+) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    set_v2_coverage_disposition(
+        root,
+        disposition=disposition,
+        enrollment_authority=None,
+        reason_codes=["SYNTHETIC_NON_EXECUTABLE"],
+    )
+
+    package = _load(root, tmp_path / "repository")
+
+    assert package.coverage_dispositions[0].value.enrollment_authority is None
+
+
+def test_v2_user_authority_requires_matching_reason_code(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    set_v2_coverage_disposition(
+        root,
+        disposition="ADVISORY",
+        enrollment_authority="USER_CONFIRMED_COVERAGE_ENROLLMENT",
+        reason_codes=["SYNTHETIC_REASON"],
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INVALID_RECORD
+
+
+def test_v2_published_rejects_user_confirmed_enrollment_authority(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    set_v2_coverage_disposition(
+        root,
+        disposition="PUBLISHED",
+        enrollment_authority="USER_CONFIRMED_COVERAGE_ENROLLMENT",
+        reason_codes=["USER_CONFIRMED_COVERAGE_ENROLLMENT"],
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INVALID_RECORD
+
+
+def test_v2_advisory_accepts_reviewed_cited_partial_artifacts(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root, include_reviewed_artifacts=True)
+
+    package = _load(root, tmp_path / "repository")
+
+    assert len(package.rule_publications) == 1
+    assert len(package.calculation_publications) == 1
+    assert package.coverage_dispositions[0].value.disposition == "ADVISORY"
+
+
+def test_v2_advisory_artifacts_still_require_citations_and_valid_dsl(tmp_path: Path) -> None:
+    uncited = write_synthetic_rule_publication_package(tmp_path / "uncited-package")
+    convert_to_v2_advisory_publication_package(uncited, include_reviewed_artifacts=True)
+    (uncited / "rule-citations.jsonl").write_bytes(b"")
+    refresh_publication_manifest(uncited)
+    with pytest.raises(PublicationPackageError) as citation_error:
+        _load(uncited, tmp_path / "repository")
+    assert citation_error.value.code is PublicationErrorCode.MISSING_CITATION
+
+    invalid = write_synthetic_rule_publication_package(tmp_path / "invalid-package")
+    convert_to_v2_advisory_publication_package(invalid, include_reviewed_artifacts=True)
+    mutate_publication_jsonl(
+        invalid,
+        "rule-publications.jsonl",
+        lambda row: row["rule_document"]["expression"].__setitem__("op", "unsupported"),
+    )
+    with pytest.raises(PublicationPackageError) as dsl_error:
+        _load(invalid, tmp_path / "repository")
+    assert dsl_error.value.code is PublicationErrorCode.UNSUPPORTED_DSL
+
+
+def test_v2_published_still_requires_rule_closure(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "v2-package")
+    convert_to_v2_advisory_publication_package(root)
+    mutate_publication_jsonl(
+        root,
+        "coverage-dispositions.jsonl",
+        lambda row: row.__setitem__("disposition", "PUBLISHED"),
+    )
+
+    with pytest.raises(PublicationPackageError) as caught:
+        _load(root, tmp_path / "repository")
+
+    assert caught.value.code is PublicationErrorCode.INCOMPLETE_DISPOSITION_CLOSURE
 
 
 @pytest.mark.parametrize(

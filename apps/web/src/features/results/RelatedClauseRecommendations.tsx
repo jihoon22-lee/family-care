@@ -39,42 +39,53 @@ export function RelatedClauseRecommendations({
       ) : null}
       {assistance.recommendations.length > 0 ? (
         <ol className={styles.recommendationList}>
-          {assistance.recommendations.map((recommendation) => (
-            <li key={recommendation.recommendation_id}>
-              <article className={styles.recommendationCard}>
-                <div className={styles.recommendationHeading}>
-                  <div>
-                    <p className={styles.cardKicker}>검토 후보</p>
-                    <strong>{recommendation.coverage_label}</strong>
+          {assistance.recommendations.map((recommendation) => {
+            const contractTermsFallback =
+              recommendation.reason_code === "CONTRACT_TERMS_TOKEN_OVERLAP";
+            return (
+              <li key={recommendation.recommendation_id}>
+                <article className={styles.recommendationCard}>
+                  <div className={styles.recommendationHeading}>
+                    <div>
+                      <p className={styles.cardKicker}>검토 후보</p>
+                      <strong>{recommendation.coverage_label}</strong>
+                    </div>
+                    <span>추천 {recommendation.rank}</span>
                   </div>
-                  <span>추천 {recommendation.rank}</span>
-                </div>
-                <p className={styles.recommendationContract}>
-                  {recommendation.contract_label} ·{" "}
-                  {recommendation.clause_label}
-                </p>
-                <p className={styles.recommendationExcerpt}>
-                  {recommendation.excerpt}
-                </p>
-                <p className={styles.recommendationReason}>
-                  {reasonLabel(
-                    recommendation.explanation_code ??
-                      recommendation.reason_code,
-                  )}
-                </p>
-                <details className={styles.citationDetails}>
-                  <summary>추천 근거 보기</summary>
-                  <p>
-                    약관{" "}
-                    {pageLabel(
-                      recommendation.citation.page_start,
-                      recommendation.citation.page_end,
+                  <p className={styles.recommendationContract}>
+                    {recommendation.contract_label} ·{" "}
+                    {recommendation.clause_label}
+                  </p>
+                  <p className={styles.recommendationExcerpt}>
+                    {recommendation.excerpt}
+                  </p>
+                  <p className={styles.recommendationReason}>
+                    {reasonLabel(
+                      contractTermsFallback
+                        ? recommendation.reason_code
+                        : (recommendation.explanation_code ??
+                            recommendation.reason_code),
                     )}
                   </p>
-                </details>
-              </article>
-            </li>
-          ))}
+                  {contractTermsFallback && recommendation.explanation_code ? (
+                    <p className={styles.recommendationReason}>
+                      {reasonLabel(recommendation.explanation_code)}
+                    </p>
+                  ) : null}
+                  <details className={styles.citationDetails}>
+                    <summary>추천 근거 보기</summary>
+                    <p>
+                      약관{" "}
+                      {pageLabel(
+                        recommendation.citation.page_start,
+                        recommendation.citation.page_end,
+                      )}
+                    </p>
+                  </details>
+                </article>
+              </li>
+            );
+          })}
         </ol>
       ) : (
         <p className={styles.emptyGroup}>

@@ -29,6 +29,7 @@ DECISION_RUN_ID = _uuid(104)
 JOB_ID = _uuid(105)
 ASSISTANCE_RUN_ID = _uuid(106)
 RECOMMENDATION_ID = _uuid(107)
+DISPOSITION_ID = _uuid(115)
 CREATED_AT = datetime(2026, 8, 31, tzinfo=UTC)
 
 
@@ -127,6 +128,9 @@ def _search_row() -> dict[str, Any]:
         "private_claim_candidate_id": _uuid(108),
         "knowledge_import_run_id": _uuid(114),
         "knowledge_coverage_id": _uuid(109),
+        "coverage_execution_disposition_id": DISPOSITION_ID,
+        "enrollment_decision_snapshot": "MATCH",
+        "enrollment_authority_snapshot": "CERTIFICATE_SNAPSHOT",
         "terms_section_id": _uuid(110),
         "knowledge_fact_id": _uuid(111),
         "source_clause_id": _uuid(112),
@@ -166,12 +170,63 @@ def test_create_projection_searches_exact_scope_and_persists_only_bounded_result
     assert "coverage.enrollment_decision = 'MATCH'" in search_sql
     assert "mapping.overall_decision = 'MATCH'" in search_sql
     assert "candidate.decision_run_id = %s" in search_sql
+    assert "private_knowledge_terms_assignment_sources" in search_sql
+    assert "assignment.document_identity_decision = 'MATCH'" in search_sql
+    assert "assignment.edition_applicability_decision = 'MATCH'" in search_sql
+    assert "CONTRACT_TERMS_TOKEN_OVERLAP" in search_sql
+    assert "private_knowledge_coverage_execution_dispositions" in search_sql
+    assert "disposition.id AS coverage_execution_disposition_id" in search_sql
+    assert "coverage.enrollment_decision AS enrollment_decision_snapshot" in search_sql
+    assert "disposition.enrollment_authority AS enrollment_authority_snapshot" in search_sql
+    assert "coverage.enrollment_decision = 'UNKNOWN'" in search_sql
+    assert "USER_CONFIRMED_COVERAGE_ENROLLMENT" in search_sql
+    assert "scoped.execution_disposition = 'ADVISORY'" in search_sql
+    assert "PARTITION BY knowledge_coverage_id, association_priority" in search_sql
+    assert "ORDER BY association_priority DESC" in search_sql
 
     insert_params = [
         params for query, params in connection.calls if query.startswith("INSERT INTO")
     ]
     assert "sensitive_event_marker" not in repr(insert_params)
     assert all(len(item.excerpt) <= 240 for item in result.recommendations)
+
+
+def test_create_projection_persists_user_authority_with_raw_unknown_enrollment() -> None:
+    """Catch coercing a user-confirmed UNKNOWN certificate row into a raw MATCH snapshot."""
+
+    connection = _Connection(
+        search_rows=[
+            {
+                **_search_row(),
+                "enrollment_decision_snapshot": "UNKNOWN",
+                "enrollment_authority_snapshot": "USER_CONFIRMED_COVERAGE_ENROLLMENT",
+                "reason_code": "CONTRACT_TERMS_TOKEN_OVERLAP",
+            }
+        ]
+    )
+    repository = AnalysisAssistanceRepository()
+
+    result = repository.create_search_projection(
+        connection,  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+        DECISION_RUN_ID,
+    )
+
+    assert result.recommendations
+    insert_sql, insert_params = next(
+        (query, params)
+        for query, params in connection.calls
+        if query.startswith("INSERT INTO analysis_recommendations")
+    )
+    assert "coverage_execution_disposition_id" in insert_sql
+    assert "enrollment_decision_snapshot" in insert_sql
+    assert "enrollment_authority_snapshot" in insert_sql
+    assert isinstance(insert_params, tuple)
+    assert DISPOSITION_ID in insert_params
+    assert "UNKNOWN" in insert_params
+    assert "USER_CONFIRMED_COVERAGE_ENROLLMENT" in insert_params
+    assert "MATCH" not in insert_params
 
 
 def test_zero_token_event_stores_none_without_search_or_external_work() -> None:
@@ -221,7 +276,21 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
         pytest.skip("FAMILYCARE_DATABASE_URL is required")
     _reset_database(database_url)
     seed = _seed(database_url)
-    _seed_private_publication(database_url, seed, tmp_path)
+    knowledge_run_id, publication_run_id = _seed_private_publication(
+        database_url,
+        seed,
+        tmp_path,
+        advisory=True,
+    )
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            UPDATE private_knowledge_coverage_terms_mappings
+            SET overall_decision = 'UNKNOWN'
+            WHERE import_run_id = %s
+            """,
+            (knowledge_run_id,),
+        )
     service = DecisionService(seed.scope_a, DecisionRepository(database_url))
     event = service.create_medical_event(
         family_member_id=seed.member_a,
@@ -238,6 +307,10 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
     assert first.assistance is not None
     assert first.assistance.mode == "STRUCTURED_SEARCH"
     assert first.assistance.recommendations
+    assert all(
+        item.reason_code == "CONTRACT_TERMS_TOKEN_OVERLAP"
+        for item in first.assistance.recommendations
+    )
     assert all(item.page_start >= 1 for item in first.assistance.recommendations)
     with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
         before_get = connection.execute(
@@ -275,6 +348,60 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
             tokens,
         )
         assert baseline
+
+        connection.execute(
+            """
+            UPDATE private_knowledge_coverage_terms_mappings
+            SET overall_decision = 'MATCH'
+            WHERE import_run_id = %s
+            """,
+            (first.knowledge_import_run_id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_coverage_terms_mappings (
+              id, import_run_id, coverage_id, terms_section_id,
+              source_mapping_key, mapping_applicability,
+              selected_terms_source_alias,
+              selected_terms_source_alias_digest_sha256,
+              enrollment_decision, document_identity_decision,
+              edition_applicability_decision, section_mapping_decision,
+              overall_decision, reason_codes_json, executable,
+              source_record_json, source_record_digest_sha256
+            )
+            SELECT %s, import_run_id, coverage_id, terms_section_id,
+                   'synthetic-duplicate-exact-mapping', mapping_applicability,
+                   selected_terms_source_alias,
+                   selected_terms_source_alias_digest_sha256,
+                   enrollment_decision, document_identity_decision,
+                   edition_applicability_decision, section_mapping_decision,
+                   overall_decision, reason_codes_json, executable,
+                   '{}'::jsonb, %s
+            FROM private_knowledge_coverage_terms_mappings
+            WHERE import_run_id = %s AND overall_decision = 'MATCH'
+            ORDER BY id
+            LIMIT 1
+            """,
+            (_uuid(904), "8" * 64, first.knowledge_import_run_id),
+        )
+        duplicate_exact_rows = repository._search_rows(  # noqa: SLF001
+            connection, seed.scope_a, event, first.run_id, tokens
+        )
+        identities = [
+            (
+                row["private_claim_candidate_id"],
+                row["knowledge_coverage_id"],
+                row["terms_section_id"],
+                row["knowledge_fact_id"],
+                row["source_clause_id"],
+                row["fact_citation_id"],
+            )
+            for row in duplicate_exact_rows
+        ]
+        assert identities
+        assert len(identities) == len(set(identities))
+        assert all(row["reason_code"] == "TOKEN_OVERLAP" for row in duplicate_exact_rows)
+        connection.rollback()
 
         assert (
             repository._search_rows(  # noqa: SLF001
@@ -316,6 +443,7 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
         unknown_coverage_id = _uuid(901)
         unknown_candidate_id = _uuid(902)
         unknown_mapping_id = _uuid(903)
+        blocked_disposition_id = _uuid(905)
         connection.execute(
             """
             INSERT INTO private_knowledge_coverages (
@@ -395,6 +523,27 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
                 first.knowledge_import_run_id,
             ),
         )
+        connection.execute(
+            """
+            INSERT INTO private_knowledge_coverage_execution_dispositions (
+              id, rule_import_run_id, knowledge_import_run_id,
+              household_space_id, knowledge_coverage_id, disposition,
+              reason_codes_json, enrollment_decision_snapshot,
+              enrollment_authority, enrollment_reason_code,
+              enrollment_confirmed_by
+            ) VALUES (
+              %s, %s, %s, %s, %s, 'BLOCKED', '[]'::jsonb,
+              'UNKNOWN', NULL, NULL, NULL
+            )
+            """,
+            (
+                blocked_disposition_id,
+                publication_run_id,
+                first.knowledge_import_run_id,
+                seed.scope_a.household_space_id,
+                unknown_coverage_id,
+            ),
+        )
         unenrolled_rows = repository._search_rows(  # noqa: SLF001
             connection, seed.scope_a, event, first.run_id, tokens
         )
@@ -404,7 +553,7 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
 
         connection.execute(
             """
-            UPDATE private_knowledge_coverage_terms_mappings
+            UPDATE private_knowledge_terms_assignments
             SET overall_decision = 'UNKNOWN'
             WHERE import_run_id = %s
             """,
@@ -428,3 +577,98 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
     assert after_edit.assistance is not None
     assert after_edit.assistance.job_id != first.assistance.job_id
     assert after_edit.assistance.event_version == 2
+
+
+@pytest.mark.integration
+def test_user_confirmed_advisory_persists_raw_unknown_enrollment_lineage(
+    tmp_path: Path,
+) -> None:
+    """Catch recommendation persistence that rewrites raw UNKNOWN as certificate MATCH."""
+
+    from familycare_api.decisions.repository import DecisionRepository
+    from familycare_api.decisions.service import DecisionService
+
+    from apps.api.tests.test_decision_integration import _psycopg_url, _reset_database, _seed
+    from apps.api.tests.test_private_knowledge_decision_integration import (
+        _seed_private_publication,
+    )
+
+    database_url = os.getenv("FAMILYCARE_DATABASE_URL")
+    if not database_url:
+        pytest.skip("FAMILYCARE_DATABASE_URL is required")
+    _reset_database(database_url)
+    seed = _seed(database_url)
+    _knowledge_run_id, publication_run_id = _seed_private_publication(
+        database_url,
+        seed,
+        tmp_path,
+        advisory=True,
+        user_confirmed_enrollment=True,
+    )
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        disposition = connection.execute(
+            """
+            SELECT disposition.id, disposition.knowledge_coverage_id,
+                   disposition.enrollment_confirmed_by
+            FROM private_knowledge_coverage_execution_dispositions AS disposition
+            WHERE disposition.rule_import_run_id = %s
+              AND disposition.disposition = 'ADVISORY'
+            ORDER BY disposition.id
+            LIMIT 1
+            """,
+            (publication_run_id,),
+        ).fetchone()
+        assert disposition is not None
+        actor_id = connection.execute(
+            """
+            SELECT reviewed_by
+            FROM private_knowledge_rule_import_runs
+            WHERE id = %s
+            """,
+            (publication_run_id,),
+        ).fetchone()
+        assert actor_id is not None
+
+        assert disposition["enrollment_confirmed_by"] == actor_id["reviewed_by"]
+
+    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    event = service.create_medical_event(
+        family_member_id=seed.member_a,
+        mode="post_treatment",
+        situation="Synthetic sample category phrase event.",
+        event_date=date(2025, 6, 15),
+        visit_date=date(2025, 6, 16),
+        facts={"MedicalEvent.classification": "sample_category"},
+        confirmation={"MedicalEvent.classification": "user"},
+    )
+    result = service.analyze_medical_event(event.id)
+    assert result.assistance is not None
+    assert result.assistance.recommendations
+
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        lineage = connection.execute(
+            """
+            SELECT recommendation.enrollment_decision_snapshot,
+                   recommendation.enrollment_authority_snapshot,
+                   recommendation.coverage_execution_disposition_id,
+                   disposition.enrollment_confirmed_by,
+                   disposition.enrollment_reason_code
+            FROM analysis_recommendations AS recommendation
+            JOIN private_knowledge_coverage_execution_dispositions AS disposition
+              ON disposition.id = recommendation.coverage_execution_disposition_id
+            WHERE recommendation.analysis_assistance_run_id = %s
+            ORDER BY recommendation.rank
+            """,
+            (result.assistance.run_id,),
+        ).fetchall()
+
+    assert lineage
+    assert {row["enrollment_decision_snapshot"] for row in lineage} == {"UNKNOWN"}
+    assert {row["enrollment_authority_snapshot"] for row in lineage} == {
+        "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+    }
+    assert {row["coverage_execution_disposition_id"] for row in lineage} == {disposition["id"]}
+    assert {row["enrollment_confirmed_by"] for row in lineage} == {actor_id["reviewed_by"]}
+    assert {row["enrollment_reason_code"] for row in lineage} == {
+        "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+    }

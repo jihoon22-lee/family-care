@@ -17,6 +17,7 @@
     "contract_count": 2,
     "benefit_coverage_count": 2,
     "published_coverage_count": 2,
+    "advisory_coverage_count": 0,
     "blocked_coverage_count": 0,
     "not_applicable_coverage_count": 0
   },
@@ -168,7 +169,7 @@
       ],
       "missing_fields": [],
       "conflicting_fields": [],
-      "engine_version": "private-knowledge-engine-v1",
+      "engine_version": "private-knowledge-engine-v2",
       "citations": [
         {
           "kind": "PRIVATE_KNOWLEDGE_CITATION",
@@ -263,7 +264,7 @@
         "Receipt.confirmed_amount"
       ],
       "conflicting_fields": [],
-      "engine_version": "private-knowledge-engine-v1",
+      "engine_version": "private-knowledge-engine-v2",
       "citations": [
         {
           "kind": "PRIVATE_KNOWLEDGE_CITATION",

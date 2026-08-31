@@ -926,6 +926,7 @@ export type CandidateStatus =
 export type CandidateVersionId = string;
 
 export interface CatalogCoverageResponse {
+  advisory_coverage_count: number;
   benefit_coverage_count: number;
   blocked_coverage_count: number;
   contract_count: number;

@@ -956,11 +956,12 @@ class DecisionRepository:
               knowledge_status_projection_digest, event_fact_schema_version,
               analysis_completeness, source_failure_codes_json,
               knowledge_contract_count, knowledge_benefit_coverage_count,
-              knowledge_published_coverage_count, knowledge_blocked_coverage_count,
+              knowledge_published_coverage_count, knowledge_advisory_coverage_count,
+              knowledge_blocked_coverage_count,
               knowledge_not_applicable_coverage_count
             ) VALUES (
               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
@@ -982,6 +983,7 @@ class DecisionRepository:
                 result.catalog_coverage.contract_count,
                 result.catalog_coverage.benefit_coverage_count,
                 result.catalog_coverage.published_coverage_count,
+                result.catalog_coverage.advisory_coverage_count,
                 result.catalog_coverage.blocked_coverage_count,
                 result.catalog_coverage.not_applicable_coverage_count,
             ),
@@ -1137,6 +1139,7 @@ class DecisionRepository:
                 contract_count=int(run.get("knowledge_contract_count") or 0),
                 benefit_coverage_count=int(run.get("knowledge_benefit_coverage_count") or 0),
                 published_coverage_count=int(run.get("knowledge_published_coverage_count") or 0),
+                advisory_coverage_count=int(run.get("knowledge_advisory_coverage_count") or 0),
                 blocked_coverage_count=int(run.get("knowledge_blocked_coverage_count") or 0),
                 not_applicable_coverage_count=int(
                     run.get("knowledge_not_applicable_coverage_count") or 0

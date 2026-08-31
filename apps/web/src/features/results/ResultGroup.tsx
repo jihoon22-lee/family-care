@@ -9,6 +9,11 @@ import styles from "./Results.module.css";
 
 export type ResultGroupKey = "claim_review" | "needs_information" | "mismatch";
 
+const CATALOG_ONLY_HOLD_REASONS = new Set([
+  "COVERAGE_PUBLICATION_ADVISORY",
+  "COVERAGE_PUBLICATION_BLOCKED",
+]);
+
 export interface ResultGroupProps {
   claimStartEnabled: boolean;
   calculations: BenefitCalculationResponse[];
@@ -40,6 +45,27 @@ function emptyCopy(group: ResultGroupKey): string {
   return "조건이 맞지 않는 항목이 없습니다.";
 }
 
+function isCatalogOnlyCandidate(
+  candidate: ClaimCandidateResponse,
+  evaluations: RuleEvaluationResponse[],
+): boolean {
+  if (
+    candidate.source.kind !== "PRIVATE_KNOWLEDGE_COVERAGE" ||
+    !candidate.hold_reason_codes.some((code) =>
+      CATALOG_ONLY_HOLD_REASONS.has(code),
+    )
+  ) {
+    return false;
+  }
+  const hasEvaluation = evaluations.some((evaluation) =>
+    evaluationMatchesCandidate(candidate, evaluation),
+  );
+  const hasCalculatedConditionalAmount =
+    candidate.calculation?.status === "CALCULATED" &&
+    candidate.calculation.conditional_amount != null;
+  return !hasEvaluation && !hasCalculatedConditionalAmount;
+}
+
 export function ResultGroup({
   claimStartEnabled,
   calculations,
@@ -51,7 +77,9 @@ export function ResultGroup({
   riderLabels,
 }: ResultGroupProps) {
   const grouped = candidates.filter(
-    (candidate) => resultGroupFor(candidate.aggregate_result) === group,
+    (candidate) =>
+      resultGroupFor(candidate.aggregate_result) === group &&
+      !isCatalogOnlyCandidate(candidate, evaluations),
   );
 
   return (

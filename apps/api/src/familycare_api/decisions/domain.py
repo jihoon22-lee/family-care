@@ -317,6 +317,7 @@ class KnowledgeCatalogCoverage:
     contract_count: int = 0
     benefit_coverage_count: int = 0
     published_coverage_count: int = 0
+    advisory_coverage_count: int = 0
     blocked_coverage_count: int = 0
     not_applicable_coverage_count: int = 0
 
@@ -325,6 +326,7 @@ class KnowledgeCatalogCoverage:
             self.contract_count,
             self.benefit_coverage_count,
             self.published_coverage_count,
+            self.advisory_coverage_count,
             self.blocked_coverage_count,
             self.not_applicable_coverage_count,
         )
@@ -332,6 +334,7 @@ class KnowledgeCatalogCoverage:
             raise ValueError("catalog coverage counts cannot be negative")
         if (
             self.published_coverage_count
+            + self.advisory_coverage_count
             + self.blocked_coverage_count
             + self.not_applicable_coverage_count
             > self.benefit_coverage_count

@@ -11,7 +11,7 @@ from collections import defaultdict
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, JsonValue, ValidationError
 
@@ -25,14 +25,19 @@ from familycare_api.private_knowledge.publication_models import (
     CalculationPublicationRecord,
     ContractStatusIntervalRecord,
     CoverageDispositionRecord,
+    CoverageDispositionRecordV2,
     FactNormalizerRecord,
     PublicationCounts,
+    PublicationCountsV2,
     PublicationManifest,
+    PublicationManifestV2,
     RuleCitationRecord,
     RulePublicationRecord,
 )
 
 SCHEMA_VERSION = "private-knowledge-rule-publication.sol-v1"
+SCHEMA_VERSION_V2 = "private-knowledge-rule-publication.sol-v2"
+SUPPORTED_SCHEMA_VERSIONS = frozenset({SCHEMA_VERSION, SCHEMA_VERSION_V2})
 MANIFEST_NAME = "manifest.json"
 PUBLICATION_DATA_FILES = frozenset(
     {
@@ -64,6 +69,11 @@ MAX_ROWS_BY_ROLE: Mapping[str, int] = {
 }
 
 JsonObject = dict[str, JsonValue]
+PublicationSchemaVersion = Literal[
+    "private-knowledge-rule-publication.sol-v1",
+    "private-knowledge-rule-publication.sol-v2",
+]
+CoverageDisposition = CoverageDispositionRecord | CoverageDispositionRecordV2
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,18 +84,18 @@ class ValidatedPublicationRecord[ModelT: BaseModel]:
 
 @dataclass(frozen=True, slots=True)
 class RulePublicationPackage:
-    schema_version: str
-    manifest: PublicationManifest
+    schema_version: PublicationSchemaVersion
+    manifest: PublicationManifest | PublicationManifestV2
     manifest_digest_sha256: str
     package_digest_sha256: str
-    coverage_dispositions: tuple[ValidatedPublicationRecord[CoverageDispositionRecord], ...]
+    coverage_dispositions: tuple[ValidatedPublicationRecord[CoverageDisposition], ...]
     status_intervals: tuple[ValidatedPublicationRecord[ContractStatusIntervalRecord], ...]
     fact_normalizers: tuple[ValidatedPublicationRecord[FactNormalizerRecord], ...]
     rule_publications: tuple[ValidatedPublicationRecord[RulePublicationRecord], ...]
     rule_citations: tuple[ValidatedPublicationRecord[RuleCitationRecord], ...]
     calculation_publications: tuple[ValidatedPublicationRecord[CalculationPublicationRecord], ...]
     calculation_citations: tuple[ValidatedPublicationRecord[CalculationCitationRecord], ...]
-    reconciliation: PublicationCounts
+    reconciliation: PublicationCounts | PublicationCountsV2
 
     @property
     def subject_aliases(self) -> tuple[str, ...]:
@@ -115,7 +125,9 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _manifest_projection(manifest: PublicationManifest) -> dict[str, object]:
+def _manifest_projection(
+    manifest: PublicationManifest | PublicationManifestV2,
+) -> dict[str, object]:
     projection = manifest.model_dump(mode="json")
     projection["files"] = sorted(
         cast(list[dict[str, object]], projection["files"]),
@@ -126,7 +138,12 @@ def _manifest_projection(manifest: PublicationManifest) -> dict[str, object]:
 
 def canonical_rule_publication_digest(package: RulePublicationPackage) -> str:
     canonical_manifest = _canonical_json(_manifest_projection(package.manifest))
-    return _sha256(b"familycare-private-rule-publication-sol-v1\x00" + canonical_manifest)
+    domain = (
+        b"familycare-private-rule-publication-sol-v1\x00"
+        if package.schema_version == SCHEMA_VERSION
+        else b"familycare-private-rule-publication-sol-v2\x00"
+    )
+    return _sha256(domain + canonical_manifest)
 
 
 def _is_inside(child: Path, parent: Path) -> bool:
@@ -459,9 +476,9 @@ def _validate_calculation(
 
 def _derived_counts(
     package: RulePublicationPackage,
-) -> PublicationCounts:
+) -> PublicationCounts | PublicationCountsV2:
     dispositions = [record.value for record in package.coverage_dispositions]
-    return PublicationCounts(
+    values: dict[str, int] = dict(
         subject_count=len({value.source_subject_key for value in dispositions}),
         contract_count=len({value.canonical_policy_id for value in dispositions}),
         coverage_count=len(dispositions),
@@ -478,6 +495,16 @@ def _derived_counts(
         calculation_publication_count=len(package.calculation_publications),
         calculation_citation_count=len(package.calculation_citations),
     )
+    if package.schema_version == SCHEMA_VERSION_V2:
+        values["advisory_disposition_count"] = sum(
+            value.disposition == "ADVISORY" for value in dispositions
+        )
+        values["user_confirmed_enrollment_count"] = sum(
+            getattr(value, "enrollment_authority", None) == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+            for value in dispositions
+        )
+        return PublicationCountsV2(**values)
+    return PublicationCounts(**values)
 
 
 def _validate_references(package: RulePublicationPackage) -> None:
@@ -572,9 +599,12 @@ def _validate_references(package: RulePublicationPackage) -> None:
                 row_number=row_number,
             )
         disposition = disposition_entry[1].value
+        disposition_accepts_artifact = disposition.disposition == "PUBLISHED" or (
+            package.schema_version == SCHEMA_VERSION_V2 and disposition.disposition == "ADVISORY"
+        )
         if (
             disposition.canonical_policy_id != rule.canonical_policy_id
-            or disposition.disposition != "PUBLISHED"
+            or not disposition_accepts_artifact
         ):
             raise _error(
                 PublicationErrorCode.BROKEN_REFERENCE,
@@ -594,7 +624,8 @@ def _validate_references(package: RulePublicationPackage) -> None:
             file_role="rule-publications.jsonl",
             row_number=row_number,
         )
-        published_rule_coverages.add(rule.canonical_coverage_id)
+        if disposition.disposition == "PUBLISHED":
+            published_rule_coverages.add(rule.canonical_coverage_id)
 
     calculations = _unique_index(
         package.calculation_publications,
@@ -646,9 +677,12 @@ def _validate_references(package: RulePublicationPackage) -> None:
                 row_number=row_number,
             )
         disposition = disposition_entry[1].value
+        disposition_accepts_artifact = disposition.disposition == "PUBLISHED" or (
+            package.schema_version == SCHEMA_VERSION_V2 and disposition.disposition == "ADVISORY"
+        )
         if (
             disposition.canonical_policy_id != calculation.canonical_policy_id
-            or disposition.disposition != "PUBLISHED"
+            or not disposition_accepts_artifact
             or disposition.benefit_type != calculation.calculation_kind
         ):
             raise _error(
@@ -746,14 +780,24 @@ def load_rule_publication_package(
             manifest_payload,
             file_role=MANIFEST_NAME,
         )
-        if manifest_source.get("schema_version") != SCHEMA_VERSION:
+        schema_version = manifest_source.get("schema_version")
+        if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
             raise _error(PublicationErrorCode.UNSUPPORTED_SCHEMA, file_role=MANIFEST_NAME)
-        manifest = _parse_model(
-            manifest_payload,
-            file_role=MANIFEST_NAME,
-            model_type=PublicationManifest,
-            error_code=PublicationErrorCode.MANIFEST_INVALID,
-        )
+        manifest: PublicationManifest | PublicationManifestV2
+        if schema_version == SCHEMA_VERSION:
+            manifest = _parse_model(
+                manifest_payload,
+                file_role=MANIFEST_NAME,
+                model_type=PublicationManifest,
+                error_code=PublicationErrorCode.MANIFEST_INVALID,
+            )
+        else:
+            manifest = _parse_model(
+                manifest_payload,
+                file_role=MANIFEST_NAME,
+                model_type=PublicationManifestV2,
+                error_code=PublicationErrorCode.MANIFEST_INVALID,
+            )
 
         entries: dict[str, tuple[int, str]] = {}
         for entry in manifest.files:
@@ -798,11 +842,24 @@ def load_rule_publication_package(
     finally:
         os.close(root_fd)
 
-    coverage_dispositions = _parse_jsonl(
-        payloads["coverage-dispositions.jsonl"],
-        file_role="coverage-dispositions.jsonl",
-        model_type=CoverageDispositionRecord,
-    )
+    if schema_version == SCHEMA_VERSION:
+        coverage_dispositions = cast(
+            tuple[ValidatedPublicationRecord[CoverageDisposition], ...],
+            _parse_jsonl(
+                payloads["coverage-dispositions.jsonl"],
+                file_role="coverage-dispositions.jsonl",
+                model_type=CoverageDispositionRecord,
+            ),
+        )
+    else:
+        coverage_dispositions = cast(
+            tuple[ValidatedPublicationRecord[CoverageDisposition], ...],
+            _parse_jsonl(
+                payloads["coverage-dispositions.jsonl"],
+                file_role="coverage-dispositions.jsonl",
+                model_type=CoverageDispositionRecordV2,
+            ),
+        )
     status_intervals = _parse_jsonl(
         payloads["contract-status-intervals.jsonl"],
         file_role="contract-status-intervals.jsonl",
@@ -833,20 +890,19 @@ def load_rule_publication_package(
         file_role="calculation-citations.jsonl",
         model_type=CalculationCitationRecord,
     )
+    counts_model = PublicationCounts if schema_version == SCHEMA_VERSION else PublicationCountsV2
     reconciliation = _parse_model(
         payloads["reconciliation.json"],
         file_role="reconciliation.json",
-        model_type=PublicationCounts,
+        model_type=counts_model,
     )
     manifest_projection = _manifest_projection(manifest)
     manifest_digest = _sha256(_canonical_json(manifest_projection))
     package = RulePublicationPackage(
-        schema_version=SCHEMA_VERSION,
+        schema_version=cast(PublicationSchemaVersion, schema_version),
         manifest=manifest,
         manifest_digest_sha256=manifest_digest,
-        package_digest_sha256=_sha256(
-            b"familycare-private-rule-publication-sol-v1\x00" + _canonical_json(manifest_projection)
-        ),
+        package_digest_sha256="",
         coverage_dispositions=coverage_dispositions,
         status_intervals=status_intervals,
         fact_normalizers=fact_normalizers,
@@ -856,6 +912,7 @@ def load_rule_publication_package(
         calculation_citations=calculation_citations,
         reconciliation=reconciliation,
     )
+    object.__setattr__(package, "package_digest_sha256", canonical_rule_publication_digest(package))
     _validate_references(package)
     _validate_reconciliation(package)
     return package
@@ -878,7 +935,7 @@ def _validate_loaded_records[ModelT: BaseModel](
 def validate_loaded_rule_publication_package(package: RulePublicationPackage) -> None:
     """Recheck an immutable package projection immediately before apply."""
 
-    if package.schema_version != SCHEMA_VERSION:
+    if package.schema_version not in SUPPORTED_SCHEMA_VERSIONS:
         raise _error(PublicationErrorCode.FILE_CHANGED, file_role=MANIFEST_NAME)
     manifest_projection = _manifest_projection(package.manifest)
     if (

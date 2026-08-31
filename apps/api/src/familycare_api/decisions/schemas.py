@@ -405,6 +405,10 @@ class KnowledgeBenefitCalculationResponse(StrictModel):
             raise ValueError("calculated benefit requires a conditional amount")
         if self.status != "CALCULATED" and self.conditional_amount is not None:
             raise ValueError("unresolved benefit cannot expose a conditional amount")
+        if self.confirmed_amount is not None and (
+            self.status != "CALCULATED" or self.hold_reason_code is not None
+        ):
+            raise ValueError("confirmed amount requires a calculated result without a hold reason")
         if tuple(item.step_number for item in self.steps) != tuple(range(1, len(self.steps) + 1)):
             raise ValueError("calculation steps must be contiguous")
         return self
@@ -571,6 +575,7 @@ class CatalogCoverageResponse(StrictModel):
     contract_count: BoundedCount
     benefit_coverage_count: BoundedCount
     published_coverage_count: BoundedCount
+    advisory_coverage_count: BoundedCount
     blocked_coverage_count: BoundedCount
     not_applicable_coverage_count: BoundedCount
 
@@ -578,6 +583,7 @@ class CatalogCoverageResponse(StrictModel):
     def validate_disposition_counts(self) -> Self:
         if (
             self.published_coverage_count
+            + self.advisory_coverage_count
             + self.blocked_coverage_count
             + self.not_applicable_coverage_count
             > self.benefit_coverage_count
@@ -748,7 +754,20 @@ class CoverageDecisionResponse(StrictModel):
                 else {}
             )
             knowledge_candidates = knowledge.candidates if knowledge is not None else ()
-            knowledge_evaluations = knowledge.evaluations if knowledge is not None else ()
+            knowledge_evaluations = (
+                tuple(
+                    sorted(
+                        knowledge.evaluations,
+                        key=lambda item: (
+                            item.knowledge_coverage_id,
+                            item.rule_publication_id,
+                            item.evaluation_id,
+                        ),
+                    )
+                )
+                if knowledge is not None
+                else ()
+            )
             return cls(
                 schema_version="2",
                 run_id=value.run_id,
@@ -768,6 +787,7 @@ class CoverageDecisionResponse(StrictModel):
                     contract_count=value.catalog_coverage.contract_count,
                     benefit_coverage_count=value.catalog_coverage.benefit_coverage_count,
                     published_coverage_count=value.catalog_coverage.published_coverage_count,
+                    advisory_coverage_count=value.catalog_coverage.advisory_coverage_count,
                     blocked_coverage_count=value.catalog_coverage.blocked_coverage_count,
                     not_applicable_coverage_count=(
                         value.catalog_coverage.not_applicable_coverage_count

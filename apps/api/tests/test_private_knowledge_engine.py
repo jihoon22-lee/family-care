@@ -7,10 +7,12 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+import pytest
 from familycare_api.clauses.dsl import RuleKind
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import FactValue, MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
+    KnowledgeBenefitCalculation,
     KnowledgeCalculationPublication,
     KnowledgeCitation,
     KnowledgeCoverageContext,
@@ -21,7 +23,10 @@ from familycare_api.decisions.knowledge_domain import (
 )
 from familycare_api.decisions.knowledge_engine import (
     DeterministicKnowledgeDecisionEngine,
+    summarize_knowledge_results,
 )
+from familycare_api.decisions.schemas import KnowledgeBenefitCalculationResponse
+from pydantic import ValidationError
 
 HOUSEHOLD_ID = UUID("00000000-0000-4000-8000-000000006101")
 MEMBER_ID = UUID("00000000-0000-4000-8000-000000006102")
@@ -326,6 +331,327 @@ def test_four_fixed_coverages_sum_while_indemnity_gap_stays_separate() -> None:
     assert with_receipt.indemnity_summary.status == "CALCULATED"
 
 
+def test_four_status_unconfirmed_fixed_coverages_keep_conditional_total() -> None:
+    result = _evaluate(
+        _event(),
+        *(_coverage(index, str(index * 100), status_intervals=()) for index in range(1, 5)),
+    )
+
+    assert [item.result for item in result.candidates] == ["UNKNOWN"] * 4
+    assert [item.status for item in result.calculations] == ["CALCULATED"] * 4
+    assert all(item.confirmed_amount is None for item in result.calculations)
+    assert result.fixed_subtotals[0].amount == Decimal("1000")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 4
+
+
+def test_status_unconfirmed_indemnity_never_uses_conditional_shortcut() -> None:
+    indemnity_calculation = _calculation(
+        9,
+        kind="INDEMNITY",
+        document_kind="indemnity_eligibility",
+        input_field_paths=("Receipt.covered_amount",),
+        calculation={
+            "op": "multiply",
+            "args": [
+                {"field": "Receipt.covered_amount"},
+                {"value": Decimal("0.5")},
+            ],
+        },
+    )
+    indemnity = _coverage(
+        9,
+        "0",
+        benefit_type="INDEMNITY",
+        calculation=indemnity_calculation,
+        status_intervals=(),
+    )
+    result = _evaluate(
+        _event(
+            extra_facts={
+                "Receipt.covered_amount": FactValue(Decimal("50"), "user", ()),
+            }
+        ),
+        indemnity,
+    )
+
+    assert result.candidates[0].result == "UNKNOWN"
+    assert result.calculations[0].status == "UNKNOWN"
+    assert result.calculations[0].conditional_amount is None
+    assert result.indemnity_summary.status == "UNKNOWN"
+    assert result.indemnity_summary.unresolved_candidate_count == 1
+
+
+def test_non_executable_catalog_rows_do_not_pollute_benefit_summaries() -> None:
+    published_fixed = _coverage(10, "100")
+    blocked_fixed = replace(_coverage(11, "200"), disposition="BLOCKED")
+    published_indemnity = _coverage(12, "0", benefit_type="INDEMNITY")
+    blocked_indemnity = replace(
+        _coverage(13, "0", benefit_type="INDEMNITY"),
+        disposition="BLOCKED",
+    )
+
+    result = _evaluate(
+        _event(),
+        published_fixed,
+        blocked_fixed,
+        published_indemnity,
+        blocked_indemnity,
+    )
+
+    assert len(result.candidates) == 4
+    assert len(result.fixed_subtotals) == 1
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 0
+    assert result.indemnity_summary.candidate_count == 1
+    assert result.indemnity_summary.calculated_candidate_count == 0
+    assert result.indemnity_summary.unresolved_candidate_count == 1
+    assert summarize_knowledge_results(result.candidates, result.calculations) == (
+        result.fixed_subtotals,
+        result.indemnity_summary,
+    )
+
+
+def test_advisory_coverage_requires_review_but_keeps_reviewed_fixed_calculation() -> None:
+    reviewed = replace(_coverage(15, "100"), disposition="ADVISORY")
+    catalog_only = replace(
+        _coverage(16, "200"),
+        disposition="ADVISORY",
+        rules=(),
+        calculation=None,
+    )
+
+    result = _evaluate(_event(), reviewed, catalog_only)
+
+    assert [item.result for item in result.candidates] == ["UNKNOWN", "UNKNOWN"]
+    assert "COVERAGE_PUBLICATION_ADVISORY" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "CALCULATED"
+    assert result.calculations[0].conditional_amount == Decimal("100")
+    assert result.calculations[0].confirmed_amount is None
+    assert result.calculations[0].hold_reason_code == "COVERAGE_PUBLICATION_ADVISORY"
+    assert "NO_PUBLISHED_RULE" in result.candidates[1].hold_reason_codes
+    assert result.calculations[1].status == "UNKNOWN"
+    assert result.fixed_subtotals[0].amount == Decimal("100")
+    assert result.fixed_subtotals[0].calculated_candidate_count == 1
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 0
+    assert result.completeness == "PARTIAL"
+
+
+@pytest.mark.parametrize(
+    "axis",
+    [
+        "mapping_applicability",
+        "mapping_enrollment_decision",
+        "document_identity_decision",
+        "edition_applicability_decision",
+        "section_mapping_decision",
+        "overall_mapping_decision",
+    ],
+)
+def test_advisory_hold_survives_unknown_mapping_authority_axes(axis: str) -> None:
+    coverage = replace(
+        _coverage(17, "100"),
+        disposition="ADVISORY",
+        **{axis: "UNKNOWN"},
+    )
+
+    result = _evaluate(_event(), coverage)
+
+    assert result.candidates[0].result == "UNKNOWN"
+    assert "COVERAGE_PUBLICATION_ADVISORY" in result.candidates[0].hold_reason_codes
+    assert "COVERAGE_AUTHORITY_INCOMPLETE" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "CALCULATED"
+    assert result.calculations[0].conditional_amount == Decimal("100")
+    assert result.calculations[0].confirmed_amount is None
+    assert result.calculations[0].hold_reason_code == "COVERAGE_PUBLICATION_ADVISORY"
+
+
+def test_advisory_unknown_mapping_never_overrides_decisive_contract_term_mismatch() -> None:
+    coverage = replace(
+        _coverage(21, "100"),
+        disposition="ADVISORY",
+        mapping_applicability="UNKNOWN",
+    )
+    outside_term = replace(
+        _event(),
+        event_date=date(2025, 12, 31),
+        visit_date=date(2025, 12, 31),
+    )
+
+    result = _evaluate(outside_term, coverage)
+
+    assert result.candidates[0].result == "NO_MATCH"
+    assert "EVENT_DATE_OUTSIDE_CONTRACT_TERM" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "NOT_APPLICABLE"
+    assert result.calculations[0].conditional_amount is None
+    assert result.calculations[0].confirmed_amount is None
+
+
+@pytest.mark.parametrize(
+    ("axis", "value"),
+    [
+        ("subject_binding_decision", "NO_MATCH"),
+        ("mapping_applicability", "NOT_APPLICABLE"),
+        ("mapping_enrollment_decision", "NO_MATCH"),
+        ("document_identity_decision", "NO_MATCH"),
+        ("edition_applicability_decision", "NO_MATCH"),
+        ("section_mapping_decision", "NO_MATCH"),
+        ("overall_mapping_decision", "NO_MATCH"),
+        ("current_confirmation_decision", "NO_MATCH"),
+    ],
+)
+def test_advisory_explicit_authority_mismatch_never_calculates(
+    axis: str,
+    value: str,
+) -> None:
+    coverage = replace(
+        _coverage(22, "100"),
+        disposition="ADVISORY",
+        **{axis: value},
+    )
+
+    result = _evaluate(_event(), coverage)
+
+    assert result.candidates[0].result == "NO_MATCH"
+    assert "COVERAGE_AUTHORITY_NO_MATCH" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "NOT_APPLICABLE"
+    assert result.calculations[0].conditional_amount is None
+    assert result.calculations[0].confirmed_amount is None
+
+
+@pytest.mark.parametrize(
+    ("decision", "confirmed_status", "reason_code"),
+    [
+        ("NO_MATCH", "unknown", "EVENT_DATE_STATUS_NO_MATCH"),
+        ("MATCH", "inactive", "EVENT_DATE_CONTRACT_INACTIVE"),
+    ],
+)
+def test_advisory_decisive_event_status_precedes_unknown_authority(
+    decision: str,
+    confirmed_status: str,
+    reason_code: str,
+) -> None:
+    status = KnowledgeStatusInterval(
+        effective_from=date(2026, 1, 1),
+        effective_through=date(2026, 12, 31),
+        decision=decision,  # type: ignore[arg-type]
+        confirmed_status=confirmed_status,  # type: ignore[arg-type]
+        authority="REVIEWED_STATUS_DOCUMENT",
+    )
+    coverage = replace(
+        _coverage(23, "100"),
+        disposition="ADVISORY",
+        mapping_applicability="UNKNOWN",
+        status_intervals=(status,),
+    )
+
+    result = _evaluate(_event(), coverage)
+
+    assert result.candidates[0].result == "NO_MATCH"
+    assert reason_code in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "NOT_APPLICABLE"
+    assert result.calculations[0].conditional_amount is None
+    assert result.calculations[0].confirmed_amount is None
+
+
+def test_advisory_no_match_still_carries_publication_hold() -> None:
+    coverage = replace(
+        _coverage(18, "100"),
+        disposition="ADVISORY",
+        enrollment_decision="NO_MATCH",
+    )
+
+    result = _evaluate(_event(), coverage)
+
+    assert result.candidates[0].result == "NO_MATCH"
+    assert "COVERAGE_PUBLICATION_ADVISORY" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "NOT_APPLICABLE"
+    assert result.calculations[0].confirmed_amount is None
+
+
+def test_advisory_amount_without_reviewed_formula_is_never_calculated() -> None:
+    amount_only = replace(
+        _coverage(19, "100"),
+        disposition="ADVISORY",
+        calculation=None,
+    )
+
+    result = _evaluate(_event(), amount_only)
+
+    assert result.candidates[0].result == "UNKNOWN"
+    assert "COVERAGE_PUBLICATION_ADVISORY" in result.candidates[0].hold_reason_codes
+    assert result.calculations[0].status == "UNKNOWN"
+    assert result.calculations[0].conditional_amount is None
+    assert result.calculations[0].confirmed_amount is None
+    assert result.fixed_subtotals[0].amount == 0
+    assert result.fixed_subtotals[0].calculated_candidate_count == 0
+    assert result.fixed_subtotals[0].unresolved_candidate_count == 1
+
+
+def test_calculation_authority_rejects_confirmed_amount_for_holds_and_unresolved_status() -> None:
+    calculation = KnowledgeBenefitCalculation(
+        calculation_id=_id(980),
+        candidate_id=_id(981),
+        knowledge_coverage_id=_id(982),
+        calculation_publication_id=_id(983),
+        kind="FIXED",
+        status="CALCULATED",
+        currency="KRW",
+        conditional_amount=Decimal("100"),
+        confirmed_amount=Decimal("100"),
+    )
+
+    with pytest.raises(ValueError, match="confirmed amount"):
+        replace(calculation, hold_reason_code="HUMAN_REVIEW_REQUIRED")
+    with pytest.raises(ValueError, match="confirmed amount"):
+        replace(calculation, status="UNKNOWN", conditional_amount=None)
+
+    response = KnowledgeBenefitCalculationResponse.from_domain(calculation).model_dump(mode="json")
+    with pytest.raises(ValidationError, match="confirmed amount"):
+        KnowledgeBenefitCalculationResponse.model_validate(
+            {**response, "hold_reason_code": "HUMAN_REVIEW_REQUIRED"}
+        )
+    with pytest.raises(ValidationError, match="confirmed amount"):
+        KnowledgeBenefitCalculationResponse.model_validate(
+            {**response, "status": "UNKNOWN", "conditional_amount": None}
+        )
+
+
+@pytest.mark.parametrize("calculation_hold", [None, "UNRELATED_REVIEW_HOLD"])
+def test_fixed_subtotal_rejects_unlinked_conditional_holds(
+    calculation_hold: str | None,
+) -> None:
+    result = _evaluate(_event(), replace(_coverage(17, "100"), disposition="ADVISORY"))
+    malformed = replace(result.calculations[0], hold_reason_code=calculation_hold)
+
+    fixed_subtotals, _ = summarize_knowledge_results(result.candidates, (malformed,))
+
+    assert len(fixed_subtotals) == 1
+    assert fixed_subtotals[0].amount == Decimal("0")
+    assert fixed_subtotals[0].calculated_candidate_count == 0
+    assert fixed_subtotals[0].unresolved_candidate_count == 1
+
+
+def test_blocked_catalog_row_keeps_publication_marker_after_runtime_failure() -> None:
+    class FailingEngine(DeterministicKnowledgeDecisionEngine):
+        def _evaluate_coverage(self, *args: object) -> object:
+            raise RuntimeError
+
+    blocked = replace(
+        _coverage(14, "0", benefit_type="INDEMNITY"),
+        disposition="BLOCKED",
+    )
+    result = FailingEngine().evaluate(
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+        _context(blocked),
+        run_id=DECISION_RUN_ID,
+    )
+
+    assert "COVERAGE_PUBLICATION_BLOCKED" in result.candidates[0].hold_reason_codes
+    assert result.indemnity_summary.candidate_count == 0
+
+
 def test_waiting_frequency_and_reduction_use_reviewed_runtime_facts() -> None:
     waiting = _expression_rule(
         20,
@@ -421,6 +747,27 @@ def test_untrusted_fact_missing_event_status_and_invalid_citation_fail_closed() 
     no_status = _evaluate(_event(), _coverage(2, "100", status_intervals=()))
     assert no_status.candidates[0].result == "UNKNOWN"
     assert "EVENT_DATE_STATUS_UNCONFIRMED" in no_status.candidates[0].hold_reason_codes
+    assert [(item.field_path, item.reason_code) for item in no_status.candidates[0].questions] == [
+        ("Rider.status", "EVENT_DATE_STATUS_UNCONFIRMED")
+    ]
+    assert no_status.calculations[0].status == "CALCULATED"
+    assert no_status.calculations[0].conditional_amount == Decimal("100")
+    assert no_status.calculations[0].confirmed_amount is None
+    assert no_status.calculations[0].hold_reason_code == "EVENT_DATE_STATUS_UNCONFIRMED"
+    assert no_status.fixed_subtotals[0].amount == Decimal("100")
+    assert no_status.fixed_subtotals[0].calculated_candidate_count == 1
+
+    before_contract = _evaluate(
+        replace(
+            _event(),
+            event_date=date(2025, 12, 31),
+            visit_date=date(2025, 12, 31),
+        ),
+        _coverage(4, "100", status_intervals=()),
+    )
+    assert before_contract.candidates[0].result == "NO_MATCH"
+    assert "EVENT_DATE_OUTSIDE_CONTRACT_TERM" in before_contract.candidates[0].hold_reason_codes
+    assert before_contract.calculations[0].status == "NOT_APPLICABLE"
 
     inactive_status = KnowledgeStatusInterval(
         effective_from=date(2026, 1, 1),

@@ -78,6 +78,13 @@ export function reasonLabel(reasonCode: string): string {
       "증권과 약관의 연결 상태를 더 확인해야 합니다.",
     KNOWLEDGE_CALCULATION_PUBLICATION_CONFLICT:
       "금액 계산 규칙이 서로 달라 추가 검토가 필요합니다.",
+    COVERAGE_PUBLICATION_ADVISORY:
+      "가입 담보와 관련 약관을 검색할 수 있지만 자동 판정 규칙은 아직 완전하지 않습니다.",
+    COVERAGE_PUBLICATION_BLOCKED:
+      "이전 실행 항목에 예외가 남아 있어 별도 확인이 필요합니다.",
+    EVENT_DATE_STATUS_UNCONFIRMED: "사건일의 계약 상태를 확인해야 합니다.",
+    EVENT_DATE_OUTSIDE_CONTRACT_TERM:
+      "사건일이 확인된 계약 기간에 포함되지 않습니다.",
     PROCEDURE_CODE_REQUIRED: "처치·수술 코드를 확인해 주세요.",
     DIAGNOSIS_CODE_REQUIRED: "진단 코드를 확인해 주세요.",
     PATHOLOGY_CODE_REQUIRED: "병리 코드를 확인해 주세요.",
@@ -88,6 +95,8 @@ export function reasonLabel(reasonCode: string): string {
     RECEIPT_AMOUNT_INVALID: "영수증 금액 형식을 확인해 주세요.",
     FIXED_AMOUNT_CALCULATED: "승인된 정액 계산 규칙을 적용했습니다.",
     TOKEN_OVERLAP: "입력 내용과 관련 표현이 있는 약관 조항입니다.",
+    CONTRACT_TERMS_TOKEN_OVERLAP:
+      "같은 계약의 약관에서 찾은 후보이며, 이 담보에 직접 적용된다는 뜻은 아닙니다.",
     RELATED_CLAUSE: "입력 내용과 관련 가능성이 있는 약관 조항입니다.",
   };
   return labels[reasonCode] ?? "판정에 필요한 조건을 확인할 수 없습니다.";

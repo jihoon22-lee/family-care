@@ -375,7 +375,7 @@ def test_migration_downgrade_upgrade_round_trip() -> None:
             ).fetchone()
             assert row == (None,)
     finally:
-        command.upgrade(config, "0022_analysis_assistance")
+        command.upgrade(config, "head")
 
     with psycopg.connect(_database_url()) as connection:
         row = connection.execute(

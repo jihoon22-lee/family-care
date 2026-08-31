@@ -14,7 +14,10 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
-from familycare_api.private_knowledge.publication_models import PublicationCounts
+from familycare_api.private_knowledge.publication_models import (
+    PublicationCounts,
+    PublicationCountsV2,
+)
 from familycare_api.private_knowledge.publication_package import (
     RulePublicationPackage,
     validate_loaded_rule_publication_package,
@@ -53,6 +56,14 @@ class DispositionCounts(StrictReconciliationModel):
     @classmethod
     def zero(cls) -> DispositionCounts:
         return cls(published=0, blocked=0, not_applicable=0)
+
+
+class DispositionCountsV2(DispositionCounts):
+    advisory: NonNegativeInt
+
+    @classmethod
+    def zero(cls) -> DispositionCountsV2:
+        return cls(published=0, advisory=0, blocked=0, not_applicable=0)
 
 
 class PublicationBlockCounts(StrictReconciliationModel):
@@ -121,8 +132,8 @@ class PublicationDatabaseBaseline(StrictReconciliationModel):
     known_publication_digests: tuple[Sha256, ...]
     current_publication_run_id: UUID | None
     current_publication_package_digest_sha256: Sha256 | None
-    current_publication_counts: PublicationCounts
-    current_disposition_counts: DispositionCounts
+    current_publication_counts: PublicationCounts | PublicationCountsV2
+    current_disposition_counts: DispositionCounts | DispositionCountsV2
     coverage_authorities: tuple[PublicationCoverageBaseline, ...]
     evidence: tuple[PublicationEvidenceBaseline, ...]
     actor_identity_digest_sha256: Sha256
@@ -130,17 +141,20 @@ class PublicationDatabaseBaseline(StrictReconciliationModel):
 
 class RulePublicationDryRunReport(StrictReconciliationModel):
     schema_version: Literal["private-knowledge-rule-dry-run.v1"]
-    package_schema_version: Literal["private-knowledge-rule-publication.sol-v1"]
+    package_schema_version: Literal[
+        "private-knowledge-rule-publication.sol-v1",
+        "private-knowledge-rule-publication.sol-v2",
+    ]
     package_digest_sha256: Sha256
     knowledge_package_digest_sha256: Sha256
     knowledge_snapshot_digest_sha256: Sha256
     baseline_digest_sha256: Sha256
     operation: Literal["CREATE", "NO_OP", "SUPERSEDE", "BLOCKED"]
-    input_counts: PublicationCounts
-    expected_insert_counts: PublicationCounts
-    expected_current_counts: PublicationCounts
-    dispositions: DispositionCounts
-    expected_current_dispositions: DispositionCounts
+    input_counts: PublicationCounts | PublicationCountsV2
+    expected_insert_counts: PublicationCounts | PublicationCountsV2
+    expected_current_counts: PublicationCounts | PublicationCountsV2
+    dispositions: DispositionCounts | DispositionCountsV2
+    expected_current_dispositions: DispositionCounts | DispositionCountsV2
     block_counts: PublicationBlockCounts
     apply_block_count: NonNegativeInt
     report_digest_sha256: Sha256
@@ -175,8 +189,17 @@ def canonical_rule_publication_report_digest(
     )
 
 
-def _disposition_counts(package: RulePublicationPackage) -> DispositionCounts:
+def _disposition_counts(
+    package: RulePublicationPackage,
+) -> DispositionCounts | DispositionCountsV2:
     values = [record.value.disposition for record in package.coverage_dispositions]
+    if package.schema_version == "private-knowledge-rule-publication.sol-v2":
+        return DispositionCountsV2(
+            published=values.count("PUBLISHED"),
+            advisory=values.count("ADVISORY"),
+            blocked=values.count("BLOCKED"),
+            not_applicable=values.count("NOT_APPLICABLE"),
+        )
     return DispositionCounts(
         published=values.count("PUBLISHED"),
         blocked=values.count("BLOCKED"),
@@ -239,7 +262,7 @@ def build_rule_publication_dry_run(
             or disposition.family_alias != authority.family_alias
         ):
             closure_mismatch += 1
-        if (
+        if disposition.disposition != "ADVISORY" and (
             authority.current_confirmation_decision is None
             or authority.current_confirmed_status is None
         ):
@@ -247,10 +270,16 @@ def build_rule_publication_dry_run(
         if authority.subject_binding_decision != "MATCH":
             subject_binding_mismatch += 1
         if disposition.disposition == "PUBLISHED":
+            enrollment_authority = getattr(
+                disposition,
+                "enrollment_authority",
+                "CERTIFICATE_SNAPSHOT",
+            )
             expected = (
                 authority.enrollment_decision == "MATCH"
                 and authority.component_classification == "BENEFIT_COVERAGE"
                 and authority.benefit_type == disposition.benefit_type
+                and enrollment_authority == "CERTIFICATE_SNAPSHOT"
                 and authority.mapping_applicability == "APPLICABLE"
                 and authority.mapping_enrollment_decision == "MATCH"
                 and authority.document_identity_decision == "MATCH"
@@ -259,6 +288,21 @@ def build_rule_publication_dry_run(
                 and authority.overall_mapping_decision == "MATCH"
                 and authority.current_confirmation_decision == "MATCH"
                 and authority.current_confirmed_status == "active"
+            )
+            if not expected:
+                coverage_authority_mismatch += 1
+        elif disposition.disposition == "ADVISORY":
+            enrollment_authority_matches = (
+                authority.enrollment_decision == "MATCH"
+                and disposition.enrollment_authority == "CERTIFICATE_SNAPSHOT"
+            ) or (
+                authority.enrollment_decision == "UNKNOWN"
+                and disposition.enrollment_authority == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+            )
+            expected = (
+                authority.component_classification == "BENEFIT_COVERAGE"
+                and authority.benefit_type == disposition.benefit_type
+                and enrollment_authority_matches
             )
             if not expected:
                 coverage_authority_mismatch += 1
@@ -310,17 +354,17 @@ def build_rule_publication_dry_run(
         current_counts = input_counts
         current_dispositions = dispositions
     elif operation == "NO_OP":
-        insert_counts = PublicationCounts.zero()
+        insert_counts = type(input_counts)(**{key: 0 for key in type(input_counts).model_fields})
         current_counts = baseline.current_publication_counts
         current_dispositions = baseline.current_disposition_counts
     else:
-        insert_counts = PublicationCounts.zero()
+        insert_counts = type(input_counts)(**{key: 0 for key in type(input_counts).model_fields})
         current_counts = baseline.current_publication_counts
         current_dispositions = baseline.current_disposition_counts
 
     provisional = RulePublicationDryRunReport(
         schema_version="private-knowledge-rule-dry-run.v1",
-        package_schema_version="private-knowledge-rule-publication.sol-v1",
+        package_schema_version=package.schema_version,
         package_digest_sha256=package.package_digest_sha256,
         knowledge_package_digest_sha256=(package.manifest.source_knowledge_package_digest_sha256),
         knowledge_snapshot_digest_sha256=(

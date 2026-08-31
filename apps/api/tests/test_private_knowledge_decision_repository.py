@@ -22,6 +22,8 @@ RULE_RUN_ID = UUID("00000000-0000-4000-8000-000000007005")
 CONTRACT_ID = UUID("00000000-0000-4000-8000-000000007006")
 COVERAGE_ID = UUID("00000000-0000-4000-8000-000000007007")
 RIDER_ID = UUID("00000000-0000-4000-8000-000000007008")
+CONFIRMER_ID = UUID("00000000-0000-4000-8000-000000007014")
+OTHER_CONFIRMER_ID = UUID("00000000-0000-4000-8000-000000007015")
 SECTION_ID = UUID("00000000-0000-4000-8000-000000007009")
 CLAUSE_ID = UUID("00000000-0000-4000-8000-000000007010")
 FACT_ID = UUID("00000000-0000-4000-8000-000000007011")
@@ -98,7 +100,11 @@ def _rows(*, with_publication: bool = True) -> dict[str, list[dict[str, Any]]]:
                 "contract_end": None,
                 "disposition": "PUBLISHED" if with_publication else None,
                 "subject_binding_decision": "MATCH",
-                "enrollment_decision": "MATCH",
+                "raw_certificate_enrollment_decision": "MATCH",
+                "effective_enrollment_decision": "MATCH",
+                "publication_enrollment_decision_snapshot": "MATCH",
+                "publication_enrollment_authority": "CERTIFICATE_SNAPSHOT",
+                "publication_enrollment_confirmed_by": None,
                 "component_classification": "BENEFIT_COVERAGE",
                 "mapping_count": 1,
                 "mapping_applicability": "APPLICABLE",
@@ -250,6 +256,78 @@ def test_catalog_without_current_publication_is_unavailable_not_empty_success() 
     assert snapshot.catalog_coverage.benefit_coverage_count == 1
     assert snapshot.catalog_coverage.published_coverage_count == 0
     assert snapshot.reason_codes == ("KNOWLEDGE_PUBLICATION_UNAVAILABLE",)
+
+
+def test_catalog_counts_advisory_separately_from_executable_publications() -> None:
+    catalog = PostgresKnowledgeDecisionRepository._catalog(
+        [
+            {
+                "knowledge_contract_id": CONTRACT_ID,
+                "component_classification": "BENEFIT_COVERAGE",
+                "disposition": "ADVISORY",
+            }
+        ]
+    )
+
+    assert catalog.benefit_coverage_count == 1
+    assert catalog.advisory_coverage_count == 1
+    assert catalog.published_coverage_count == 0
+
+
+def test_user_confirmation_only_overrides_certificate_enrollment_and_is_digest_bound() -> None:
+    rows = _rows()
+    coverage = rows["private-knowledge:coverage-context"][0]
+    coverage.update(
+        {
+            "disposition": "ADVISORY",
+            "raw_certificate_enrollment_decision": "UNKNOWN",
+            "effective_enrollment_decision": "MATCH",
+            "publication_enrollment_decision_snapshot": "UNKNOWN",
+            "publication_enrollment_authority": "USER_CONFIRMED_COVERAGE_ENROLLMENT",
+            "publication_enrollment_confirmed_by": CONFIRMER_ID,
+            "mapping_applicability": "UNKNOWN",
+            "mapping_enrollment_decision": "UNKNOWN",
+            "document_identity_decision": "UNKNOWN",
+            "edition_applicability_decision": "UNKNOWN",
+            "section_mapping_decision": "UNKNOWN",
+            "overall_mapping_decision": "UNKNOWN",
+        }
+    )
+    repository = PostgresKnowledgeDecisionRepository()
+
+    snapshot = repository.read_context(
+        _Connection(rows),  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+    )
+
+    assert snapshot.context is not None
+    projected = snapshot.context.coverages[0]
+    assert projected.enrollment_decision == "MATCH"
+    assert projected.mapping_applicability == "UNKNOWN"
+    assert projected.mapping_enrollment_decision == "UNKNOWN"
+    assert projected.document_identity_decision == "UNKNOWN"
+    assert projected.edition_applicability_decision == "UNKNOWN"
+    assert projected.section_mapping_decision == "UNKNOWN"
+    assert projected.overall_mapping_decision == "UNKNOWN"
+    baseline_digest = snapshot.status_projection_digest_sha256
+
+    coverage["publication_enrollment_authority"] = None
+    authority_digest = repository.read_context(
+        _Connection(rows),  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+    ).status_projection_digest_sha256
+    coverage["publication_enrollment_authority"] = "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+    coverage["publication_enrollment_confirmed_by"] = OTHER_CONFIRMER_ID
+    confirmer_digest = repository.read_context(
+        _Connection(rows),  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+    ).status_projection_digest_sha256
+
+    assert authority_digest != baseline_digest
+    assert confirmer_digest != baseline_digest
 
 
 def test_persist_result_writes_each_private_stream_with_trace_digest() -> None:

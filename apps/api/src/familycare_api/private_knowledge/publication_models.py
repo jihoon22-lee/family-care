@@ -1,4 +1,4 @@
-"""Strict models for private-knowledge-rule-publication.sol-v1."""
+"""Strict models for versioned private-knowledge rule publications."""
 
 from __future__ import annotations
 
@@ -71,6 +71,10 @@ EvidencePurpose = Literal[
     "LIMIT",
     "DEDUCTIBLE",
 ]
+EnrollmentAuthority = Literal[
+    "CERTIFICATE_SNAPSHOT",
+    "USER_CONFIRMED_COVERAGE_ENROLLMENT",
+]
 
 
 class StrictPublicationModel(BaseModel):
@@ -119,6 +123,19 @@ class PublicationCounts(StrictPublicationModel):
         )
 
 
+class PublicationCountsV2(PublicationCounts):
+    advisory_disposition_count: NonNegativeInt
+    user_confirmed_enrollment_count: NonNegativeInt
+
+    @classmethod
+    def zero(cls) -> PublicationCountsV2:
+        return cls(
+            **PublicationCounts.zero().model_dump(),
+            advisory_disposition_count=0,
+            user_confirmed_enrollment_count=0,
+        )
+
+
 class PublicationManifest(StrictPublicationModel):
     schema_version: Literal["private-knowledge-rule-publication.sol-v1"]
     source_knowledge_package_digest_sha256: Sha256
@@ -126,6 +143,16 @@ class PublicationManifest(StrictPublicationModel):
     publisher_version: ShortText
     review_state: Literal["USER_CONFIRMED"]
     counts: PublicationCounts
+    files: Annotated[list[PublicationManifestFile], Field(min_length=8, max_length=8)]
+
+
+class PublicationManifestV2(StrictPublicationModel):
+    schema_version: Literal["private-knowledge-rule-publication.sol-v2"]
+    source_knowledge_package_digest_sha256: Sha256
+    source_knowledge_projection_digest_sha256: Sha256
+    publisher_version: ShortText
+    review_state: Literal["USER_CONFIRMED"]
+    counts: PublicationCountsV2
     files: Annotated[list[PublicationManifestFile], Field(min_length=8, max_length=8)]
 
 
@@ -138,6 +165,35 @@ class CoverageDispositionRecord(StrictPublicationModel):
     disposition: Literal["PUBLISHED", "BLOCKED", "NOT_APPLICABLE"]
     reason_codes: Annotated[list[ReasonCode], Field(max_length=32)]
     review_state: Literal["USER_CONFIRMED"]
+
+
+class CoverageDispositionRecordV2(StrictPublicationModel):
+    source_subject_key: ShortText
+    family_alias: ShortText
+    canonical_policy_id: ShortText
+    canonical_coverage_id: ShortText
+    benefit_type: Literal["FIXED", "INDEMNITY", "UNKNOWN"]
+    disposition: Literal["PUBLISHED", "ADVISORY", "BLOCKED", "NOT_APPLICABLE"]
+    enrollment_authority: EnrollmentAuthority | None
+    reason_codes: Annotated[list[ReasonCode], Field(max_length=32)]
+    review_state: Literal["USER_CONFIRMED"]
+
+    @model_validator(mode="after")
+    def validate_enrollment_authority(self) -> CoverageDispositionRecordV2:
+        if self.disposition == "PUBLISHED":
+            valid = self.enrollment_authority == "CERTIFICATE_SNAPSHOT"
+        elif self.disposition == "ADVISORY":
+            valid = self.enrollment_authority is not None
+        else:
+            valid = self.enrollment_authority is None
+        if not valid:
+            raise ValueError("invalid disposition enrollment authority")
+        if (
+            self.enrollment_authority == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+            and "USER_CONFIRMED_COVERAGE_ENROLLMENT" not in self.reason_codes
+        ):
+            raise ValueError("user-confirmed enrollment reason is required")
+        return self
 
 
 class ContractStatusIntervalRecord(StrictPublicationModel):

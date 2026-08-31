@@ -360,7 +360,7 @@ def _write_acceptance_publication_package(
         dispositions.append(disposition)
 
     status = rows("contract-status-intervals.jsonl")[0]
-    status.update({"effective_from": "2025-01-01", "effective_through": "2025-12-31"})
+    status.update({"effective_from": "2025-01-01", "effective_through": "2025-01-01"})
     base_rule = rows("rule-publications.jsonl")[0]
     rule_rows = [
         _rule(
@@ -542,7 +542,7 @@ def _recommendation_projection(value: Any) -> list[tuple[object, ...]]:
 def _assert_private_result(
     value: Any,
     *,
-    fixed_match_count: int,
+    fixed_calculated_count: int,
     subtotal: Decimal,
 ) -> None:
     knowledge = value.knowledge_result
@@ -556,15 +556,23 @@ def _assert_private_result(
         )
         for evaluation in knowledge.evaluations
     )
-    assert (
-        len(
-            [
-                candidate
-                for candidate in knowledge.candidates
-                if candidate.benefit_type == "FIXED" and candidate.result == "MATCH"
-            ]
-        )
-        == fixed_match_count
+    calculated = [
+        calculation
+        for calculation in knowledge.calculations
+        if calculation.kind == "FIXED" and calculation.status == "CALCULATED"
+    ]
+    assert len(calculated) == fixed_calculated_count
+    calculated_candidate_ids = {calculation.candidate_id for calculation in calculated}
+    assert all(calculation.confirmed_amount is None for calculation in calculated)
+    assert all(
+        calculation.hold_reason_code == "EVENT_DATE_STATUS_UNCONFIRMED"
+        for calculation in calculated
+    )
+    assert all(
+        candidate.result == "UNKNOWN"
+        and "EVENT_DATE_STATUS_UNCONFIRMED" in candidate.hold_reason_codes
+        for candidate in knowledge.candidates
+        if candidate.candidate_id in calculated_candidate_ids
     )
     assert len(knowledge.fixed_subtotals) == 1
     assert knowledge.fixed_subtotals[0].currency == "KRW"
@@ -635,7 +643,7 @@ def test_private_publication_decisions_and_optional_assistance_are_complete_and_
         {"MedicalEvent.classification": "sample_category"},
     )
     first = service.analyze_medical_event(first_event.id)
-    _assert_private_result(first, fixed_match_count=2, subtotal=Decimal("2"))
+    _assert_private_result(first, fixed_calculated_count=2, subtotal=Decimal("2"))
     assert first.assistance is not None
     first_verified = _verified_projection(first)
     first_recommendations = _recommendation_projection(first)
@@ -666,7 +674,7 @@ def test_private_publication_decisions_and_optional_assistance_are_complete_and_
         },
     )
     second = service.analyze_medical_event(second_event.id)
-    _assert_private_result(second, fixed_match_count=4, subtotal=Decimal("4"))
+    _assert_private_result(second, fixed_calculated_count=4, subtotal=Decimal("4"))
     second_verified = _verified_projection(second)
     second_recommendations = _recommendation_projection(second)
     provider = _ReverseProvider()

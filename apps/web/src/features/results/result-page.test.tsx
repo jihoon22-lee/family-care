@@ -7,6 +7,7 @@ import type {
   BenefitCalculationsResponse,
   ClaimCandidateResponse,
   CoverageDecisionResponse,
+  KnowledgeBenefitCalculationResponse,
   MedicalEventResponse,
   OperationalEvaluationResponse,
   RuleEvaluationResponse,
@@ -66,6 +67,38 @@ function candidate(
   };
 }
 
+function privateCalculation(
+  overrides: Partial<KnowledgeBenefitCalculationResponse> = {},
+): KnowledgeBenefitCalculationResponse {
+  return {
+    applied_limit: null,
+    applied_rate: null,
+    calculation_id: "00000000-0000-4000-8000-000000000901",
+    calculation_publication_id: "00000000-0000-4000-8000-000000000902",
+    conditional_amount: "300000",
+    confirmed_amount: null,
+    currency: "KRW",
+    deductible_amount: null,
+    excluded_amount: null,
+    hold_reason_code: null,
+    kind: "FIXED",
+    rounding_rule: null,
+    status: "CALCULATED",
+    steps: [
+      {
+        currency: "KRW",
+        input_amount: null,
+        operation: "fixed_amount",
+        output_amount: "300000",
+        reason_code: "FIXED_AMOUNT_CALCULATED",
+        rounding_rule: null,
+        step_number: 1,
+      },
+    ],
+    ...overrides,
+  };
+}
+
 function privateCandidate(
   candidateId: string,
   coverageId: string,
@@ -77,32 +110,10 @@ function privateCandidate(
     benefit_kind: "FIXED",
     calculation:
       aggregateResult === "MATCH"
-        ? {
-            applied_limit: null,
-            applied_rate: null,
+        ? privateCalculation({
             calculation_id: `${candidateId.slice(0, -3)}901`,
             calculation_publication_id: `${candidateId.slice(0, -3)}902`,
-            conditional_amount: "300000",
-            confirmed_amount: null,
-            currency: "KRW",
-            deductible_amount: null,
-            excluded_amount: null,
-            hold_reason_code: null,
-            kind: "FIXED",
-            rounding_rule: null,
-            status: "CALCULATED",
-            steps: [
-              {
-                currency: "KRW",
-                input_amount: null,
-                operation: "fixed_amount",
-                output_amount: "300000",
-                reason_code: "FIXED_AMOUNT_CALCULATED",
-                rounding_rule: null,
-                step_number: 1,
-              },
-            ],
-          }
+          })
         : null,
     candidate_id: candidateId,
     claim_start_ready: false,
@@ -118,6 +129,20 @@ function privateCandidate(
       knowledge_contract_id: PRIVATE_CONTRACT,
       knowledge_coverage_id: coverageId,
     },
+  };
+}
+
+function catalogCoverage(
+  overrides: Partial<CoverageDecisionResponse["catalog_coverage"]> = {},
+): CoverageDecisionResponse["catalog_coverage"] {
+  return {
+    advisory_coverage_count: 0,
+    benefit_coverage_count: 1,
+    blocked_coverage_count: 0,
+    contract_count: 1,
+    not_applicable_coverage_count: 0,
+    published_coverage_count: 1,
+    ...overrides,
   };
 }
 
@@ -188,13 +213,7 @@ function result(
         "MATCH",
       ),
     ],
-    catalog_coverage: {
-      benefit_coverage_count: 1,
-      blocked_coverage_count: 0,
-      contract_count: 1,
-      not_applicable_coverage_count: 0,
-      published_coverage_count: 1,
-    },
+    catalog_coverage: catalogCoverage(),
     conditional_fixed_subtotals: [
       {
         amount: "300000",
@@ -415,6 +434,40 @@ describe("action-first event results", () => {
     expect(screen.queryByText("420000 KRW")).not.toBeInTheDocument();
   });
 
+  it("explains advisory conditional estimates and calculation-unavailable counts", () => {
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          conditional_fixed_subtotals: [
+            {
+              amount: "300000",
+              calculated_candidate_count: 1,
+              currency: "KRW",
+              unresolved_candidate_count: 2,
+            },
+          ],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const summary = screen
+      .getByRole("heading", { name: "조건부 정액 합계" })
+      .closest("section");
+    expect(summary).not.toBeNull();
+    expect(
+      within(summary!).getByText(
+        /검토된 계산식으로 산출한 정액형 조건부 예상액.*판정이 추가 확인으로 남은 자문 담보의 조건부 예상액도 포함될 수 있습니다/,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(summary!).getByText("계산 불가·계산식 미완료").parentElement,
+    ).toHaveTextContent(/계산 불가·계산식 미완료\s*2개/);
+    expect(within(summary!).queryByText("금액 미확정")).not.toBeInTheDocument();
+  });
+
   it("renders every private coverage independently and never offers private claim start", () => {
     const onStartClaim = vi.fn();
     const privateCandidates = [1, 2, 3, 4].map((index) =>
@@ -459,22 +512,21 @@ describe("action-first event results", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("explains unpublished enrolled coverage instead of claiming there is no insurance", () => {
+  it("separates automatic, advisory, and exceptional catalog coverage", () => {
     renderWithProviders(
       <ActionFirstResult
         result={result({
-          analysis_completeness: "UNAVAILABLE",
+          analysis_completeness: "PARTIAL",
           candidates: [],
-          catalog_coverage: {
-            benefit_coverage_count: 3,
-            blocked_coverage_count: 3,
+          catalog_coverage: catalogCoverage({
+            advisory_coverage_count: 2,
+            benefit_coverage_count: 4,
+            blocked_coverage_count: 1,
             contract_count: 2,
-            not_applicable_coverage_count: 0,
-            published_coverage_count: 0,
-          },
+            published_coverage_count: 1,
+          }),
           conditional_fixed_subtotals: [],
           evaluations: [],
-          source_failure_codes: ["KNOWLEDGE_PUBLICATION_UNAVAILABLE"],
         })}
         onStartClaim={vi.fn()}
         onOpenEvidence={vi.fn()}
@@ -484,15 +536,167 @@ describe("action-first event results", () => {
 
     expect(
       screen.getByText(
-        /가입 담보는 확인됐지만 실행 규칙 검토가 완료되지 않았습니다/,
+        /가입 담보와 관련 약관을 검색할 수 있지만, 자동 판정 규칙은 아직 완전하지 않습니다/,
       ),
     ).toBeInTheDocument();
     expect(
-      screen.queryByText(/보험이 없습니다|해당 보험 없음/),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("검토 대기").parentElement).toHaveTextContent(
-      /검토 대기\s*3개/,
+      screen.getByText("자동 판정 규칙 준비").parentElement,
+    ).toHaveTextContent(/자동 판정 규칙 준비\s*1개/);
+    expect(
+      screen.getByText("가입·검색 가능 · 자동 규칙 미완료").parentElement,
+    ).toHaveTextContent(/가입·검색 가능 · 자동 규칙 미완료\s*2개/);
+    expect(screen.getByText("예외 확인").parentElement).toHaveTextContent(
+      /예외 확인\s*1개/,
     );
+    expect(screen.queryByText(/검토 대기|차단/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/현재 상태 확인/)).not.toBeInTheDocument();
+  });
+
+  it("keeps catalog-only advisory and legacy exception rows out of event cards", () => {
+    const advisoryOnly = privateCandidate(
+      "00000000-0000-4000-8000-000000000351",
+      "00000000-0000-4000-8000-000000000651",
+      "UNKNOWN",
+      "Synthetic Advisory Catalog Row",
+    );
+    advisoryOnly.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    const blockedOnly = privateCandidate(
+      "00000000-0000-4000-8000-000000000352",
+      "00000000-0000-4000-8000-000000000652",
+      "UNKNOWN",
+      "Synthetic Legacy Catalog Row",
+    );
+    blockedOnly.hold_reason_codes = ["COVERAGE_PUBLICATION_BLOCKED"];
+    const failedCalculationOnly = privateCandidate(
+      "00000000-0000-4000-8000-000000000355",
+      "00000000-0000-4000-8000-000000000655",
+      "UNKNOWN",
+      "Synthetic Failed Catalog Calculation",
+    );
+    failedCalculationOnly.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    failedCalculationOnly.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000905",
+      conditional_amount: null,
+      status: "FAILED",
+    });
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          candidates: [advisoryOnly, blockedOnly, failedCalculationOnly],
+          catalog_coverage: catalogCoverage({
+            advisory_coverage_count: 2,
+            benefit_coverage_count: 3,
+            blocked_coverage_count: 1,
+            published_coverage_count: 0,
+          }),
+          conditional_fixed_subtotals: [],
+          evaluations: [],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.queryByText("Synthetic Advisory Catalog Row"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Synthetic Legacy Catalog Row"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Synthetic Failed Catalog Calculation"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("가입·검색 가능 · 자동 규칙 미완료").parentElement,
+    ).toHaveTextContent(/2개/);
+    expect(screen.getByText("예외 확인").parentElement).toHaveTextContent(
+      /1개/,
+    );
+  });
+
+  it("distinguishes held policy estimates from confirmed calculations", () => {
+    const conditional = privateCandidate(
+      "00000000-0000-4000-8000-000000000353",
+      "00000000-0000-4000-8000-000000000653",
+      "UNKNOWN",
+      "Synthetic Conditional Coverage",
+    );
+    conditional.hold_reason_codes = ["COVERAGE_PUBLICATION_ADVISORY"];
+    conditional.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000903",
+      confirmed_amount: null,
+      hold_reason_code: "HUMAN_REVIEW_REQUIRED",
+    });
+    const confirmed = privateCandidate(
+      "00000000-0000-4000-8000-000000000354",
+      "00000000-0000-4000-8000-000000000654",
+      "MATCH",
+      "Synthetic Confirmed Coverage",
+    );
+    confirmed.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000904",
+      confirmed_amount: "300000",
+    });
+    const unresolved = privateCandidate(
+      "00000000-0000-4000-8000-000000000356",
+      "00000000-0000-4000-8000-000000000656",
+      "UNKNOWN",
+      "Synthetic Unresolved Coverage",
+    );
+    unresolved.calculation = privateCalculation({
+      calculation_id: "00000000-0000-4000-8000-000000000906",
+      conditional_amount: null,
+      confirmed_amount: "300000",
+      status: "FAILED",
+    });
+
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          candidates: [conditional, confirmed, unresolved],
+          evaluations: [],
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    const conditionalCard = screen
+      .getByText("Synthetic Conditional Coverage")
+      .closest("article");
+    const confirmedCard = screen
+      .getByText("Synthetic Confirmed Coverage")
+      .closest("article");
+    const unresolvedCard = screen
+      .getByText("Synthetic Unresolved Coverage")
+      .closest("article");
+    expect(conditionalCard).not.toBeNull();
+    expect(confirmedCard).not.toBeNull();
+    expect(unresolvedCard).not.toBeNull();
+    expect(
+      within(conditionalCard!).getByText("조건부 약관 예상액"),
+    ).toBeInTheDocument();
+    expect(
+      within(conditionalCard!).getByText("조건부 예상액: 300000 KRW"),
+    ).toBeInTheDocument();
+    expect(
+      within(conditionalCard!).queryByText("확인된 계산 결과"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(confirmedCard!).getByText("확인된 계산 결과"),
+    ).toBeInTheDocument();
+    expect(
+      within(confirmedCard!).queryByText("조건부 약관 예상액"),
+    ).not.toBeInTheDocument();
+    expect(
+      within(unresolvedCard!).getByText("계산 다시 확인 필요"),
+    ).toBeInTheDocument();
+    expect(
+      within(unresolvedCard!).queryByText(/확인된 계산 금액/),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps unknown questions and private clause pages keyboard accessible", async () => {
@@ -521,7 +725,7 @@ describe("action-first event results", () => {
         },
       ],
       conflicting_fields: [],
-      engine_version: "private-knowledge-engine-v1",
+      engine_version: "private-knowledge-engine-v2",
       evaluation_id: "00000000-0000-4000-8000-000000000854",
       fact_paths: ["MedicalEvent.procedure_code"],
       missing_fields: ["MedicalEvent.procedure_code"],
@@ -579,6 +783,40 @@ describe("action-first event results", () => {
       screen.getByText(/검토 후보이며 보험금 지급 판정이 아닙니다/),
     ).toBeInTheDocument();
     expect(screen.queryByText("synthetic-model-v1")).not.toBeInTheDocument();
+  });
+
+  it("always identifies contract-level terms recommendations as indirect", () => {
+    renderWithProviders(
+      <ActionFirstResult
+        result={result({
+          assistance: {
+            ...result().assistance,
+            mode: "LLM_ASSISTED",
+            model_label: "synthetic-model-v1",
+            recommendations: [
+              {
+                ...result().assistance.recommendations[0],
+                explanation_code: "RELATED_CLAUSE",
+                reason_code: "CONTRACT_TERMS_TOKEN_OVERLAP",
+              },
+            ],
+            state: "LLM_READY",
+          },
+        })}
+        onStartClaim={vi.fn()}
+        onOpenEvidence={vi.fn()}
+        onReanalyze={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "같은 계약의 약관에서 찾은 후보이며, 이 담보에 직접 적용된다는 뜻은 아닙니다.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("입력 내용과 관련 가능성이 있는 약관 조항입니다."),
+    ).toBeInTheDocument();
   });
 
   it("keeps DB recommendations usable while polling only the assistance stream", async () => {

@@ -1373,6 +1373,12 @@
       "CatalogCoverageResponse": {
         "additionalProperties": false,
         "properties": {
+          "advisory_coverage_count": {
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Advisory Coverage Count",
+            "type": "integer"
+          },
           "benefit_coverage_count": {
             "maximum": 10000.0,
             "minimum": 0.0,
@@ -1408,6 +1414,7 @@
           "contract_count",
           "benefit_coverage_count",
           "published_coverage_count",
+          "advisory_coverage_count",
           "blocked_coverage_count",
           "not_applicable_coverage_count"
         ],

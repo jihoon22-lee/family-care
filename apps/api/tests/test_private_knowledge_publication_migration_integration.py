@@ -205,8 +205,12 @@ def _insert_disposition(
         INSERT INTO private_knowledge_coverage_execution_dispositions (
           id, rule_import_run_id, knowledge_import_run_id,
           household_space_id, knowledge_coverage_id, disposition,
-          reason_codes_json
-        ) VALUES (%s, %s, %s, %s, %s, 'PUBLISHED', '[]'::jsonb)
+          reason_codes_json, enrollment_decision_snapshot,
+          enrollment_authority
+        ) VALUES (
+          %s, %s, %s, %s, %s, 'PUBLISHED', '[]'::jsonb,
+          'MATCH', 'CERTIFICATE_SNAPSHOT'
+        )
         """,
         (
             disposition_id,

@@ -17,13 +17,17 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict
 
 from familycare_api.private_knowledge.errors import PublicationPackageError
-from familycare_api.private_knowledge.publication_models import PublicationCounts
+from familycare_api.private_knowledge.publication_models import (
+    PublicationCounts,
+    PublicationCountsV2,
+)
 from familycare_api.private_knowledge.publication_package import (
     RulePublicationPackage,
     validate_loaded_rule_publication_package,
 )
 from familycare_api.private_knowledge.publication_reconciliation import (
     DispositionCounts,
+    DispositionCountsV2,
     PublicationCoverageBaseline,
     PublicationDatabaseBaseline,
     PublicationEvidenceBaseline,
@@ -62,8 +66,8 @@ class RulePublicationSummary(BaseModel):
     package_digest_sha256: str
     state: Literal["APPLIED"]
     is_current: Literal[True]
-    counts: PublicationCounts
-    dispositions: DispositionCounts
+    counts: PublicationCounts | PublicationCountsV2
+    dispositions: DispositionCounts | DispositionCountsV2
 
 
 class AppliedRulePublication(RulePublicationSummary):
@@ -126,7 +130,16 @@ def _advisory_lock_key(household_space_id: UUID) -> int:
     return int.from_bytes(payload[:8], byteorder="big", signed=True)
 
 
-def _disposition_counts(values: Sequence[str]) -> DispositionCounts:
+def _disposition_counts(
+    values: Sequence[str], *, schema_version: str
+) -> DispositionCounts | DispositionCountsV2:
+    if schema_version == "private-knowledge-rule-publication.sol-v2":
+        return DispositionCountsV2(
+            published=values.count("PUBLISHED"),
+            advisory=values.count("ADVISORY"),
+            blocked=values.count("BLOCKED"),
+            not_applicable=values.count("NOT_APPLICABLE"),
+        )
     return DispositionCounts(
         published=values.count("PUBLISHED"),
         blocked=values.count("BLOCKED"),
@@ -297,11 +310,11 @@ class PostgresRulePublicationRepository:
                    coverage.component_classification,
                    coverage.benefit_type,
                    mapping.mapping_applicability,
-                   mapping.enrollment_decision AS mapping_enrollment_decision,
+                   mapping.mapping_enrollment_decision,
                    mapping.document_identity_decision,
                    mapping.edition_applicability_decision,
                    mapping.section_mapping_decision,
-                   mapping.overall_decision AS overall_mapping_decision,
+                   mapping.overall_mapping_decision,
                    confirmation.decision AS current_confirmation_decision,
                    confirmation.confirmed_status AS current_confirmed_status
             FROM private_knowledge_coverages AS coverage
@@ -311,15 +324,56 @@ class PostgresRulePublicationRepository:
             JOIN private_knowledge_subjects AS subject
               ON subject.id = contract.subject_id
              AND subject.import_run_id = contract.import_run_id
-            LEFT JOIN private_knowledge_coverage_terms_mappings AS mapping
-              ON mapping.coverage_id = coverage.id
-             AND mapping.import_run_id = coverage.import_run_id
+            LEFT JOIN LATERAL (
+              SELECT
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.mapping_applicability = 'NOT_APPLICABLE')
+                    THEN 'NOT_APPLICABLE'
+                  WHEN bool_and(item.mapping_applicability = 'APPLICABLE')
+                    THEN 'APPLICABLE'
+                  ELSE 'UNKNOWN'
+                END AS mapping_applicability,
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.enrollment_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                  WHEN bool_and(item.enrollment_decision = 'MATCH') THEN 'MATCH'
+                  ELSE 'UNKNOWN'
+                END AS mapping_enrollment_decision,
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.document_identity_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                  WHEN bool_and(item.document_identity_decision = 'MATCH') THEN 'MATCH'
+                  ELSE 'UNKNOWN'
+                END AS document_identity_decision,
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.edition_applicability_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                  WHEN bool_and(item.edition_applicability_decision = 'MATCH') THEN 'MATCH'
+                  ELSE 'UNKNOWN'
+                END AS edition_applicability_decision,
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.section_mapping_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                  WHEN bool_and(item.section_mapping_decision = 'MATCH') THEN 'MATCH'
+                  ELSE 'UNKNOWN'
+                END AS section_mapping_decision,
+                CASE
+                  WHEN count(*) = 0 THEN 'UNKNOWN'
+                  WHEN bool_or(item.overall_decision = 'NO_MATCH') THEN 'NO_MATCH'
+                  WHEN bool_and(item.overall_decision = 'MATCH') THEN 'MATCH'
+                  ELSE 'UNKNOWN'
+                END AS overall_mapping_decision
+              FROM private_knowledge_coverage_terms_mappings AS item
+              WHERE item.coverage_id = coverage.id
+                AND item.import_run_id = coverage.import_run_id
+            ) AS mapping ON true
             LEFT JOIN private_knowledge_contract_confirmations AS confirmation
               ON confirmation.knowledge_contract_id = contract.id
              AND confirmation.import_run_id = contract.import_run_id
              AND confirmation.is_current
             WHERE coverage.import_run_id = %s
-            ORDER BY canonical_coverage_id, coverage.id, mapping.id
+            ORDER BY canonical_coverage_id, coverage.id
             """,
             (knowledge_run_id,),
         ).fetchall()
@@ -363,7 +417,7 @@ class PostgresRulePublicationRepository:
 
         publication_rows = connection.execute(
             """
-            SELECT id, package_digest_sha256, state, is_current,
+            SELECT id, package_schema_version, package_digest_sha256, state, is_current,
                    entity_counts_json, disposition_counts_json,
                    projection_digest_sha256
             FROM private_knowledge_rule_import_runs
@@ -392,10 +446,19 @@ class PostgresRulePublicationRepository:
                 str,
                 current_publication["package_digest_sha256"],
             )
-            current_counts = PublicationCounts.model_validate(
-                current_publication["entity_counts_json"]
+            schema_version = current_publication["package_schema_version"]
+            counts_model = (
+                PublicationCountsV2
+                if schema_version == "private-knowledge-rule-publication.sol-v2"
+                else PublicationCounts
             )
-            current_dispositions = DispositionCounts.model_validate(
+            disposition_model = (
+                DispositionCountsV2
+                if schema_version == "private-knowledge-rule-publication.sol-v2"
+                else DispositionCounts
+            )
+            current_counts = counts_model.model_validate(current_publication["entity_counts_json"])
+            current_dispositions = disposition_model.model_validate(
                 current_publication["disposition_counts_json"]
             )
 
@@ -694,6 +757,7 @@ class PostgresRulePublicationRepository:
                         connection,
                         knowledge_run_id=baseline.knowledge_import_run_id,
                         publication_run_id=run_id,
+                        package_schema_version=package.schema_version,
                     )
                     if (
                         actual_counts != approved_report.expected_insert_counts
@@ -778,6 +842,9 @@ class PostgresRulePublicationRepository:
             item.canonical_coverage_id: item.knowledge_coverage_id
             for item in baseline.coverage_authorities
         }
+        authority_by_key = {
+            item.canonical_coverage_id: item for item in baseline.coverage_authorities
+        }
         evidence_by_key = {_citation_identity(item): item for item in baseline.evidence}
         rule_ids = {record.value.rule_key: uuid4() for record in package.rule_publications}
         calculation_ids = {
@@ -827,10 +894,14 @@ class PostgresRulePublicationRepository:
             INSERT INTO private_knowledge_coverage_execution_dispositions (
               id, rule_import_run_id, knowledge_import_run_id,
               household_space_id, knowledge_coverage_id, disposition,
-              reason_codes_json
+              reason_codes_json, enrollment_decision_snapshot,
+              enrollment_authority, enrollment_reason_code,
+              enrollment_confirmed_by
             ) VALUES (
               %(id)s, %(rule_run)s, %(knowledge_run)s, %(household)s,
-              %(coverage)s, %(disposition)s, %(reasons)s
+              %(coverage)s, %(disposition)s, %(reasons)s, %(enrollment_decision)s,
+              %(enrollment_authority)s, %(enrollment_reason)s,
+              %(enrollment_confirmer)s
             )
             """,
             [
@@ -842,6 +913,30 @@ class PostgresRulePublicationRepository:
                     "coverage": coverage_by_key[record.value.canonical_coverage_id],
                     "disposition": record.value.disposition,
                     "reasons": Jsonb(record.value.reason_codes),
+                    "enrollment_decision": authority_by_key[
+                        record.value.canonical_coverage_id
+                    ].enrollment_decision,
+                    "enrollment_authority": (
+                        getattr(record.value, "enrollment_authority", None)
+                        if package.schema_version == "private-knowledge-rule-publication.sol-v2"
+                        else (
+                            "CERTIFICATE_SNAPSHOT"
+                            if record.value.disposition == "PUBLISHED"
+                            else None
+                        )
+                    ),
+                    "enrollment_reason": (
+                        "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+                        if getattr(record.value, "enrollment_authority", None)
+                        == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+                        else None
+                    ),
+                    "enrollment_confirmer": (
+                        actor_id
+                        if getattr(record.value, "enrollment_authority", None)
+                        == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+                        else None
+                    ),
                 }
                 for record in package.coverage_dispositions
             ],
@@ -1110,6 +1205,7 @@ class PostgresRulePublicationRepository:
         run = connection.execute(
             """
             SELECT publication.id, publication.knowledge_import_run_id,
+                   publication.package_schema_version,
                    publication.package_digest_sha256,
                    publication.projection_digest_sha256,
                    publication.state, publication.is_current,
@@ -1137,12 +1233,24 @@ class PostgresRulePublicationRepository:
                 RulePublicationRepositoryErrorCode.VERIFICATION_FAILED
             )
         knowledge_run_id = cast(UUID, run["knowledge_import_run_id"])
-        expected_counts = PublicationCounts.model_validate(run["entity_counts_json"])
-        expected_dispositions = DispositionCounts.model_validate(run["disposition_counts_json"])
+        schema_version = cast(str, run["package_schema_version"])
+        counts_model = (
+            PublicationCountsV2
+            if schema_version == "private-knowledge-rule-publication.sol-v2"
+            else PublicationCounts
+        )
+        disposition_model = (
+            DispositionCountsV2
+            if schema_version == "private-knowledge-rule-publication.sol-v2"
+            else DispositionCounts
+        )
+        expected_counts = counts_model.model_validate(run["entity_counts_json"])
+        expected_dispositions = disposition_model.model_validate(run["disposition_counts_json"])
         actual_counts, actual_dispositions, records = self._publication_snapshot(
             connection,
             knowledge_run_id=knowledge_run_id,
             publication_run_id=run_id,
+            package_schema_version=schema_version,
         )
         if actual_counts != expected_counts:
             raise RulePublicationRepositoryError(RulePublicationRepositoryErrorCode.COUNT_MISMATCH)
@@ -1181,7 +1289,12 @@ class PostgresRulePublicationRepository:
         *,
         knowledge_run_id: UUID,
         publication_run_id: UUID,
-    ) -> tuple[PublicationCounts, DispositionCounts, dict[str, list[object]]]:
+        package_schema_version: str,
+    ) -> tuple[
+        PublicationCounts | PublicationCountsV2,
+        DispositionCounts | DispositionCountsV2,
+        dict[str, list[object]],
+    ]:
         source_counts = connection.execute(
             """
             SELECT
@@ -1220,20 +1333,30 @@ class PostgresRulePublicationRepository:
             ).fetchall()
             records[key] = [row["record"] for row in rows]
             child_counts[key] = len(rows)
-        disposition_values = [
-            cast(str, value["disposition"])
-            for value in connection.execute(
-                """
-                SELECT disposition
-                FROM private_knowledge_coverage_execution_dispositions
-                WHERE rule_import_run_id = %s
-                ORDER BY knowledge_coverage_id
-                """,
-                (publication_run_id,),
-            ).fetchall()
-        ]
-        dispositions = _disposition_counts(disposition_values)
-        counts = PublicationCounts(
+        if package_schema_version == "private-knowledge-rule-publication.sol-v1":
+            for record in records["dispositions"]:
+                if isinstance(record, dict):
+                    for key in (
+                        "enrollment_decision_snapshot",
+                        "enrollment_authority",
+                        "enrollment_reason_code",
+                        "enrollment_confirmed_by",
+                    ):
+                        record.pop(key, None)
+        disposition_rows = connection.execute(
+            """
+            SELECT disposition, enrollment_authority
+            FROM private_knowledge_coverage_execution_dispositions
+            WHERE rule_import_run_id = %s
+            ORDER BY knowledge_coverage_id
+            """,
+            (publication_run_id,),
+        ).fetchall()
+        disposition_values = [cast(str, value["disposition"]) for value in disposition_rows]
+        dispositions = _disposition_counts(
+            disposition_values, schema_version=package_schema_version
+        )
+        values = dict(
             subject_count=int(source_counts["subject_count"]),
             contract_count=int(source_counts["contract_count"]),
             coverage_count=int(source_counts["coverage_count"]),
@@ -1248,6 +1371,16 @@ class PostgresRulePublicationRepository:
             calculation_publication_count=child_counts["calculation_publications"],
             calculation_citation_count=child_counts["calculation_citations"],
         )
+        counts: PublicationCounts | PublicationCountsV2
+        if package_schema_version == "private-knowledge-rule-publication.sol-v2":
+            values["advisory_disposition_count"] = cast(DispositionCountsV2, dispositions).advisory
+            values["user_confirmed_enrollment_count"] = sum(
+                value["enrollment_authority"] == "USER_CONFIRMED_COVERAGE_ENROLLMENT"
+                for value in disposition_rows
+            )
+            counts = PublicationCountsV2(**values)
+        else:
+            counts = PublicationCounts(**values)
         records["source_counts"] = [
             {
                 "knowledge_import_run_id": str(knowledge_run_id),

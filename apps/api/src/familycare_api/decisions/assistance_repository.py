@@ -113,13 +113,15 @@ class AnalysisAssistanceRepository:
             return self.get_latest(connection, scope, decision_run_id)
 
         for recommendation in recommendations:
+            source_row = rows[recommendation.rank - 1]
             connection.execute(
                 """
                 INSERT INTO analysis_recommendations (
                   id, analysis_assistance_run_id, household_space_id,
                   decision_run_id, private_claim_candidate_id,
                   knowledge_import_run_id, knowledge_coverage_id,
-                  enrollment_decision_snapshot,
+                  coverage_execution_disposition_id,
+                  enrollment_decision_snapshot, enrollment_authority_snapshot,
                   terms_section_id, knowledge_fact_id, source_clause_id,
                   fact_citation_id, candidate_digest_sha256, rank, score,
                   contract_label_snapshot, coverage_label_snapshot,
@@ -127,7 +129,7 @@ class AnalysisAssistanceRepository:
                   citation_kind, reason_code
                 ) VALUES (
                   %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                  %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """,
                 (
@@ -136,9 +138,11 @@ class AnalysisAssistanceRepository:
                     scope.household_space_id,
                     decision_run_id,
                     recommendation.private_claim_candidate_id,
-                    cast(UUID, rows[recommendation.rank - 1]["knowledge_import_run_id"]),
+                    cast(UUID, source_row["knowledge_import_run_id"]),
                     recommendation.knowledge_coverage_id,
-                    "MATCH",
+                    cast(UUID, source_row["coverage_execution_disposition_id"]),
+                    cast(str, source_row["enrollment_decision_snapshot"]),
+                    cast(str, source_row["enrollment_authority_snapshot"]),
                     recommendation.terms_section_id,
                     recommendation.knowledge_fact_id,
                     recommendation.source_clause_id,
@@ -241,38 +245,18 @@ class AnalysisAssistanceRepository:
                 """
                 WITH query_tokens AS (
                   SELECT DISTINCT unnest(%s::text[]) AS token
-                ), scoped_candidates AS (
+                ), scoped_coverages AS (
                   SELECT candidate.id AS private_claim_candidate_id,
                          import_run.id AS knowledge_import_run_id,
                          coverage.id AS knowledge_coverage_id,
-                         section.id AS terms_section_id,
-                         fact.id AS knowledge_fact_id,
-                         clause.id AS source_clause_id,
-                         citation.id AS fact_citation_id,
+                         contract.id AS knowledge_contract_id,
+                         decision.household_space_id,
+                         disposition.id AS coverage_execution_disposition_id,
+                         disposition.disposition AS execution_disposition,
+                         coverage.enrollment_decision AS enrollment_decision_snapshot,
+                         disposition.enrollment_authority AS enrollment_authority_snapshot,
                          candidate.contract_label_snapshot AS contract_label,
-                         candidate.coverage_label_snapshot AS coverage_label,
-                         COALESCE(NULLIF(clause.clause_label, ''),
-                                  NULLIF(clause.title, ''), section.heading) AS clause_label,
-                         left(regexp_replace(fact.statement, '\\s+', ' ', 'g'), 240)
-                           AS excerpt,
-                         citation.page_start,
-                         LEAST(citation.page_end, citation.page_start + 20) AS page_end,
-                         'FACT_CITATION'::text AS citation_kind,
-                         'TOKEN_OVERLAP'::text AS reason_code,
-                         (
-                           SELECT count(*)
-                           FROM query_tokens AS query_token
-                           WHERE query_token.token = ANY(
-                             regexp_split_to_array(
-                               lower(concat_ws(
-                                 ' ', candidate.coverage_label_snapshot,
-                                 section.heading, semantic.section_summary,
-                                 fact.statement, clause.clause_label, clause.title
-                               )),
-                               '[^[:alnum:]_]+'
-                             )
-                           )
-                         ) AS score
+                         candidate.coverage_label_snapshot AS coverage_label
                   FROM decision_runs AS decision
                   JOIN medical_events AS event
                     ON event.id = decision.medical_event_id
@@ -302,38 +286,12 @@ class AnalysisAssistanceRepository:
                     ON coverage.id = candidate.knowledge_coverage_id
                    AND coverage.import_run_id = import_run.id
                    AND coverage.knowledge_contract_id = contract.id
-                   AND coverage.enrollment_decision = 'MATCH'
                    AND coverage.component_classification = 'BENEFIT_COVERAGE'
-                  JOIN private_knowledge_coverage_terms_mappings AS mapping
-                    ON mapping.import_run_id = import_run.id
-                   AND mapping.coverage_id = coverage.id
-                   AND mapping.mapping_applicability = 'APPLICABLE'
-                   AND mapping.enrollment_decision = 'MATCH'
-                   AND mapping.document_identity_decision = 'MATCH'
-                   AND mapping.edition_applicability_decision = 'MATCH'
-                   AND mapping.section_mapping_decision = 'MATCH'
-                   AND mapping.overall_decision = 'MATCH'
-                  JOIN private_knowledge_terms_sections AS section
-                    ON section.id = mapping.terms_section_id
-                   AND section.import_run_id = import_run.id
-                   AND section.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
-                  JOIN private_knowledge_facts AS fact
-                    ON fact.import_run_id = import_run.id
-                   AND fact.terms_section_id = section.id
-                   AND fact.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
-                  JOIN private_knowledge_semantic_reviews AS semantic
-                    ON semantic.id = fact.semantic_review_id
-                   AND semantic.import_run_id = import_run.id
-                   AND semantic.terms_section_id = section.id
-                   AND semantic.review_state = 'DIRECT_REVIEWED'
-                  JOIN private_knowledge_fact_citations AS citation
-                    ON citation.import_run_id = import_run.id
-                   AND citation.fact_id = fact.id
-                  JOIN private_knowledge_source_clauses AS clause
-                    ON clause.id = citation.source_clause_id
-                   AND clause.import_run_id = import_run.id
-                   AND clause.terms_section_id = section.id
-                   AND clause.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                  JOIN private_knowledge_coverage_execution_dispositions AS disposition
+                    ON disposition.rule_import_run_id = decision.knowledge_rule_import_run_id
+                   AND disposition.knowledge_import_run_id = import_run.id
+                   AND disposition.household_space_id = decision.household_space_id
+                   AND disposition.knowledge_coverage_id = coverage.id
                   WHERE decision.id = %s
                     AND candidate.decision_run_id = %s
                     AND decision.household_space_id = %s
@@ -342,11 +300,196 @@ class AnalysisAssistanceRepository:
                     AND event.family_member_id = %s
                     AND subject.family_member_id = %s
                     AND event.deleted_at IS NULL
+                    AND ((coverage.enrollment_decision = 'MATCH'
+                          AND disposition.enrollment_decision_snapshot = 'MATCH'
+                          AND disposition.enrollment_authority = 'CERTIFICATE_SNAPSHOT'
+                          AND disposition.disposition IN ('PUBLISHED', 'ADVISORY'))
+                         OR (coverage.enrollment_decision = 'UNKNOWN'
+                          AND disposition.enrollment_decision_snapshot = 'UNKNOWN'
+                          AND disposition.disposition = 'ADVISORY'
+                          AND disposition.enrollment_authority =
+                              'USER_CONFIRMED_COVERAGE_ENROLLMENT'
+                          AND disposition.enrollment_reason_code =
+                              'USER_CONFIRMED_COVERAGE_ENROLLMENT'
+                          AND disposition.enrollment_confirmed_by IS NOT NULL))
+                ), reviewed_facts AS (
+                  SELECT section.import_run_id,
+                         section.id AS terms_section_id,
+                         section.terms_source_alias_digest_sha256,
+                         section.heading,
+                         fact.id AS knowledge_fact_id,
+                         fact.statement,
+                         semantic.section_summary,
+                         clause.id AS source_clause_id,
+                         clause.clause_label AS source_clause_label,
+                         clause.title AS source_clause_title,
+                         citation.id AS fact_citation_id,
+                         citation.page_start,
+                         LEAST(citation.page_end, citation.page_start + 20) AS page_end
+                  FROM private_knowledge_terms_sections AS section
+                  JOIN (
+                    SELECT DISTINCT knowledge_import_run_id
+                    FROM scoped_coverages
+                  ) AS scoped_run
+                    ON scoped_run.knowledge_import_run_id = section.import_run_id
+                  JOIN private_knowledge_facts AS fact
+                    ON fact.import_run_id = section.import_run_id
+                   AND fact.terms_section_id = section.id
+                   AND fact.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                  JOIN private_knowledge_semantic_reviews AS semantic
+                    ON semantic.id = fact.semantic_review_id
+                   AND semantic.import_run_id = section.import_run_id
+                   AND semantic.terms_section_id = section.id
+                   AND semantic.review_state = 'DIRECT_REVIEWED'
+                  JOIN private_knowledge_fact_citations AS citation
+                    ON citation.import_run_id = section.import_run_id
+                   AND citation.fact_id = fact.id
+                  JOIN private_knowledge_source_clauses AS clause
+                    ON clause.id = citation.source_clause_id
+                   AND clause.import_run_id = section.import_run_id
+                   AND clause.terms_section_id = section.id
+                   AND clause.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                  WHERE section.review_state IN ('DIRECT_REVIEWED', 'USER_CONFIRMED')
+                ), exact_mapping_candidates AS (
+                  SELECT DISTINCT scoped.private_claim_candidate_id,
+                         scoped.knowledge_import_run_id,
+                         scoped.knowledge_coverage_id,
+                         scoped.coverage_execution_disposition_id,
+                         scoped.enrollment_decision_snapshot,
+                         scoped.enrollment_authority_snapshot,
+                         reviewed.terms_section_id,
+                         reviewed.knowledge_fact_id,
+                         reviewed.source_clause_id,
+                         reviewed.fact_citation_id,
+                         scoped.contract_label,
+                         scoped.coverage_label,
+                         COALESCE(NULLIF(reviewed.source_clause_label, ''),
+                                  NULLIF(reviewed.source_clause_title, ''),
+                                  reviewed.heading) AS clause_label,
+                         left(regexp_replace(reviewed.statement, '\\s+', ' ', 'g'), 240)
+                           AS excerpt,
+                         reviewed.page_start,
+                         reviewed.page_end,
+                         'FACT_CITATION'::text AS citation_kind,
+                         'TOKEN_OVERLAP'::text AS reason_code,
+                         reviewed.heading,
+                         reviewed.section_summary,
+                         reviewed.statement,
+                         reviewed.source_clause_label,
+                         reviewed.source_clause_title,
+                         2::integer AS association_priority
+                  FROM scoped_coverages AS scoped
+                  JOIN private_knowledge_coverage_terms_mappings AS mapping
+                    ON mapping.import_run_id = scoped.knowledge_import_run_id
+                   AND mapping.coverage_id = scoped.knowledge_coverage_id
+                   AND mapping.mapping_applicability = 'APPLICABLE'
+                   AND mapping.enrollment_decision = 'MATCH'
+                   AND mapping.document_identity_decision = 'MATCH'
+                   AND mapping.edition_applicability_decision = 'MATCH'
+                   AND mapping.section_mapping_decision = 'MATCH'
+                   AND mapping.overall_decision = 'MATCH'
+                  JOIN reviewed_facts AS reviewed
+                    ON reviewed.import_run_id = scoped.knowledge_import_run_id
+                   AND reviewed.terms_section_id = mapping.terms_section_id
+                  WHERE scoped.execution_disposition IN ('PUBLISHED', 'ADVISORY')
+                ), contract_terms_candidates AS (
+                  SELECT DISTINCT scoped.private_claim_candidate_id,
+                         scoped.knowledge_import_run_id,
+                         scoped.knowledge_coverage_id,
+                         scoped.coverage_execution_disposition_id,
+                         scoped.enrollment_decision_snapshot,
+                         scoped.enrollment_authority_snapshot,
+                         reviewed.terms_section_id,
+                         reviewed.knowledge_fact_id,
+                         reviewed.source_clause_id,
+                         reviewed.fact_citation_id,
+                         scoped.contract_label,
+                         scoped.coverage_label,
+                         COALESCE(NULLIF(reviewed.source_clause_label, ''),
+                                  NULLIF(reviewed.source_clause_title, ''),
+                                  reviewed.heading) AS clause_label,
+                         left(regexp_replace(reviewed.statement, '\\s+', ' ', 'g'), 240)
+                           AS excerpt,
+                         reviewed.page_start,
+                         reviewed.page_end,
+                         'FACT_CITATION'::text AS citation_kind,
+                         'CONTRACT_TERMS_TOKEN_OVERLAP'::text AS reason_code,
+                         reviewed.heading,
+                         reviewed.section_summary,
+                         reviewed.statement,
+                         reviewed.source_clause_label,
+                         reviewed.source_clause_title,
+                         1::integer AS association_priority
+                  FROM scoped_coverages AS scoped
+                  JOIN private_knowledge_terms_assignments AS assignment
+                    ON assignment.import_run_id = scoped.knowledge_import_run_id
+                   AND assignment.household_space_id = scoped.household_space_id
+                   AND assignment.knowledge_contract_id = scoped.knowledge_contract_id
+                   AND assignment.document_identity_decision = 'MATCH'
+                   AND assignment.edition_applicability_decision = 'MATCH'
+                   AND assignment.overall_decision = 'MATCH'
+                  JOIN private_knowledge_terms_assignment_sources AS assignment_source
+                    ON assignment_source.import_run_id = scoped.knowledge_import_run_id
+                   AND assignment_source.terms_assignment_id = assignment.id
+                  JOIN reviewed_facts AS reviewed
+                    ON reviewed.import_run_id = scoped.knowledge_import_run_id
+                   AND reviewed.terms_source_alias_digest_sha256 =
+                       assignment_source.source_alias_digest_sha256
+                  WHERE scoped.execution_disposition = 'ADVISORY'
+                    AND NOT EXISTS (
+                    SELECT 1
+                    FROM private_knowledge_coverage_terms_mappings AS exact_mapping
+                    WHERE exact_mapping.import_run_id = scoped.knowledge_import_run_id
+                      AND exact_mapping.coverage_id = scoped.knowledge_coverage_id
+                      AND exact_mapping.mapping_applicability = 'APPLICABLE'
+                      AND exact_mapping.enrollment_decision = 'MATCH'
+                      AND exact_mapping.document_identity_decision = 'MATCH'
+                      AND exact_mapping.edition_applicability_decision = 'MATCH'
+                      AND exact_mapping.section_mapping_decision = 'MATCH'
+                      AND exact_mapping.overall_decision = 'MATCH'
+                  )
+                ), associated_candidates AS (
+                  SELECT * FROM exact_mapping_candidates
+                  UNION ALL
+                  SELECT * FROM contract_terms_candidates
+                ), scored_candidates AS (
+                  SELECT associated.*,
+                         (
+                           SELECT count(*)
+                           FROM query_tokens AS query_token
+                           WHERE query_token.token = ANY(
+                             regexp_split_to_array(
+                               lower(concat_ws(
+                                 ' ', associated.coverage_label,
+                                 associated.heading, associated.section_summary,
+                                 associated.statement, associated.source_clause_label,
+                                 associated.source_clause_title
+                               )),
+                               '[^[:alnum:]_]+'
+                             )
+                           )
+                         ) AS score
+                  FROM associated_candidates AS associated
+                ), ranked_candidates AS (
+                  SELECT scored.*,
+                         row_number() OVER (
+                           PARTITION BY knowledge_coverage_id, association_priority
+                           ORDER BY score DESC, terms_section_id, fact_citation_id
+                         ) AS coverage_rank
+                  FROM scored_candidates AS scored
+                  WHERE score > 0
                 )
-                SELECT *
-                FROM scoped_candidates
-                WHERE score > 0
-                ORDER BY score DESC, knowledge_coverage_id, terms_section_id,
+                SELECT private_claim_candidate_id, knowledge_import_run_id,
+                       knowledge_coverage_id, coverage_execution_disposition_id,
+                       enrollment_decision_snapshot, enrollment_authority_snapshot,
+                       terms_section_id, knowledge_fact_id,
+                       source_clause_id, fact_citation_id, contract_label,
+                       coverage_label, clause_label, excerpt, page_start, page_end,
+                       citation_kind, reason_code, score
+                FROM ranked_candidates
+                WHERE coverage_rank <= 2
+                ORDER BY association_priority DESC, coverage_rank,
+                         score DESC, knowledge_coverage_id, terms_section_id,
                          fact_citation_id
                 LIMIT 12
                 """,

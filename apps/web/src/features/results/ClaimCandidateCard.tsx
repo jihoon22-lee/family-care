@@ -38,12 +38,27 @@ function benefitKindLabel(
   return "보장 유형 확인 필요";
 }
 
+function isConditionalPolicyEstimate(
+  calculation: KnowledgeBenefitCalculationResponse,
+): boolean {
+  return (
+    calculation.status === "CALCULATED" &&
+    calculation.confirmed_amount === null &&
+    calculation.hold_reason_code !== null
+  );
+}
+
 function calculationStatusLabel(
-  status: KnowledgeBenefitCalculationResponse["status"],
+  calculation: KnowledgeBenefitCalculationResponse,
 ): string {
-  if (status === "CALCULATED") return "서버 계산 완료";
-  if (status === "NOT_APPLICABLE") return "계산 대상 아님";
-  if (status === "FAILED") return "계산 다시 확인 필요";
+  if (isConditionalPolicyEstimate(calculation)) return "조건부 약관 예상액";
+  if (calculation.status === "CALCULATED") {
+    return calculation.confirmed_amount === null
+      ? "서버 계산 완료"
+      : "확인된 계산 결과";
+  }
+  if (calculation.status === "NOT_APPLICABLE") return "계산 대상 아님";
+  if (calculation.status === "FAILED") return "계산 다시 확인 필요";
   return "계산 조건 추가 확인";
 }
 
@@ -75,14 +90,20 @@ function KnowledgeCalculationTrace({
 }: {
   calculation: KnowledgeBenefitCalculationResponse;
 }) {
-  const amount = calculation.conditional_amount ?? calculation.confirmed_amount;
+  const conditionalPolicyEstimate = isConditionalPolicyEstimate(calculation);
+  const amount =
+    calculation.status === "CALCULATED"
+      ? conditionalPolicyEstimate
+        ? calculation.conditional_amount
+        : (calculation.confirmed_amount ?? calculation.conditional_amount)
+      : null;
 
   return (
     <div className={styles.knowledgeCalculation}>
       <div className={styles.calculationTraceHeading}>
         <div>
           <p className={styles.cardKicker}>Approved calculation trace</p>
-          <strong>{calculationStatusLabel(calculation.status)}</strong>
+          <strong>{calculationStatusLabel(calculation)}</strong>
         </div>
         <span className={styles.calculationKind}>
           {calculation.kind === "FIXED"
@@ -94,7 +115,13 @@ function KnowledgeCalculationTrace({
       </div>
       {amount && calculation.currency ? (
         <p className={styles.conditionalAmount}>
-          조건부 계산: {amount} {calculation.currency}
+          {conditionalPolicyEstimate
+            ? "조건부 예상액"
+            : calculation.status === "CALCULATED" &&
+                calculation.confirmed_amount !== null
+              ? "확인된 계산 금액"
+              : "조건부 계산"}
+          : {amount} {calculation.currency}
         </p>
       ) : (
         <p className={styles.calculationStatus}>

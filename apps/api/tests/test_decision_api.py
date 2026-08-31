@@ -102,6 +102,7 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
             "contract_count": 1,
             "benefit_coverage_count": 1,
             "published_coverage_count": 1,
+            "advisory_coverage_count": 0,
             "blocked_coverage_count": 0,
             "not_applicable_coverage_count": 0,
         },
@@ -226,7 +227,7 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
                         "page_end": 7,
                     }
                 ],
-                "engine_version": "private-knowledge-engine-v1",
+                "engine_version": "private-knowledge-engine-v2",
             },
         ],
         "conditional_fixed_subtotals": [

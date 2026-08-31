@@ -6,12 +6,17 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from familycare_api.private_knowledge.publication_models import PublicationCounts
+import pytest
+from familycare_api.private_knowledge.publication_models import (
+    PublicationCounts,
+    PublicationCountsV2,
+)
 from familycare_api.private_knowledge.publication_package import (
     load_rule_publication_package,
 )
 from familycare_api.private_knowledge.publication_reconciliation import (
     DispositionCounts,
+    DispositionCountsV2,
     PublicationCoverageBaseline,
     PublicationDatabaseBaseline,
     PublicationEvidenceBaseline,
@@ -21,6 +26,8 @@ from familycare_api.private_knowledge.publication_reconciliation import (
 
 from apps.api.tests.private_knowledge_publication_fixtures import (
     SYNTHETIC_SOURCE_SUBJECT_KEY,
+    convert_to_v2_advisory_publication_package,
+    set_v2_coverage_disposition,
     write_synthetic_rule_publication_package,
 )
 
@@ -120,6 +127,134 @@ def test_first_apply_is_count_only_create_with_deterministic_digest(tmp_path: Pa
     assert "Family Member A" not in serialized
     assert "synthetic-policy-001" not in serialized
     assert str(HOUSEHOLD_ID) not in serialized
+
+
+def test_v2_advisory_is_counted_without_becoming_executable(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "publication-package")
+    convert_to_v2_advisory_publication_package(root)
+    package = load_rule_publication_package(root, repository_root=tmp_path / "repository")
+    baseline = _baseline(
+        package,
+        current_publication_counts=PublicationCountsV2(
+            **PublicationCounts.zero().model_dump(),
+            advisory_disposition_count=0,
+            user_confirmed_enrollment_count=0,
+        ),
+        current_disposition_counts=DispositionCountsV2(
+            published=0, advisory=0, blocked=0, not_applicable=0
+        ),
+    )
+
+    report = build_rule_publication_dry_run(package, baseline)
+
+    assert report.package_schema_version == "private-knowledge-rule-publication.sol-v2"
+    assert report.input_counts.advisory_disposition_count == 1
+    assert report.input_counts.user_confirmed_enrollment_count == 0
+    assert report.dispositions == DispositionCountsV2(
+        published=0, advisory=1, blocked=0, not_applicable=0
+    )
+
+
+def test_v2_advisory_allows_unresolved_mapping_and_current_status(tmp_path: Path) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "publication-package")
+    convert_to_v2_advisory_publication_package(root)
+    package = load_rule_publication_package(root, repository_root=tmp_path / "repository")
+    baseline = _baseline(package)
+    coverage = baseline.coverage_authorities[0].model_copy(
+        update={
+            "mapping_applicability": "UNKNOWN",
+            "mapping_enrollment_decision": "UNKNOWN",
+            "document_identity_decision": "UNKNOWN",
+            "edition_applicability_decision": "UNKNOWN",
+            "section_mapping_decision": "UNKNOWN",
+            "overall_mapping_decision": "UNKNOWN",
+            "current_confirmation_decision": None,
+            "current_confirmed_status": None,
+        }
+    )
+
+    report = build_rule_publication_dry_run(
+        package,
+        baseline.model_copy(update={"coverage_authorities": (coverage,)}),
+    )
+
+    assert report.operation == "CREATE"
+    assert report.block_counts.missing_current_confirmation == 0
+    assert report.block_counts.coverage_authority_mismatch == 0
+
+
+@pytest.mark.parametrize(
+    "authority_update",
+    [
+        {"enrollment_decision": "NO_MATCH"},
+        {"enrollment_decision": "UNKNOWN"},
+        {"component_classification": "NON_BENEFIT_CONTRACT_COMPONENT"},
+        {"benefit_type": "INDEMNITY"},
+    ],
+)
+def test_v2_advisory_requires_enrolled_matching_benefit_authority(
+    tmp_path: Path,
+    authority_update: dict[str, str],
+) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "publication-package")
+    convert_to_v2_advisory_publication_package(root)
+    package = load_rule_publication_package(root, repository_root=tmp_path / "repository")
+    baseline = _baseline(package)
+    coverage = baseline.coverage_authorities[0].model_copy(update=authority_update)
+
+    report = build_rule_publication_dry_run(
+        package,
+        baseline.model_copy(update={"coverage_authorities": (coverage,)}),
+    )
+
+    assert report.operation == "BLOCKED"
+    assert report.block_counts.coverage_authority_mismatch == 1
+
+
+def test_v2_advisory_user_authority_only_overrides_unknown_enrollment(
+    tmp_path: Path,
+) -> None:
+    root = write_synthetic_rule_publication_package(tmp_path / "publication-package")
+    convert_to_v2_advisory_publication_package(root)
+    set_v2_coverage_disposition(
+        root,
+        disposition="ADVISORY",
+        enrollment_authority="USER_CONFIRMED_COVERAGE_ENROLLMENT",
+        reason_codes=["USER_CONFIRMED_COVERAGE_ENROLLMENT"],
+    )
+    package = load_rule_publication_package(root, repository_root=tmp_path / "repository")
+    baseline = _baseline(package)
+    certificate_match_cannot_use_user_authority = build_rule_publication_dry_run(
+        package,
+        baseline,
+    )
+    coverage = baseline.coverage_authorities[0].model_copy(
+        update={"enrollment_decision": "UNKNOWN"}
+    )
+
+    allowed = build_rule_publication_dry_run(
+        package,
+        baseline.model_copy(update={"coverage_authorities": (coverage,)}),
+    )
+    rejected = build_rule_publication_dry_run(
+        package,
+        baseline.model_copy(
+            update={
+                "coverage_authorities": (
+                    coverage.model_copy(update={"enrollment_decision": "NO_MATCH"}),
+                )
+            }
+        ),
+    )
+
+    assert certificate_match_cannot_use_user_authority.operation == "BLOCKED"
+    assert certificate_match_cannot_use_user_authority.block_counts.coverage_authority_mismatch == 1
+    assert allowed.operation == "CREATE"
+    assert allowed.input_counts.user_confirmed_enrollment_count == 1
+    assert allowed.block_counts.coverage_authority_mismatch == 0
+    assert allowed.report_digest_sha256 == canonical_rule_publication_report_digest(allowed)
+    assert rejected.operation == "BLOCKED"
+    assert rejected.block_counts.coverage_authority_mismatch == 1
 
 
 def test_current_same_is_no_op_and_new_package_supersedes(tmp_path: Path) -> None:

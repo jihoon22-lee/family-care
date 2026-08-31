@@ -50,13 +50,19 @@ from familycare_api.decisions.knowledge_domain import (
 from familycare_api.decisions.knowledge_facts import normalize_private_event_facts
 from familycare_api.decisions.operators import OperatorEvaluationError, evaluate_expression
 
-ENGINE_VERSION = "private-knowledge-engine-v1"
+ENGINE_VERSION = "private-knowledge-engine-v2"
 _ROUNDING = {
     "half_up": ROUND_HALF_UP,
     "half_even": ROUND_HALF_EVEN,
     "up": ROUND_CEILING,
     "down": ROUND_DOWN,
 }
+_NON_EXECUTABLE_SUMMARY_HOLDS = frozenset(
+    {
+        "COVERAGE_PUBLICATION_BLOCKED",
+        "NO_PUBLISHED_RULE",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -177,8 +183,12 @@ class DeterministicKnowledgeDecisionEngine:
             evaluation, failed = self._evaluate_rule(facts, coverage, rule)
             evaluations.append(evaluation)
             runtime_failed = runtime_failed or failed
-        aggregate = _aggregate_required(evaluations)
-        hold_reasons = [item.reason_code for item in evaluations if item.result != "MATCH"]
+        rule_aggregate = _aggregate_required(evaluations)
+        aggregate = rule_aggregate
+        hold_reasons = (
+            ["COVERAGE_PUBLICATION_ADVISORY"] if coverage.disposition == "ADVISORY" else []
+        )
+        hold_reasons.extend(item.reason_code for item in evaluations if item.result != "MATCH")
         if precondition == "NO_MATCH":
             aggregate = "NO_MATCH"
             hold_reasons.insert(0, precondition_reason)
@@ -189,7 +199,13 @@ class DeterministicKnowledgeDecisionEngine:
             aggregate = "UNKNOWN"
             hold_reasons.append("NO_PUBLISHED_RULE")
         required = tuple(item for item in evaluations if item.required)
-        questions = _questions(evaluations)
+        questions = list(_questions(evaluations))
+        if (
+            precondition == "UNKNOWN"
+            and precondition_reason == "EVENT_DATE_STATUS_UNCONFIRMED"
+            and not any(item.field_path == "Rider.status" for item in questions)
+        ):
+            questions.append(KnowledgeQuestion("Rider.status", "EVENT_DATE_STATUS_UNCONFIRMED"))
         candidate = KnowledgeClaimCandidate(
             candidate_id=self.id_factory(),
             knowledge_contract_id=coverage.knowledge_contract_id,
@@ -199,13 +215,31 @@ class DeterministicKnowledgeDecisionEngine:
             benefit_type=coverage.benefit_type,
             result=aggregate,
             evaluations=tuple(evaluations),
-            questions=questions,
+            questions=tuple(questions),
             hold_reason_codes=_unique(hold_reasons),
             required_match_count=sum(item.result == "MATCH" for item in required),
             required_unknown_count=sum(item.result == "UNKNOWN" for item in required),
             required_no_match_count=sum(item.result == "NO_MATCH" for item in required),
         )
-        calculation, calculation_failed = self._calculate(facts, coverage, candidate)
+        conditional_hold_reason = None
+        if (
+            rule_aggregate == "MATCH"
+            and precondition == "UNKNOWN"
+            and coverage.benefit_type == "FIXED"
+        ):
+            if coverage.disposition == "ADVISORY" and precondition_reason in {
+                "COVERAGE_PUBLICATION_ADVISORY",
+                "COVERAGE_AUTHORITY_INCOMPLETE",
+            }:
+                conditional_hold_reason = "COVERAGE_PUBLICATION_ADVISORY"
+            elif precondition_reason == "EVENT_DATE_STATUS_UNCONFIRMED":
+                conditional_hold_reason = precondition_reason
+        calculation, calculation_failed = self._calculate(
+            facts,
+            coverage,
+            candidate,
+            conditional_hold_reason=conditional_hold_reason,
+        )
         calculation_publication_missing = (
             candidate.result == "MATCH"
             and coverage.benefit_type == "FIXED"
@@ -310,6 +344,8 @@ class DeterministicKnowledgeDecisionEngine:
         facts: KnowledgeFactContext,
         coverage: KnowledgeCoverageContext,
         candidate: KnowledgeClaimCandidate,
+        *,
+        conditional_hold_reason: str | None = None,
     ) -> tuple[KnowledgeBenefitCalculation, bool]:
         publication = coverage.calculation
         if candidate.result == "NO_MATCH":
@@ -319,7 +355,7 @@ class DeterministicKnowledgeDecisionEngine:
                 status="NOT_APPLICABLE",
                 reason="CANDIDATE_NOT_MATCHED",
             ), False
-        if candidate.result != "MATCH":
+        if candidate.result != "MATCH" and conditional_hold_reason is None:
             return self._calculation_unknown(
                 candidate,
                 coverage,
@@ -390,8 +426,9 @@ class DeterministicKnowledgeDecisionEngine:
                 status="CALCULATED",
                 currency=coverage.currency,
                 conditional_amount=amount,
-                confirmed_amount=amount,
+                confirmed_amount=(amount if conditional_hold_reason is None else None),
                 rounding_rule=state.last_rounding,
+                hold_reason_code=conditional_hold_reason,
                 steps=tuple(state.steps),
             ),
             False,
@@ -421,6 +458,11 @@ class DeterministicKnowledgeDecisionEngine:
         )
 
     def _failed_coverage(self, coverage: KnowledgeCoverageContext) -> _CoverageOutcome:
+        hold_reasons = ["KNOWLEDGE_COVERAGE_EVALUATION_FAILED"]
+        if coverage.disposition == "BLOCKED":
+            hold_reasons.insert(0, "COVERAGE_PUBLICATION_BLOCKED")
+        elif coverage.disposition == "ADVISORY":
+            hold_reasons.insert(0, "COVERAGE_PUBLICATION_ADVISORY")
         candidate = KnowledgeClaimCandidate(
             candidate_id=self.id_factory(),
             knowledge_contract_id=coverage.knowledge_contract_id,
@@ -431,7 +473,7 @@ class DeterministicKnowledgeDecisionEngine:
             result="UNKNOWN",
             evaluations=(),
             questions=(),
-            hold_reason_codes=("KNOWLEDGE_COVERAGE_EVALUATION_FAILED",),
+            hold_reason_codes=tuple(hold_reasons),
             required_match_count=0,
             required_unknown_count=0,
             required_no_match_count=0,
@@ -454,14 +496,43 @@ def _coverage_precondition(
     event: MedicalEvent,
     coverage: KnowledgeCoverageContext,
 ) -> tuple[TriState, str]:
-    if coverage.disposition != "PUBLISHED":
+    if coverage.disposition == "BLOCKED":
         return "UNKNOWN", "COVERAGE_PUBLICATION_BLOCKED"
+    advisory = coverage.disposition == "ADVISORY"
     if coverage.enrollment_decision == "NO_MATCH":
         return "NO_MATCH", "CERTIFICATE_ENROLLMENT_NO_MATCH"
+    if (
+        coverage.subject_binding_decision == "NO_MATCH"
+        or coverage.mapping_applicability == "NOT_APPLICABLE"
+        or coverage.mapping_enrollment_decision == "NO_MATCH"
+        or coverage.document_identity_decision == "NO_MATCH"
+        or coverage.edition_applicability_decision == "NO_MATCH"
+        or coverage.section_mapping_decision == "NO_MATCH"
+        or coverage.overall_mapping_decision == "NO_MATCH"
+        or coverage.current_confirmation_decision == "NO_MATCH"
+    ):
+        return "NO_MATCH", "COVERAGE_AUTHORITY_NO_MATCH"
     if coverage.current_confirmation_decision == "MATCH" and (
         coverage.current_confirmed_status in {"inactive", "lapsed", "terminated"}
     ):
         return "NO_MATCH", "CURRENT_CONTRACT_INACTIVE"
+    if event.event_date is not None and (
+        (coverage.contract_start is not None and event.event_date < coverage.contract_start)
+        or (coverage.contract_end is not None and event.event_date > coverage.contract_end)
+    ):
+        return "NO_MATCH", "EVENT_DATE_OUTSIDE_CONTRACT_TERM"
+    intervals = tuple(
+        item
+        for item in coverage.status_intervals
+        if event.event_date is not None
+        and item.effective_from <= event.event_date <= item.effective_through
+    )
+    if len(intervals) == 1:
+        interval = intervals[0]
+        if interval.decision == "NO_MATCH":
+            return "NO_MATCH", "EVENT_DATE_STATUS_NO_MATCH"
+        if interval.decision == "MATCH" and interval.confirmed_status != "active":
+            return "NO_MATCH", "EVENT_DATE_CONTRACT_INACTIVE"
     required_matches = (
         coverage.subject_binding_decision == "MATCH",
         coverage.enrollment_decision == "MATCH",
@@ -479,11 +550,6 @@ def _coverage_precondition(
         return "UNKNOWN", "COVERAGE_AUTHORITY_INCOMPLETE"
     if event.event_date is None:
         return "UNKNOWN", "EVENT_DATE_REQUIRED"
-    intervals = tuple(
-        item
-        for item in coverage.status_intervals
-        if item.effective_from <= event.event_date <= item.effective_through
-    )
     if len(intervals) != 1:
         return "UNKNOWN", "EVENT_DATE_STATUS_UNCONFIRMED"
     interval = intervals[0]
@@ -491,6 +557,8 @@ def _coverage_precondition(
         return "UNKNOWN", "EVENT_DATE_STATUS_UNCONFIRMED"
     if interval.confirmed_status != "active":
         return "NO_MATCH", "EVENT_DATE_CONTRACT_INACTIVE"
+    if advisory:
+        return "UNKNOWN", "COVERAGE_PUBLICATION_ADVISORY"
     return "MATCH", "COVERAGE_AUTHORITY_MATCH"
 
 
@@ -664,16 +732,17 @@ def _fixed_subtotals(
     unresolved: dict[str, int] = defaultdict(int)
     for calculation in calculations:
         candidate = candidate_by_id[calculation.candidate_id]
-        if candidate.benefit_type != "FIXED" or candidate.result == "NO_MATCH":
+        if (
+            candidate.benefit_type != "FIXED"
+            or candidate.result == "NO_MATCH"
+            or not _is_executable_summary_candidate(candidate)
+        ):
             continue
         currency = calculation.currency
         if currency is None:
             continue
-        if (
-            candidate.result == "MATCH"
-            and calculation.status == "CALCULATED"
-            and calculation.conditional_amount is not None
-        ):
+        if _is_authorized_fixed_amount(candidate, calculation):
+            assert calculation.conditional_amount is not None
             amounts[currency] += calculation.conditional_amount
             calculated[currency] += 1
         else:
@@ -696,18 +765,44 @@ def _indemnity_summary(
     candidate_ids = {
         item.candidate_id
         for item in candidates
-        if item.benefit_type == "INDEMNITY" and item.result != "NO_MATCH"
+        if item.benefit_type == "INDEMNITY"
+        and item.result != "NO_MATCH"
+        and _is_executable_summary_candidate(item)
     }
     relevant = tuple(item for item in calculations if item.candidate_id in candidate_ids)
     if not candidate_ids:
         return KnowledgeIndemnitySummary("NONE", 0, 0, 0)
-    calculated = sum(item.status == "CALCULATED" for item in relevant)
+    candidate_by_id = {item.candidate_id: item for item in candidates}
+    calculated = sum(
+        item.status == "CALCULATED" and candidate_by_id[item.candidate_id].result == "MATCH"
+        for item in relevant
+    )
     unresolved = len(candidate_ids) - calculated
     return KnowledgeIndemnitySummary(
         "CALCULATED" if unresolved == 0 else "UNKNOWN",
         len(candidate_ids),
         calculated,
         unresolved,
+    )
+
+
+def _is_executable_summary_candidate(candidate: KnowledgeClaimCandidate) -> bool:
+    return not _NON_EXECUTABLE_SUMMARY_HOLDS.intersection(candidate.hold_reason_codes)
+
+
+def _is_authorized_fixed_amount(
+    candidate: KnowledgeClaimCandidate,
+    calculation: KnowledgeBenefitCalculation,
+) -> bool:
+    if calculation.status != "CALCULATED" or calculation.conditional_amount is None:
+        return False
+    if candidate.result == "MATCH":
+        return calculation.hold_reason_code is None
+    return (
+        candidate.result == "UNKNOWN"
+        and calculation.confirmed_amount is None
+        and calculation.hold_reason_code is not None
+        and calculation.hold_reason_code in candidate.hold_reason_codes
     )
 
 

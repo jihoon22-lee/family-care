@@ -24,7 +24,10 @@ from familycare_api.private_knowledge.errors import (
     PublicationPackageError,
 )
 from familycare_api.private_knowledge.package import load_private_knowledge_package
-from familycare_api.private_knowledge.publication_models import PublicationCounts
+from familycare_api.private_knowledge.publication_models import (
+    PublicationCounts,
+    PublicationCountsV2,
+)
 from familycare_api.private_knowledge.publication_package import (
     load_rule_publication_package,
 )
@@ -196,7 +199,7 @@ def _print_confirmation_counts(
 def _print_publication_counts(
     *,
     status: str,
-    counts: PublicationCounts,
+    counts: PublicationCounts | PublicationCountsV2,
     run_id: UUID | None = None,
 ) -> None:
     fields = [f"status={status}"]
@@ -208,6 +211,8 @@ def _print_publication_counts(
             f"contracts={counts.contract_count}",
             f"coverages={counts.coverage_count}",
             f"published={counts.published_disposition_count}",
+            f"advisory={getattr(counts, 'advisory_disposition_count', 0)}",
+            f"user_confirmed_enrollment={getattr(counts, 'user_confirmed_enrollment_count', 0)}",
             f"blocked={counts.blocked_disposition_count}",
             f"not_applicable={counts.not_applicable_disposition_count}",
             f"rules={counts.rule_publication_count}",
