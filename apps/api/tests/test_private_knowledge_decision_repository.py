@@ -96,6 +96,26 @@ def _rows(*, with_publication: bool = True) -> dict[str, list[dict[str, Any]]]:
                 "benefit_type": "FIXED",
                 "insured_amount": Decimal("100"),
                 "currency": "KRW",
+                "certificate_evidence_json": [
+                    {
+                        "document_alias": "Sample Certificate",
+                        "evidence_pages": [3],
+                        "local_policy_id": "synthetic-policy-001",
+                        "local_rider_id": "synthetic-rider-001",
+                    }
+                ],
+                "source_record_json": {
+                    "certificate_review": {
+                        "amount_decision": "MATCH",
+                        "amount_evidence_locations": [
+                            {
+                                "document_alias": "Sample Certificate Amount",
+                                "line": 12,
+                                "physical_page": 4,
+                            }
+                        ],
+                    }
+                },
                 "contract_start": date(2025, 1, 1),
                 "contract_end": None,
                 "disposition": "PUBLISHED" if with_publication else None,
@@ -220,6 +240,12 @@ def test_read_context_is_member_scoped_and_directly_evaluable() -> None:
     assert snapshot.context.family_member_id == MEMBER_ID
     assert snapshot.context.coverages[0].claim_history_counted_occurrence is not None
     assert snapshot.context.coverages[0].claim_history_counted_occurrence.value == 1
+    assert snapshot.context.coverages[0].certificate_amount_decision == "MATCH"
+    assert snapshot.context.coverages[0].certificate_amount_evidence_state == "DIRECT"
+    assert snapshot.context.coverages[0].certificate_evidence[0].document_alias == (
+        "Sample Certificate Amount"
+    )
+    assert snapshot.context.coverages[0].certificate_evidence[0].evidence_pages == (4,)
     assert snapshot.context.supporting_facts["Receipt.covered_amount"].value == Decimal("50")
 
     result = DeterministicKnowledgeDecisionEngine().evaluate(
@@ -230,6 +256,9 @@ def test_read_context_is_member_scoped_and_directly_evaluable() -> None:
     )
     assert result.candidates[0].result == "MATCH"
     assert result.calculations[0].conditional_amount == Decimal("1")
+    assert result.calculations[0].certificate_evidence == (
+        snapshot.context.coverages[0].certificate_evidence
+    )
     assert result.evaluations[0].citations[0].terms_section_id == SECTION_ID
 
     scoped_queries = "\n".join(query for query, _ in connection.calls)
@@ -241,6 +270,29 @@ def test_read_context_is_member_scoped_and_directly_evaluable() -> None:
         for query, parameters in connection.calls
         if "coverage-context" in query and isinstance(parameters, dict)
     )
+
+
+def test_read_context_marks_generic_certificate_pages_as_amount_review_required() -> None:
+    rows = _rows()
+    coverage = rows["private-knowledge:coverage-context"][0]
+    coverage["source_record_json"] = {
+        "certificate_review": {
+            "amount_decision": "UNKNOWN",
+            "amount_evidence_locations": [],
+        }
+    }
+    snapshot = PostgresKnowledgeDecisionRepository().read_context(
+        _Connection(rows),  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+    )
+
+    assert snapshot.context is not None
+    context = snapshot.context.coverages[0]
+    assert context.certificate_amount_decision == "UNKNOWN"
+    assert context.certificate_amount_evidence_state == "REVIEW_REQUIRED"
+    assert context.certificate_evidence[0].document_alias == "Sample Certificate"
+    assert context.certificate_evidence[0].evidence_pages == (3,)
 
 
 def test_catalog_without_current_publication_is_unavailable_not_empty_success() -> None:
@@ -365,3 +417,40 @@ def test_persist_result_writes_each_private_stream_with_trace_digest() -> None:
     )
     assert isinstance(calculation_call, tuple)
     assert isinstance(calculation_call[-1], str) and len(calculation_call[-1]) == 64
+
+
+def test_stored_unresolved_calculation_does_not_claim_detached_direct_evidence() -> None:
+    calculation = PostgresKnowledgeDecisionRepository._stored_calculation(  # noqa: SLF001
+        {
+            "id": UUID("00000000-0000-4000-8000-000000007301"),
+            "private_claim_candidate_id": UUID("00000000-0000-4000-8000-000000007302"),
+            "knowledge_coverage_id": COVERAGE_ID,
+            "calculation_publication_id": None,
+            "calculation_kind": "FIXED",
+            "calculation_status": "UNKNOWN",
+            "currency": "KRW",
+            "hold_reason_code": "CALCULATION_INPUT_UNAVAILABLE",
+            "source_record_json": {
+                "certificate_review": {
+                    "amount_decision": "MATCH",
+                    "amount_evidence_locations": [
+                        {
+                            "document_alias": "Sample Certificate Amount",
+                            "physical_page": 4,
+                        }
+                    ],
+                }
+            },
+            "certificate_evidence_json": [
+                {
+                    "document_alias": "Sample Certificate",
+                    "evidence_pages": [3],
+                }
+            ],
+        },
+        (),
+    )
+
+    assert calculation.certificate_amount_decision == "UNKNOWN"
+    assert calculation.certificate_amount_evidence_state == "UNAVAILABLE"
+    assert calculation.certificate_evidence == ()

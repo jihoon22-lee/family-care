@@ -146,6 +146,30 @@ Rule publication 단계는 다음 불변식을 보장해야 합니다.
 
 계산 결과의 각 DSL 연산은 `CalculationStep(step_number, operation, input_amount, output_amount, rounding_rule, reason_code)`로 보존합니다. 결과가 소수 단위인데 명시적 `round` 경계가 없거나, fact/Evidence/rule이 없거나 stale하거나, overflow·지원하지 않는 식이면 금액을 0으로 대체하지 않고 `status="unknown"`과 안정적인 hold reason code를 반환합니다.
 
+정액형 coverage의 가입과 eligibility rule은 검토됐지만 별도 calculation publication만 없는
+경우에는 증권의 `insured_amount`를 지급 확정값이 아닌 조건부 예상액으로 사용할 수 있습니다.
+이 경로는 `calculation_publication_id=null`, `confirmed_amount=null`,
+`operation="certificate_insured_amount"`,
+`reason_code="CERTIFICATE_INSURED_AMOUNT_ESTIMATE"`를 기록합니다. 규칙이 없거나 필수 규칙이
+일치하지 않은 catalog-only coverage에는 이 fallback을 적용하지 않습니다. 실손형에도 적용하지
+않습니다. `certificate_review.amount_decision=MATCH`이고 가입금액 전용
+`amount_evidence_locations`가 있을 때만 `certificate_amount_evidence_state=DIRECT`로 표시하고,
+해당 문서 별칭과 물리 페이지를 계산 응답에 보존합니다. 담보 존재만 확인하는 일반 증권
+페이지밖에 없거나 금액 검토가 `UNKNOWN`이면 예상액 자체는 참고값으로 표시하되
+`CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED` hold로 합계에서 제외하고, UI도 “가입금액 위치
+확인 필요”로 구분합니다. 이 근거는 계산이 참조한 immutable knowledge snapshot에서 다시 읽어
+약관 eligibility citation과 함께 한 카드에서 확인합니다.
+검토된 calculation publication이 `Rider.insured_amount`를 입력으로 사용하더라도 같은 경계를
+적용합니다. 금액 review가 `MATCH + DIRECT`가 아니면 계산식은 참고 예상액을 만들 수 있지만
+`confirmed_amount`를 만들거나 조건부 정액 합계에 포함될 수 없습니다.
+
+AI가 구조화한 fact는 규칙 평가가 `MATCH`, `NO_MATCH`, exclusion match 중 어느 결과를
+만들더라도 단독으로 확정 판정을 만들지 않습니다. 계약 기간·가입 상태처럼 별도 신뢰 근거가
+결정적으로 불일치한 경우에만 coverage `NO_MATCH`가 우선합니다. AI가 제안한 사건 날짜와 방문
+날짜는 candidate fact로만 보존하고 authoritative event date column에는 투영하지 않습니다.
+사건 날짜가 없더라도 검토된 정액 eligibility rule이 일치하면 `EVENT_DATE_REQUIRED` hold를 붙인
+증권 기준 조건부 예상액을 표시합니다.
+
 ## Indemnity handling
 
 실손형은 사용자가 수동 입력한 통원·입원·약제비 `ReceiptLine`만 입력으로 받습니다. `covered`이면서 `user` 또는 `ai_structured`로 확인된 항목만 confirmed에 합산하고, `possible_excluded`·`unknown`·미확인 항목은 additional로 보존하며, `excluded` 항목은 excluded와 bounded reason code로 보존합니다. 모든 항목은 하나의 uppercase ISO 통화를 사용해야 하며 통화가 다르면 계산하지 않고 `UNKNOWN`을 반환합니다.

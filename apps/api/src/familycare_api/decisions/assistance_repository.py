@@ -459,6 +459,30 @@ class AnalysisAssistanceRepository:
                            FROM query_tokens AS query_token
                            WHERE query_token.token = ANY(
                              regexp_split_to_array(
+                               lower(associated.coverage_label),
+                               '[^[:alnum:]_]+'
+                             )
+                           )
+                         ) AS coverage_score,
+                         (
+                           SELECT count(*)
+                           FROM query_tokens AS query_token
+                           WHERE query_token.token = ANY(
+                             regexp_split_to_array(
+                               lower(concat_ws(
+                                 ' ', associated.heading, associated.section_summary,
+                                 associated.statement, associated.source_clause_label,
+                                 associated.source_clause_title
+                               )),
+                               '[^[:alnum:]_]+'
+                             )
+                           )
+                         ) AS clause_score,
+                         (
+                           SELECT count(*)
+                           FROM query_tokens AS query_token
+                           WHERE query_token.token = ANY(
+                             regexp_split_to_array(
                                lower(concat_ws(
                                  ' ', associated.coverage_label,
                                  associated.heading, associated.section_summary,
@@ -477,7 +501,13 @@ class AnalysisAssistanceRepository:
                            ORDER BY score DESC, terms_section_id, fact_citation_id
                          ) AS coverage_rank
                   FROM scored_candidates AS scored
-                  WHERE score > 0
+                  WHERE (
+                    association_priority = 2 AND score > 0
+                  ) OR (
+                    association_priority = 1
+                    AND coverage_score > 0
+                    AND clause_score > 0
+                  )
                 )
                 SELECT private_claim_candidate_id, knowledge_import_run_id,
                        knowledge_coverage_id, coverage_execution_disposition_id,

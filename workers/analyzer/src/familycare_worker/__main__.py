@@ -18,8 +18,10 @@ from familycare_worker.ai.event_structurer import (
 )
 from familycare_worker.ai.evidence_loader import PolicyEvidenceLoader
 from familycare_worker.ai.provider import (
+    DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
     DEFAULT_STRUCTURER_MODEL,
     DEFAULT_VERIFIER_MODEL,
+    EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS,
     OpenAiResponsesAdapter,
 )
 from familycare_worker.ai.recommender import (
@@ -174,7 +176,13 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema(),
             RECOMMENDER_SCHEMA_NAME: recommender_schema(),
             **openai_schema_registry(),
-        }
+        },
+        output_token_limits={
+            EVENT_STRUCTURER_SCHEMA_NAME: DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
+        },
+        request_timeouts={
+            EVENT_STRUCTURER_SCHEMA_NAME: EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS,
+        },
     )
     event_runner = EventStructuringJobRunner(
         queue=EventStructuringJobQueue(database_url),

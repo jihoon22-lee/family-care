@@ -25,6 +25,9 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeBenefitCalculation,
     KnowledgeCalculationPublication,
     KnowledgeCalculationStep,
+    KnowledgeCertificateAmountDecision,
+    KnowledgeCertificateAmountEvidenceState,
+    KnowledgeCertificateEvidence,
     KnowledgeCitation,
     KnowledgeClaimCandidate,
     KnowledgeCoverageContext,
@@ -94,6 +97,88 @@ def _decimal(value: object) -> Decimal | None:
     return result if result.is_finite() else None
 
 
+def _certificate_evidence(value: object) -> tuple[KnowledgeCertificateEvidence, ...]:
+    evidence: list[KnowledgeCertificateEvidence] = []
+    for raw in _sequence(value)[:16]:
+        if not isinstance(raw, Mapping):
+            continue
+        document_alias = raw.get("document_alias")
+        pages = tuple(
+            sorted(
+                {
+                    page
+                    for page in _sequence(raw.get("evidence_pages"))
+                    if isinstance(page, int) and not isinstance(page, bool) and 1 <= page <= 500
+                }
+            )
+        )
+        if not isinstance(document_alias, str) or not document_alias or not pages:
+            continue
+        try:
+            evidence.append(
+                KnowledgeCertificateEvidence(
+                    document_alias=document_alias,
+                    evidence_pages=pages,
+                )
+            )
+        except ValueError:
+            continue
+    return tuple(evidence)
+
+
+def _certificate_amount_review(
+    source_record: object,
+    generic_evidence: object,
+) -> tuple[
+    KnowledgeCertificateAmountDecision,
+    KnowledgeCertificateAmountEvidenceState,
+    tuple[KnowledgeCertificateEvidence, ...],
+]:
+    decision: KnowledgeCertificateAmountDecision = "UNKNOWN"
+    locations: object = ()
+    if isinstance(source_record, Mapping):
+        raw_review = source_record.get("certificate_review")
+        if isinstance(raw_review, Mapping):
+            raw_decision = raw_review.get("amount_decision")
+            if raw_decision in {
+                "ALIGNMENT_REVIEW",
+                "MATCH",
+                "NOT_APPLICABLE",
+                "UNKNOWN",
+            }:
+                decision = cast(KnowledgeCertificateAmountDecision, raw_decision)
+            locations = raw_review.get("amount_evidence_locations", ())
+
+    pages_by_document: dict[str, set[int]] = defaultdict(set)
+    for raw in _sequence(locations)[:128]:
+        if not isinstance(raw, Mapping):
+            continue
+        document_alias = raw.get("document_alias")
+        page = raw.get("physical_page")
+        if (
+            isinstance(document_alias, str)
+            and document_alias
+            and isinstance(page, int)
+            and not isinstance(page, bool)
+            and 1 <= page <= 500
+        ):
+            pages_by_document[document_alias].add(page)
+    reviewed_evidence = tuple(
+        KnowledgeCertificateEvidence(
+            document_alias=document_alias,
+            evidence_pages=tuple(sorted(pages)),
+        )
+        for document_alias, pages in sorted(pages_by_document.items())
+    )
+    if decision == "MATCH" and reviewed_evidence:
+        return decision, "DIRECT", reviewed_evidence
+
+    fallback = reviewed_evidence or _certificate_evidence(generic_evidence)
+    if fallback:
+        return decision, "REVIEW_REQUIRED", fallback
+    return decision, "UNAVAILABLE", ()
+
+
 def _citation(row: Mapping[str, Any]) -> KnowledgeCitation | None:
     key = row.get("citation_key")
     if not isinstance(key, str) or not key:
@@ -157,6 +242,8 @@ class PostgresKnowledgeDecisionRepository:
                    coverage.display_name AS coverage_label,
                    coverage.benefit_type,
                    coverage.insured_amount, coverage.currency,
+                   coverage.certificate_evidence_json,
+                   coverage.source_record_json,
                    coalesce(coverage.coverage_start, contract.contract_start)
                      AS contract_start,
                    coalesce(coverage.coverage_end, contract.contract_end)
@@ -443,6 +530,14 @@ class PostgresKnowledgeDecisionRepository:
                     value=history.get(rider_id, 0),
                     provenance="DERIVED_CONFIRMED",
                 )
+            (
+                amount_decision,
+                amount_evidence_state,
+                amount_evidence,
+            ) = _certificate_amount_review(
+                row.get("source_record_json"),
+                row.get("certificate_evidence_json"),
+            )
             coverages.append(
                 KnowledgeCoverageContext(
                     knowledge_contract_id=cast(UUID, row["knowledge_contract_id"]),
@@ -471,6 +566,9 @@ class PostgresKnowledgeDecisionRepository:
                     status_intervals=intervals.get(cast(UUID, row["knowledge_contract_id"]), ()),
                     rules=rules.get(coverage_id, ()),
                     calculation=calculations.get(coverage_id),
+                    certificate_amount_decision=amount_decision,
+                    certificate_amount_evidence_state=amount_evidence_state,
+                    certificate_evidence=amount_evidence,
                     claim_history_counted_occurrence=history_fact,
                 )
             )
@@ -985,12 +1083,18 @@ class PostgresKnowledgeDecisionRepository:
         calculation_rows = connection.execute(
             """
             /* private-knowledge:stored-calculations */
-            SELECT calculation.*, step.step_number, step.operation,
+            SELECT calculation.*, coverage.certificate_evidence_json,
+                   coverage.source_record_json,
+                   step.step_number, step.operation,
                    step.input_amount, step.input_currency,
                    step.output_amount, step.output_currency,
                    step.rounding_rule AS step_rounding_rule,
                    step.reason_code AS step_reason_code
             FROM private_knowledge_benefit_calculations AS calculation
+            LEFT JOIN private_knowledge_coverages AS coverage
+              ON coverage.id = calculation.knowledge_coverage_id
+             AND coverage.import_run_id = %s
+             AND coverage.household_space_id = calculation.household_space_id
             LEFT JOIN private_knowledge_calculation_steps AS step
               ON step.private_benefit_calculation_id = calculation.id
             WHERE calculation.household_space_id = %s
@@ -998,7 +1102,7 @@ class PostgresKnowledgeDecisionRepository:
             ORDER BY calculation.knowledge_coverage_id, calculation.id,
                      step.step_number, step.id
             """,
-            (scope.household_space_id, run["id"]),
+            (knowledge_run_id, scope.household_space_id, run["id"]),
         ).fetchall()
         grouped: dict[UUID, tuple[Mapping[str, Any], list[KnowledgeCalculationStep]]] = {}
         for row in calculation_rows:
@@ -1231,6 +1335,11 @@ class PostgresKnowledgeDecisionRepository:
         row: Mapping[str, Any],
         steps: tuple[KnowledgeCalculationStep, ...],
     ) -> KnowledgeBenefitCalculation:
+        amount_decision, amount_evidence_state, amount_evidence = _certificate_amount_review(
+            row.get("source_record_json"),
+            row.get("certificate_evidence_json"),
+        )
+        calculated = row["calculation_status"] == "CALCULATED"
         return KnowledgeBenefitCalculation(
             calculation_id=cast(UUID, row["id"]),
             candidate_id=cast(UUID, row["private_claim_candidate_id"]),
@@ -1248,6 +1357,11 @@ class PostgresKnowledgeDecisionRepository:
             rounding_rule=cast(str | None, row.get("rounding_rule")),
             hold_reason_code=cast(str | None, row.get("hold_reason_code")),
             steps=steps,
+            certificate_amount_decision=(amount_decision if calculated else "UNKNOWN"),
+            certificate_amount_evidence_state=(
+                amount_evidence_state if calculated else "UNAVAILABLE"
+            ),
+            certificate_evidence=(amount_evidence if calculated else ()),
         )
 
     def _persist_candidates_and_calculations(

@@ -392,6 +392,7 @@ class EventStructuringJobRunner:
                     mode=job.mode,
                     event_date=job.event_date,
                     visit_date=job.visit_date,
+                    normalization_hints=job.normalization_hints,
                 ),
                 provider=self.provider,
                 model=self.structurer_model,

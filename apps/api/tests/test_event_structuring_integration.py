@@ -83,11 +83,65 @@ def test_enqueue_is_scoped_idempotent_and_version_checked(database_url: str) -> 
 
     assert first.id == duplicate.id
     assert first.state == "queued"
+    loaded_event = DecisionRepository(database_url).get_medical_event(scope_a, event.id)
+    assert loaded_event.auto_structuring_attempted is True
+    with psycopg.connect(database_url) as connection:
+        max_attempts = connection.execute(
+            "SELECT max_attempts FROM medical_event_structuring_jobs WHERE id = %s",
+            (first.id,),
+        ).fetchone()
+    assert max_attempts == (1,)
     assert repository.get_job(scope_a, first.id).id == first.id
     with pytest.raises(VersionConflict):
         repository.enqueue(scope_a, event.id, event.version + 1)
     with pytest.raises(MedicalEventNotFound):
         repository.get_job(HouseholdScope(HOUSEHOLD_B), first.id)
+
+
+def test_enqueue_reuses_terminal_automatic_attempt_for_same_event_version(
+    database_url: str,
+) -> None:
+    event = _event(database_url)
+    repository = EventStructuringRepository(database_url)
+    scope = HouseholdScope(HOUSEHOLD_A)
+    first = repository.enqueue(scope, event.id, event.version)
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """
+            UPDATE medical_event_structuring_jobs
+            SET state = 'permanently_failed', attempts = max_attempts,
+                error_code = 'STRUCTURING_PROVIDER_TIMEOUT'
+            WHERE id = %s
+            """,
+            (first.id,),
+        )
+
+    repeated = repository.enqueue(scope, event.id, event.version)
+
+    assert repeated.id == first.id
+    assert repeated.state == "permanently_failed"
+
+
+def test_cancelled_claimed_job_remains_a_persistent_automatic_attempt(
+    database_url: str,
+) -> None:
+    event = _event(database_url)
+    repository = EventStructuringRepository(database_url)
+    scope = HouseholdScope(HOUSEHOLD_A)
+    job = repository.enqueue(scope, event.id, event.version)
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """
+            UPDATE medical_event_structuring_jobs
+            SET state = 'cancelled', attempts = 1
+            WHERE id = %s
+            """,
+            (job.id,),
+        )
+
+    loaded = DecisionRepository(database_url).get_medical_event(scope, event.id)
+
+    assert loaded.auto_structuring_attempted is True
 
 
 def test_user_override_preserves_ai_version_and_wins_in_decision_facts(
@@ -148,6 +202,7 @@ def test_user_override_preserves_ai_version_and_wins_in_decision_facts(
     )
 
     assert response_event.version == 2
+    assert response_event.auto_structuring_attempted is True
     assert response_event.facts["MedicalEvent.classification"].value == "synthetic-user-value"
     assert response_event.facts["MedicalEvent.classification"].confirmation == "user"
     assert response_event.facts["MedicalEvent.admission_days"].value == 0

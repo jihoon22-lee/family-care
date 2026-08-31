@@ -24,6 +24,7 @@ from familycare_api.decisions.domain import (
 from familycare_api.decisions.knowledge_domain import (
     KnowledgeBenefitCalculation,
     KnowledgeCalculationStep,
+    KnowledgeCertificateEvidence,
     KnowledgeCitation,
     KnowledgeClaimCandidate,
     KnowledgeFixedSubtotal,
@@ -129,6 +130,7 @@ class MedicalEventResponse(StrictModel):
     facts: dict[str, FactResponse]
     structured_facts: list[StructuredFactResponse] = Field(default_factory=list)
     optional_questions: list[OptionalQuestionResponse] = Field(default_factory=list)
+    auto_structuring_attempted: bool = False
     version: int
     deleted: bool
 
@@ -150,6 +152,7 @@ class MedicalEventResponse(StrictModel):
                     OptionalQuestionResponse.model_validate(item)
                     for item in value.optional_questions
                 ],
+                auto_structuring_attempted=value.auto_structuring_attempted,
                 version=value.version,
                 deleted=value.deleted_at is not None,
             )
@@ -372,6 +375,21 @@ class KnowledgeCalculationStepResponse(StrictModel):
         )
 
 
+class KnowledgeCertificateEvidenceResponse(StrictModel):
+    document_alias: SafeLabel
+    evidence_pages: list[Annotated[int, Field(ge=1, le=500)]] = Field(
+        min_length=1,
+        max_length=128,
+    )
+
+    @classmethod
+    def from_domain(cls, value: KnowledgeCertificateEvidence) -> Self:
+        return cls(
+            document_alias=value.document_alias,
+            evidence_pages=list(value.evidence_pages),
+        )
+
+
 class KnowledgeBenefitCalculationResponse(StrictModel):
     calculation_id: UUID
     calculation_publication_id: UUID | None
@@ -386,7 +404,22 @@ class KnowledgeBenefitCalculationResponse(StrictModel):
     applied_limit: DecimalString | None
     rounding_rule: Annotated[StrictStr, Field(min_length=1, max_length=64)] | None
     hold_reason_code: ReasonCode | None
+    certificate_amount_decision: Literal[
+        "ALIGNMENT_REVIEW",
+        "MATCH",
+        "NOT_APPLICABLE",
+        "UNKNOWN",
+    ] = "UNKNOWN"
+    certificate_amount_evidence_state: Literal[
+        "DIRECT",
+        "REVIEW_REQUIRED",
+        "UNAVAILABLE",
+    ] = "UNAVAILABLE"
     steps: list[KnowledgeCalculationStepResponse] = Field(max_length=64)
+    certificate_evidence: list[KnowledgeCertificateEvidenceResponse] = Field(
+        default_factory=list,
+        max_length=16,
+    )
 
     @model_validator(mode="after")
     def validate_calculation_state(self) -> Self:
@@ -447,7 +480,13 @@ class KnowledgeBenefitCalculationResponse(StrictModel):
             ),
             rounding_rule=value.rounding_rule,
             hold_reason_code=value.hold_reason_code,
+            certificate_amount_decision=value.certificate_amount_decision,
+            certificate_amount_evidence_state=value.certificate_amount_evidence_state,
             steps=[KnowledgeCalculationStepResponse.from_domain(item) for item in value.steps],
+            certificate_evidence=[
+                KnowledgeCertificateEvidenceResponse.from_domain(item)
+                for item in value.certificate_evidence
+            ],
         )
 
 

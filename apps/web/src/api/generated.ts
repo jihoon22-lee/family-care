@@ -1467,6 +1467,11 @@ export interface KnowledgeBenefitCalculationResponse {
   applied_rate: string | null;
   calculation_id: string;
   calculation_publication_id: string | null;
+  certificate_amount_decision?:
+    "ALIGNMENT_REVIEW" | "MATCH" | "NOT_APPLICABLE" | "UNKNOWN";
+  certificate_amount_evidence_state?:
+    "DIRECT" | "REVIEW_REQUIRED" | "UNAVAILABLE";
+  certificate_evidence?: Array<KnowledgeCertificateEvidenceResponse>;
   conditional_amount: string | null;
   confirmed_amount: string | null;
   currency: string | null;
@@ -1487,6 +1492,11 @@ export interface KnowledgeCalculationStepResponse {
   reason_code: string;
   rounding_rule: string | null;
   step_number: number;
+}
+
+export interface KnowledgeCertificateEvidenceResponse {
+  document_alias: string;
+  evidence_pages: Array<number>;
 }
 
 export interface KnowledgeContractDetailResponse {
@@ -1672,6 +1682,7 @@ export interface MedicalEventCreateRequest {
 }
 
 export interface MedicalEventResponse {
+  auto_structuring_attempted?: boolean;
   deleted: boolean;
   event_date: string | null;
   facts: Record<string, unknown>;
@@ -2168,7 +2179,13 @@ export interface RuleSnapshotResponse {
 export interface StructureAcceptedResponse {
   job_id: string;
   schema_version?: "1";
-  state: "queued";
+  state:
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "retryable_failed"
+    | "permanently_failed"
+    | "cancelled";
   status_url: string;
 }
 

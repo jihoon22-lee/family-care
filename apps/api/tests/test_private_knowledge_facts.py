@@ -66,6 +66,24 @@ def test_unicode_exact_token_sequence_and_priority_are_deterministic() -> None:
     assert no_substring.get("MedicalEvent.classification") is None
 
 
+def test_korean_case_marker_does_not_break_an_exact_reviewed_token() -> None:
+    context = normalize_private_event_facts(
+        _event("샘플처치를 받음"),
+        (_normalizer("reviewed", ("샘플처치",), "sample_code"),),
+    )
+
+    fact = context.get("MedicalEvent.classification")
+    assert fact is not None
+    assert fact.value == "sample_code"
+    assert fact.provenance == "DERIVED_CONFIRMED"
+
+    unrelated_prefix = normalize_private_event_facts(
+        _event("샘플처치실을 방문함"),
+        (_normalizer("reviewed", ("샘플처치",), "sample_code"),),
+    )
+    assert unrelated_prefix.get("MedicalEvent.classification") is None
+
+
 def test_equal_priority_conflict_is_preserved_and_user_fact_overrides_derivation() -> None:
     normalizers = (
         _normalizer("one", ("violet", "delta"), "sample_one"),

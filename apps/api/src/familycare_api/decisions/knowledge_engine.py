@@ -185,10 +185,23 @@ class DeterministicKnowledgeDecisionEngine:
             runtime_failed = runtime_failed or failed
         rule_aggregate = _aggregate_required(evaluations)
         aggregate = rule_aggregate
+        ai_suggested_paths = tuple(
+            sorted(
+                {
+                    path
+                    for evaluation in evaluations
+                    for path in evaluation.fact_paths
+                    if (fact := facts.get(path)) is not None and fact.provenance == "AI_SUGGESTED"
+                }
+            )
+        )
         hold_reasons = (
             ["COVERAGE_PUBLICATION_ADVISORY"] if coverage.disposition == "ADVISORY" else []
         )
         hold_reasons.extend(item.reason_code for item in evaluations if item.result != "MATCH")
+        if ai_suggested_paths:
+            aggregate = "UNKNOWN"
+            hold_reasons.append("AI_STRUCTURED_FACTS_UNCONFIRMED")
         if precondition == "NO_MATCH":
             aggregate = "NO_MATCH"
             hold_reasons.insert(0, precondition_reason)
@@ -200,6 +213,11 @@ class DeterministicKnowledgeDecisionEngine:
             hold_reasons.append("NO_PUBLISHED_RULE")
         required = tuple(item for item in evaluations if item.required)
         questions = list(_questions(evaluations))
+        questions.extend(
+            KnowledgeQuestion(path, "AI_STRUCTURED_FACTS_UNCONFIRMED")
+            for path in ai_suggested_paths
+            if not any(item.field_path == path for item in questions)
+        )
         if (
             precondition == "UNKNOWN"
             and precondition_reason == "EVENT_DATE_STATUS_UNCONFIRMED"
@@ -232,8 +250,19 @@ class DeterministicKnowledgeDecisionEngine:
                 "COVERAGE_AUTHORITY_INCOMPLETE",
             }:
                 conditional_hold_reason = "COVERAGE_PUBLICATION_ADVISORY"
-            elif precondition_reason == "EVENT_DATE_STATUS_UNCONFIRMED":
+            elif precondition_reason in {
+                "EVENT_DATE_REQUIRED",
+                "EVENT_DATE_STATUS_UNCONFIRMED",
+            }:
                 conditional_hold_reason = precondition_reason
+        if (
+            rule_aggregate == "MATCH"
+            and aggregate == "UNKNOWN"
+            and conditional_hold_reason is None
+            and ai_suggested_paths
+            and coverage.benefit_type == "FIXED"
+        ):
+            conditional_hold_reason = "AI_STRUCTURED_FACTS_UNCONFIRMED"
         calculation, calculation_failed = self._calculate(
             facts,
             coverage,
@@ -363,6 +392,54 @@ class DeterministicKnowledgeDecisionEngine:
                 reason="CANDIDATE_NOT_RESOLVED",
             ), False
         if publication is None:
+            if (
+                coverage.benefit_type == "FIXED"
+                and coverage.insured_amount is not None
+                and coverage.insured_amount.is_finite()
+                and coverage.insured_amount >= 0
+                and coverage.currency is not None
+            ):
+                amount = coverage.insured_amount
+                amount_hold_reason = conditional_hold_reason
+                if (
+                    coverage.certificate_amount_decision != "MATCH"
+                    or coverage.certificate_amount_evidence_state != "DIRECT"
+                ):
+                    amount_hold_reason = "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
+                return (
+                    KnowledgeBenefitCalculation(
+                        calculation_id=self.id_factory(),
+                        candidate_id=candidate.candidate_id,
+                        knowledge_coverage_id=coverage.knowledge_coverage_id,
+                        calculation_publication_id=None,
+                        kind="FIXED",
+                        status="CALCULATED",
+                        currency=coverage.currency,
+                        conditional_amount=amount,
+                        # A certificate amount is useful for an estimate, but
+                        # without a reviewed calculation publication it must
+                        # never become an authority-bearing confirmed amount.
+                        confirmed_amount=None,
+                        hold_reason_code=amount_hold_reason,
+                        certificate_amount_decision=coverage.certificate_amount_decision,
+                        certificate_amount_evidence_state=(
+                            coverage.certificate_amount_evidence_state
+                        ),
+                        certificate_evidence=coverage.certificate_evidence,
+                        steps=(
+                            KnowledgeCalculationStep(
+                                step_number=1,
+                                operation="certificate_insured_amount",
+                                input_amount=amount,
+                                output_amount=amount,
+                                currency=coverage.currency,
+                                rounding_rule=None,
+                                reason_code="CERTIFICATE_INSURED_AMOUNT_ESTIMATE",
+                            ),
+                        ),
+                    ),
+                    False,
+                )
             reason = (
                 "RECEIPT_COVERED_AMOUNT_REQUIRED"
                 if coverage.benefit_type == "INDEMNITY"
@@ -384,6 +461,16 @@ class DeterministicKnowledgeDecisionEngine:
                 reason="CALCULATION_CITATION_INVALID",
                 publication=publication,
             ), True
+        input_field_paths = publication.calculation_document.get("input_field_paths")
+        uses_certificate_amount = isinstance(input_field_paths, list) and any(
+            item == "Rider.insured_amount" for item in input_field_paths
+        )
+        calculation_hold_reason = conditional_hold_reason
+        if uses_certificate_amount and (
+            coverage.certificate_amount_decision != "MATCH"
+            or coverage.certificate_amount_evidence_state != "DIRECT"
+        ):
+            calculation_hold_reason = "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
         citation_keys = tuple(item.citation_key for item in publication.citations)
         try:
             validated = validate_rule_document(
@@ -426,9 +513,12 @@ class DeterministicKnowledgeDecisionEngine:
                 status="CALCULATED",
                 currency=coverage.currency,
                 conditional_amount=amount,
-                confirmed_amount=(amount if conditional_hold_reason is None else None),
+                confirmed_amount=(amount if calculation_hold_reason is None else None),
                 rounding_rule=state.last_rounding,
-                hold_reason_code=conditional_hold_reason,
+                hold_reason_code=calculation_hold_reason,
+                certificate_amount_decision=coverage.certificate_amount_decision,
+                certificate_amount_evidence_state=coverage.certificate_amount_evidence_state,
+                certificate_evidence=coverage.certificate_evidence,
                 steps=tuple(state.steps),
             ),
             False,
@@ -566,6 +656,8 @@ def _fact_value(value: KnowledgeFact) -> FactValue:
     confirmation: FactConfirmation = (
         "user"
         if value.is_trusted
+        else "ai_structured"
+        if value.provenance == "AI_SUGGESTED" and not value.stale
         else "conflicting"
         if value.provenance == "CONFLICTING"
         else "unconfirmed"
@@ -612,7 +704,15 @@ def _legacy_fact_context(
     rider = {
         "Rider.insured_amount": FactValue(
             coverage.insured_amount,
-            "user" if coverage.insured_amount is not None else "unconfirmed",
+            (
+                "user"
+                if coverage.insured_amount is not None
+                and coverage.certificate_amount_decision == "MATCH"
+                and coverage.certificate_amount_evidence_state == "DIRECT"
+                else "ai_structured"
+                if coverage.insured_amount is not None
+                else "unconfirmed"
+            ),
             (),
         ),
         "Rider.status": FactValue(

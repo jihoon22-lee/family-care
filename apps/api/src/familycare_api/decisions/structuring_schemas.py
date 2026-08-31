@@ -97,7 +97,7 @@ class StrictModel(BaseModel):
 class StructureAcceptedResponse(StrictModel):
     schema_version: Literal["1"] = "1"
     job_id: UUID
-    state: Literal["queued"]
+    state: StructuringJobState
     status_url: str = Field(pattern=r"^/api/v1/medical-event-structuring-jobs/[0-9a-f-]{36}$")
 
     @classmethod
@@ -106,10 +106,11 @@ class StructureAcceptedResponse(StrictModel):
             return value
         if isinstance(value, dict):
             return cls.model_validate(value)
-        job_id = cast(Any, value).id
+        job = cast(Any, value)
+        job_id = job.id
         return cls(
             job_id=job_id,
-            state="queued",
+            state=job.state,
             status_url=f"/api/v1/medical-event-structuring-jobs/{job_id}",
         )
 

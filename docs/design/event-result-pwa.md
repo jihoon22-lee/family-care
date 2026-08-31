@@ -28,6 +28,16 @@
 
 첫 화면은 FamilyMember, 대략적 event date와 natural-language situation만으로 제출할 수 있다. AI structuring 결과는 editable chips/fields로 보여준다.
 
+사용자가 `결과 확인`을 선택했을 때 구조화 fact가 하나도 없고 provider가 설정되어 있으면,
+Web은 사건을 저장한 뒤 structuring job을 최대 한 번만 실행하고 최신 event version으로
+analysis를 실행한다. 자동 job은 provider 재시도 없이 끝나며 생성 후 55초의 절대 완료 기한을
+가진다. 늦게 claim되거나 기한 뒤 완료된 provider 결과는 사건 version에 반영하지 않으므로 60초
+Web polling fallback 결과를 나중에 덮어쓸 수 없다. API가 사건별 자동 시도 여부를 반환하므로
+provider를 호출한 뒤 version 충돌로 취소된 job도 시도 완료로 보존하고, 빈 결과나 실패 뒤에도 같은 사건에서
+자동 호출을 반복하지 않는다. 이미 구조화 fact가 있거나 이전 자동 시도가 있으면 provider를
+다시 호출하지 않는다. Provider가 없거나 structuring이 실패해도 같은 action은 deterministic
+structured search를 계속 실행한다. 사용자가 누르는 수동 구조화 action은 다시 실행할 수 있다.
+
 - confirmed-looking value: analysis에 즉시 사용, 수정 가능
 - ambiguous value: warning과 optional question
 - missing required fact: null, dependent rule `UNKNOWN`
@@ -47,7 +57,7 @@
 6. 계산 trace와 증권·약관 page/Clause Evidence
 7. 별도 `관련 약관 추천`과 `DB 검색`/`LLM 보조` mode
 
-각 card는 Rider, result group, conditional estimate 또는 hold reason, missing facts, required-document checklist preview를 보여준다. Evidence drawer는 policy/terms document label, physical page, Clause와 bounded excerpt를 보여준다.
+각 card는 Rider, result group, conditional estimate 또는 hold reason, missing facts, required-document checklist preview를 보여준다. Evidence drawer는 policy/terms document label, physical page, Clause와 bounded excerpt를 보여준다. 증권 가입금액 기반 예상액은 검토된 가입금액 전용 위치가 있으면 “증권 가입금액 직접 근거”로 표시한다. 담보 페이지밖에 없거나 금액 검토가 끝나지 않았으면 예상액은 유지하되 “가입금액 위치 확인 필요”로 분리하고 정액 합계에는 넣지 않는다. 자동 판정 규칙을 실제 실행한 private coverage는 completeness panel에 담보명과 계약명을 나열한다. 같은 계약에 속했다는 이유만으로 검색된 catalog-only coverage는 event card로 표시하지 않는다.
 
 `MATCH`를 지급 가능 또는 지급 확정으로 번역하지 않는다. 사용자 문구는 `청구 검토`, `추가 확인 필요`, `조건 불일치`를 사용한다.
 

@@ -410,6 +410,8 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
         assert "policy_candidate_batch_structurer_v2" in schemas
         assert "policy_candidate_verifier_v1" in schemas
         assert "event_clause_recommendations_v1" in schemas
+        assert provider._output_token_limits["medical_event_structurer_v1"] == 2_000  # noqa: SLF001
+        assert provider._request_timeouts["medical_event_structurer_v1"] == 50.0  # noqa: SLF001
     finally:
         runner.shutdown()
 

@@ -351,6 +351,24 @@ def test_analyze_persists_scoped_projection_and_get_is_read_only(tmp_path: Path)
 
         connection.execute(
             """
+            UPDATE private_knowledge_claim_candidates
+            SET coverage_label_snapshot = 'Unrelated Housing Benefit'
+            WHERE decision_run_id = %s
+            """,
+            (first.run_id,),
+        )
+        unrelated_contract_rows = repository._search_rows(  # noqa: SLF001
+            connection,
+            seed.scope_a,
+            event,
+            first.run_id,
+            tokens,
+        )
+        assert unrelated_contract_rows == []
+        connection.rollback()
+
+        connection.execute(
+            """
             UPDATE private_knowledge_coverage_terms_mappings
             SET overall_decision = 'MATCH'
             WHERE import_run_id = %s

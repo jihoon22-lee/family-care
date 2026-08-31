@@ -174,6 +174,34 @@ def test_recommender_schema_refuses_output_limit_above_hard_maximum() -> None:
         )
 
 
+def test_adapter_applies_a_bounded_per_schema_request_timeout(monkeypatch: Any) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "synthetic-api-key-marker")
+    responses = _Responses()
+    adapter = OpenAiResponsesAdapter(
+        {"synthetic_schema": _schema()},
+        request_timeouts={"synthetic_schema": 50.0},
+        client_factory=lambda _: _Client(responses),
+    )
+
+    adapter.complete(
+        model="synthetic-model-v1",
+        schema_name="synthetic_schema",
+        system_instruction="Return the strict synthetic schema.",
+        input_payload={"evidence": []},
+    )
+
+    assert responses.requests[0]["timeout"] == 50.0
+
+
+@pytest.mark.parametrize("timeout", [0, 120.1, float("inf"), True])
+def test_adapter_refuses_invalid_schema_request_timeout(timeout: object) -> None:
+    with pytest.raises(ProviderConfigurationError):
+        OpenAiResponsesAdapter(
+            {"synthetic_schema": _schema()},
+            request_timeouts={"synthetic_schema": timeout},  # type: ignore[dict-item]
+        )
+
+
 def test_adapter_drops_malformed_provider_output_and_exception_detail(
     monkeypatch: Any,
 ) -> None:

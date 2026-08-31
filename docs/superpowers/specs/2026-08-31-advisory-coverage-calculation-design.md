@@ -1,6 +1,6 @@
 # Advisory Coverage Calculation Design
 
-**Status:** Approved by the user for implementation
+**Status:** Approved and amended by the user for fixed certificate estimates
 
 ## Goal
 
@@ -18,8 +18,8 @@ application computes useful amounts without silently deciding the insurer's fina
 - `ADVISORY`: the coverage is admitted by either the immutable certificate snapshot or a
   publication-scoped user enrollment confirmation and is available to search, recommend, and
   display, but one or more exact eligibility or calculation rules still require review. It is
-  conditionally calculated only when a directly reviewed, cited calculation publication already
-  exists.
+  conditionally calculated when a directly reviewed, cited calculation publication exists, or
+  when reviewed eligibility rules match and the certificate supplies a fixed insured amount.
 - `BLOCKED`: legacy or exceptional publication failure only. A current reviewed publication must
   not use this value for ordinary rule-review work.
 - `NOT_APPLICABLE`: a non-benefit component that is not a claim candidate.
@@ -41,11 +41,19 @@ For a fixed-benefit coverage:
    reviewed calculation publication and citations are sufficient to execute the same deterministic
    formula. The candidate stays `UNKNOWN`, `confirmed_amount` stays null, and the unresolved reason
    remains attached.
-3. A certificate insured amount is reference evidence, never a generic benefit-payment formula.
-   A catalog-only advisory row with no reviewed calculation publication has no calculated amount.
+3. When reviewed eligibility rules match but a fixed-benefit calculation publication is absent,
+   the certificate insured amount may be exposed as a conditional estimate. This fallback records
+   no calculation publication, leaves `confirmed_amount` null, and emits a dedicated certificate
+   estimate step. It carries the bound certificate document alias and evidence pages. It never
+   applies to a catalog-only row with no evaluated rule.
 4. A decisive `NO_MATCH` candidate is not calculated.
 5. Indemnity coverage still requires receipt, deductible, rate, limit, and allocation inputs; an
    insured amount or limit is not presented as a payable indemnity amount.
+6. Any eligibility or exclusion outcome that references an `AI_SUGGESTED` fact leaves the candidate
+   `UNKNOWN`; only a separate trusted contract or enrollment precondition may produce a decisive
+   `NO_MATCH`. AI-suggested dates are never promoted into authoritative event date columns.
+7. A missing authoritative event date does not erase a reviewed fixed-benefit estimate. The amount
+   remains conditional with `EVENT_DATE_REQUIRED` until the date is supplied.
 
 The response's `conditional_fixed_subtotals` deliberately includes these executable conditional
 fixed amounts. Its name and each calculation's null `confirmed_amount` distinguish the result from
@@ -56,8 +64,9 @@ an insurer-confirmed payment. Catalog-only rows and indemnity estimates never en
 The v2 decision response adds `advisory_coverage_count` and retains
 `blocked_coverage_count` for legacy evidence. The result page labels advisory coverage as enrolled
 and searchable but rule-incomplete. It labels an executable amount on an unresolved candidate as a
-conditional estimate rather than confirmed payment. Event result cards omit catalog-only rows with
-no evaluations and no calculation; the completeness panel still reports their catalog count.
+conditional estimate rather than confirmed payment. Event result cards omit every catalog-only row
+with no evaluation even if it carries a reference amount; the completeness panel still reports its
+catalog count. The panel separately names each coverage for which an automatic rule was evaluated.
 
 ## Privacy and authority
 
@@ -83,8 +92,9 @@ no evaluations and no calculation; the completeness panel still reports their ca
   certificate `NO_MATCH`, user authority on `PUBLISHED`, and user authority for non-benefit rows.
 - PostgreSQL tests prove raw certificate `UNKNOWN` remains unchanged while an advisory
   recommendation stores the publication disposition, authority, and confirming actor lineage.
-- Engine tests prove that only reviewed fixed formulas can calculate conditionally, that catalog-only
-  and indemnity rows cannot create amounts, and that decisive `NO_MATCH` behavior is unchanged.
+- Engine tests prove reviewed fixed formulas and the bounded certificate fixed-amount fallback,
+  that catalog-only and indemnity rows cannot create amounts, and that decisive `NO_MATCH`
+  behavior is unchanged.
 - Web tests prove the advisory and conditional labels.
 - A protected external publication is dry-run, restored-database verified, applied once, and
   checked through the authenticated HTTP and browser paths before release.

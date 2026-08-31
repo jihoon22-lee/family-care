@@ -10,9 +10,11 @@ original situation or a raw provider response.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
+from types import MappingProxyType
 from typing import Literal, Protocol, cast
 from uuid import NAMESPACE_URL, UUID, uuid5
 
@@ -46,6 +48,13 @@ type EventFactField = Literal[
     "admission",
     "outpatient",
     "pharmacy",
+    "diagnosis_code",
+    "procedure_code",
+    "anatomical_site_code",
+    "pathology_code",
+    "treatment_setting",
+    "treatment_context",
+    "separately_billed_treatment",
 ]
 type FactSource = Literal["user", "ai", "system"]
 type FactState = Literal["confirmed", "ambiguous", "missing", "conflict"]
@@ -73,11 +82,31 @@ _EVENT_FACT_FIELDS = frozenset(
         "admission",
         "outpatient",
         "pharmacy",
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+        "separately_billed_treatment",
     }
 )
 _FACT_STATES = frozenset({"confirmed", "ambiguous", "missing", "conflict"})
-_BOOLEAN_FACT_FIELDS = frozenset({"admission", "outpatient", "pharmacy"})
+_BOOLEAN_FACT_FIELDS = frozenset(
+    {"admission", "outpatient", "pharmacy", "separately_billed_treatment"}
+)
 _DATE_FACT_FIELDS = frozenset({"event_date", "visit_date"})
+_NORMALIZED_CODE_FACT_FIELDS = frozenset(
+    {
+        "diagnosis_code",
+        "procedure_code",
+        "anatomical_site_code",
+        "pathology_code",
+        "treatment_setting",
+        "treatment_context",
+    }
+)
+_NORMALIZED_CODE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
 _QUESTION_CODES = frozenset(_EVENT_FACT_FIELDS)
 _FORBIDDEN_KEYS = frozenset(
     {
@@ -125,6 +154,10 @@ class EventStructuringRequest:
     mode: EventMode
     event_date: date | None = None
     visit_date: date | None = None
+    normalization_hints: Mapping[EventFactField, tuple[str | bool, ...]] = field(
+        default_factory=dict,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if (
@@ -140,6 +173,27 @@ class EventStructuringRequest:
             raise ValueError("invalid event date")
         if self.visit_date is not None and type(self.visit_date) is not date:
             raise ValueError("invalid visit date")
+        hints: dict[EventFactField, tuple[str | bool, ...]] = {}
+        if not isinstance(self.normalization_hints, Mapping) or len(self.normalization_hints) > len(
+            _EVENT_FACT_FIELDS
+        ):
+            raise ValueError("invalid normalization hints")
+        for field_id, values in self.normalization_hints.items():
+            if (
+                field_id not in _EVENT_FACT_FIELDS
+                or not isinstance(values, tuple)
+                or not 1 <= len(values) <= 32
+                or len(set(values)) != len(values)
+            ):
+                raise ValueError("invalid normalization hints")
+            for value in values:
+                if isinstance(value, bool):
+                    if field_id not in _BOOLEAN_FACT_FIELDS:
+                        raise ValueError("invalid normalization hint value")
+                elif not isinstance(value, str) or not _NORMALIZED_CODE_PATTERN.fullmatch(value):
+                    raise ValueError("invalid normalization hint value")
+            hints[field_id] = values
+        object.__setattr__(self, "normalization_hints", MappingProxyType(hints))
 
     def to_provider_payload(self) -> Mapping[str, object]:
         """Return a bounded, identifier-free provider input."""
@@ -150,6 +204,10 @@ class EventStructuringRequest:
             "mode": self.mode,
             "event_date": self.event_date.isoformat() if self.event_date else None,
             "visit_date": self.visit_date.isoformat() if self.visit_date else None,
+            "normalization_hints": {
+                field_id: list(values)
+                for field_id, values in sorted(self.normalization_hints.items())
+            },
         }
 
 
@@ -211,6 +269,11 @@ class StructuredFactCandidate:
                     date.fromisoformat(self.value)
                 except ValueError:
                     raise ValueError("date event fact has an invalid value") from None
+            if (
+                self.field_id in _NORMALIZED_CODE_FACT_FIELDS
+                and _NORMALIZED_CODE_PATTERN.fullmatch(self.value) is None
+            ):
+                raise ValueError("normalized event fact has an invalid value")
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,7 +354,7 @@ def event_structurer_schema() -> Mapping[str, object]:
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "schema_version": {"const": _SCHEMA_VERSION},
+            "schema_version": {"type": "string", "const": _SCHEMA_VERSION},
             "facts": {
                 "type": "array",
                 "maxItems": _MAX_FACTS,
@@ -301,7 +364,6 @@ def event_structurer_schema() -> Mapping[str, object]:
                     "properties": {
                         "fact_id": {
                             "type": "string",
-                            "format": "uuid",
                             "pattern": (
                                 "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-"
                                 "[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
@@ -325,8 +387,13 @@ def event_structurer_schema() -> Mapping[str, object]:
                         "evidence_ids": {
                             "type": "array",
                             "maxItems": 8,
-                            "uniqueItems": True,
-                            "items": {"type": "string", "format": "uuid"},
+                            "items": {
+                                "type": "string",
+                                "pattern": (
+                                    "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-"
+                                    "[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                ),
+                            },
                         },
                     },
                     "required": [
@@ -544,6 +611,8 @@ def structure_event(
             schema_name=EVENT_STRUCTURER_SCHEMA_NAME,
             system_instruction=(
                 "Return only bounded medical-event fact candidates and optional question codes. "
+                "For normalized code fields, prefer an exact normalization_hints value when the "
+                "situation supports it; otherwise return a missing or ambiguous fact. "
                 "Do not invent fields or emit authority-bearing outcomes."
             ),
             input_payload=request.to_provider_payload(),

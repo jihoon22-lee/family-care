@@ -60,10 +60,7 @@ function isCatalogOnlyCandidate(
   const hasEvaluation = evaluations.some((evaluation) =>
     evaluationMatchesCandidate(candidate, evaluation),
   );
-  const hasCalculatedConditionalAmount =
-    candidate.calculation?.status === "CALCULATED" &&
-    candidate.calculation.conditional_amount != null;
-  return !hasEvaluation && !hasCalculatedConditionalAmount;
+  return !hasEvaluation;
 }
 
 export function ResultGroup({

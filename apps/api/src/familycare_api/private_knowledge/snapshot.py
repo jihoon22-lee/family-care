@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 import psycopg
 from psycopg.types.json import Jsonb
 
+from familycare_api.private_knowledge.models import CoverageRecord
 from familycare_api.private_knowledge.package import (
     PrivateKnowledgePackage,
     contract_certificate_decision,
@@ -58,6 +59,22 @@ def _date(value: str | None) -> date | None:
 
 def _amount(value: int | float | None) -> Decimal | None:
     return Decimal(str(value)) if value is not None else None
+
+
+def _certificate_amount_evidence(coverage: CoverageRecord) -> list[dict[str, object]]:
+    review = coverage.certificate_review
+    if review.amount_decision == "MATCH" and review.amount_evidence_locations:
+        pages_by_document: dict[str, set[int]] = {}
+        for location in review.amount_evidence_locations:
+            pages_by_document.setdefault(location.document_alias, set()).add(location.physical_page)
+        return [
+            {
+                "document_alias": document_alias,
+                "evidence_pages": sorted(pages),
+            }
+            for document_alias, pages in sorted(pages_by_document.items())
+        ]
+    return [reference.model_dump(mode="json") for reference in coverage.source_refs]
 
 
 def _review_state(value: str) -> str:
@@ -257,9 +274,7 @@ def insert_private_knowledge_snapshot(
                 "start": _date(coverage.coverage_start),
                 "end": _date(coverage.coverage_end),
                 "renewal": renewal,
-                "evidence": Jsonb(
-                    [reference.model_dump(mode="json") for reference in coverage.source_refs]
-                ),
+                "evidence": Jsonb(_certificate_amount_evidence(coverage)),
                 "issues": Jsonb(coverage.warnings),
                 "source": Jsonb(coverage_record.source_record),
                 "source_digest": coverage_record.source_record_digest_sha256,

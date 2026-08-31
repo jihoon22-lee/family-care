@@ -105,6 +105,7 @@ class MedicalEvent:
     facts: Mapping[str, FactValue] = field(default_factory=dict)
     structured_facts: tuple[Mapping[str, object], ...] = ()
     optional_questions: tuple[Mapping[str, str], ...] = ()
+    auto_structuring_attempted: bool = False
     confirmation: Mapping[str, FactConfirmation] = field(default_factory=dict)
     version: int = 1
     created_at: datetime | None = None
@@ -121,6 +122,8 @@ class MedicalEvent:
             raise ValueError("invalid event situation")
         if isinstance(self.version, bool) or self.version < 1:
             raise ValueError("event version must be positive")
+        if not isinstance(self.auto_structuring_attempted, bool):
+            raise ValueError("auto structuring attempt marker must be boolean")
 
 
 @dataclass(frozen=True)

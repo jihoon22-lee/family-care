@@ -281,6 +281,11 @@ def test_apply_persists_manifest_authority_and_certificate_evidence_decision(
         "contracts.jsonl",
         lambda row: row["source_members"][0].__setitem__("decision", "needs_review"),
     )
+    mutate_jsonl(
+        package_root,
+        "coverage-components.jsonl",
+        lambda row: row["source_refs"][0].__setitem__("evidence_pages", [7]),
+    )
     package = load_private_knowledge_package(
         package_root,
         repository_root=tmp_path / "repository",
@@ -310,10 +315,26 @@ def test_apply_persists_manifest_authority_and_certificate_evidence_decision(
             """,
             (applied.run_id,),
         ).fetchone()
+        coverage = connection.execute(
+            """
+            SELECT certificate_evidence_json, source_record_json
+            FROM private_knowledge_coverages
+            WHERE import_run_id = %s
+            """,
+            (applied.run_id,),
+        ).fetchone()
     assert run is not None
     assert run[0] == "gpt-5.6-sol_direct_local_review_no_model_api"
     assert isinstance(run[1], str) and len(run[1]) == 64
     assert contract == ("UNKNOWN",)
+    assert coverage is not None
+    assert coverage[0] == [
+        {
+            "document_alias": "synthetic-certificate-source",
+            "evidence_pages": [1],
+        }
+    ]
+    assert coverage[1]["certificate_review"]["amount_decision"] == "MATCH"
 
 
 def test_apply_holds_operational_tables_stable_until_commit(tmp_path: Path) -> None:

@@ -93,6 +93,12 @@ export function reasonLabel(reasonCode: string): string {
     RECEIPT_COVERED_AMOUNT_REQUIRED: "급여 대상 영수증 금액을 확인해 주세요.",
     RECEIPT_CURRENCY_CONFLICT: "영수증 통화가 서로 달라 확인이 필요합니다.",
     RECEIPT_AMOUNT_INVALID: "영수증 금액 형식을 확인해 주세요.",
+    AI_STRUCTURED_FACTS_UNCONFIRMED:
+      "입력 문장에서 자동으로 정리한 조건입니다. 예상액에 반영했으며 내용을 확인해 주세요.",
+    CERTIFICATE_INSURED_AMOUNT_ESTIMATE:
+      "증권에 기록된 정액 가입금액을 예상액으로 적용했습니다.",
+    CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED:
+      "가입금액이 적힌 위치를 직접 확인하기 전의 참고 예상액입니다.",
     FIXED_AMOUNT_CALCULATED: "승인된 정액 계산 규칙을 적용했습니다.",
     TOKEN_OVERLAP: "입력 내용과 관련 표현이 있는 약관 조항입니다.",
     CONTRACT_TERMS_TOKEN_OVERLAP:

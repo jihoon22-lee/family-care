@@ -31,6 +31,33 @@ _STRUCTURED_FIELD_PATHS = {
     "treatment_context": "MedicalEvent.treatment_context",
     "separately_billed_treatment": "MedicalEvent.separately_billed_treatment",
 }
+_KOREAN_CASE_SUFFIXES = (
+    "으로부터",
+    "에게서",
+    "에서",
+    "으로",
+    "까지",
+    "부터",
+    "에게",
+    "께서",
+    "처럼",
+    "보다",
+    "이나",
+    "은",
+    "는",
+    "이",
+    "가",
+    "을",
+    "를",
+    "에",
+    "의",
+    "와",
+    "과",
+    "도",
+    "만",
+    "로",
+    "나",
+)
 
 
 def normalized_tokens(value: str) -> tuple[str, ...]:
@@ -50,12 +77,28 @@ def normalized_tokens(value: str) -> tuple[str, ...]:
     return tuple(tokens)
 
 
+def _token_matches(value: str, expected: str) -> bool:
+    if value == expected:
+        return True
+    if not any("가" <= character <= "힣" for character in expected):
+        return False
+    return any(value == expected + suffix for suffix in _KOREAN_CASE_SUFFIXES)
+
+
 def _contains_sequence(values: tuple[str, ...], expected: tuple[str, ...]) -> bool:
     if not expected or len(expected) > len(values):
         return False
     width = len(expected)
     return any(
-        values[index : index + width] == expected for index in range(len(values) - width + 1)
+        all(
+            _token_matches(value, expected_value)
+            for value, expected_value in zip(
+                values[index : index + width],
+                expected,
+                strict=True,
+            )
+        )
+        for index in range(len(values) - width + 1)
     )
 
 
