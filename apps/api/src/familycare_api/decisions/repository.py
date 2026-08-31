@@ -41,6 +41,7 @@ from familycare_api.decisions.errors import (
 )
 from familycare_api.decisions.facts import FactNormalizationError, normalize_facts
 from familycare_api.decisions.knowledge_engine import DeterministicKnowledgeDecisionEngine
+from familycare_api.decisions.knowledge_facts import reviewed_normalizer_search_tokens
 from familycare_api.decisions.knowledge_repository import (
     KnowledgeContextRead,
     PostgresKnowledgeDecisionRepository,
@@ -508,6 +509,15 @@ class DecisionRepository:
                             scope,
                             event,
                             combined.run_id,
+                            reviewed_fact_tokens=(
+                                reviewed_normalizer_search_tokens(
+                                    knowledge_result.fact_context,
+                                    knowledge_read.context.normalizers,
+                                )
+                                if knowledge_result is not None
+                                and knowledge_read.context is not None
+                                else ()
+                            ),
                         )
                 except psycopg.Error, ValueError:
                     assistance = None

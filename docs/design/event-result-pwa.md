@@ -57,7 +57,7 @@ structured search를 계속 실행한다. 사용자가 누르는 수동 구조�
 6. 계산 trace와 증권·약관 page/Clause Evidence
 7. 별도 `관련 약관 추천`과 `DB 검색`/`LLM 보조` mode
 
-각 card는 Rider, result group, conditional estimate 또는 hold reason, missing facts, required-document checklist preview를 보여준다. Evidence drawer는 policy/terms document label, physical page, Clause와 bounded excerpt를 보여준다. 증권 가입금액 기반 예상액은 검토된 가입금액 전용 위치가 있으면 “증권 가입금액 직접 근거”로 표시한다. 담보 페이지밖에 없거나 금액 검토가 끝나지 않았으면 예상액은 유지하되 “가입금액 위치 확인 필요”로 분리하고 정액 합계에는 넣지 않는다. 자동 판정 규칙을 실제 실행한 private coverage는 completeness panel에 담보명과 계약명을 나열한다. 같은 계약에 속했다는 이유만으로 검색된 catalog-only coverage는 event card로 표시하지 않는다.
+각 card는 Rider, result group, conditional estimate 또는 hold reason, missing facts, required-document checklist preview를 보여준다. Evidence drawer는 policy/terms document label, physical page, Clause와 bounded excerpt를 보여준다. 증권 가입금액 기반 예상액은 검토된 가입금액 전용 위치가 있으면 “증권 가입금액 직접 근거”로 표시한다. 담보 페이지밖에 없거나 금액 검토가 끝나지 않았으면 예상액과 “가입금액 위치 확인 필요”를 함께 표시하며, `confirmed_amount`가 아닌 조건부 정액 합계에는 포함한다. 자동 판정 규칙을 실제 실행한 private coverage는 completeness panel에 담보명과 계약명을 나열한다. 같은 계약에 속했다는 이유만으로 검색된 catalog-only coverage는 event card로 표시하지 않는다. 규칙 평가가 모두 `ALL_UNKNOWN`인 담보는 event card와 추천 목록에서 숨기고, 규칙이 아직 없어 평가되지 않은 구조화 검색 후보는 별도 관련 약관 추천으로 유지한다.
 
 `MATCH`를 지급 가능 또는 지급 확정으로 번역하지 않는다. 사용자 문구는 `청구 검토`, `추가 확인 필요`, `조건 불일치`를 사용한다.
 

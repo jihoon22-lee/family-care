@@ -301,6 +301,7 @@
     "recommendations": [
       {
         "recommendation_id": "00000000-0000-4000-8000-000000000839",
+        "knowledge_coverage_id": "00000000-0000-4000-8000-000000000811",
         "rank": 1,
         "contract_label": "Sample Private Policy A",
         "coverage_label": "Sample Fixed Coverage A",

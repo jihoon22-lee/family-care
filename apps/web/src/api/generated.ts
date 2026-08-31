@@ -635,6 +635,7 @@ export interface AnalysisRecommendationResponse {
   coverage_label: string;
   excerpt: string;
   explanation_code: string | null;
+  knowledge_coverage_id: string;
   question_code: string | null;
   rank: number;
   reason_code: string;

@@ -897,12 +897,18 @@ def _is_authorized_fixed_amount(
     if calculation.status != "CALCULATED" or calculation.conditional_amount is None:
         return False
     if candidate.result == "MATCH":
-        return calculation.hold_reason_code is None
+        return calculation.hold_reason_code in {
+            None,
+            "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED",
+        }
     return (
         candidate.result == "UNKNOWN"
         and calculation.confirmed_amount is None
         and calculation.hold_reason_code is not None
-        and calculation.hold_reason_code in candidate.hold_reason_codes
+        and (
+            calculation.hold_reason_code in candidate.hold_reason_codes
+            or calculation.hold_reason_code == "CERTIFICATE_AMOUNT_EVIDENCE_REVIEW_REQUIRED"
+        )
     )
 
 

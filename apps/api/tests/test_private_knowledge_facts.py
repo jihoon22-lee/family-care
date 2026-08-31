@@ -7,7 +7,10 @@ from uuid import UUID
 
 from familycare_api.decisions.domain import FactValue, MedicalEvent
 from familycare_api.decisions.knowledge_domain import KnowledgeFactNormalizer
-from familycare_api.decisions.knowledge_facts import normalize_private_event_facts
+from familycare_api.decisions.knowledge_facts import (
+    normalize_private_event_facts,
+    reviewed_normalizer_search_tokens,
+)
 
 
 def _event(
@@ -32,11 +35,12 @@ def _normalizer(
     tokens: tuple[str, ...],
     value: str,
     *,
+    field_path: str = "MedicalEvent.classification",
     priority: int = 100,
 ) -> KnowledgeFactNormalizer:
     return KnowledgeFactNormalizer(
         normalizer_key=key,
-        field_path="MedicalEvent.classification",
+        field_path=field_path,
         normalized_tokens=tokens,
         normalized_value=value,
         priority=priority,
@@ -82,6 +86,35 @@ def test_korean_case_marker_does_not_break_an_exact_reviewed_token() -> None:
         (_normalizer("reviewed", ("샘플처치",), "sample_code"),),
     )
     assert unrelated_prefix.get("MedicalEvent.classification") is None
+
+
+def test_exact_normalizer_does_not_promote_a_korean_compound() -> None:
+    anatomical = _normalizer(
+        "reviewed-anatomical",
+        ("샘플부위",),
+        "sample_site_code",
+        field_path="MedicalEvent.anatomical_site_code",
+    )
+    classification = _normalizer(
+        "reviewed-classification",
+        ("샘플부위",),
+        "sample_classification",
+    )
+
+    context = normalize_private_event_facts(
+        _event("샘플부위정밀검사를 받음"),
+        (anatomical, classification),
+    )
+
+    assert context.get("MedicalEvent.anatomical_site_code") is None
+    assert context.get("MedicalEvent.classification") is None
+    assert (
+        reviewed_normalizer_search_tokens(
+            context,
+            (anatomical, classification),
+        )
+        == ()
+    )
 
 
 def test_equal_priority_conflict_is_preserved_and_user_fact_overrides_derivation() -> None:

@@ -253,6 +253,7 @@ def _decision_payload(*, run_id: UUID, event_version: int) -> dict[str, Any]:
             "recommendations": [
                 {
                     "recommendation_id": str(UUID("00000000-0000-4000-8000-000000000721")),
+                    "knowledge_coverage_id": str(KNOWLEDGE_COVERAGE_ID),
                     "rank": 1,
                     "contract_label": "Sample Private Policy",
                     "coverage_label": "Sample Fixed Coverage",

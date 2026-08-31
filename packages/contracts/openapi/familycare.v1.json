@@ -242,6 +242,11 @@
             ],
             "title": "Explanation Code"
           },
+          "knowledge_coverage_id": {
+            "format": "uuid",
+            "title": "Knowledge Coverage Id",
+            "type": "string"
+          },
           "question_code": {
             "anyOf": [
               {
@@ -277,6 +282,7 @@
         },
         "required": [
           "recommendation_id",
+          "knowledge_coverage_id",
           "rank",
           "contract_label",
           "coverage_label",
