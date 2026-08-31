@@ -1,7 +1,11 @@
 import json
 from pathlib import Path
 
-from scripts.release_audit import check_release_identity
+from scripts.release_audit import (
+    ReleaseImageDigest,
+    check_release_identity,
+    inspect_image_digests,
+)
 
 VERSION = "0.1.0"
 COMMIT_SHA = "a" * 40
@@ -93,3 +97,54 @@ def test_release_identity_requires_exact_image_set(tmp_path: Path) -> None:
     )
 
     assert "image-set" in _codes(tmp_path)
+
+
+def test_image_inspection_returns_only_ordered_verified_version_digests() -> None:
+    version = "0.1.0"
+    commit_sha = "b" * 40
+    expected = {
+        "web": "sha256:" + "1" * 64,
+        "api": "sha256:" + "2" * 64,
+        "worker": "sha256:" + "3" * 64,
+    }
+
+    def success_get(url: str, _headers: object) -> tuple[int, dict[str, str], bytes]:
+        component = next(name for name in expected if f"-repo-{name}/" in url)
+        return 200, {"Docker-Content-Digest": expected[component]}, b"ignored"
+
+    digests, findings = inspect_image_digests(
+        "ghcr.io",
+        "synthetic-owner/synthetic-repo",
+        version,
+        commit_sha,
+        success_get,
+    )
+
+    assert findings == ()
+    assert digests == tuple(
+        ReleaseImageDigest(component=component, digest=expected[component])
+        for component in ("web", "api", "worker")
+    )
+
+
+def test_image_inspection_returns_no_publishable_digests_on_any_finding() -> None:
+    version = "0.1.0"
+    commit_sha = "b" * 40
+
+    def mismatched_get(url: str, _headers: object) -> tuple[int, dict[str, str], bytes]:
+        component = next(name for name in ("web", "api", "worker") if f"-{name}/" in url)
+        character = {"web": "1", "api": "2", "worker": "3"}[component]
+        if component == "api" and url.endswith(f"sha-{commit_sha[:12]}"):
+            character = "4"
+        return 200, {"Docker-Content-Digest": "sha256:" + character * 64}, b"ignored"
+
+    digests, findings = inspect_image_digests(
+        "ghcr.io",
+        "synthetic-owner/synthetic-repo",
+        version,
+        commit_sha,
+        mismatched_get,
+    )
+
+    assert digests == ()
+    assert {finding.code for finding in findings} == {"digest-mismatch"}
