@@ -25,6 +25,28 @@ INVENTORY_SCHEMA_PATH = (
 INVENTORY_EXAMPLE_PATH = (
     ROOT / "packages/contracts/examples/insurance-document-inventory.v1.example.json"
 )
+RECONCILIATION_SCHEMA_PATH = (
+    ROOT / "packages/contracts/schemas/insurance-reconciliation.v1.schema.json"
+)
+RECONCILIATION_EXAMPLE_PATH = (
+    ROOT / "packages/contracts/examples/insurance-reconciliation.v1.example.json"
+)
+RECONCILIATION_FORBIDDEN_FIELDS = {
+    "absolute_path",
+    "archive_key",
+    "content_sha256",
+    "document_text",
+    "family_alias",
+    "household_space_id",
+    "link_digest_sha256",
+    "password",
+    "policy_number",
+    "raw_text",
+    "resolution_digest_sha256",
+    "source_key",
+    "source_path",
+    "source_record",
+}
 POLICY_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-ledger.v1.schema.json"
 POLICY_EXAMPLE_PATH = ROOT / "packages/contracts/examples/policy-ledger.v1.json"
 CANDIDATE_SCHEMA_PATH = ROOT / "packages/contracts/schemas/policy-candidate.v1.schema.json"
@@ -443,6 +465,7 @@ def validate_openapi() -> list[str]:
         "/api/v1/family-members/{member_id}",
         "/api/v1/family-members/{member_id}/insurance-document-components",
         "/api/v1/family-members/{member_id}/insurance-document-inventory",
+        "/api/v1/family-members/{member_id}/insurance-reconciliation",
         "/api/v1/family-members/{member_id}/insurance-document-sets",
         "/api/v1/family-members/{member_id}/restore",
         "/api/v1/insurance-document-sets/{document_set_id}",
@@ -457,6 +480,8 @@ def validate_openapi() -> list[str]:
         "/api/v1/private-knowledge/current",
         "/api/v1/private-knowledge/current/contracts",
         "/api/v1/private-knowledge/current/contracts/{contract_id}",
+        "/api/v1/private-knowledge/current/contracts/{contract_id}/operational-link",
+        "/api/v1/document-batch-items/{item_id}/resolution",
         "/api/v1/review-items",
         "/api/v1/review-items/{review_item_id}",
         "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
@@ -650,6 +675,58 @@ def validate_openapi() -> list[str]:
     ):
         if f'"{forbidden}":' in inventory_contract:
             errors.append(f"insurance document inventory exposes forbidden field {forbidden}")
+
+    reconciliation_get = paths["/api/v1/family-members/{member_id}/insurance-reconciliation"].get(
+        "get", {}
+    )
+    reconciliation_response_ref = (
+        reconciliation_get.get("responses", {})
+        .get("200", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+        .get("$ref")
+    )
+    if reconciliation_response_ref != (
+        "#/components/schemas/MemberInsuranceReconciliationResponse"
+    ):
+        errors.append("insurance reconciliation must use its bounded integrated read model")
+    link_request = schemas.get("OperationalLinkRequest", {})
+    expected_link_fields = {
+        "decision",
+        "conflict",
+        "policy_contract_id",
+        "reason_code",
+        "expected_current_link_id",
+    }
+    if set(link_request.get("properties", {})) != expected_link_fields:
+        errors.append("operational link request fields changed")
+    if set(link_request.get("required", [])) != expected_link_fields:
+        errors.append("operational link request must require the nullable expected current ID")
+    resolution_request = schemas.get("DocumentResolutionRequest", {})
+    expected_resolution_fields = {
+        "resolution",
+        "replacement_item_id",
+        "reason_code",
+        "expected_current_resolution_id",
+    }
+    if set(resolution_request.get("properties", {})) != expected_resolution_fields:
+        errors.append("document resolution request fields changed")
+    if set(resolution_request.get("required", [])) != expected_resolution_fields:
+        errors.append("document resolution request must require the nullable expected current ID")
+    reconciliation_contract = json.dumps(
+        {
+            name: schema
+            for name, schema in schemas.items()
+            if "Reconciliation" in name
+            or name.startswith("OperationalLink")
+            or name.startswith("DocumentResolution")
+        },
+        sort_keys=True,
+    ).lower()
+    for forbidden in RECONCILIATION_FORBIDDEN_FIELDS:
+        if f'"{forbidden}":' in reconciliation_contract:
+            errors.append(f"insurance reconciliation exposes forbidden field {forbidden}")
 
     post = paths["/api/v1/documents/analysis"].get("post", {})
     status_get = paths["/api/v1/analysis-jobs/{job_id}"].get("get", {})
@@ -2237,6 +2314,110 @@ def validate_insurance_document_inventory_contract() -> list[str]:
     return errors
 
 
+def validate_insurance_reconciliation_contract() -> list[str]:
+    """Validate the strict, path-free integrated reconciliation response."""
+
+    from familycare_api.insurance_reconciliation.schemas import (
+        MemberInsuranceReconciliationResponse,
+    )
+    from pydantic import ValidationError
+
+    try:
+        schema = load_json(RECONCILIATION_SCHEMA_PATH)
+        example = load_json(RECONCILIATION_EXAMPLE_PATH)
+    except (json.JSONDecodeError, ValueError) as error:
+        return [str(error)]
+
+    errors: list[str] = []
+    expected_fields = {
+        "schema_version",
+        "member_id",
+        "knowledge_run_id",
+        "generated_at",
+        "summary",
+        "contracts",
+        "orphan_operational_contracts",
+        "unresolved_sources",
+    }
+    if set(schema.get("properties", {})) != expected_fields:
+        errors.append("insurance reconciliation top-level fields changed")
+    if set(schema.get("required", [])) != expected_fields:
+        errors.append("insurance reconciliation fields must all be required")
+    if schema.get("additionalProperties") is not False:
+        errors.append("insurance reconciliation must reject additional properties")
+    if not all(
+        object_schema.get("additionalProperties") is False
+        for object_schema in _object_schemas(schema)
+    ):
+        errors.append("insurance reconciliation nested objects must reject additional properties")
+    definitions = schema.get("$defs", {})
+    if definitions.get("ReconciliationState", {}).get("enum") != [
+        "EVIDENCE_READY",
+        "DOCUMENTS_PENDING",
+        "LINK_REVIEW_REQUIRED",
+        "CONFLICT",
+    ]:
+        errors.append("insurance reconciliation state enum changed")
+    for field, bound in (
+        ("contracts", 256),
+        ("orphan_operational_contracts", 256),
+        ("unresolved_sources", 1000),
+    ):
+        if schema.get("properties", {}).get(field, {}).get("maxItems") != bound:
+            errors.append(f"insurance reconciliation {field} bound changed")
+    errors.extend(
+        f"insurance reconciliation example schema mismatch: {error}"
+        for error in validate_schema_instance(schema, example)
+    )
+    try:
+        MemberInsuranceReconciliationResponse.model_validate(example)
+    except ValidationError:
+        errors.append("insurance reconciliation example does not match the API model")
+    for value, label in ((schema, "schema"), (example, "example")):
+        forbidden = [
+            path
+            for path, key in _nested_keys(value)
+            if key.lower() in RECONCILIATION_FORBIDDEN_FIELDS
+        ]
+        if forbidden:
+            errors.append(f"insurance reconciliation {label} contains a forbidden field")
+    serialized = json.dumps(example, sort_keys=True, ensure_ascii=False).lower()
+    if "/mnt/" in serialized or "\\" in serialized or "://" in serialized:
+        errors.append("insurance reconciliation example contains a path-like private value")
+    summary = example.get("summary", {})
+    contracts = example.get("contracts", [])
+    orphans = example.get("orphan_operational_contracts", [])
+    unresolved = example.get("unresolved_sources", [])
+    if isinstance(summary, dict) and isinstance(contracts, list):
+        state_fields = {
+            "EVIDENCE_READY": "evidence_ready_contracts",
+            "DOCUMENTS_PENDING": "documents_pending_contracts",
+            "LINK_REVIEW_REQUIRED": "link_review_required_contracts",
+            "CONFLICT": "conflict_contracts",
+        }
+        if summary.get("total_contracts") != len(contracts):
+            errors.append("insurance reconciliation example contract total is inconsistent")
+        for state, field in state_fields.items():
+            if summary.get(field) != sum(
+                isinstance(item, dict) and item.get("reconciliation_state") == state
+                for item in contracts
+            ):
+                errors.append(f"insurance reconciliation example {state} count is inconsistent")
+    if (
+        isinstance(summary, dict)
+        and isinstance(orphans, list)
+        and summary.get("orphan_operational_contracts") != len(orphans)
+    ):
+        errors.append("insurance reconciliation example orphan count is inconsistent")
+    if (
+        isinstance(summary, dict)
+        and isinstance(unresolved, list)
+        and summary.get("unresolved_unreadable_sources") != len(unresolved)
+    ):
+        errors.append("insurance reconciliation example unresolved count is inconsistent")
+    return errors
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-openapi", action="store_true")
@@ -2268,6 +2449,7 @@ def main() -> int:
         *validate_job_contract(),
         *validate_document_contracts(),
         *validate_insurance_document_inventory_contract(),
+        *validate_insurance_reconciliation_contract(),
         *validate_batch_contracts(),
         *validate_ocr_contracts(),
         *validate_policy_contract(),
@@ -2287,6 +2469,7 @@ def main() -> int:
     print(
         "contract checks passed (OpenAPI, analysis-job.v1, document ingestion, "
         "encrypted document batch, selective OCR, insurance-document-inventory.v1, "
+        "insurance-reconciliation.v1, "
         "policy-ledger.v1, policy-candidate.v1, clause-search.v1, "
         "private-knowledge.v1, "
         "rider-clause-rules.v1, coverage-decision.v2 (plus historical v1), "

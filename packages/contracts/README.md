@@ -6,7 +6,8 @@ API, and analyzer services.
 - `openapi/` is generated from the FastAPI application and committed so drift is reviewable.
 - `schemas/` contains transport-neutral JSON Schemas for analysis jobs, document ingestion and
   extraction, encrypted batch status, OCR provenance, policy ledger/candidate review, insurance
-  document inventory, clause search, Rider-Clause rules, coverage decision v1/v2, benefit
+  document inventory, integrated insurance reconciliation, clause search, Rider-Clause rules,
+  coverage decision v1/v2, benefit
   calculation, medical-event structuring, claim workflow, and the non-executable household-scoped
   private-knowledge catalog.
 - `examples/` contains synthetic examples that must not include real insurance or family data. Queue examples are password-free and do not contain `content_sha256` before Worker intake; encrypted batch examples contain only opaque source IDs and bounded status projections.
@@ -19,7 +20,7 @@ API, and analyzer services.
 
 Run `TMPDIR=/tmp uv run python scripts/check_contracts.py` to validate the committed artifacts,
 including schema/example privacy rules, safety-limit metadata, generated-type drift, and the canonical
-OpenAPI document. The current `0.3.2` OpenAPI snapshot contains 69 paths, 81 operations, and 150
+OpenAPI document. The current `0.3.2` OpenAPI snapshot contains 72 paths, 84 operations, and 161
 component schemas; these counts are a review aid rather than a compatibility promise.
 
 To regenerate only the document TypedDict consumers, run

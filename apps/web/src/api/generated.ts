@@ -20,6 +20,7 @@ export const API_PATHS = [
   "/api/v1/clauses/search",
   "/api/v1/coverage-rules/{rule_id}/publish",
   "/api/v1/coverage-rules/{rule_id}/versions",
+  "/api/v1/document-batch-items/{item_id}/resolution",
   "/api/v1/document-batches",
   "/api/v1/document-batches/{batch_id}",
   "/api/v1/document-batches/{batch_id}/cancel",
@@ -33,6 +34,7 @@ export const API_PATHS = [
   "/api/v1/family-members/{member_id}/insurance-document-components",
   "/api/v1/family-members/{member_id}/insurance-document-inventory",
   "/api/v1/family-members/{member_id}/insurance-document-sets",
+  "/api/v1/family-members/{member_id}/insurance-reconciliation",
   "/api/v1/family-members/{member_id}/restore",
   "/api/v1/insurance-document-set-items/{item_id}",
   "/api/v1/insurance-document-sets/{document_set_id}",
@@ -58,6 +60,7 @@ export const API_PATHS = [
   "/api/v1/private-knowledge/current",
   "/api/v1/private-knowledge/current/contracts",
   "/api/v1/private-knowledge/current/contracts/{contract_id}",
+  "/api/v1/private-knowledge/current/contracts/{contract_id}/operational-link",
   "/api/v1/review-items",
   "/api/v1/review-items/{review_item_id}",
   "/api/v1/review-items/{review_item_id}/candidate-fields/{field_id}",
@@ -182,6 +185,12 @@ export const API_OPERATIONS = [
   },
   {
     method: "POST",
+    path: "/api/v1/document-batch-items/{item_id}/resolution",
+    operationId:
+      "confirm_document_resolution_api_v1_document_batch_items__item_id__resolution_post",
+  },
+  {
+    method: "POST",
     path: "/api/v1/document-batches",
     operationId: "create_batch_api_v1_document_batches_post",
   },
@@ -264,6 +273,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/family-members/{member_id}/insurance-document-sets",
     operationId:
       "create_insurance_document_set_api_v1_family_members__member_id__insurance_document_sets_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/family-members/{member_id}/insurance-reconciliation",
+    operationId:
+      "get_member_insurance_reconciliation_api_v1_family_members__member_id__insurance_reconciliation_get",
   },
   {
     method: "POST",
@@ -443,6 +458,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/private-knowledge/current/contracts/{contract_id}",
     operationId:
       "get_current_private_knowledge_contract_api_v1_private_knowledge_current_contracts__contract_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/private-knowledge/current/contracts/{contract_id}/operational-link",
+    operationId:
+      "confirm_operational_link_api_v1_private_knowledge_current_contracts__contract_id__operational_link_post",
   },
   {
     method: "GET",
@@ -1162,6 +1183,21 @@ export interface ConditionalFixedSubtotalResponse {
   unresolved_candidate_count: number;
 }
 
+export interface ContractReconciliationResponse {
+  certificate_decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  current_status: "active" | "inactive" | "lapsed" | "terminated" | "unknown";
+  document_readiness: DocumentReadinessResponse | null;
+  insurer_display: string;
+  knowledge_contract_id: string;
+  operational_link: OperationalLinkResponse;
+  product_display: string;
+  reconciliation_state:
+    | "EVIDENCE_READY"
+    | "DOCUMENTS_PENDING"
+    | "LINK_REVIEW_REQUIRED"
+    | "CONFLICT";
+}
+
 export interface CoverageDecisionResponse {
   analysis_completeness: "COMPLETE" | "PARTIAL" | "UNAVAILABLE";
   assistance: AnalysisAssistanceResponse;
@@ -1238,6 +1274,34 @@ export interface DocumentAnalysisRequest {
   extractor_config: ExtractorConfigRequest;
   schema_version: "1";
   source_key: string;
+}
+
+export interface DocumentReadinessResponse {
+  completeness: "CERTIFICATE_AND_TERMS" | "CERTIFICATE_ONLY";
+  has_application: boolean;
+  has_product_explanation: boolean;
+  policy_contract_id: string;
+}
+
+export interface DocumentResolutionRequest {
+  expected_current_resolution_id: string | null;
+  reason_code:
+    | "USER_CONFIRMED_REPLACEMENT"
+    | "USER_DISMISSED_STALE_FAILURE"
+    | "USER_REOPENED_DOCUMENT_REVIEW";
+  replacement_item_id: string | null;
+  resolution: "REPLACED" | "DISMISSED" | "REOPENED";
+}
+
+export interface DocumentResolutionResponse {
+  authority: "USER_CONFIRMED_DOCUMENT_RESOLUTION";
+  confirmed_at: string;
+  failed_item_id: string;
+  id: string;
+  reason_code: string;
+  replacement_item_id: string | null;
+  resolution: "REPLACED" | "DISMISSED" | "REOPENED";
+  schema_version: "1";
 }
 
 export interface DocumentSetCreateRequest {
@@ -1429,6 +1493,12 @@ export interface InsuranceDocumentSetResponse {
   policy_contract_id: string | null;
   product_display: string | null;
   version: number;
+}
+
+export interface InsuranceReconciliationErrorResponse {
+  error_code: string;
+  fields?: Array<string> | null;
+  message: string;
 }
 
 export interface InventoryComponentResponse {
@@ -1717,6 +1787,17 @@ export interface MemberInsuranceDocumentInventoryResponse {
   unregistered_document_sets: Array<UnregisteredDocumentSetResponse>;
 }
 
+export interface MemberInsuranceReconciliationResponse {
+  contracts: Array<ContractReconciliationResponse>;
+  generated_at: string;
+  knowledge_run_id: string;
+  member_id: string;
+  orphan_operational_contracts: Array<OrphanOperationalPolicyResponse>;
+  schema_version: "1";
+  summary: ReconciliationSummaryResponse;
+  unresolved_sources: Array<UnreadableSourceResponse>;
+}
+
 export interface MoneyResponse {
   amount: string;
   currency: string;
@@ -1773,6 +1854,41 @@ export interface OperationalEvidenceCitationResponse {
   review_state: "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED";
 }
 
+export interface OperationalLinkMutationResponse {
+  authority: "USER_CONFIRMED_OPERATIONAL_IDENTITY";
+  confirmed_at: string;
+  conflict: boolean;
+  decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  id: string;
+  knowledge_contract_id: string;
+  policy_contract_id: string | null;
+  reason_code: string;
+  schema_version: "1";
+}
+
+export interface OperationalLinkRequest {
+  conflict: boolean;
+  decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  expected_current_link_id: string | null;
+  policy_contract_id: string | null;
+  reason_code:
+    | "USER_CONFIRMED_SAME_CONTRACT"
+    | "USER_CONFIRMED_DISTINCT_CONTRACT"
+    | "USER_REOPENED_OPERATIONAL_REVIEW"
+    | "USER_REPORTED_OPERATIONAL_CONFLICT";
+}
+
+export interface OperationalLinkResponse {
+  authority:
+    "SNAPSHOT_EXACT_EVIDENCE" | "USER_CONFIRMED_OPERATIONAL_IDENTITY" | null;
+  confirmed_at: string | null;
+  conflict: boolean;
+  decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  id: string | null;
+  policy_contract_id: string | null;
+  reason_code: string;
+}
+
 export interface OptionalQuestionResponse {
   field_id:
     | "event_date"
@@ -1806,6 +1922,14 @@ export interface OptionalQuestionResponse {
     | "treatment_setting"
     | "treatment_context"
     | "separately_billed_treatment";
+}
+
+export interface OrphanOperationalPolicyResponse {
+  completeness: "CERTIFICATE_AND_TERMS" | "CERTIFICATE_ONLY";
+  insurer_display: string;
+  policy_contract_id: string;
+  product_display: string;
+  status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
 }
 
 export interface PasswordRequest {
@@ -2060,6 +2184,16 @@ export interface ReceiptLineUpdateRequest {
 export interface ReceiptLinesResponse {
   receipt_lines: Array<ReceiptLineResponse>;
   schema_version: "1";
+}
+
+export interface ReconciliationSummaryResponse {
+  conflict_contracts: number;
+  documents_pending_contracts: number;
+  evidence_ready_contracts: number;
+  link_review_required_contracts: number;
+  orphan_operational_contracts: number;
+  total_contracts: number;
+  unresolved_unreadable_sources: number;
 }
 
 export interface RegisteredPolicyInventoryResponse {

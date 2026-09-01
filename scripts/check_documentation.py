@@ -111,6 +111,7 @@ REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
     "docs/design/clause-linking-search.md": ("# Clause linking and search design",),
     "docs/design/event-result-pwa.md": ("# Event and result PWA design",),
     "docs/design/insurance-document-inventory.md": ("# Insurance document inventory design",),
+    "docs/design/insurance-ledger-reconciliation.md": ("# Insurance ledger reconciliation design",),
     "docs/design/policy-ledger.md": ("# Policy ledger design",),
     "docs/design/private-data-runtime.md": ("# Private data and local runtime design",),
     "docs/adr/0001-modular-monolith.md": ("# ADR 0001: Modular monolith",),
@@ -152,6 +153,9 @@ REQUIRED_HEADINGS: dict[str, tuple[str, ...]] = {
     ),
     "docs/plan/018-insurance-document-inventory.md": (
         "# Insurance Document Inventory Implementation Plan",
+    ),
+    "docs/plan/020-insurance-ledger-reconciliation.md": (
+        "# Insurance Ledger Reconciliation Implementation Plan",
     ),
     "docs/release/v0.1.0-verification.md": RELEASE_EVIDENCE_HEADINGS,
 }

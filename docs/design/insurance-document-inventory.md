@@ -11,6 +11,10 @@
 
 이 화면은 가입 사실과 문서 보유 사실을 구분한다. 증권으로 확인된 `PolicyContract`만 등록 보험으로 표시하고, 약관이나 상품설명서만 있는 자료는 가입 확인 전 문서로 별도 표시한다.
 
+전체 private catalog와 operational inventory 사이의 계약 identity 대사와 통합 summary는
+`docs/design/insurance-ledger-reconciliation.md`가 소유한다. 이 inventory는 상세 업로드·Evidence
+작업 projection으로 유지하며 전체 가입 계약 수의 권위가 되지 않는다.
+
 원본 PDF 한 개가 곧 문서 역할 하나라는 가정은 하지 않는다. 한 파일에 서로 다른 보험의 증권이 함께 있거나, 증권과 약관이 이어 붙어 있거나, 파일명은 증권이지만 실제 내용은 상품설명서·청약서일 수 있다. 따라서 물리 source file, immutable `DocumentVersion`, 검수된 page-range component, 보험별 document set을 분리한다.
 
 ## User-visible model
