@@ -12,7 +12,9 @@ review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정�
 PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가
 구현되어 있습니다. 이후 immutable private knowledge snapshot, 전체 보험 catalog, publication별
 `PUBLISHED`/`ADVISORY`/`BLOCKED`/`NOT_APPLICABLE` 상태, 조건부 정액 추정, 관련 담보만 보여 주는
-결과와 선택적 one-call assistance까지 `main`에 합쳐졌습니다.
+결과와 선택적 one-call assistance까지 `main`에 합쳐졌습니다. 보장 원장은 전체 catalog를 기준으로
+앱 계약 identity·Evidence 준비 상태·미해결 문서 작업을 하나의 대사 projection에서 보여 주며,
+문서 inventory는 별도의 상세 편집 경계로 유지합니다.
 
 Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는
 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면

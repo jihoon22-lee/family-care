@@ -69,16 +69,16 @@ orphan operational policies and unresolved sources.
 
 ## Task 5: Consolidate the Web ledger
 
-1. [ ] Consume the reconciliation projection as the single contract/readiness summary.
-2. [ ] Add per-contract readiness badges, an orphan operational-policy review group, and a document work
+1. [x] Consume the reconciliation projection as the single contract/readiness summary.
+2. [x] Add per-contract readiness badges, an orphan operational-policy review group, and a document work
    queue without duplicating a second authoritative contract list.
-3. [ ] Invalidate reconciliation and inventory caches after link/resolution/document mutations and
+3. [x] Invalidate reconciliation and inventory caches after link/resolution/document mutations and
    revalidate on focus and explicit refresh.
-4. [ ] Verify keyboard, narrow viewport, partial failure, login expiry, and no persistent API caching.
+4. [x] Verify keyboard, narrow viewport, partial failure, login expiry, and no persistent API caching.
 
 ## Task 6: Verification and protected acceptance
 
-1. [ ] Run the complete required repository verification serially.
+1. [x] Run the complete required repository verification serially.
 2. [ ] Merge each reviewed PR only after every required GitHub Action passes, then delete its local and
    remote branch and any completed worktree.
 3. [ ] Run a count-only protected-runtime reconciliation after backup and restored-database rehearsal;
