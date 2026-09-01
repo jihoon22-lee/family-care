@@ -436,7 +436,8 @@ describe("candidate review", () => {
     renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
 
     await user.click(await screen.findByRole("button", { name: "후보 검토" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
       /근거가 필요합니다/,
     );
     expect(screen.getByRole("button", { name: "확인" })).toBeDisabled();
@@ -526,9 +527,9 @@ describe("candidate review", () => {
     );
     await user.click(within(dialog).getByRole("button", { name: "수정 저장" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "다른 변경이 먼저 저장되었습니다",
-    );
+    expect(
+      await within(screen.getByRole("dialog")).findByRole("alert"),
+    ).toHaveTextContent("다른 변경이 먼저 저장되었습니다");
     expect(
       within(screen.getByRole("dialog")).getByRole("textbox", {
         name: "rider_name",

@@ -1,23 +1,23 @@
 import { useCallback, useEffect } from "react";
 
-import type { MemberInsuranceDocumentInventoryResponse } from "../../api/generated";
-import { getInsuranceDocumentInventory } from "../../api/insurance-document-inventory";
+import type { MemberInsuranceReconciliationResponse } from "../../api/generated";
+import { getInsuranceReconciliation } from "../../api/insurance-reconciliation";
 import { useQueryCache, useResource } from "../../api/query-cache";
 
-export function useInsuranceDocumentInventory(memberId: string | undefined) {
+export function useInsuranceReconciliation(memberId: string | undefined) {
   const cache = useQueryCache();
-  const key = `insurance-document-inventory:${memberId ?? "none"}`;
+  const key = `insurance-reconciliation:${memberId ?? "none"}`;
   const resource = useResource<
-    MemberInsuranceDocumentInventoryResponse | undefined
+    MemberInsuranceReconciliationResponse | undefined
   >(key, (signal) =>
     memberId
-      ? getInsuranceDocumentInventory(memberId, signal)
+      ? getInsuranceReconciliation(memberId, signal)
       : Promise.resolve(undefined),
   );
   const reload = useCallback(() => {
     if (!memberId) return;
-    cache.invalidate(`insurance-document-inventory:${memberId}`);
     cache.invalidate(`insurance-reconciliation:${memberId}`);
+    cache.invalidate(`insurance-document-inventory:${memberId}`);
   }, [cache, memberId]);
   useEffect(() => {
     if (!memberId) return;

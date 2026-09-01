@@ -111,7 +111,7 @@ function setTargets(
         displayLabel: policy.product_display,
         documentSetId: policy.document_set_id ?? undefined,
         key: policy.document_set_id ?? `policy:${policy.policy_id}`,
-        label: `앱 근거 연결 계약 · ${policy.insurer_display} · ${policy.product_display}`,
+        label: `연결된 문서 묶음 · ${policy.insurer_display} · ${policy.product_display}`,
         policyId: policy.policy_id,
         version: policy.document_set_version ?? undefined,
       },
@@ -235,16 +235,6 @@ function RoleDocument({
         </ul>
       ) : null}
     </li>
-  );
-}
-
-function SummaryCard({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="insurance-inventory-summary-card">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>건</small>
-    </div>
   );
 }
 
@@ -561,38 +551,6 @@ function UnpairedComponent({
   );
 }
 
-function UnreadableSources({
-  sources,
-}: {
-  sources: MemberInsuranceDocumentInventoryResponse["unreadable_sources"];
-}) {
-  if (sources.length === 0) return null;
-  return (
-    <div className="insurance-inventory-unreadable">
-      <div className="insurance-inventory-section-heading compact">
-        <div>
-          <span>Unreadable sources</span>
-          <h3>판독 필요 자료</h3>
-        </div>
-        <strong>{sources.length}건</strong>
-      </div>
-      <ul className="insurance-inventory-unreadable-list">
-        {sources.map((source) => (
-          <li key={source.document_batch_item_id}>
-            <div className="insurance-inventory-role-heading">
-              <strong>{source.display_label}</strong>
-              <span>{ROLE_LABELS[source.source_kind]}</span>
-            </div>
-            <span className="insurance-inventory-component-meta">
-              <span>{PROCESSING_LABELS[source.processing_state]}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
 function InventoryContent({
   data,
   memberId,
@@ -616,38 +574,10 @@ function InventoryContent({
 }) {
   return (
     <>
-      <div
-        className="insurance-inventory-summary"
-        role="group"
-        aria-label="보험 문서 요약"
-      >
-        <SummaryCard
-          label="앱 근거 연결 보험"
-          value={data.summary.certificate_backed_policies}
-        />
-        <SummaryCard
-          label="증권+약관"
-          value={data.summary.certificate_and_terms}
-        />
-        <SummaryCard label="증권만" value={data.summary.certificate_only} />
-        <SummaryCard
-          label="미연결 약관"
-          value={data.summary.terms_only_documents}
-        />
-        <SummaryCard
-          label="상품설명서"
-          value={data.summary.product_explanation_documents}
-        />
-        <SummaryCard
-          label="판독 필요"
-          value={data.summary.unreadable_documents}
-        />
-      </div>
-
       <div className="insurance-inventory-actions">
         <p>
-          증권·약관을 확인한 뒤 부족한 문서를 같은 가족 구성원에게 추가할 수
-          있습니다.
+          계약 수와 준비 상태는 위 통합 현황을 기준으로 합니다. 이 영역에서는
+          문서 역할·페이지와 Evidence 연결만 편집합니다.
         </p>
         <a
           className="event-start-link"
@@ -657,20 +587,17 @@ function InventoryContent({
         </a>
       </div>
 
-      <section
-        className="insurance-inventory-registered"
-        aria-labelledby="insurance-inventory-registered-title"
-      >
-        <div className="insurance-inventory-section-heading">
-          <div>
-            <span>Certificate-backed</span>
-            <h2 id="insurance-inventory-registered-title">앱 근거 연결 계약</h2>
-          </div>
-          <strong>{data.registered_policies.length}건</strong>
-        </div>
+      <details className="insurance-inventory-registered insurance-inventory-details">
+        <summary>
+          연결된 문서 묶음 세부 편집 · {data.registered_policies.length}건
+        </summary>
+        <p className="insurance-inventory-unpaired-note">
+          통합 계약 현황의 근거 문서 구간을 확인하거나 연결을 해제할 때만 펼쳐서
+          사용합니다.
+        </p>
         {data.registered_policies.length === 0 ? (
           <p className="insurance-inventory-empty">
-            앱 내부 Evidence 연결이 완료된 계약이 없습니다.
+            앱 내부 Evidence 연결이 완료된 문서 묶음이 없습니다.
           </p>
         ) : (
           <div className="insurance-inventory-policy-list">
@@ -688,7 +615,7 @@ function InventoryContent({
             ))}
           </div>
         )}
-      </section>
+      </details>
 
       <section
         className="insurance-inventory-unregistered"
@@ -755,7 +682,6 @@ function InventoryContent({
             </ul>
           </div>
         ) : null}
-        <UnreadableSources sources={data.unreadable_sources} />
       </section>
     </>
   );
@@ -895,11 +821,11 @@ export function InsuranceDocumentInventory({
     >
       <div className="insurance-inventory-heading">
         <div>
-          <span>Document completeness</span>
-          <h2 id="insurance-inventory-title">앱 업로드·문서 연결 현황</h2>
+          <span>Document evidence editor</span>
+          <h2 id="insurance-inventory-title">문서 근거 정리</h2>
           <p>
-            전체 가입 보험 수가 아니라 앱에 업로드된 문서와 청구용 Evidence의
-            연결 작업 상태를 표시합니다.
+            통합 보험 현황과 별도로, 업로드 문서의 역할·페이지·문서 묶음 연결을
+            검수합니다.
           </p>
         </div>
         <button

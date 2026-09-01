@@ -103,11 +103,11 @@ export function LedgerPage({ memberId }: { memberId?: string }) {
             >
               <div className="folio-heading">
                 <span>Policy folio</span>
-                <h2 id="policy-ledger-title">청구 근거 연결 계약</h2>
+                <h2 id="policy-ledger-title">청구 근거 세부 원장</h2>
               </div>
               {data.policies.length === 0 ? (
                 <div className="empty-state compact">
-                  <h3>청구 근거 연결 계약이 없습니다.</h3>
+                  <h3>청구 근거 세부 원장이 비어 있습니다.</h3>
                   <p>
                     전체 가입 보험은 위 분석 목록에 표시되며, 내부 Evidence
                     연결이 완료된 계약만 이 영역에 표시됩니다.
