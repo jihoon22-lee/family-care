@@ -94,6 +94,10 @@ linking the operational upload inventory and must not be treated as missing enro
 3. [x] Reload the member inventory after creation and preserve the later explicit set-attachment step.
 4. [x] Retry transient polling network/5xx failures, clear recovered errors, and stop on 4xx or authentication failures.
 5. [x] Verify the source request contract and the full synthetic Chromium document-import flow.
+6. [x] Hide a historical unreadable item only after a later successful item for the same household,
+   family member, and opaque source ID; retain changed-source and cross-member failures for review.
+7. [x] Add explicit inventory refresh and revalidate the memory-only projection when the window
+   regains focus.
 
 ## Required verification
 

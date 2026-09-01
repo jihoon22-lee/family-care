@@ -166,6 +166,11 @@ MemberInsuranceDocumentInventory
 
 아직 `DocumentVersion`이 없는 암호 필요·OCR 필요·실패 item은 component를 꾸며 내지 않는다. 대신 `unreadable_sources`에 내부 batch item ID, intake role, 서버가 만든 일반화 라벨, bounded processing state만 반환한다. 따라서 사용자는 어떤 종류의 자료가 보완 대상인지 확인할 수 있지만 실제 파일명·경로·암호는 읽기 모델에 노출되지 않는다.
 
+같은 HouseholdSpace·FamilyMember·opaque `source_id`의 더 늦은 batch item이 성공하고 처리된
+`DocumentVersion`을 고정한 경우에만 이전 실패 item을 현재 `unreadable_sources`에서 제외한다.
+다른 가족의 성공이나 내용·경로 변경으로 `source_id`가 달라진 교체본은 자동으로 같은 자료라
+판단하지 않는다. 이전 실패 행은 감사 이력으로 보존하며 물리 삭제하지 않는다.
+
 ## UI behavior
 
 기존 가족별 원장 route를 유지한다. 원장 최상단의 전체 가입 보험 분석은 current private
@@ -200,6 +205,8 @@ knowledge snapshot을 읽고, 이 문서의 inventory는 그 아래에서 앱 �
 13. 암호 필요·OCR 필요 자료는 가짜 component로 만들지 않고 path-free `unreadable_sources`로 표시한다.
 14. inventory의 미연결 상태는 실제 가입 여부의 `NO_MATCH` 근거가 아니며 전체 가입 보험
     catalog의 계약을 숨기거나 비가입으로 바꾸지 않는다.
+15. 과거 판독 실패는 같은 가족·같은 opaque source의 더 늦은 성공으로만 현재 목록에서
+    제외하며, 원래 batch item과 실패 상태는 감사 이력으로 보존한다.
 
 ## Verification
 

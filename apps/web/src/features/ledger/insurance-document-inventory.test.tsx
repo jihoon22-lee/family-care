@@ -265,6 +265,33 @@ describe("insurance document inventory", () => {
     ).toHaveAttribute("href", `/app/documents/import?member=${MEMBER_ID}`);
   });
 
+  it("lets the user refresh a loaded inventory", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(INVENTORY));
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+
+    renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+
+    await screen.findByText("Sample Policy");
+    await user.click(
+      screen.getByRole("button", { name: "문서 현황 새로고침" }),
+    );
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
+  it("revalidates a loaded inventory when the window regains focus", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(INVENTORY));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+
+    await screen.findByText("Sample Policy");
+    window.dispatchEvent(new Event("focus"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+  });
+
   it("keeps the ledger visible when the inventory request fails", async () => {
     const baseMock = createMockApi();
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

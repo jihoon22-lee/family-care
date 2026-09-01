@@ -902,6 +902,14 @@ export function InsuranceDocumentInventory({
             연결 작업 상태를 표시합니다.
           </p>
         </div>
+        <button
+          className="import-quiet-button"
+          disabled={loading}
+          onClick={reload}
+          type="button"
+        >
+          문서 현황 새로고침
+        </button>
       </div>
       {loading && !data ? (
         <p

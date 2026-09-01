@@ -34,6 +34,9 @@ POLICY_REISSUE_ITEM_ID = UUID("00000000-0000-4000-8000-000000000817")
 UNPAIRED_POLICY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000818")
 UNPAIRED_POLICY_COPY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000819")
 ACTIVE_POLICY_UNPAIRED_ITEM_ID = UUID("00000000-0000-4000-8000-000000000820")
+OTHER_MEMBER_RETRY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000824")
+MEMBER_RETRY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000825")
+CHANGED_SOURCE_RETRY_ITEM_ID = UUID("00000000-0000-4000-8000-000000000828")
 
 
 def _database_url() -> str:
@@ -428,3 +431,109 @@ def test_postgresql_inventory_enforces_authority_scope_and_conflict_states() -> 
     assert after_delete.summary.certificate_and_terms == 0
     with pytest.raises(PolicyStateConflict):
         service.delete_document_set(document_set.id, expected_version=4)
+
+
+def test_postgresql_inventory_hides_only_a_later_exact_member_success() -> None:
+    database_url = _database_url()
+    _seed(database_url)
+    context = AuthContext(
+        user_id=USER_ID,
+        household_space_id=HOUSEHOLD_ID,
+        session_id=UUID("00000000-0000-4000-8000-000000000898"),
+        needs_reauthentication=False,
+    )
+    service = InsuranceDocumentService(
+        context,
+        InsuranceDocumentRepository(database_url),
+    )
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_batches (
+              id, household_space_id, family_member_id, created_by, state, completed_at
+            ) VALUES
+              ('00000000-0000-4000-8000-000000000826', %s, %s, %s,
+               'succeeded', clock_timestamp()),
+              ('00000000-0000-4000-8000-000000000827', %s, %s, %s,
+               'succeeded', clock_timestamp())
+            """,
+            (
+                HOUSEHOLD_ID,
+                MEMBER_B_ID,
+                USER_ID,
+                HOUSEHOLD_ID,
+                MEMBER_A_ID,
+                USER_ID,
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO document_batch_items (
+              id, batch_id, document_id, source_id, source_key, display_label,
+              document_kind, state, processed_document_version_id,
+              available_at, completed_at
+            ) VALUES
+              (%s, '00000000-0000-4000-8000-000000000826', %s, %s,
+               'synthetic/inventory-locked.pdf', 'Synthetic retry', 'policy',
+               'succeeded', %s, clock_timestamp(), clock_timestamp())
+            """,
+            (
+                OTHER_MEMBER_RETRY_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "1" * 64,
+                POLICY_VERSION_ID,
+            ),
+        )
+
+    other_member_retry = service.get_inventory(MEMBER_A_ID)
+    assert other_member_retry.summary.unreadable_documents == 1
+    assert other_member_retry.unreadable_sources[0].document_batch_item_id == LOCKED_ITEM_ID
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_batch_items (
+              id, batch_id, document_id, source_id, source_key, display_label,
+              document_kind, state, processed_document_version_id,
+              available_at, completed_at
+            ) VALUES
+              (%s, '00000000-0000-4000-8000-000000000827', %s, %s,
+               'synthetic/inventory-replacement.pdf', 'Synthetic replacement', 'policy',
+               'succeeded', %s, clock_timestamp(), clock_timestamp())
+            """,
+            (
+                CHANGED_SOURCE_RETRY_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "2" * 64,
+                POLICY_VERSION_ID,
+            ),
+        )
+
+    changed_source_retry = service.get_inventory(MEMBER_A_ID)
+    assert changed_source_retry.summary.unreadable_documents == 1
+    assert changed_source_retry.unreadable_sources[0].document_batch_item_id == LOCKED_ITEM_ID
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            """
+            INSERT INTO document_batch_items (
+              id, batch_id, document_id, source_id, source_key, display_label,
+              document_kind, state, processed_document_version_id,
+              available_at, completed_at
+            ) VALUES
+              (%s, '00000000-0000-4000-8000-000000000827', %s, %s,
+               'synthetic/inventory-locked.pdf', 'Synthetic retry', 'policy',
+               'succeeded', %s, clock_timestamp(), clock_timestamp())
+            """,
+            (
+                MEMBER_RETRY_ITEM_ID,
+                POLICY_DOCUMENT_ID,
+                "1" * 64,
+                POLICY_VERSION_ID,
+            ),
+        )
+
+    exact_member_retry = service.get_inventory(MEMBER_A_ID)
+    assert exact_member_retry.summary.unreadable_documents == 0
+    assert exact_member_retry.unreadable_sources == ()
