@@ -1,9 +1,9 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: Phase 0~8과 private knowledge/advisory 결과 구현, `v0.1.0`~`v0.3.2` 컨테이너·GitHub
+- 상태: Phase 0~8과 private knowledge/advisory·원장 대사 결과 구현, `v0.1.0`~`v0.4.0` 컨테이너·GitHub
   Release 완료; 보호된 acceptance와 남은 실제 형식·기기·복구 경계 분리
 - 기준 설계: `docs/design/v0.1-product.md`
-- 현재 공개 버전: `v0.3.2`; 다음 버전 미지정
+- 현재 공개 버전: `v0.4.0`; 다음 버전 미지정
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
 ## Plan rules
@@ -36,7 +36,9 @@
 | v0.3.0 — Container release | Complete | Release workflow run `33350051878`; catalog/advisory baseline published on 2026-08-31. |
 | v0.3.1 — Container release | Complete | Release workflow run `33374796485`; relevant-result and bounded structuring corrections published on 2026-08-31. |
 | v0.3.2 — Container release | Complete | Release workflow run `33389763777`; live benefit regressions and exact-token authority corrections published on 2026-08-31. |
-| Release-note normalization | Complete; next tag run pending | PR #49 normalized all five GitHub Release bodies. The follow-up moved `runner.temp` paths to step-level environments and added a repository regression check; no new tag was created. |
+| Insurance ledger reconciliation | Complete in public code; protected runtime migration deferred | PR #54~#57 added stale-failure cleanup, exact contract links, append-only resolution history, one member summary, and protected count-only acceptance. |
+| v0.4.0 — Container release | Complete | Reconciliation, release-note/workflow corrections, documentation, and development-tool maintenance published on 2026-09-01; exact workflow and digest evidence is in the GitHub Release. |
+| Release-note normalization | Complete | PR #49 normalized the earlier five GitHub Release bodies. PR #53 moved `runner.temp` paths to step-level environments and the `v0.4.0` tag workflow exercised the corrected publication path. |
 
 ## Dependency flow
 
@@ -53,8 +55,8 @@ Phase 0 Foundation [complete]
   -> v0.1.0 and v0.2.0 GHCR releases [complete]
   -> Immutable private knowledge catalog and complete member projection [complete]
   -> Advisory publication, conditional estimates and v2 result assistance [complete]
-  -> v0.3.0, v0.3.1 and v0.3.2 GHCR/GitHub releases [complete]
-  -> Release workflow parser correction [pending before next tag]
+  -> v0.3.0, v0.3.1, v0.3.2 and v0.4.0 GHCR/GitHub releases [complete]
+  -> Insurance ledger reconciliation and release workflow parser correction [complete]
   -> Remaining source-format, Windows/mobile and disaster-recovery checks [pending]
 ```
 
@@ -332,7 +334,7 @@ The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0
 
 ### Releases and maintenance
 
-- `v0.3.0`, `v0.3.1`, and `v0.3.2` each passed the tag workflow and published immutable
+- `v0.3.0`, `v0.3.1`, `v0.3.2`, and `v0.4.0` each passed the tag workflow and published immutable
   Web/API/Worker version/SHA image pairs plus GitHub Release metadata.
 - PR #49 made CHANGELOG the Release change source and repaired the public bodies for `v0.1.0` through
   `v0.3.2`. The bodies now share three headings, contain real newlines, and record three distinct
@@ -340,9 +342,12 @@ The gate below completed before tag commit `4fff47b41e22eb95fed42887038640fb75e0
 - PR #50 updated `@testing-library/react` and `@vitejs/plugin-react`; PR #51 updated Ruff and the
   Python lockfile. Both replacement PRs passed all seven required CI checks and superseded the stale
   Dependabot PRs.
+- PR #54 removed superseded unreadable failures from the current queue without deleting audit
+  history. PR #55~#57 added the exact-ID reconciliation API and consolidated coverage-ledger UI,
+  then recorded a count-only protected acceptance without migrating or mutating the runtime.
 - The release workflow parser regression was corrected by moving `${{ runner.temp }}` paths to
   step-level environments and rejecting the invalid job-level form in repository validation.
-  `actionlint` and local workflow policy checks pass; the next deliberate tag run remains unverified.
+  `actionlint`, local workflow policy checks, and the `v0.4.0` tag publication path passed.
 
 ## Deferred after the current baseline
 

@@ -3883,7 +3883,7 @@
             "type": "string"
           },
           "version": {
-            "default": "0.3.2",
+            "default": "0.4.0",
             "title": "Version",
             "type": "string"
           }
@@ -9510,7 +9510,7 @@
   "info": {
     "description": "Evidence-first family insurance guidance API",
     "title": "FamilyCare API",
-    "version": "0.3.2"
+    "version": "0.4.0"
   },
   "openapi": "3.1.0",
   "paths": {

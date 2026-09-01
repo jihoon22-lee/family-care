@@ -20,7 +20,7 @@ API, and analyzer services.
 
 Run `TMPDIR=/tmp uv run python scripts/check_contracts.py` to validate the committed artifacts,
 including schema/example privacy rules, safety-limit metadata, generated-type drift, and the canonical
-OpenAPI document. The current `0.3.2` OpenAPI snapshot contains 72 paths, 84 operations, and 162
+OpenAPI document. The current `0.4.0` OpenAPI snapshot contains 72 paths, 84 operations, and 162
 component schemas; these counts are a review aid rather than a compatibility promise.
 
 To regenerate only the document TypedDict consumers, run

@@ -4,21 +4,43 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-01
+
+### Added
+
+- A member-scoped insurance reconciliation API now joins the immutable analyzed-contract snapshot,
+  exact operational policy links, closed readiness states, orphan operational policies, and
+  unresolved document sources without collapsing their separate authority.
+- Append-only operational-link and document-resolution histories support explicit linking,
+  replacement, dismissal, and reopening with optimistic concurrency checks.
+
 ### Changed
 
+- The coverage ledger now uses reconciliation as its single contract and Evidence-readiness summary,
+  while document inventory remains a focused editor and the operational Evidence ledger remains a
+  subordinate detail view.
 - Project status, architecture, security, roadmap, design, release, and contract documentation now
-  reflects the v0.3.2 product baseline, protected acceptance boundaries, and remaining platform and
-  recovery gaps.
+  reflects the v0.4.0 product baseline, protected acceptance boundaries, and remaining platform,
+  runtime-migration, manual-resolution, and recovery gaps.
 - Development tooling now uses Ruff 0.16.5, `@testing-library/react` 16.3.3, and
   `@vitejs/plugin-react` 6.1.1 with synchronized Python and pnpm lockfiles.
 
 ### Fixed
 
+- Superseded unreadable document failures no longer remain in the current work queue after an exact
+  later success or an explicit current resolution, while the historical failure remains auditable.
 - Release temporary-file paths now use the `runner` context only in step-level environments, and
   repository workflow validation rejects the invalid job-level form before GitHub parses it.
 - GitHub Release notes now derive their change list from the matching CHANGELOG section, append
   verified workflow and immutable image-digest evidence, and use real Markdown files so escaped
   newline text cannot replace actual line breaks.
+
+### Security
+
+- Contract identity is linked only through an explicit exact operational policy selection; insurer
+  and product display text never creates a fuzzy or automatic match.
+- Reconciliation projections and mutations remain household- and member-scoped, expose only bounded
+  workflow metadata, and reject stale writes instead of overwriting newer append-only history.
 
 ## [0.3.2] - 2026-08-31
 
