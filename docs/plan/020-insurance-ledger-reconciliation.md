@@ -79,9 +79,9 @@ orphan operational policies and unresolved sources.
 ## Task 6: Verification and protected acceptance
 
 1. [x] Run the complete required repository verification serially.
-2. [ ] Merge each reviewed PR only after every required GitHub Action passes, then delete its local and
+2. [x] Merge each reviewed PR only after every required GitHub Action passes, then delete its local and
    remote branch and any completed worktree.
-3. [ ] Run a count-only protected-runtime reconciliation after backup and restored-database rehearsal;
+3. [x] Run a count-only protected-runtime reconciliation after backup and restored-database rehearsal;
    stop on any conflict, unknown target, baseline drift, or count mismatch.
-4. [ ] Record only aggregate counts, stable reason codes, CI/merge references, and unverified visual/OCR
+4. [x] Record only aggregate counts, stable reason codes, CI/merge references, and unverified visual/OCR
    boundaries. Do not record actual private values.

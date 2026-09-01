@@ -1,6 +1,6 @@
 # Insurance ledger reconciliation design
 
-- 상태: API·Web 구현 및 합성 검증 완료; 보호된 runtime count-only 수용 대기
+- 상태: API·Web 구현·합성 검증과 보호된 runtime count-only 수용 완료; runtime migration·재배포 대기
 - 선행 권위: current private knowledge snapshot, operational `PolicyContract`, insurance document inventory
 - 권위 경계: 계약 identity 대사와 Evidence 준비 상태를 분리
 

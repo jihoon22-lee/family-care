@@ -125,12 +125,36 @@ and the expected current link ID; insurer and product display strings never crea
 - Contract, container-definition, and workflow-policy checks — passed.
 - `git diff --check` — passed.
 
+## PR and protected count-only acceptance
+
+- PR #56 passed Repository safety, Web, Python, PostgreSQL integration, and all three container jobs,
+  then merged as `bbe61d4b220f8753c2e6c6081b902d5ff93c90cb`. Its local and remote branch were
+  deleted, stale remote refs were pruned, and only the root `main` worktree remained.
+- The protected database had the previously recorded backup and restored-database rehearsal evidence.
+  A second write was not required for this acceptance. The reconciliation was executed in one
+  `REPEATABLE READ READ ONLY` transaction with a five-second statement limit and emitted counts only.
+- The current snapshot contained 52 analyzed contracts. With zero exact operational identity links,
+  all 52 were link-review items. The operational ledger contained 19 policies, all 19 were orphans
+  relative to that snapshot, and there were zero conflicts or duplicate snapshot links.
+- Of the 19 operational policies, 2 had confirmed terms Evidence and 17 were certificate-only. These
+  readiness counts remain subordinate until an exact contract identity link is confirmed.
+- There were 47 current failed-source rows: 5 password-required rows, 19 OCR-failed rows, and 42
+  permanently-failed rows; the processing dimensions overlap. Thirty-seven exact sources had a later
+  successful item of the same member and document role but a different opaque source ID. They are
+  manual changed-source review candidates, not automatic replacements. Ten had no such later success.
+- The protected runtime remained on migration `0023_advisory_disposition`; the new history tables,
+  application migration, image rebuild, and service recreation were not applied by this count-only
+  acceptance.
+
+The closed contract partition (`52 = 0 + 0 + 52 + 0`), operational completeness partition
+(`19 = 2 + 17`), and failure-source partition (`47 = 37 + 10`) were internally consistent. No actual
+label, identifier, path, document content, database URL, credential, digest, or row-level result was
+recorded.
+
 ## Remaining Boundaries
 
-- GitHub PR review, required Actions, merge, and branch/worktree cleanup are pending at the time of
-  this implementation record.
-- Protected-runtime reconciliation remains count-only and requires the documented backup and restored
-  database rehearsal gates before execution.
+- Runtime migration/redeployment and the 37 explicit changed-source resolutions require a separately
+  approved operational pass; this count-only acceptance did not mutate or auto-link anything.
 - Windows browser, physical mobile PWA, actual insurance documents, OCR variants, tags, releases, and
   deployment were not exercised.
 - All committed examples and tests are synthetic from inception. No protected document content,

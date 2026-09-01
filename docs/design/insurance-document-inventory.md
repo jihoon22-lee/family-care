@@ -1,7 +1,7 @@
 # Insurance document inventory design
 
-- 상태: operational inventory 구현·합성 검증 완료; 통합 계약 대사와 해결 이력 API·Web 수용 완료,
-  보호된 runtime count-only 검증 대기
+- 상태: operational inventory 구현·합성 검증 완료; 통합 계약 대사와 해결 이력 API·Web 및 보호된
+  runtime count-only 수용 완료, runtime migration·재배포 대기
 - 적용 단계: Private policy structuring 후속
 - 선행 조건: FamilyMember, private document batch, PolicyContract, Evidence
 
