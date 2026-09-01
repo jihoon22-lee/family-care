@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
-from familycare_api.insurance_documents.domain import UnreadableSource
 from familycare_api.insurance_reconciliation.domain import (
     KnowledgeContractSource,
     OperationalLinkHistory,
     OperationalPolicySource,
+    UnresolvedDocumentSource,
     build_member_reconciliation,
 )
 
@@ -81,17 +81,19 @@ def _link(
 
 def test_projection_partitions_every_contract_and_keeps_document_work_independent() -> None:
     unresolved = (
-        UnreadableSource(
+        UnresolvedDocumentSource(
             document_batch_item_id=UUID("00000000-0000-4000-8000-000000002511"),
             source_kind="policy",
             display_label="보험증권 문서",
             processing_state="PASSWORD_REQUIRED",
+            current_resolution_id=None,
         ),
-        UnreadableSource(
+        UnresolvedDocumentSource(
             document_batch_item_id=UUID("00000000-0000-4000-8000-000000002512"),
             source_kind="terms",
             display_label="보험약관 문서",
             processing_state="OCR_REQUIRED",
+            current_resolution_id=None,
         ),
     )
 

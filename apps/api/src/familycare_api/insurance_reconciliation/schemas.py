@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from familycare_api.insurance_documents.schemas import UnreadableSourceResponse
 from familycare_api.insurance_reconciliation.domain import (
     ContractReconciliation,
     DocumentResolutionHistory,
@@ -16,6 +15,7 @@ from familycare_api.insurance_reconciliation.domain import (
     OperationalLinkHistory,
     OperationalLinkProjection,
     OrphanOperationalPolicy,
+    UnresolvedDocumentSource,
 )
 
 _STRICT = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -231,6 +231,26 @@ class ReconciliationSummaryResponse(BaseModel):
     unresolved_unreadable_sources: int = Field(ge=0, le=1000)
 
 
+class ReconciliationUnreadableSourceResponse(BaseModel):
+    model_config = _STRICT
+
+    document_batch_item_id: UUID
+    source_kind: Literal[
+        "policy",
+        "terms",
+        "product_explanation",
+        "application",
+        "supporting",
+    ]
+    display_label: str = Field(min_length=1, max_length=80)
+    processing_state: Literal["PASSWORD_REQUIRED", "OCR_REQUIRED", "FAILED"]
+    current_resolution_id: UUID | None
+
+    @classmethod
+    def from_domain(cls, value: UnresolvedDocumentSource) -> Self:
+        return cls(**value.__dict__)
+
+
 class MemberInsuranceReconciliationResponse(BaseModel):
     model_config = _STRICT
 
@@ -243,7 +263,7 @@ class MemberInsuranceReconciliationResponse(BaseModel):
     orphan_operational_contracts: tuple[OrphanOperationalPolicyResponse, ...] = Field(
         max_length=256
     )
-    unresolved_sources: tuple[UnreadableSourceResponse, ...] = Field(max_length=1000)
+    unresolved_sources: tuple[ReconciliationUnreadableSourceResponse, ...] = Field(max_length=1000)
 
     @classmethod
     def from_domain(cls, value: MemberInsuranceReconciliation) -> Self:
@@ -261,7 +281,8 @@ class MemberInsuranceReconciliationResponse(BaseModel):
                 for item in value.orphan_operational_contracts
             ),
             unresolved_sources=tuple(
-                UnreadableSourceResponse.from_domain(item) for item in value.unresolved_sources
+                ReconciliationUnreadableSourceResponse.from_domain(item)
+                for item in value.unresolved_sources
             ),
         )
 

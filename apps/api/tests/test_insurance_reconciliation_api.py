@@ -8,12 +8,12 @@ from uuid import UUID
 
 import pytest
 from familycare_api.errors import install_error_handlers
-from familycare_api.insurance_documents.domain import UnreadableSource
 from familycare_api.insurance_reconciliation.domain import (
     DocumentResolutionHistory,
     KnowledgeContractSource,
     OperationalLinkHistory,
     OperationalPolicySource,
+    UnresolvedDocumentSource,
     build_member_reconciliation,
 )
 from familycare_api.insurance_reconciliation.router import (
@@ -84,11 +84,12 @@ class _Service:
                 ),
             ),
             unresolved_sources=(
-                UnreadableSource(
+                UnresolvedDocumentSource(
                     document_batch_item_id=FAILED_ITEM_ID,
                     source_kind="policy",
                     display_label="보험증권 문서",
                     processing_state="PASSWORD_REQUIRED",
+                    current_resolution_id=None,
                 ),
             ),
         )
@@ -152,6 +153,7 @@ def test_get_reconciliation_is_closed_no_store_and_private_field_free() -> None:
     assert payload["contracts"][0]["reconciliation_state"] == "DOCUMENTS_PENDING"
     assert payload["contracts"][0]["operational_link"]["id"] == str(LINK_ID)
     assert payload["contracts"][0]["document_readiness"]["completeness"] == ("CERTIFICATE_ONLY")
+    assert payload["unresolved_sources"][0]["current_resolution_id"] is None
     serialized = json.dumps(payload, sort_keys=True).lower()
     for forbidden in (
         "source_key",

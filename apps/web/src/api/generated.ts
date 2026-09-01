@@ -1795,7 +1795,7 @@ export interface MemberInsuranceReconciliationResponse {
   orphan_operational_contracts: Array<OrphanOperationalPolicyResponse>;
   schema_version: "1";
   summary: ReconciliationSummaryResponse;
-  unresolved_sources: Array<UnreadableSourceResponse>;
+  unresolved_sources: Array<ReconciliationUnreadableSourceResponse>;
 }
 
 export interface MoneyResponse {
@@ -2194,6 +2194,15 @@ export interface ReconciliationSummaryResponse {
   orphan_operational_contracts: number;
   total_contracts: number;
   unresolved_unreadable_sources: number;
+}
+
+export interface ReconciliationUnreadableSourceResponse {
+  current_resolution_id: string | null;
+  display_label: string;
+  document_batch_item_id: string;
+  processing_state: "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
+  source_kind:
+    "policy" | "terms" | "product_explanation" | "application" | "supporting";
 }
 
 export interface RegisteredPolicyInventoryResponse {

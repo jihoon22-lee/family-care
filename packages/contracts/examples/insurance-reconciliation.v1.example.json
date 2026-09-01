@@ -69,7 +69,8 @@
       "document_batch_item_id": "00000000-0000-4000-8000-000000002808",
       "source_kind": "policy",
       "display_label": "보험증권 문서",
-      "processing_state": "PASSWORD_REQUIRED"
+      "processing_state": "PASSWORD_REQUIRED",
+      "current_resolution_id": null
     }
   ]
 }
