@@ -292,6 +292,8 @@ Evidence 연결과 청구 실행 준비가 끝난 일부 계약을 다루는 운
 건수가 같다는 가정을 하지 않으며, 운영 subset을 전체 가입 보험 수로 표시하지 않는다.
 가족별 필터에는 앱의 다른 가족 API와 동일한 opaque `family_member_id`만 노출하며,
 실제 이름·생년월일·외부 Drive ID·package alias는 binding 식별자로 사용하거나 응답하지 않는다.
+사후 operational identity 확인과 통합 readiness projection은 immutable snapshot을 수정하지 않는
+`docs/design/insurance-ledger-reconciliation.md`의 append-only history가 소유한다.
 
 ## Verified publication and event decision boundary
 
