@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 
 import type { MemberInsuranceDocumentInventoryResponse } from "../../api/generated";
 import { getInsuranceDocumentInventory } from "../../api/insurance-document-inventory";
@@ -17,5 +17,11 @@ export function useInsuranceDocumentInventory(memberId: string | undefined) {
   const reload = useCallback(() => {
     if (memberId) cache.invalidate(`insurance-document-inventory:${memberId}`);
   }, [cache, memberId]);
+  useEffect(() => {
+    if (!memberId) return;
+    const revalidate = () => cache.invalidate(key);
+    window.addEventListener("focus", revalidate);
+    return () => window.removeEventListener("focus", revalidate);
+  }, [cache, key, memberId]);
   return { ...resource, reload };
 }

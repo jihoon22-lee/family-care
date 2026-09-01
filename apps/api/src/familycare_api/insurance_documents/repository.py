@@ -361,6 +361,24 @@ class InsuranceDocumentRepository:
                           item.state IN ('password_required', 'permanently_failed')
                           OR item.ocr_state = 'failed'
                       )
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM document_batch_items AS resolved_item
+                          JOIN document_batches AS resolved_batch
+                            ON resolved_batch.id = resolved_item.batch_id
+                          WHERE resolved_batch.household_space_id =
+                                batch.household_space_id
+                            AND resolved_batch.family_member_id = batch.family_member_id
+                            AND resolved_item.source_id = item.source_id
+                            AND resolved_item.state = 'succeeded'
+                            AND resolved_item.processed_document_version_id IS NOT NULL
+                            AND resolved_item.ocr_state <> 'failed'
+                            AND resolved_item.completed_at > COALESCE(
+                                item.completed_at,
+                                item.updated_at,
+                                item.created_at
+                            )
+                      )
                     ORDER BY item.created_at, item.id
                     """,
                     (scope.household_space_id, member_id),
