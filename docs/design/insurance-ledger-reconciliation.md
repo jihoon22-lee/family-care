@@ -1,6 +1,6 @@
 # Insurance ledger reconciliation design
 
-- 상태: 구현 진행 중
+- 상태: API·Web 구현 및 합성 검증 완료; 보호된 runtime count-only 수용 대기
 - 선행 권위: current private knowledge snapshot, operational `PolicyContract`, insurance document inventory
 - 권위 경계: 계약 identity 대사와 Evidence 준비 상태를 분리
 
@@ -102,6 +102,7 @@ MemberInsuranceReconciliation
     document_readiness
   orphan_operational_contracts[]
   unresolved_sources[]
+    current_resolution_id
 ```
 
 계약의 `reconciliation_state`는 상호 배타적으로 계산한다.
@@ -136,6 +137,18 @@ batch terminal transition, private snapshot 변경 뒤 reconciliation과 invento
 창 focus와 사용자의 명시적 새로고침에서도 재검증한다. 서비스 워커와 persistent browser storage에는
 어느 응답도 저장하지 않는다.
 
+`전체 가입 보험 분석` 패널은 닫힌 네 상태 count와 계약별 준비 상태를 함께 표시한다. 정확한
+operational ID를 고른 사용자의 명시적 확인만 `MATCH`를 만들 수 있고, 자동 문자열 유사도 후보는
+제공하지 않는다. 연결되지 않은 앱 계약은 `앱 원장 단독 계약`, 현재 해결되지 않은 판독 실패는
+`판독·해결 작업`으로 같은 projection 안에 둔다. 해결 mutation에 필요한 nullable
+`current_resolution_id`도 projection이 제공해 stale UI가 최신 이력을 덮어쓰지 못하게 한다.
+
+document inventory는 `문서 근거 정리` 편집기로 표시한다. 계약·준비 상태 summary를 반복하지 않고,
+연결된 document set 세부는 기본으로 접어 둔다. 미연결 set/component 편집은 유지하며, 과거 실패
+목록은 reconciliation 작업 큐에서만 현재 상태를 설명한다. 기존 operational Evidence 원장은
+`청구 근거 세부 원장`으로 명시해 전체 계약 목록과 구분한다. reconciliation 요청 실패는 inventory,
+Evidence 원장, 후보 검토를 막지 않으며 각 경계가 독립적으로 재시도할 수 있다.
+
 ## Invariants
 
 1. private knowledge snapshot과 기존 `PolicyContract`·`Rider`를 대사 과정에서 수정하지 않는다.
@@ -159,3 +172,5 @@ batch terminal transition, private snapshot 변경 뒤 reconciliation과 invento
 - exact-source automatic resolution과 changed-source manual resolution, dismissal, reopen
 - `REPEATABLE READ READ ONLY`, no-store, bounded arrays와 private-field 부재
 - migration upgrade/downgrade, current unique index, digest/idempotency와 supersede history
+- 단일 Web summary, 정확한 ID 기반 link/resolution mutation, 부분 실패, focus/수동 refresh와
+  reconciliation·inventory 동시 cache invalidation

@@ -7,7 +7,10 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from familycare_api.insurance_documents.domain import UnreadableSource
+from familycare_api.insurance_documents.domain import (
+    DocumentRole,
+    UnreadableProcessingState,
+)
 
 TriState = Literal["MATCH", "NO_MATCH", "UNKNOWN"]
 PolicyStatus = Literal["active", "inactive", "expired", "cancelled", "unknown"]
@@ -57,6 +60,15 @@ class DocumentResolutionHistory:
     authority: Literal["USER_CONFIRMED_DOCUMENT_RESOLUTION"]
     reason_code: str
     confirmed_at: datetime
+
+
+@dataclass(frozen=True)
+class UnresolvedDocumentSource:
+    document_batch_item_id: UUID
+    source_kind: DocumentRole
+    display_label: str
+    processing_state: UnreadableProcessingState
+    current_resolution_id: UUID | None
 
 
 @dataclass(frozen=True)
@@ -129,7 +141,7 @@ class MemberInsuranceReconciliation:
     summary: ReconciliationSummary
     contracts: tuple[ContractReconciliation, ...]
     orphan_operational_contracts: tuple[OrphanOperationalPolicy, ...]
-    unresolved_sources: tuple[UnreadableSource, ...]
+    unresolved_sources: tuple[UnresolvedDocumentSource, ...]
 
 
 def _unique_by_id[T](values: tuple[T, ...], *, label: str) -> dict[UUID, T]:
@@ -248,7 +260,7 @@ def build_member_reconciliation(
     contracts: tuple[KnowledgeContractSource, ...],
     current_links: tuple[OperationalLinkHistory, ...],
     operational_policies: tuple[OperationalPolicySource, ...],
-    unresolved_sources: tuple[UnreadableSource, ...],
+    unresolved_sources: tuple[UnresolvedDocumentSource, ...],
 ) -> MemberInsuranceReconciliation:
     """Derive one closed member projection without changing either source authority."""
 
@@ -324,5 +336,6 @@ __all__ = [
     "MemberInsuranceReconciliation",
     "OperationalLinkHistory",
     "OperationalPolicySource",
+    "UnresolvedDocumentSource",
     "build_member_reconciliation",
 ]

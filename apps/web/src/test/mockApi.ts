@@ -254,6 +254,30 @@ export function createMockApi(
       });
     }
 
+    const reconciliationMatch = url.pathname.match(
+      /^\/api\/v1\/family-members\/([^/]+)\/insurance-reconciliation$/,
+    );
+    if (reconciliationMatch) {
+      return jsonResponse({
+        contracts: [],
+        generated_at: "2026-09-01T00:00:00Z",
+        knowledge_run_id: "00000000-0000-4000-8000-000000009901",
+        member_id: reconciliationMatch[1],
+        orphan_operational_contracts: [],
+        schema_version: "1",
+        summary: {
+          conflict_contracts: 0,
+          documents_pending_contracts: 0,
+          evidence_ready_contracts: 0,
+          link_review_required_contracts: 0,
+          orphan_operational_contracts: 0,
+          total_contracts: 0,
+          unresolved_unreadable_sources: 0,
+        },
+        unresolved_sources: [],
+      });
+    }
+
     const inventoryMatch = url.pathname.match(
       /^\/api\/v1\/family-members\/([^/]+)\/insurance-document-inventory$/,
     );

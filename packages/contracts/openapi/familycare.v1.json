@@ -6211,7 +6211,7 @@
           },
           "unresolved_sources": {
             "items": {
-              "$ref": "#/components/schemas/UnreadableSourceResponse"
+              "$ref": "#/components/schemas/ReconciliationUnreadableSourceResponse"
             },
             "maxItems": 1000,
             "title": "Unresolved Sources",
@@ -8297,6 +8297,63 @@
           "unresolved_unreadable_sources"
         ],
         "title": "ReconciliationSummaryResponse",
+        "type": "object"
+      },
+      "ReconciliationUnreadableSourceResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "current_resolution_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Resolution Id"
+          },
+          "display_label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Display Label",
+            "type": "string"
+          },
+          "document_batch_item_id": {
+            "format": "uuid",
+            "title": "Document Batch Item Id",
+            "type": "string"
+          },
+          "processing_state": {
+            "enum": [
+              "PASSWORD_REQUIRED",
+              "OCR_REQUIRED",
+              "FAILED"
+            ],
+            "title": "Processing State",
+            "type": "string"
+          },
+          "source_kind": {
+            "enum": [
+              "policy",
+              "terms",
+              "product_explanation",
+              "application",
+              "supporting"
+            ],
+            "title": "Source Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "document_batch_item_id",
+          "source_kind",
+          "display_label",
+          "processing_state",
+          "current_resolution_id"
+        ],
+        "title": "ReconciliationUnreadableSourceResponse",
         "type": "object"
       },
       "RegisteredPolicyInventoryResponse": {

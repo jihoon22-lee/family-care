@@ -11,7 +11,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from familycare_api.common.scope import HouseholdScope
-from familycare_api.insurance_documents.domain import DocumentRole, UnreadableSource
+from familycare_api.insurance_documents.domain import DocumentRole
 from familycare_api.insurance_documents.repository import _processing_state
 from familycare_api.insurance_reconciliation.domain import (
     DocumentResolutionHistory,
@@ -20,6 +20,7 @@ from familycare_api.insurance_reconciliation.domain import (
     OperationalLinkHistory,
     OperationalPolicySource,
     TriState,
+    UnresolvedDocumentSource,
     build_member_reconciliation,
 )
 
@@ -242,21 +243,20 @@ class InsuranceReconciliationRepository:
                 unreadable_rows = connection.execute(
                     """
                     SELECT item.id AS document_batch_item_id, item.document_kind,
-                           item.state AS item_state, item.ocr_state
+                           item.state AS item_state, item.ocr_state,
+                           resolution.id AS current_resolution_id
                     FROM document_batch_items AS item
                     JOIN document_batches AS batch ON batch.id = item.batch_id
+                    LEFT JOIN document_batch_item_resolutions AS resolution
+                      ON resolution.failed_item_id = item.id
+                     AND resolution.household_space_id = batch.household_space_id
+                     AND resolution.family_member_id = batch.family_member_id
+                     AND resolution.is_current
                     WHERE batch.household_space_id = %s
                       AND batch.family_member_id = %s
                       AND (item.state IN ('password_required', 'permanently_failed')
                            OR item.ocr_state = 'failed')
-                      AND NOT EXISTS (
-                        SELECT 1 FROM document_batch_item_resolutions AS resolution
-                        WHERE resolution.failed_item_id = item.id
-                          AND resolution.household_space_id = batch.household_space_id
-                          AND resolution.family_member_id = batch.family_member_id
-                          AND resolution.is_current
-                          AND resolution.resolution IN ('REPLACED', 'DISMISSED')
-                      )
+                      AND (resolution.id IS NULL OR resolution.resolution = 'REOPENED')
                       AND NOT EXISTS (
                         SELECT 1
                         FROM document_batch_items AS resolved_item
@@ -328,11 +328,12 @@ class InsuranceReconciliationRepository:
                 for row in policy_rows
             )
             unreadable = tuple(
-                UnreadableSource(
+                UnresolvedDocumentSource(
                     document_batch_item_id=cast(UUID, row["document_batch_item_id"]),
                     source_kind=cast(DocumentRole, row["document_kind"]),
                     display_label=labels[cast(DocumentRole, row["document_kind"])],
                     processing_state=cast(Any, _processing_state(row)),
+                    current_resolution_id=cast(UUID | None, row["current_resolution_id"]),
                 )
                 for row in unreadable_rows
             )

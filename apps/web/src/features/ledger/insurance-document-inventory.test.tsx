@@ -226,26 +226,22 @@ afterEach(() => {
 });
 
 describe("insurance document inventory", () => {
-  it("renders six summary states and separates registered policy documents from unconfirmed sets", async () => {
+  it("keeps document editing separate without rendering a second contract summary", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(INVENTORY)));
 
     renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
 
     expect(
-      await screen.findByRole("heading", { name: "앱 업로드·문서 연결 현황" }),
+      await screen.findByRole("heading", { name: "문서 근거 정리" }),
     ).toBeInTheDocument();
-    for (const label of [
-      "앱 근거 연결 보험",
-      "증권+약관",
-      "증권만",
-      "미연결 약관",
-      "상품설명서",
-      "판독 필요",
-    ]) {
-      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
-    }
     expect(
-      screen.getByRole("heading", { name: "앱 근거 연결 계약" }),
+      screen.queryByRole("heading", { name: "앱 업로드·문서 연결 현황" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "앱 근거 연결 계약" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText("연결된 문서 묶음 세부 편집 · 1건"),
     ).toBeInTheDocument();
     expect(screen.getByText("Sample Policy")).toBeInTheDocument();
     expect(screen.getByText("묶음 문서")).toBeInTheDocument();
@@ -258,8 +254,7 @@ describe("insurance document inventory", () => {
     ).toBeInTheDocument();
     expect(screen.getAllByText("앱 계약 연결 대기").length).toBeGreaterThan(0);
     expect(screen.getByText("Sample Terms Bundle")).toBeInTheDocument();
-    expect(screen.getAllByText("암호 해제 필요").length).toBeGreaterThan(0);
-    expect(screen.getByText("보험증권 문서")).toBeInTheDocument();
+    expect(screen.queryByText("보험증권 문서")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /누락 문서 추가/ }),
     ).toHaveAttribute("href", `/app/documents/import?member=${MEMBER_ID}`);
@@ -319,7 +314,7 @@ describe("insurance document inventory", () => {
       await screen.findByRole("alert", { name: /문서 현황/ }),
     ).toHaveTextContent(/문서 현황.*불러오지 못했/);
     expect(
-      screen.getByRole("heading", { name: "청구 근거 연결 계약" }),
+      screen.getByRole("heading", { name: "청구 근거 세부 원장" }),
     ).toBeInTheDocument();
   });
 
@@ -489,7 +484,7 @@ describe("insurance document inventory", () => {
 
     expect(
       await screen.findByRole("option", {
-        name: /앱 근거 연결 계약.*Sample Policy/,
+        name: /연결된 문서 묶음.*Sample Policy/,
       }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /약관.*문서 연결$/ }));

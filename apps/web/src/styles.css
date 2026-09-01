@@ -970,6 +970,51 @@ button:focus-visible {
   font-weight: 500;
 }
 
+.reconciliation-heading-actions {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  justify-items: end;
+}
+
+.reconciliation-heading-actions strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.6rem;
+  font-weight: 500;
+}
+
+.reconciliation-heading-actions button,
+.reconciliation-link-controls button,
+.reconciliation-review-group button {
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  color: var(--ink);
+  background: transparent;
+  font-size: 0.7rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reconciliation-heading-actions button:hover,
+.reconciliation-link-controls button:hover,
+.reconciliation-review-group button:hover {
+  color: white;
+  background: var(--ink);
+}
+
+.reconciliation-heading-actions button:disabled,
+.reconciliation-link-controls button:disabled,
+.reconciliation-review-group button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.reconciliation-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .private-catalog-contracts {
   display: grid;
   gap: 12px;
@@ -1014,6 +1059,21 @@ button:focus-visible {
   font-weight: 750;
 }
 
+.private-catalog-contract > header > .reconciliation-state-documents_pending,
+.private-catalog-contract
+  > header
+  > .reconciliation-state-link_review_required {
+  border-color: rgb(217 133 0 / 40%);
+  color: #8a4c0d;
+  background: rgb(217 133 0 / 8%);
+}
+
+.private-catalog-contract > header > .reconciliation-state-conflict {
+  border-color: rgb(180 55 55 / 40%);
+  color: #9b2929;
+  background: rgb(180 55 55 / 8%);
+}
+
 .private-catalog-contract-facts {
   display: flex;
   flex-wrap: wrap;
@@ -1046,6 +1106,81 @@ button:focus-visible {
 .private-catalog-contract > button[aria-expanded="true"] {
   color: white;
   background: var(--ink);
+}
+
+.reconciliation-link-controls {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid rgb(217 133 0 / 30%);
+  background: rgb(255 250 239 / 72%);
+}
+
+.reconciliation-link-controls label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reconciliation-link-controls label > span {
+  color: var(--quiet);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.reconciliation-link-controls > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reconciliation-link-controls.compact {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.reconciliation-link-controls p,
+.reconciliation-review-group > p {
+  margin: 0;
+  color: var(--quiet);
+  font-size: 0.76rem;
+  line-height: 1.55;
+}
+
+.reconciliation-review-group {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--rule);
+}
+
+.reconciliation-review-group ul {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: var(--rule);
+  list-style: none;
+}
+
+.reconciliation-review-group li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  background: white;
+}
+
+.reconciliation-review-group li strong {
+  overflow-wrap: anywhere;
+}
+
+.reconciliation-review-group li span {
+  color: var(--quiet);
+  font-size: 0.7rem;
 }
 
 .private-catalog-analysis {
@@ -1261,6 +1396,28 @@ button:focus-visible {
 
 .insurance-inventory-actions .event-start-link {
   flex: 0 0 auto;
+}
+
+.insurance-inventory-details {
+  padding: 16px;
+  border: 1px solid var(--rule);
+  background: rgb(251 252 253 / 72%);
+}
+
+.insurance-inventory-details > summary {
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.insurance-inventory-details > summary:focus-visible {
+  outline: 3px solid rgb(36 107 254 / 35%);
+  outline-offset: 4px;
+}
+
+.insurance-inventory-details[open] > summary {
+  margin-bottom: 12px;
 }
 
 .insurance-inventory-registered,
@@ -2120,6 +2277,25 @@ blockquote {
   .private-catalog-sections article > header {
     display: grid;
     align-items: start;
+  }
+
+  .reconciliation-heading-actions {
+    justify-items: start;
+  }
+
+  .reconciliation-heading-actions button,
+  .reconciliation-link-controls button,
+  .reconciliation-review-group button {
+    width: 100%;
+  }
+
+  .reconciliation-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reconciliation-link-controls.compact,
+  .reconciliation-review-group li {
+    grid-template-columns: 1fr;
   }
 
   .private-catalog-contract > header > span {

@@ -203,7 +203,8 @@
         "document_batch_item_id",
         "source_kind",
         "display_label",
-        "processing_state"
+        "processing_state",
+        "current_resolution_id"
       ],
       "properties": {
         "document_batch_item_id": { "$ref": "#/$defs/Uuid" },
@@ -212,6 +213,9 @@
         "processing_state": {
           "type": "string",
           "enum": ["PASSWORD_REQUIRED", "OCR_REQUIRED", "FAILED"]
+        },
+        "current_resolution_id": {
+          "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
         }
       }
     }

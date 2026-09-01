@@ -69,6 +69,7 @@ def test_projection_and_link_history_are_scoped_closed_and_versioned() -> None:
     assert initial.summary.orphan_operational_contracts == 1
     assert initial.summary.unresolved_unreadable_sources == 1
     assert initial.unresolved_sources[0].document_batch_item_id == LOCKED_ITEM_ID
+    assert initial.unresolved_sources[0].current_resolution_id is None
     assert repository.get_member(scope, MEMBER_B_ID).summary.total_contracts == 0
 
     with psycopg.connect(
@@ -283,7 +284,9 @@ def test_document_resolution_requires_a_later_success_in_the_same_member_scope()
         expected_current_resolution_id=replaced.id,
     )
     assert reopened.resolution == "REOPENED"
-    assert repository.get_member(scope, MEMBER_A_ID).summary.unresolved_unreadable_sources == 1
+    reopened_projection = repository.get_member(scope, MEMBER_A_ID)
+    assert reopened_projection.summary.unresolved_unreadable_sources == 1
+    assert reopened_projection.unresolved_sources[0].current_resolution_id == reopened.id
 
     dismissed = repository.confirm_document_resolution(
         scope,
