@@ -6,7 +6,7 @@ Event/Result PWA, 수동 Claim workflow, 로컬 인증, 암호화 document batch
 private import reliability, private local Compose와 bounded Tailscale inspection이 `main`에 구현되어
 있다. 현재 구조에는 immutable private knowledge snapshot, 전체 catalog projection, append-only
 rule/calculation publication, advisory decision stream과 선택적 one-call result assistance도 포함된다.
-공개 제품 기준은 `v0.3.2`이고 이후 변경은 아직 릴리스되지 않았다. 상세 초기 제품 기준은
+공개 제품 기준은 `v0.4.0`이다. 상세 초기 제품 기준은
 `docs/design/v0.1-product.md`, 현재 전달 상태는 `docs/plan/000-project-roadmap.md`를 따른다.
 
 ## Architectural goals
@@ -266,14 +266,14 @@ AI explanation은 구조화 결과와 reason code를 사용자 언어로 풀어 
 - 현재 runtime은 개인 WSL Docker Compose와 Tailscale private access다.
 - LUKS, BitLocker, WSL swap, 고정 크기 encrypted volume 변경은 수행하지 않는다.
 - `vMAJOR.MINOR.PATCH` tag는 Web/API/Worker image를 GHCR에 publish한다.
-- `v0.1.0`부터 `v0.3.2`까지 tag, immutable image와 GitHub Release가 게시되었다.
+- `v0.1.0`부터 `v0.4.0`까지 tag, immutable image와 GitHub Release가 게시되었다.
 - `CHANGELOG.md` 버전 섹션이 Release 변경사항의 단일 원본이며 검증된 workflow, commit과 세
   image digest를 별도 증거로 붙인다.
 - GHCR publish는 running service deployment를 의미하지 않는다.
 - Cloud Run과 public production deployment는 별도 승인 전까지 구성하지 않는다.
 - 2026-09-01 release workflow의 `runner.temp` 경로는 step-level `env`로 이동했고 저장소 검사도
-  job-level `runner` context를 거부한다. 수정 과정에서 tag를 만들지 않았으므로 다음 실제 tag
-  workflow 결과는 별도 릴리스 증거로 남긴다.
+  job-level `runner` context를 거부한다. `v0.4.0` tag workflow가 이 게시 경로를 실제로
+  통과했으며 exact run, commit과 digest는 GitHub Release 증거에 남긴다.
 
 ## Verification boundaries
 

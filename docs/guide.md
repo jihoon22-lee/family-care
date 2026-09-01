@@ -2,7 +2,8 @@
 
 이 문서는 완료된 Foundation·Phase 1부터 정책 원장, 약관 검색·규칙 검토, 결정론적 판정·조건부
 계산, Event/Result PWA, 수동 Claim workflow, encrypted document batch·selective local OCR,
-private knowledge catalog/publication과 `v0.3.2` 결과 흐름까지 현재 개발환경의 경계를 설명합니다.
+private knowledge catalog/publication, 통합 원장 대사와 `v0.4.0` 결과 흐름까지 현재 개발환경의
+경계를 설명합니다.
 업무 API는 로컬 인증 session이 없으면 fail-closed입니다. 공개 개발·CI에는 합성 자료만 사용하며,
 저장소 밖 보호된 acceptance와 아직 실행하지 않은 실제 문서·기기 검증을 구분합니다.
 
@@ -338,7 +339,7 @@ Tailscale은 private network 접근 경로일 뿐 app login을 대체하지 않�
 이 인증 경계는 합성 계정·합성 PostgreSQL·합성 Web 테스트와 private-runtime의 Tailscale HTTPS
 브라우저 흐름으로 확인했습니다. 보호된 catalog/result acceptance도 인증 session으로 수행했지만
 Windows 실제 브라우저, 모바일 PWA와 다른 실제 기기는 검증하지 않았습니다. `v0.1.0`부터
-`v0.3.2`까지 GHCR 게시와 GitHub Release는 완료됐으며, 이는 Cloud Run이나 공개 운영 배포가
+`v0.4.0`까지 GHCR 게시와 GitHub Release는 완료됐으며, 이는 Cloud Run이나 공개 운영 배포가
 아닙니다.
 
 ### Use the local synthetic document-analysis API
@@ -556,15 +557,14 @@ docker compose --env-file .env -f infra/compose/compose.yaml build worker
 
 ### Current release status
 
-- 공개 릴리스 `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.3.2`의 tag workflow와 세 image
+- 공개 릴리스 `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.3.2`, `v0.4.0`의 tag workflow와 세 image
   digest 검증은 성공했습니다.
-- 다섯 GitHub Release 본문은 같은 `Changes`/`Release evidence`/`Privacy and deployment
+- 여섯 GitHub Release 본문은 같은 `Changes`/`Release evidence`/`Privacy and deployment
   boundary` 구조이며 실제 줄바꿈과 서로 다른 세 digest를 확인했습니다.
 - release 임시 파일 경로는 `${{ runner.temp }}`를 사용할 수 있는 각 step의 `env`에만 두며,
   repository workflow 검사는 job-level `runner` context를 회귀 오류로 거부합니다.
-- `actionlint`와 repository workflow 검사는 수정된 파일을 통과했습니다. 이 수정은 tag, image,
-  기존 Release를 만들거나 바꾸지 않았으므로 다음 실제 tag workflow는 명시적인 릴리스 결정 뒤
-  별도 실행 증거로 확인합니다.
+- `actionlint`, repository workflow 검사와 `v0.4.0` tag workflow가 수정된 publication path를
+  통과했습니다. 정확한 run, commit과 digest는 해당 GitHub Release 본문에 기록합니다.
 
 ## Troubleshooting
 

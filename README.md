@@ -6,8 +6,8 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-`main`은 공개 버전 `v0.3.2`의 제품 기능에 아직 릴리스되지 않은 유지보수 변경을 더한
-상태입니다. Phase 0 Foundation과 Phase 1 Synthetic PDF Ingestion부터 정책 원장·candidate
+`main`은 `v0.4.0` 릴리스 기준으로 정리되어 있습니다. Phase 0 Foundation과 Phase 1 Synthetic
+PDF Ingestion부터 정책 원장·candidate
 review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result
 PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가
 구현되어 있습니다. 이후 immutable private knowledge snapshot, 전체 보험 catalog, publication별
@@ -19,9 +19,9 @@ PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR
 Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는
 1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면
 `401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. Web/API/Worker의 현재 제품 버전은
-`0.3.2`이고, `v0.1.0`, `v0.2.0`, `v0.3.0`, `v0.3.1`, `v0.3.2` 컨테이너와 GitHub Release가
-게시되어 있습니다. 다섯 Release 본문은 CHANGELOG 변경사항, workflow·commit 증거와 서로 다른
-Web/API/Worker digest를 같은 형식으로 기록합니다. 다음 릴리스 버전은 아직 정하지 않았습니다.
+`0.4.0`입니다. `v0.1.0`부터 `v0.4.0`까지의 공개 태그·컨테이너·GitHub Release 상태는 각 tag
+workflow와 Release 본문을 권위 있는 증거로 사용합니다. 각 Release 본문은 CHANGELOG 변경사항,
+workflow·commit 증거와 서로 다른 Web/API/Worker digest를 같은 형식으로 기록합니다.
 
 WSL Docker Compose private runtime, Tailscale HTTPS, 인증된 브라우저 login·navigation·logout,
 synthetic OpenAI pipeline을 확인했습니다. 저장소 밖의 보호된 package에 대해서는 validation,
@@ -35,8 +35,8 @@ end-to-end import/OCR, Windows 브라우저, 모바일 PWA, 다른 실제 기기
 
 2026-09-01 release workflow의 임시 파일 경로는 `runner.temp`를 사용할 수 있는 step-level
 `env`로 한정했고, 저장소 검사도 job-level `runner` context를 거부합니다. `actionlint`와 로컬
-workflow 정책 검사는 통과했지만 이 수정으로 새 tag를 만들지는 않았으므로 다음 실제 tag run은
-명시적인 릴리스 결정 뒤 별도로 확인합니다.
+workflow 정책 검사를 통과한 이 경로는 `v0.4.0` tag workflow에서 실제 게시 경계까지 검증하며,
+정확한 run·commit·digest 결과는 GitHub Release 본문에 기록합니다.
 
 승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
 
@@ -141,9 +141,9 @@ ENV_FILE=.env.private make down
 
 게시 성공은 운영 배포 성공을 뜻하지 않습니다. 현재 자동화의 경계는 GHCR 이미지 게시까지이며, Cloud Run을 포함한 운영 배포는 모든 개발이 끝난 뒤 별도로 설계하고 승인합니다. `1.0.0` 이전에는 `latest` 태그를 만들지 않습니다.
 
-현재 공개 릴리스는 `v0.1.0`부터 `v0.3.2`까지입니다. release workflow의 parser 결함은
-수정했지만 실제 tag 실행은 만들지 않았습니다. 다음 태그는 사용자의 명시적인 릴리스 결정과
-tag workflow 결과 확인을 포함해야 합니다.
+현재 릴리스 계열은 `v0.1.0`부터 `v0.4.0`까지입니다. `v0.4.0`은 정리된 CHANGELOG, 일치하는
+Web/API/Worker 버전, 전체 SHA tag와 서로 다른 세 immutable image digest를 tag workflow와
+GitHub Release에서 함께 확인합니다.
 
 ## License
 

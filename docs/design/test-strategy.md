@@ -1,6 +1,6 @@
 # Test strategy
 
-- 상태: Phase 0~8, private knowledge/advisory 구현과 `v0.1.0`~`v0.3.2` release 검증 반영
+- 상태: Phase 0~8, private knowledge/advisory·원장 대사 구현과 `v0.1.0`~`v0.4.0` release 검증 반영
 - 원칙: 최신 실행 증거 없는 완료 주장을 하지 않음
 
 ## Scope

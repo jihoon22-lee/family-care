@@ -4,7 +4,7 @@
 - 작성일: 2026-08-23
 - 적용 범위: 공개 저장소의 문서, 개발환경, 최소 실행 골격, CI, GHCR 릴리스
 - 완료 근거: PR #1, merge commit `0f632989df891ae944c012bfcce6c838009867a9`, PR 및 post-merge CI 일곱 required job 성공
-- 후속 상태: Phase 1~8과 private knowledge/advisory 결과 구현, 공개 버전 `v0.3.2`;
+- 후속 상태: Phase 1~8과 private knowledge/advisory·원장 대사 결과 구현, 공개 버전 `v0.4.0`;
   현재 전달 상태는 `docs/plan/000-project-roadmap.md`
 
 ## 1. 목적
@@ -281,9 +281,8 @@ PR과 `main` push에서 다음 작업을 독립적으로 실행한다.
 구현 기록은 PR #49에 merge되었고 기존 `v0.1.0`~`v0.3.2` Release 본문도 같은 형식으로
 정비되었다. 2026-09-01 후속 수정은 `publish-release` 임시 경로의 `runner.temp` 참조를 허용되는
 step-level `env`로 옮기고, 저장소 workflow 검사에 job-level `runner` context 회귀 검사를
-추가했다. `actionlint`와 저장소 정책 검사는 통과했지만 새 tag는 만들지 않았으므로 다음 실제
-tag workflow는 별도 릴리스 증거로 확인한다. 이 수정은 기존 다섯 tag와 공개 artifact를 바꾸지
-않는다.
+추가했다. `actionlint`, 저장소 정책 검사와 `v0.4.0` tag workflow가 corrected publication path를
+통과했고, 해당 Release 본문도 같은 증거 형식을 사용한다.
 
 ### 12.3 Protect main ruleset
 
