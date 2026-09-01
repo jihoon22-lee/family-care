@@ -45,6 +45,12 @@ PrivateKnowledgeBoundaryErrorCode = Literal[
     "PRIVATE_KNOWLEDGE_TOO_LARGE",
     "PRIVATE_KNOWLEDGE_UNAVAILABLE",
 ]
+InsuranceReconciliationBoundaryErrorCode = Literal[
+    "INSURANCE_RECONCILIATION_NOT_FOUND",
+    "INSURANCE_RECONCILIATION_CONFLICT",
+    "INSURANCE_RECONCILIATION_TOO_LARGE",
+    "INSURANCE_RECONCILIATION_UNAVAILABLE",
+]
 ApiErrorCode = (
     ErrorCode
     | PolicyErrorCode
@@ -54,6 +60,7 @@ ApiErrorCode = (
     | ClaimBoundaryErrorCode
     | AuthBoundaryErrorCode
     | PrivateKnowledgeBoundaryErrorCode
+    | InsuranceReconciliationBoundaryErrorCode
 )
 
 

@@ -28,44 +28,44 @@ orphan operational policies and unresolved sources.
 
 1. [x] Record the authority split, append-only histories, state derivation, API boundary, privacy rules,
    cache invalidation, and operational acceptance gate.
-2. [ ] Add the versioned transport-neutral reconciliation schema and synthetic example.
-3. [ ] Extend documentation and contract drift checks for the new public boundary.
+2. [x] Add the versioned transport-neutral reconciliation schema and synthetic example.
+3. [x] Extend documentation and contract drift checks for the new public boundary.
 
 ## Task 2: Add scoped append-only histories
 
-1. [ ] Write RED structural migration tests for `0024_insurance_reconciliation` after
+1. [x] Write RED structural migration tests for `0024_insurance_reconciliation` after
    `0023_advisory_disposition`.
-2. [ ] Require `private_knowledge_operational_links` with current/superseded state, tri-state decision,
+2. [x] Require `private_knowledge_operational_links` with current/superseded state, tri-state decision,
    conflict, optional policy link, actor/time, authority, reason, digest, household/run/contract FKs,
    one current link per knowledge contract, and one current `MATCH` per operational policy.
-3. [ ] Require `document_batch_item_resolutions` with current/superseded state, resolution kind,
+3. [x] Require `document_batch_item_resolutions` with current/superseded state, resolution kind,
    optional successful replacement, actor/time, authority, reason, digest, and one current resolution
    per failed item.
-4. [ ] Prove cross-household/member references, invalid state combinations, duplicate current links,
+4. [x] Prove cross-household/member references, invalid state combinations, duplicate current links,
    invalid replacements, and destructive history changes are rejected or fail closed.
-5. [ ] Verify clean upgrade/downgrade against a disposable PostgreSQL database.
+5. [x] Verify clean upgrade/downgrade against a disposable PostgreSQL database.
 
 ## Task 3: Implement reconciliation and mutation use cases
 
-1. [ ] Write RED domain tests for the closed four-state contract partition and independent unreadable
+1. [x] Write RED domain tests for the closed four-state contract partition and independent unreadable
    source count.
-2. [ ] Write RED PostgreSQL tests for exact snapshot binding, current history precedence, orphan policy,
+2. [x] Write RED PostgreSQL tests for exact snapshot binding, current history precedence, orphan policy,
    document readiness, conflict, cross-scope rejection, stale expected IDs, idempotent confirmation,
    supersede history, changed-source replacement, dismissal, and reopen.
-3. [ ] Implement one repeatable-read read-only member projection with bounded results and sanitized
+3. [x] Implement one repeatable-read read-only member projection with bounded results and sanitized
    repository errors.
-4. [ ] Implement transactional link and resolution confirmation with row locks, exact current snapshot,
+4. [x] Implement transactional link and resolution confirmation with row locks, exact current snapshot,
    active member policy checks, successful replacement checks, canonical digests, and optimistic
    concurrency.
 
 ## Task 4: Publish the API and generated contracts
 
-1. [ ] Write RED API tests for the member reconciliation GET, operational-link POST, and unreadable
+1. [x] Write RED API tests for the member reconciliation GET, operational-link POST, and unreadable
    resolution POST, including no-store, auth, validation, bounded output, and private-field absence.
-2. [ ] Register the router and stable error codes without weakening the existing authentication/CSRF
+2. [x] Register the router and stable error codes without weakening the existing authentication/CSRF
    boundary.
-3. [ ] Regenerate OpenAPI and TypeScript consumers from FastAPI; do not hand-edit generated files.
-4. [ ] Run focused migration, domain, repository, API, contract, privacy, and PostgreSQL tests.
+3. [x] Regenerate OpenAPI and TypeScript consumers from FastAPI; do not hand-edit generated files.
+4. [x] Run focused migration, domain, repository, API, contract, privacy, and PostgreSQL tests.
 
 ## Task 5: Consolidate the Web ledger
 
@@ -85,4 +85,3 @@ orphan operational policies and unresolved sources.
    stop on any conflict, unknown target, baseline drift, or count mismatch.
 4. [ ] Record only aggregate counts, stable reason codes, CI/merge references, and unverified visual/OCR
    boundaries. Do not record actual private values.
-

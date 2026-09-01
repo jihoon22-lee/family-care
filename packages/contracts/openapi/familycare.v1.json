@@ -2576,6 +2576,83 @@
         "title": "ConditionalFixedSubtotalResponse",
         "type": "object"
       },
+      "ContractReconciliationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "certificate_decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Certificate Decision",
+            "type": "string"
+          },
+          "current_status": {
+            "enum": [
+              "active",
+              "inactive",
+              "lapsed",
+              "terminated",
+              "unknown"
+            ],
+            "title": "Current Status",
+            "type": "string"
+          },
+          "document_readiness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentReadinessResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "insurer_display": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "knowledge_contract_id": {
+            "format": "uuid",
+            "title": "Knowledge Contract Id",
+            "type": "string"
+          },
+          "operational_link": {
+            "$ref": "#/components/schemas/OperationalLinkResponse"
+          },
+          "product_display": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Product Display",
+            "type": "string"
+          },
+          "reconciliation_state": {
+            "enum": [
+              "EVIDENCE_READY",
+              "DOCUMENTS_PENDING",
+              "LINK_REVIEW_REQUIRED",
+              "CONFLICT"
+            ],
+            "title": "Reconciliation State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "knowledge_contract_id",
+          "insurer_display",
+          "product_display",
+          "certificate_decision",
+          "current_status",
+          "reconciliation_state",
+          "operational_link",
+          "document_readiness"
+        ],
+        "title": "ContractReconciliationResponse",
+        "type": "object"
+      },
       "CoverageDecisionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2976,6 +3053,164 @@
           "extractor_config"
         ],
         "title": "DocumentAnalysisRequest",
+        "type": "object"
+      },
+      "DocumentReadinessResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "completeness": {
+            "enum": [
+              "CERTIFICATE_AND_TERMS",
+              "CERTIFICATE_ONLY"
+            ],
+            "title": "Completeness",
+            "type": "string"
+          },
+          "has_application": {
+            "title": "Has Application",
+            "type": "boolean"
+          },
+          "has_product_explanation": {
+            "title": "Has Product Explanation",
+            "type": "boolean"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_contract_id",
+          "completeness",
+          "has_product_explanation",
+          "has_application"
+        ],
+        "title": "DocumentReadinessResponse",
+        "type": "object"
+      },
+      "DocumentResolutionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_current_resolution_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Current Resolution Id"
+          },
+          "reason_code": {
+            "enum": [
+              "USER_CONFIRMED_REPLACEMENT",
+              "USER_DISMISSED_STALE_FAILURE",
+              "USER_REOPENED_DOCUMENT_REVIEW"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "replacement_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Item Id"
+          },
+          "resolution": {
+            "enum": [
+              "REPLACED",
+              "DISMISSED",
+              "REOPENED"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resolution",
+          "replacement_item_id",
+          "reason_code",
+          "expected_current_resolution_id"
+        ],
+        "title": "DocumentResolutionRequest",
+        "type": "object"
+      },
+      "DocumentResolutionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "const": "USER_CONFIRMED_DOCUMENT_RESOLUTION",
+            "title": "Authority",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "failed_item_id": {
+            "format": "uuid",
+            "title": "Failed Item Id",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "replacement_item_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replacement Item Id"
+          },
+          "resolution": {
+            "enum": [
+              "REPLACED",
+              "DISMISSED",
+              "REOPENED"
+            ],
+            "title": "Resolution",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "failed_item_id",
+          "replacement_item_id",
+          "resolution",
+          "authority",
+          "reason_code",
+          "confirmed_at"
+        ],
+        "title": "DocumentResolutionResponse",
         "type": "object"
       },
       "DocumentSetCreateRequest": {
@@ -3952,6 +4187,39 @@
           "version"
         ],
         "title": "InsuranceDocumentSetResponse",
+        "type": "object"
+      },
+      "InsuranceReconciliationErrorResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "title": "Error Code",
+            "type": "string"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fields"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error_code",
+          "message"
+        ],
+        "title": "InsuranceReconciliationErrorResponse",
         "type": "object"
       },
       "InventoryComponentResponse": {
@@ -5899,6 +6167,70 @@
         "title": "MemberInsuranceDocumentInventoryResponse",
         "type": "object"
       },
+      "MemberInsuranceReconciliationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "contracts": {
+            "items": {
+              "$ref": "#/components/schemas/ContractReconciliationResponse"
+            },
+            "maxItems": 256,
+            "title": "Contracts",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "knowledge_run_id": {
+            "format": "uuid",
+            "title": "Knowledge Run Id",
+            "type": "string"
+          },
+          "member_id": {
+            "format": "uuid",
+            "title": "Member Id",
+            "type": "string"
+          },
+          "orphan_operational_contracts": {
+            "items": {
+              "$ref": "#/components/schemas/OrphanOperationalPolicyResponse"
+            },
+            "maxItems": 256,
+            "title": "Orphan Operational Contracts",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReconciliationSummaryResponse"
+          },
+          "unresolved_sources": {
+            "items": {
+              "$ref": "#/components/schemas/UnreadableSourceResponse"
+            },
+            "maxItems": 1000,
+            "title": "Unresolved Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schema_version",
+          "member_id",
+          "knowledge_run_id",
+          "generated_at",
+          "summary",
+          "contracts",
+          "orphan_operational_contracts",
+          "unresolved_sources"
+        ],
+        "title": "MemberInsuranceReconciliationResponse",
+        "type": "object"
+      },
       "MoneyResponse": {
         "additionalProperties": false,
         "description": "One amount/currency pair in a calculation response.",
@@ -6257,6 +6589,227 @@
         "title": "OperationalEvidenceCitationResponse",
         "type": "object"
       },
+      "OperationalLinkMutationResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "const": "USER_CONFIRMED_OPERATIONAL_IDENTITY",
+            "title": "Authority",
+            "type": "string"
+          },
+          "confirmed_at": {
+            "format": "date-time",
+            "title": "Confirmed At",
+            "type": "string"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "knowledge_contract_id": {
+            "format": "uuid",
+            "title": "Knowledge Contract Id",
+            "type": "string"
+          },
+          "policy_contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "1",
+            "title": "Schema Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema_version",
+          "id",
+          "knowledge_contract_id",
+          "policy_contract_id",
+          "decision",
+          "conflict",
+          "authority",
+          "reason_code",
+          "confirmed_at"
+        ],
+        "title": "OperationalLinkMutationResponse",
+        "type": "object"
+      },
+      "OperationalLinkRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_current_link_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Current Link Id"
+          },
+          "policy_contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
+          },
+          "reason_code": {
+            "enum": [
+              "USER_CONFIRMED_SAME_CONTRACT",
+              "USER_CONFIRMED_DISTINCT_CONTRACT",
+              "USER_REOPENED_OPERATIONAL_REVIEW",
+              "USER_REPORTED_OPERATIONAL_CONFLICT"
+            ],
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "conflict",
+          "policy_contract_id",
+          "reason_code",
+          "expected_current_link_id"
+        ],
+        "title": "OperationalLinkRequest",
+        "type": "object"
+      },
+      "OperationalLinkResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "anyOf": [
+              {
+                "enum": [
+                  "SNAPSHOT_EXACT_EVIDENCE",
+                  "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authority"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "conflict": {
+            "title": "Conflict",
+            "type": "boolean"
+          },
+          "decision": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "policy_contract_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
+          },
+          "reason_code": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Reason Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "policy_contract_id",
+          "decision",
+          "conflict",
+          "authority",
+          "reason_code",
+          "confirmed_at"
+        ],
+        "title": "OperationalLinkResponse",
+        "type": "object"
+      },
       "OptionalQuestionResponse": {
         "additionalProperties": false,
         "properties": {
@@ -6308,6 +6861,56 @@
           "field_id"
         ],
         "title": "OptionalQuestionResponse",
+        "type": "object"
+      },
+      "OrphanOperationalPolicyResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "completeness": {
+            "enum": [
+              "CERTIFICATE_AND_TERMS",
+              "CERTIFICATE_ONLY"
+            ],
+            "title": "Completeness",
+            "type": "string"
+          },
+          "insurer_display": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Insurer Display",
+            "type": "string"
+          },
+          "policy_contract_id": {
+            "format": "uuid",
+            "title": "Policy Contract Id",
+            "type": "string"
+          },
+          "product_display": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Product Display",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "inactive",
+              "expired",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "policy_contract_id",
+          "insurer_display",
+          "product_display",
+          "status",
+          "completeness"
+        ],
+        "title": "OrphanOperationalPolicyResponse",
         "type": "object"
       },
       "PasswordRequest": {
@@ -7636,6 +8239,64 @@
           "receipt_lines"
         ],
         "title": "ReceiptLinesResponse",
+        "type": "object"
+      },
+      "ReconciliationSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "conflict_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Conflict Contracts",
+            "type": "integer"
+          },
+          "documents_pending_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Documents Pending Contracts",
+            "type": "integer"
+          },
+          "evidence_ready_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Evidence Ready Contracts",
+            "type": "integer"
+          },
+          "link_review_required_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Link Review Required Contracts",
+            "type": "integer"
+          },
+          "orphan_operational_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Orphan Operational Contracts",
+            "type": "integer"
+          },
+          "total_contracts": {
+            "maximum": 256.0,
+            "minimum": 0.0,
+            "title": "Total Contracts",
+            "type": "integer"
+          },
+          "unresolved_unreadable_sources": {
+            "maximum": 1000.0,
+            "minimum": 0.0,
+            "title": "Unresolved Unreadable Sources",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_contracts",
+          "evidence_ready_contracts",
+          "documents_pending_contracts",
+          "link_review_required_contracts",
+          "conflict_contracts",
+          "orphan_operational_contracts",
+          "unresolved_unreadable_sources"
+        ],
+        "title": "ReconciliationSummaryResponse",
         "type": "object"
       },
       "RegisteredPolicyInventoryResponse": {
@@ -10653,6 +11314,104 @@
         ]
       }
     },
+    "/api/v1/document-batch-items/{item_id}/resolution": {
+      "post": {
+        "operationId": "confirm_document_resolution_api_v1_document_batch_items__item_id__resolution_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentResolutionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResolutionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "State conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Confirm Document Resolution",
+        "tags": [
+          "insurance reconciliation"
+        ]
+      }
+    },
     "/api/v1/document-batches": {
       "post": {
         "operationId": "create_batch_api_v1_document_batches_post",
@@ -11831,6 +12590,94 @@
         "summary": "Create Insurance Document Set",
         "tags": [
           "insurance document inventory"
+        ]
+      }
+    },
+    "/api/v1/family-members/{member_id}/insurance-reconciliation": {
+      "get": {
+        "operationId": "get_member_insurance_reconciliation_api_v1_family_members__member_id__insurance_reconciliation_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "member_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Member Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemberInsuranceReconciliationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "State conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Get Member Insurance Reconciliation",
+        "tags": [
+          "insurance reconciliation"
         ]
       }
     },
@@ -14834,6 +15681,104 @@
         "summary": "Get Current Private Knowledge Contract",
         "tags": [
           "private knowledge"
+        ]
+      }
+    },
+    "/api/v1/private-knowledge/current/contracts/{contract_id}/operational-link": {
+      "post": {
+        "operationId": "confirm_operational_link_api_v1_private_knowledge_current_contracts__contract_id__operational_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "contract_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Contract Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationalLinkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationalLinkMutationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "State conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsuranceReconciliationErrorResponse"
+                }
+              }
+            },
+            "description": "Database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Confirm Operational Link",
+        "tags": [
+          "insurance reconciliation"
         ]
       }
     },

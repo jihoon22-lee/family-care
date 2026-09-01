@@ -159,4 +159,3 @@ batch terminal transition, private snapshot 변경 뒤 reconciliation과 invento
 - exact-source automatic resolution과 changed-source manual resolution, dismissal, reopen
 - `REPEATABLE READ READ ONLY`, no-store, bounded arrays와 private-field 부재
 - migration upgrade/downgrade, current unique index, digest/idempotency와 supersede history
-

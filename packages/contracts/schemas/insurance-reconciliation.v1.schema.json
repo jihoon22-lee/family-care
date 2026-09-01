@@ -1,0 +1,219 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/insurance-reconciliation.v1.schema.json",
+  "title": "FamilyCare member insurance reconciliation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "member_id",
+    "knowledge_run_id",
+    "generated_at",
+    "summary",
+    "contracts",
+    "orphan_operational_contracts",
+    "unresolved_sources"
+  ],
+  "properties": {
+    "schema_version": { "const": "1" },
+    "member_id": { "$ref": "#/$defs/Uuid" },
+    "knowledge_run_id": { "$ref": "#/$defs/Uuid" },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "summary": { "$ref": "#/$defs/Summary" },
+    "contracts": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/Contract" }
+    },
+    "orphan_operational_contracts": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "$ref": "#/$defs/OrphanOperationalPolicy" }
+    },
+    "unresolved_sources": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": { "$ref": "#/$defs/UnreadableSource" }
+    }
+  },
+  "$defs": {
+    "Uuid": {
+      "type": "string",
+      "format": "uuid",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "TriState": {
+      "type": "string",
+      "enum": ["MATCH", "NO_MATCH", "UNKNOWN"]
+    },
+    "Completeness": {
+      "type": "string",
+      "enum": ["CERTIFICATE_AND_TERMS", "CERTIFICATE_ONLY"]
+    },
+    "ReconciliationState": {
+      "type": "string",
+      "enum": [
+        "EVIDENCE_READY",
+        "DOCUMENTS_PENDING",
+        "LINK_REVIEW_REQUIRED",
+        "CONFLICT"
+      ]
+    },
+    "Summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "total_contracts",
+        "evidence_ready_contracts",
+        "documents_pending_contracts",
+        "link_review_required_contracts",
+        "conflict_contracts",
+        "orphan_operational_contracts",
+        "unresolved_unreadable_sources"
+      ],
+      "properties": {
+        "total_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "evidence_ready_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "documents_pending_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "link_review_required_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "conflict_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "orphan_operational_contracts": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "unresolved_unreadable_sources": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "OperationalLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "policy_contract_id",
+        "decision",
+        "conflict",
+        "authority",
+        "reason_code",
+        "confirmed_at"
+      ],
+      "properties": {
+        "id": {
+          "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+        },
+        "policy_contract_id": {
+          "anyOf": [{ "$ref": "#/$defs/Uuid" }, { "type": "null" }]
+        },
+        "decision": { "$ref": "#/$defs/TriState" },
+        "conflict": { "type": "boolean" },
+        "authority": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "SNAPSHOT_EXACT_EVIDENCE",
+                "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "reason_code": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "confirmed_at": {
+          "anyOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "DocumentReadiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_contract_id",
+        "completeness",
+        "has_product_explanation",
+        "has_application"
+      ],
+      "properties": {
+        "policy_contract_id": { "$ref": "#/$defs/Uuid" },
+        "completeness": { "$ref": "#/$defs/Completeness" },
+        "has_product_explanation": { "type": "boolean" },
+        "has_application": { "type": "boolean" }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "knowledge_contract_id",
+        "insurer_display",
+        "product_display",
+        "certificate_decision",
+        "current_status",
+        "reconciliation_state",
+        "operational_link",
+        "document_readiness"
+      ],
+      "properties": {
+        "knowledge_contract_id": { "$ref": "#/$defs/Uuid" },
+        "insurer_display": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "product_display": { "type": "string", "minLength": 1, "maxLength": 800 },
+        "certificate_decision": { "$ref": "#/$defs/TriState" },
+        "current_status": {
+          "type": "string",
+          "enum": ["active", "inactive", "lapsed", "terminated", "unknown"]
+        },
+        "reconciliation_state": { "$ref": "#/$defs/ReconciliationState" },
+        "operational_link": { "$ref": "#/$defs/OperationalLink" },
+        "document_readiness": {
+          "anyOf": [
+            { "$ref": "#/$defs/DocumentReadiness" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "OrphanOperationalPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "policy_contract_id",
+        "insurer_display",
+        "product_display",
+        "status",
+        "completeness"
+      ],
+      "properties": {
+        "policy_contract_id": { "$ref": "#/$defs/Uuid" },
+        "insurer_display": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "product_display": { "type": "string", "minLength": 1, "maxLength": 800 },
+        "status": {
+          "type": "string",
+          "enum": ["active", "inactive", "expired", "cancelled", "unknown"]
+        },
+        "completeness": { "$ref": "#/$defs/Completeness" }
+      }
+    },
+    "Role": {
+      "type": "string",
+      "enum": ["policy", "terms", "product_explanation", "application", "supporting"]
+    },
+    "UnreadableSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_batch_item_id",
+        "source_kind",
+        "display_label",
+        "processing_state"
+      ],
+      "properties": {
+        "document_batch_item_id": { "$ref": "#/$defs/Uuid" },
+        "source_kind": { "$ref": "#/$defs/Role" },
+        "display_label": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "processing_state": {
+          "type": "string",
+          "enum": ["PASSWORD_REQUIRED", "OCR_REQUIRED", "FAILED"]
+        }
+      }
+    }
+  }
+}
