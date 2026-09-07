@@ -402,3 +402,40 @@ workflow 정적 검사·diff 검사도 통과했다. Web/계약/lock/toolchain �
 diff로 확인했으며 Web 166개와 Chromium mock E2E 16개의 기존 증거를 유지한다.
 `2b35773` CI 34120477553의 7개 작업(이미지 3개 포함)은 모두 통과했다. 새 source의 이미지
 빌드/CI와 보호된 실제 자료 적용은 별도이며, 실제 canonical writer/조회는 아직 후속이다.
+
+## Current canonical identity publication
+
+`0034`와 canonical repository는 exact source binding·전체 native 원문 inventory·가입
+publication으로 공통 담보 identity를 별도 저장한다. 원본 coverage snapshot을 수정하지 않고
+현재 원장 version/필드 차이, 원래 package 위치와 publication 근거를 보존한다. 조회 때 현재
+가정/구성원/primary insured·원본 문서/추출/Evidence·사용자 결정·1:1 관계를 재검사한다.
+재추출의 아직 publication되지 않은 동일 이름도 전체 IR에서 확인한다. 사용자 교정 금액을
+덮어쓰지 않으며 다른 Evidence로 바뀐 원장은 새 자동 연결로 승격하지 않는다.
+
+기존 API consumer가 30초 간격으로 갱신하고 통합 계약 조회에서 현재 유효한 프로그램
+연결을 제공한다. Web은 원본 기반 자동 연결과 재검토 동작을 표시한다. 기존 사용자 mutation
+계약은 그대로 사용하며 응답 authority enum에 `PROGRAM_VERIFIED_SOURCE_IDENTITY`를
+추가하고 neutral schema/OpenAPI/Web consumer를 함께 갱신했다. 코드 의미와 후속 경계는
+[대사 설계](../docs/design/insurance-ledger-reconciliation.md#v05-source-verified-canonical-coverage-identity)에 기록했다.
+
+모듈 부재, 미처리 두 번째 원문 위치의 stale 조회, Web 표시 부재, API 자동 갱신 부재,
+원장 Evidence 차용을 각각 RED로 확인했다. 수정 후 신규 canonical PostgreSQL 13개,
+기존 대사와 묶은 14개(신규 12개 시점), API consumer 4개, Web 관련 5개가 통과했다.
+동시 갱신은 1회만 기록하며 불변 이력 수정/삭제 거부도 PostgreSQL에서 확인했다.
+실제 자료/provider 호출·runtime migration·태그·배포는 실행하지 않았다. B02는 상세 담보 소비, 사용자 최초 publication의 program 검증, component/판본
+연결과 보호된 수용이 남아 있다.
+
+
+2026-09-07 22:22~22:31 KST, `30f6368` + 이 절의 canonical writer/조회/consumer·API/Web 계약과
+테스트/문서 변경에서 검증했다. 기본 Python은 **1,971 passed / 298 deselected / 3 subtests**,
+전체 합성 PostgreSQL은 **297 passed / 1,689 deselected**다. 한글 source record의 기존
+UTF-8 canonical digest와 불일치를 추가 RED로 확인하고 수정한 뒤 전체 PG가 통과했다.
+`0034`의 빈 합성 DB downgrade/upgrade도 통과했으며 다른 환경에는 적용하지 않았다.
+`ruff format --check .` 586개, `ruff check .`, `mypy apps/api/src workers/analyzer/src scripts`
+244개와 생성 계약·container/workflow 정적 검사·diff 검사가 통과했다.
+
+`corepack pnpm@11.22.0 web:check`는 format/lint/typecheck·167 tests·production build가
+통과했다. 이후 추가한 E2E 파일의 Prettier/ESLint와 전체 Chromium mock browser **17개**도
+통과했다. 신규 320px 키보드 재검토에서 요청의 expected ID·scope 계약, 외부 요청 0회와
+Web Storage/IndexedDB 쓰기 0회를 확인했다. 실제 backend browser, 실제 자료/provider,
+Windows/mobile, 새 image build/CI와 protected 수용은 이 로컬 증거에 포함하지 않는다.

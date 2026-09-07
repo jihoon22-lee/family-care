@@ -13,6 +13,10 @@ from psycopg.rows import dict_row
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.domain import DocumentRole
 from familycare_api.insurance_documents.repository import _processing_state
+from familycare_api.insurance_reconciliation.canonical_repository import (
+    CanonicalLinkError,
+    CanonicalLinkRepository,
+)
 from familycare_api.insurance_reconciliation.domain import (
     DocumentResolutionHistory,
     KnowledgeContractSource,
@@ -278,6 +282,12 @@ class InsuranceReconciliationRepository:
                 ).fetchall()
                 if len(unreadable_rows) > _MAX_UNREADABLE_SOURCES:
                     raise ReconciliationRepositoryTooLarge
+                program_links = CanonicalLinkRepository.read_in_transaction(connection, scope)
+                program_policies = {
+                    item.knowledge_contract_id: item.policy_contract_id
+                    for item in program_links
+                    if item.family_member_id == member_id
+                }
                 generated = connection.execute(
                     "SELECT clock_timestamp() AS generated_at"
                 ).fetchone()
@@ -285,7 +295,7 @@ class InsuranceReconciliationRepository:
                     raise ReconciliationRepositoryUnavailable
         except ReconciliationRepositoryError:
             raise
-        except psycopg.Error:
+        except psycopg.Error, CanonicalLinkError:
             raise ReconciliationRepositoryUnavailable from None
 
         labels: dict[DocumentRole, str] = {
@@ -304,6 +314,7 @@ class InsuranceReconciliationRepository:
                     certificate_decision=cast(TriState, row["certificate_decision"]),
                     current_status=cast(Any, row["current_status"]),
                     snapshot_policy_contract_id=cast(UUID | None, row["policy_contract_id"]),
+                    program_policy_contract_id=program_policies.get(row["id"]),
                     snapshot_operational_decision=cast(
                         TriState, row["operational_binding_decision"]
                     ),

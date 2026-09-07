@@ -5,7 +5,14 @@ from threading import Event
 from familycare_api.main import create_app
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 from fastapi.testclient import TestClient
-from pytest import LogCaptureFixture, MonkeyPatch
+from pytest import LogCaptureFixture, MonkeyPatch, fixture
+
+
+@fixture(autouse=True)
+def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+
+    monkeypatch.setattr(CanonicalLinkRepository, "refresh_pending", lambda self: 0)
 
 
 def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPatch) -> None:
@@ -59,3 +66,20 @@ def test_transient_projection_failure_retries_without_logging_details(
         assert recovered.wait(timeout=4)
     assert "range_enrollment_projection_unavailable" in caplog.messages
     assert "synthetic private payload" not in caplog.text
+
+
+def test_enabled_api_refreshes_canonical_identity_without_http(monkeypatch: MonkeyPatch) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+
+    called = Event()
+
+    def refresh(self: object, **kwargs: object) -> int:
+        called.set()
+        return 0
+
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(CanonicalLinkRepository, "refresh_pending", refresh, raising=False)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)

@@ -1976,7 +1976,10 @@ export interface OperationalLinkRequest {
 
 export interface OperationalLinkResponse {
   authority:
-    "SNAPSHOT_EXACT_EVIDENCE" | "USER_CONFIRMED_OPERATIONAL_IDENTITY" | null;
+    | "SNAPSHOT_EXACT_EVIDENCE"
+    | "PROGRAM_VERIFIED_SOURCE_IDENTITY"
+    | "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+    | null;
   confirmed_at: string | null;
   conflict: boolean;
   decision: "MATCH" | "NO_MATCH" | "UNKNOWN";

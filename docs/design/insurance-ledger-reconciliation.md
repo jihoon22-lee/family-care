@@ -174,3 +174,26 @@ Evidence 원장, 후보 검토를 막지 않으며 각 경계가 독립적으로
 - migration upgrade/downgrade, current unique index, digest/idempotency와 supersede history
 - 단일 Web summary, 정확한 ID 기반 link/resolution mutation, 부분 실패, focus/수동 refresh와
   reconciliation·inventory 동시 cache invalidation
+
+## v0.5 source-verified canonical coverage identity
+
+`0034_canonical_links`는 현재 비공개 지식의 담보와 가입 원장의 Rider를 별도 불변 이력으로
+연결한다. exact content manifest가 증권의 bytes·쪽수·종류를 연결하고, 해당 페이지의 원래
+담보명과 native 물리 좌표가 유일한 가입 publication에 대응해야 한다. 패키지의 `line`은
+원래 출처 위치로 보존하며 추출 행 번호로 해석하지 않는다. 저장된 모든 동일 bytes IR의
+미처리 줄·표·raw words까지 검사하고 다른 위치의 동일 이름, OCR·불명확한 이름 근거는
+자동 연결하지 않는다. 관계없는 미해결 텍스트는 자동 연결을 막지 않는다.
+
+현재 가정·구성원·primary insured 관계, 원본 문서/추출/근거, 원장 version, 사용자 연결
+결정과 계약/담보 1:1 관계를 저장과 조회 때 재검사한다. 사용자 `NO_MATCH`·재검토·충돌
+결정은 자동 연결보다 우선한다. 기존 exact snapshot 연결과 원본 값은 수정하지 않는다.
+원장 금액/이름 교정 후 identity를 재검사할 수 있지만 snapshot과의 값 차이는 별도로 남기며
+이 연결이 과거 금액을 최신 확정 금액으로 승격하지 않는다. 계산 소비는 B04의 독립 경계다.
+
+기존 API background consumer가 30초 간격으로 연결 이력을 갱신한다. 현재 유효한 이력만
+통합 계약 조회의 `PROGRAM_VERIFIED_SOURCE_IDENTITY`로 표시하고 Web에서 자동 연결을
+다시 검토할 수 있다. 새 사용자 확인은 기존 mutation 계약의 `expected_current_link_id`를
+사용한다. 가입/유효성·약관 판본·청구 가능성은 별도 상태로 유지한다. 한 번에 읽는 source inventory의
+JSON 크기를 합계 64 MiB로 제한하고 이를 넘으면 자동 연결을 보류한다. 과거 이력과 다른 원장은
+보존한다. 사용자 확인으로 최초 생성된 publication만 있는 경우의 자동 연결, 상세 담보
+조회·판정 소비와 약관 판본/component 연결은 후속 작업이다.

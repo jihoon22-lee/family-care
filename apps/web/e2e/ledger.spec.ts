@@ -504,3 +504,117 @@ test.describe("synthetic policy ledger review", () => {
     await expectNoExternalRequests(state);
   });
 });
+
+test("reopens automatic contract identity at 320px without persistent storage", async ({
+  page,
+}) => {
+  await installStorageWriteSpy(page);
+  const state = await installSyntheticApi(page, "LOW_CONFIDENCE");
+  const knowledgeId = "00000000-0000-4000-8000-000000002002";
+  const requests: JsonObject[] = [];
+  let reopened = false;
+  await page.route("**/insurance-reconciliation", async (route) => {
+    await fulfillJson(route, {
+      schema_version: "1",
+      member_id: MEMBER_ID,
+      knowledge_run_id: "00000000-0000-4000-8000-000000002003",
+      generated_at: "2026-09-07T01:00:00Z",
+      summary: {
+        total_contracts: 1,
+        evidence_ready_contracts: 0,
+        documents_pending_contracts: reopened ? 0 : 1,
+        link_review_required_contracts: reopened ? 1 : 0,
+        conflict_contracts: 0,
+        orphan_operational_contracts: 0,
+        unresolved_unreadable_sources: 0,
+      },
+      contracts: [
+        {
+          knowledge_contract_id: knowledgeId,
+          insurer_display: "Sample Insurer",
+          product_display: "Sample Knowledge Plan",
+          certificate_decision: "MATCH",
+          current_status: "unknown",
+          reconciliation_state: reopened
+            ? "LINK_REVIEW_REQUIRED"
+            : "DOCUMENTS_PENDING",
+          operational_link: {
+            id: null,
+            policy_contract_id: reopened ? null : POLICY_ID,
+            decision: reopened ? "UNKNOWN" : "MATCH",
+            conflict: false,
+            authority: reopened
+              ? "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+              : "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+            reason_code: reopened
+              ? "USER_REOPENED_OPERATIONAL_REVIEW"
+              : "UNIQUE_ENROLLED_NAME_ON_BOUND_PAGE",
+            confirmed_at: null,
+          },
+          document_readiness: reopened
+            ? null
+            : {
+                policy_contract_id: POLICY_ID,
+                completeness: "CERTIFICATE_ONLY",
+                has_product_explanation: false,
+                has_application: false,
+              },
+        },
+      ],
+      orphan_operational_contracts: [],
+      unresolved_sources: [],
+    });
+  });
+  await page.route("**/operational-link", async (route) => {
+    requests.push(parseRequestBody(route));
+    reopened = true;
+    await fulfillJson(route, {
+      schema_version: "1",
+      id: CANDIDATE_VERSION_ID,
+      knowledge_contract_id: knowledgeId,
+      policy_contract_id: null,
+      decision: "UNKNOWN",
+      conflict: false,
+      authority: "USER_CONFIRMED_OPERATIONAL_IDENTITY",
+      reason_code: "USER_REOPENED_OPERATIONAL_REVIEW",
+      confirmed_at: "2026-09-07T01:00:00Z",
+    });
+  });
+  await mockAuthenticatedSession(page);
+  await page.setViewportSize({ width: 320, height: 720 });
+  await openLedger(page);
+  await expect(page.getByText("원본 근거로 자동 연결")).toBeVisible();
+  const button = page.getByRole("button", { name: "앱 계약 연결 다시 검토" });
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("원본 근거로 자동 연결")).toHaveCount(0);
+  expect(requests).toEqual([
+    {
+      decision: "UNKNOWN",
+      conflict: false,
+      policy_contract_id: null,
+      expected_current_link_id: null,
+      reason_code: "USER_REOPENED_OPERATIONAL_REVIEW",
+    },
+  ]);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  expect(
+    await page.evaluate(
+      () =>
+        (
+          window as typeof window & {
+            __familyCareStorageWrites?: {
+              localStorage: number;
+              sessionStorage: number;
+              indexedDB: number;
+            };
+          }
+        ).__familyCareStorageWrites,
+    ),
+  ).toEqual({ localStorage: 0, sessionStorage: 0, indexedDB: 0 });
+  await expectNoExternalRequests(state);
+});

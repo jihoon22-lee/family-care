@@ -23,6 +23,7 @@ ReconciliationState = Literal[
 ]
 LinkAuthority = Literal[
     "SNAPSHOT_EXACT_EVIDENCE",
+    "PROGRAM_VERIFIED_SOURCE_IDENTITY",
     "USER_CONFIRMED_OPERATIONAL_IDENTITY",
 ]
 
@@ -37,6 +38,7 @@ class KnowledgeContractSource:
     snapshot_policy_contract_id: UUID | None
     snapshot_operational_decision: TriState
     snapshot_operational_reason_code: str
+    program_policy_contract_id: UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -204,6 +206,16 @@ def _effective_link(
             conflict=contract.snapshot_policy_contract_id is None,
             authority="SNAPSHOT_EXACT_EVIDENCE",
             reason_code=contract.snapshot_operational_reason_code,
+            confirmed_at=None,
+        )
+    if contract.program_policy_contract_id is not None:
+        return OperationalLinkProjection(
+            id=None,
+            policy_contract_id=contract.program_policy_contract_id,
+            decision="MATCH",
+            conflict=False,
+            authority="PROGRAM_VERIFIED_SOURCE_IDENTITY",
+            reason_code="UNIQUE_ENROLLED_NAME_ON_BOUND_PAGE",
             confirmed_at=None,
         )
     return OperationalLinkProjection(

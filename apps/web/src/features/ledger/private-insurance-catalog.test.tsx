@@ -492,3 +492,74 @@ describe("complete private insurance catalog", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
   });
 });
+
+it("shows source-based automatic identity and lets the user reopen it", async () => {
+  let reopened = false;
+  const calls: unknown[] = [];
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), window.location.origin);
+      if (url.pathname.endsWith("/operational-link")) {
+        calls.push(JSON.parse(String(init?.body)));
+        reopened = true;
+        return jsonResponse({
+          schema_version: "1",
+          id: "00000000-0000-4000-8000-000000002016",
+          knowledge_contract_id: CONTRACT_ID,
+          policy_contract_id: null,
+          decision: "UNKNOWN",
+          conflict: false,
+          authority: "USER_CONFIRMED_OPERATIONAL_IDENTITY",
+          reason_code: "USER_REOPENED_OPERATIONAL_REVIEW",
+          confirmed_at: "2026-09-07T01:00:00Z",
+        });
+      }
+      if (url.pathname.endsWith("/insurance-reconciliation")) {
+        const contract = RECONCILIATION.contracts[0];
+        return jsonResponse({
+          ...RECONCILIATION,
+          contracts: [
+            {
+              ...contract,
+              reconciliation_state: reopened
+                ? "LINK_REVIEW_REQUIRED"
+                : "DOCUMENTS_PENDING",
+              operational_link: {
+                ...contract.operational_link,
+                id: null,
+                policy_contract_id: reopened ? null : POLICY_ID,
+                decision: reopened ? "UNKNOWN" : "MATCH",
+                authority: reopened
+                  ? "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+                  : "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+              },
+            },
+          ],
+        });
+      }
+      if (url.pathname.endsWith("/insurance-document-inventory"))
+        return jsonResponse(EMPTY_INVENTORY);
+      return jsonResponse({ error_code: "NOT_FOUND" }, 404);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  renderWithProviders(<PrivateInsuranceCatalog memberId={MEMBER_ID} />);
+  expect(await screen.findByText("원본 근거로 자동 연결")).toBeInTheDocument();
+  await userEvent.click(
+    screen.getByRole("button", { name: "앱 계약 연결 다시 검토" }),
+  );
+  await waitFor(() =>
+    expect(calls).toEqual([
+      {
+        decision: "UNKNOWN",
+        conflict: false,
+        policy_contract_id: null,
+        reason_code: "USER_REOPENED_OPERATIONAL_REVIEW",
+        expected_current_link_id: null,
+      },
+    ]),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText("원본 근거로 자동 연결")).not.toBeInTheDocument(),
+  );
+});
