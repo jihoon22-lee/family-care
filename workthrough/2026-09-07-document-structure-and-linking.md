@@ -68,9 +68,15 @@ OCR 통합 최초 실행은 합성 fixture의 필수 `source_layer/review_state`
 두 thread의 동시 claim, 취소/재개, 오래된 lease 거부, 실제 DB native/OCR 재사용을 검사한다.
 OpenAI 키를 제거한 사례도 포함하며 provider 호출·실제 PDF 파일 열람은 없다.
 
-Web 소스/생성 계약/잠금파일은 B01 `c2d4f58` 이후 동일하다. 그 소스의 같은 작업 중
-Web 전체 162개·Chromium mock E2E 15개 통과 증거를 유지한다. 새 Web 동작이나 실제 기기
-검증으로 확대하지 않는다. 이번 PR의 실제 이미지 빌드와 최종 CI는 remote 결과로 추가한다.
+Web 소스/생성 계약은 B01 `c2d4f58` 이후 동일하다. 후속 PR #77의 보안 패치를 병합했고
+Web tree/manifest/lock/Node pin이 검증된 보안 소스 `5e3c4f3`과 동일함을 `git diff`로 확인했다.
+그 소스의 Web 전체 162개·Chromium mock E2E 15개 통과 증거를 유지하며 root에서도 frozen
+install을 확인했다. Python/DB 소스는 이 병합으로 바뀌지 않았다.
+
+Draft [PR #76](https://github.com/jihoon22-lee/family-care/pull/76)의 `fff6aa7` 대상
+CI [34090106992](https://github.com/jihoon22-lee/family-care/actions/runs/34090106992)는
+필수 7개 검사와 세 이미지 빌드가 모두 통과했다. 현재 draft는 자동 가입/판본/담보 연결과
+runtime 소비를 남긴 상태이므로 #62/#63을 종료하거나 merge하지 않았다.
 
 ## Remaining work and review findings
 
