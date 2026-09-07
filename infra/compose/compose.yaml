@@ -57,7 +57,7 @@ services:
       FAMILYCARE_WORK_ROOT: /var/lib/familycare/work
       FAMILYCARE_ARCHIVE_MASTER_KEY_FILE: /run/secrets/familycare_archive_master_key
       FAMILYCARE_SECRET_SOCKET: /run/familycare/secret.sock
-      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY outside Git}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       FAMILYCARE_AI_STRUCTURER_MODEL: ${FAMILYCARE_AI_STRUCTURER_MODEL:-gpt-5.6-luna}
       FAMILYCARE_AI_VERIFIER_MODEL: ${FAMILYCARE_AI_VERIFIER_MODEL:-gpt-5.6-terra}
     group_add:

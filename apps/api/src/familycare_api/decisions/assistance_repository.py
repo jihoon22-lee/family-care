@@ -33,6 +33,7 @@ class AnalysisAssistanceRepository:
         decision_run_id: UUID,
         *,
         reviewed_fact_tokens: tuple[str, ...] = (),
+        enqueue_review: bool = False,
     ) -> AnalysisAssistance:
         legacy_fact_values = tuple(
             value.value for _, value in sorted(event.facts.items()) if isinstance(value.value, str)
@@ -79,9 +80,13 @@ class AnalysisAssistanceRepository:
                 event.id,
                 event.version,
                 digest,
-                "QUEUED" if has_candidates else "SUCCEEDED",
-                None if has_candidates else "NO_SEARCH_CANDIDATES",
-                "QUEUED" if has_candidates else "SUCCEEDED",
+                "QUEUED" if has_candidates and enqueue_review else "SUCCEEDED",
+                None
+                if has_candidates and enqueue_review
+                else "LOCAL_SEARCH_ONLY"
+                if has_candidates
+                else "NO_SEARCH_CANDIDATES",
+                "QUEUED" if has_candidates and enqueue_review else "SUCCEEDED",
             ),
         ).fetchone()
         if job_row is None:
@@ -91,7 +96,7 @@ class AnalysisAssistanceRepository:
         mode = "STRUCTURED_SEARCH" if has_candidates else "NONE"
         state = (
             "LLM_PENDING"
-            if has_candidates and job_state in {"QUEUED", "RUNNING"}
+            if has_candidates and enqueue_review and job_state in {"QUEUED", "RUNNING"}
             else "SEARCH_READY"
         )
         outcome_code = "LOCAL_SEARCH_READY" if has_candidates else "NO_SEARCH_CANDIDATES"

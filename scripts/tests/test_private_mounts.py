@@ -78,9 +78,7 @@ def test_archive_work_key_and_ai_credentials_are_worker_only() -> None:
         "target": KEY_TARGET,
         "read_only": True,
     }
-    assert worker["environment"]["OPENAI_API_KEY"] == (
-        "${OPENAI_API_KEY:?set OPENAI_API_KEY outside Git}"
-    )
+    assert worker["environment"]["OPENAI_API_KEY"] == "${OPENAI_API_KEY:-}"
     assert worker["environment"]["FAMILYCARE_AI_STRUCTURER_MODEL"] == (
         "${FAMILYCARE_AI_STRUCTURER_MODEL:-gpt-5.6-luna}"
     )

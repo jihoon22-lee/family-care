@@ -25,7 +25,7 @@ const inputLabels: Record<string, string> = {
   "MedicalEvent.pathology_code": "병리 코드",
   "MedicalEvent.anatomical_site_code": "신체 부위 코드",
   "MedicalEvent.separately_billed_treatment": "별도 결제 치료 여부",
-  "Receipt.covered_amount": "급여 대상 영수증 금액",
+  "Receipt.covered_amount": "보장대상 비용",
   "Receipt.noncovered_amount": "비급여 영수증 금액",
   "Receipt.total_amount": "영수증 총액",
   "Receipt.currency": "영수증 통화",

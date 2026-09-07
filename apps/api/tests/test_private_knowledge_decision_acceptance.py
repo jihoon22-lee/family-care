@@ -634,7 +634,12 @@ def test_private_publication_decisions_and_optional_assistance_are_complete_and_
         package_digest=package_digest,
         projection_digest=projection_digest,
     )
-    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    from apps.api.tests.assistance_fixtures import ExplicitReviewRepository
+
+    service = DecisionService(
+        seed.scope_a,
+        DecisionRepository(database_url, assistance_repository=ExplicitReviewRepository()),
+    )
     queue = PostgresRecommendationJobQueue(database_url)
 
     first_event = _create_updated_event(

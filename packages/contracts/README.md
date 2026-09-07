@@ -7,7 +7,7 @@ API, and analyzer services.
 - `schemas/` contains transport-neutral JSON Schemas for analysis jobs, document ingestion and
   extraction, encrypted batch status, OCR provenance, policy ledger/candidate review, insurance
   document inventory, integrated insurance reconciliation, clause search, Rider-Clause rules,
-  coverage decision v1/v2, benefit
+  coverage decision v1/v2 (including optional local guidance v1 snapshots), benefit
   calculation, medical-event structuring, claim workflow, and the non-executable household-scoped
   private-knowledge catalog.
 - `examples/` contains synthetic examples that must not include real insurance or family data. Queue examples are password-free and do not contain `content_sha256` before Worker intake; encrypted batch examples contain only opaque source IDs and bounded status projections.
@@ -20,8 +20,14 @@ API, and analyzer services.
 
 Run `TMPDIR=/tmp uv run python scripts/check_contracts.py` to validate the committed artifacts,
 including schema/example privacy rules, safety-limit metadata, generated-type drift, and the canonical
-OpenAPI document. The current `0.4.0` OpenAPI snapshot contains 72 paths, 84 operations, and 162
-component schemas; these counts are a review aid rather than a compatibility promise.
+OpenAPI document. The generated snapshot is the source for the current operation and component
+inventory; counts are not a compatibility promise.
+
+Local guidance is generated from `familycare_api.guidance.models` through the decision response.
+Regenerate its neutral schema with `TMPDIR=/tmp uv run python scripts/check_contracts.py
+--write-decision-schema`, OpenAPI with `--write-openapi`, and then the Web consumer. Existing v1/v2
+snapshots without `local_guidance` retain their prior meaning; new guidance carries its own version,
+document-based assumptions, evidence, candidate relevance and independent estimate readiness.
 
 To regenerate only the document TypedDict consumers, run
 `TMPDIR=/tmp uv run python scripts/generate_document_contract_types.py`; to regenerate encrypted

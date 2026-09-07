@@ -57,7 +57,6 @@ function guidance(candidates = [candidate()]): LocalGuidanceResponse {
     event_date: "2026-09-01",
     event_version: 1,
     family_member_id: "synthetic-member-001",
-    household_space_id: "synthetic-household-001",
     medical_event_id: "synthetic-event-001",
     outcome: "CANDIDATES",
     support: {

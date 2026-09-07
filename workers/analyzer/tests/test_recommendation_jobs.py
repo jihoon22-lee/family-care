@@ -309,6 +309,7 @@ def test_postgresql_job_success_and_missing_key_fallback_round_trip(
     from familycare_worker.recommendation_jobs import PostgresRecommendationJobQueue
     from psycopg.rows import dict_row
 
+    from apps.api.tests.assistance_fixtures import ExplicitReviewRepository
     from apps.api.tests.test_decision_integration import _psycopg_url, _reset_database, _seed
     from apps.api.tests.test_private_knowledge_decision_integration import (
         _seed_private_publication,
@@ -326,7 +327,10 @@ def test_postgresql_job_success_and_missing_key_fallback_round_trip(
         advisory=True,
         user_confirmed_enrollment=True,
     )
-    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    service = DecisionService(
+        seed.scope_a,
+        DecisionRepository(database_url, assistance_repository=ExplicitReviewRepository()),
+    )
 
     def create_event() -> MedicalEvent:
         return service.create_medical_event(

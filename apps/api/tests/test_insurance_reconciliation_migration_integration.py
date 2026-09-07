@@ -342,4 +342,4 @@ def test_migration_downgrade_is_clean_only_without_history() -> None:
         connection.execute("TRUNCATE TABLE document_batch_item_resolutions")
 
     command.downgrade(config, "0023_advisory_disposition")
-    command.upgrade(config, "0024_insurance_reconciliation")
+    command.upgrade(config, "head")

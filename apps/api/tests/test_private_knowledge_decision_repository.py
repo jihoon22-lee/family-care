@@ -67,6 +67,18 @@ def _event() -> MedicalEvent:
     )
 
 
+def test_missing_claim_history_is_not_published_as_zero_prior_payments() -> None:
+    rows = _rows()
+    rows["private-knowledge:claim-history"] = []
+    snapshot = PostgresKnowledgeDecisionRepository().read_context(
+        _Connection(rows),  # type: ignore[arg-type]
+        HouseholdScope(HOUSEHOLD_ID),
+        _event(),
+    )
+    assert snapshot.context is not None
+    assert snapshot.context.coverages[0].claim_history_counted_occurrence is None
+
+
 def _rows(*, with_publication: bool = True) -> dict[str, list[dict[str, Any]]]:
     citation = {
         "citation_key": "synthetic-citation-001",
