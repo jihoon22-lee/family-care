@@ -286,7 +286,7 @@ class DocumentStructureRepository:
                 return StructureProgress(
                     generation_id,
                     bool(generation["range_plan_complete"]),
-                    len(generation["plan_json"]["unprocessed"]),
+                    int(generation["unprocessed_ranges"]),
                     int(counts["total"]),
                     int(counts["completed"]),
                     int(counts["failed"]),
@@ -304,7 +304,9 @@ class DocumentStructureRepository:
     ) -> dict[str, Any]:
         row = connection.execute(
             """
-            SELECT * FROM document_structure_generations
+            SELECT range_plan_complete,
+              jsonb_array_length(plan_json->'unprocessed') AS unprocessed_ranges
+            FROM document_structure_generations
             WHERE id = %s AND household_space_id = %s AND family_member_id = %s
             FOR UPDATE
             """,

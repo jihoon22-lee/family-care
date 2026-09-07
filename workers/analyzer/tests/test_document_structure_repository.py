@@ -160,6 +160,35 @@ def test_partial_new_plan_keeps_the_previous_complete_generation_and_exposes_omi
         _prepare(repository, replace(job, family_member_id=uuid4()), structure, complete)
 
 
+def test_generation_progress_reads_only_counts_without_source_payloads(
+    structure_database: tuple[str, Any],
+) -> None:
+    database_url, job = structure_database
+    repository = DocumentStructureRepository(database_url)
+    structure, plan = _inputs(job, maximum_chunks=2)
+    generation_id = _prepare(repository, job, structure, plan)
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        metadata = repository._scoped_generation(
+            connection, job.household_space_id, job.family_member_id, generation_id
+        )
+        assert metadata == {
+            "range_plan_complete": False,
+            "unprocessed_ranges": len(plan.unprocessed),
+        }
+    progress = repository.progress(job.household_space_id, job.family_member_id, generation_id)
+    assert progress.unprocessed_ranges == len(plan.unprocessed) > 0
+    assert progress.total_chunks == 2
+    assert progress.completed_chunks == progress.cancelled_chunks == 0
+    repository.cancel(job.household_space_id, job.family_member_id, generation_id)
+    cancelled = repository.progress(job.household_space_id, job.family_member_id, generation_id)
+    assert cancelled.cancelled_chunks == cancelled.total_chunks == 2
+    assert cancelled.unprocessed_ranges == progress.unprocessed_ranges
+    repository.resume(job.household_space_id, job.family_member_id, generation_id)
+    assert (
+        repository.progress(job.household_space_id, job.family_member_id, generation_id) == progress
+    )
+
+
 def test_chunk_claim_retry_cancel_and_resume_preserve_successful_ranges(
     structure_database: tuple[str, Any],
 ) -> None:
