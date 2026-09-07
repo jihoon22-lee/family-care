@@ -6,8 +6,13 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-DocumentRole = Literal["policy", "terms", "product_explanation", "application", "supporting"]
+DocumentRole = Literal[
+    "policy", "terms", "product_explanation", "application", "supporting", "amendment"
+]
 ReviewState = Literal["SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED"]
+ComponentReviewState = Literal[
+    "SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED", "PROGRAM_VERIFIED"
+]
 ProcessingState = Literal[
     "READY",
     "PENDING",
@@ -23,6 +28,7 @@ PrimaryClassification = Literal[
     "TERMS_ONLY",
     "PRODUCT_EXPLANATION_ONLY",
     "APPLICATION_ONLY",
+    "AMENDMENT_ONLY",
     "POLICY_UNREVIEWED",
     "SUPPORTING_ONLY",
 ]
@@ -33,6 +39,7 @@ _ROLE_ORDER: tuple[DocumentRole, ...] = (
     "product_explanation",
     "application",
     "supporting",
+    "amendment",
 )
 
 
@@ -45,7 +52,7 @@ class InventoryComponent:
     role: DocumentRole
     page_start: int
     page_end: int
-    review_state: ReviewState
+    review_state: ComponentReviewState
     processing_state: ProcessingState
     duplicate_state: DuplicateState
 
@@ -92,7 +99,7 @@ class InsuranceDocumentComponentRecord:
     role: DocumentRole
     page_start: int
     page_end: int
-    review_state: ReviewState
+    review_state: ComponentReviewState
     version: int
 
 
@@ -185,7 +192,10 @@ class MemberInsuranceDocumentInventory:
 
 
 def _confirmed(item: InventorySetItem) -> bool:
-    return item.match_state == "USER_CONFIRMED" and item.component.review_state == "USER_CONFIRMED"
+    return item.match_state == "USER_CONFIRMED" and item.component.review_state in {
+        "USER_CONFIRMED",
+        "PROGRAM_VERIFIED",
+    }
 
 
 def _role_summaries(
@@ -221,6 +231,8 @@ def _primary_classification(items: tuple[InventorySetItem, ...]) -> PrimaryClass
         return "PRODUCT_EXPLANATION_ONLY"
     if "application" in roles:
         return "APPLICATION_ONLY"
+    if "amendment" in roles:
+        return "AMENDMENT_ONLY"
     return "SUPPORTING_ONLY"
 
 

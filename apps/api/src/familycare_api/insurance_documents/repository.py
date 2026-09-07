@@ -11,6 +11,7 @@ from psycopg.rows import dict_row
 
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.domain import (
+    ComponentReviewState,
     DocumentRole,
     DuplicateState,
     InsuranceDocumentComponentRecord,
@@ -71,7 +72,7 @@ def _component(row: dict[str, Any]) -> InventoryComponent:
         role=cast(DocumentRole, row["role"]),
         page_start=int(row["page_start"]),
         page_end=int(row["page_end"]),
-        review_state=cast(ReviewState, row["component_review_state"]),
+        review_state=cast(ComponentReviewState, row["component_review_state"]),
         processing_state=_processing_state(row),
         duplicate_state=_duplicate_state(row),
     )
@@ -444,6 +445,7 @@ class InsuranceDocumentRepository:
             "product_explanation": "상품설명서 문서",
             "application": "청약서 문서",
             "supporting": "보조자료 문서",
+            "amendment": "계약변경서 문서",
         }
         return UnreadableSource(
             document_batch_item_id=cast(UUID, row["document_batch_item_id"]),
@@ -676,10 +678,10 @@ class InsuranceDocumentRepository:
                 ).fetchone()
                 if component is None:
                     raise PolicyStateConflict
-                if (
-                    match_state == "USER_CONFIRMED"
-                    and component["review_state"] != "USER_CONFIRMED"
-                ):
+                if match_state == "USER_CONFIRMED" and component["review_state"] not in {
+                    "USER_CONFIRMED",
+                    "PROGRAM_VERIFIED",
+                }:
                     raise PolicyStateConflict
                 self._validate_optional_evidence(
                     connection,

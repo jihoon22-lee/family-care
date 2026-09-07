@@ -10,7 +10,7 @@ import re
 from importlib import import_module
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any
+from typing import Any, cast
 
 from familycare_api.main import create_app
 
@@ -411,6 +411,14 @@ def _load_private_knowledge_generator() -> Any:
 
 _PRIVATE_KNOWLEDGE_GENERATOR = _load_private_knowledge_generator()
 render_private_knowledge_schema = _PRIVATE_KNOWLEDGE_GENERATOR.render_schema
+
+
+def validate_document_metadata_contract() -> list[str]:
+    try:
+        module = import_module("scripts.generate_document_metadata_contract")
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution
+        module = import_module("generate_document_metadata_contract")
+    return cast(list[str], module.validate())
 
 
 def render_openapi() -> str:
@@ -2275,6 +2283,7 @@ def validate_insurance_document_inventory_contract() -> list[str]:
         "product_explanation",
         "application",
         "supporting",
+        "amendment",
     ]:
         errors.append("insurance document roles changed")
     try:
@@ -2449,6 +2458,7 @@ def main() -> int:
         *validate_openapi(),
         *validate_job_contract(),
         *validate_document_contracts(),
+        *validate_document_metadata_contract(),
         *validate_insurance_document_inventory_contract(),
         *validate_insurance_reconciliation_contract(),
         *validate_batch_contracts(),

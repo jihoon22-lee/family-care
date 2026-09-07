@@ -2672,7 +2672,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4628,7 +4629,8 @@
               "SUGGESTED",
               "USER_CONFIRMED",
               "CONFLICT",
-              "REJECTED"
+              "REJECTED",
+              "PROGRAM_VERIFIED"
             ],
             "title": "Review State",
             "type": "string"
@@ -4639,7 +4641,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4729,7 +4732,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4917,7 +4921,8 @@
               "SUGGESTED",
               "USER_CONFIRMED",
               "CONFLICT",
-              "REJECTED"
+              "REJECTED",
+              "PROGRAM_VERIFIED"
             ],
             "title": "Review State",
             "type": "string"
@@ -4928,7 +4933,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -9141,7 +9147,8 @@
                 "terms",
                 "product_explanation",
                 "application",
-                "supporting"
+                "supporting",
+                "amendment"
               ],
               "type": "string"
             },
@@ -9544,7 +9551,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -10002,7 +10010,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Source Kind",
             "type": "string"
@@ -10074,6 +10083,7 @@
               "TERMS_ONLY",
               "PRODUCT_EXPLANATION_ONLY",
               "APPLICATION_ONLY",
+              "AMENDMENT_ONLY",
               "POLICY_UNREVIEWED",
               "SUPPORTING_ONLY"
             ],

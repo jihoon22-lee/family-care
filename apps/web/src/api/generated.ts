@@ -1196,7 +1196,12 @@ export interface ComponentCreateRequest {
   page_start: number;
   review_state?: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface ConditionalFixedSubtotalResponse {
@@ -1553,9 +1558,19 @@ export interface InsuranceDocumentComponentResponse {
   id: string;
   page_end: number;
   page_start: number;
-  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  review_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   version: number;
 }
 
@@ -1571,7 +1586,12 @@ export interface InsuranceDocumentSetItemMutationResponse {
   insurance_document_set_id: string;
   match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   version: number;
 }
 
@@ -1600,9 +1620,19 @@ export interface InventoryComponentResponse {
   page_start: number;
   processing_state:
     "READY" | "PENDING" | "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
-  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  review_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface InventorySetItemResponse {
@@ -2325,7 +2355,12 @@ export interface RegisteredPolicyInventoryResponse {
   has_product_explanation: boolean;
   insurer_display: string;
   missing_document_roles: Array<
-    "policy" | "terms" | "product_explanation" | "application" | "supporting"
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment"
   >;
   policy_id: string;
   product_display: string;
@@ -2419,7 +2454,12 @@ export interface RoleDocumentSummaryResponse {
   component_count: number;
   items: Array<InventorySetItemResponse>;
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   source_count: number;
 }
 
@@ -2532,7 +2572,12 @@ export interface UnreadableSourceResponse {
   document_batch_item_id: string;
   processing_state: "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
   source_kind:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface UnregisteredDocumentSetResponse {
@@ -2548,6 +2593,7 @@ export interface UnregisteredDocumentSetResponse {
     | "TERMS_ONLY"
     | "PRODUCT_EXPLANATION_ONLY"
     | "APPLICATION_ONLY"
+    | "AMENDMENT_ONLY"
     | "POLICY_UNREVIEWED"
     | "SUPPORTING_ONLY";
   product_display: string | null;

@@ -228,3 +228,31 @@ summary로 반복하지 않는다.
 - no-store, 메모리 전용 Web cache, app-shell-only service worker
 - source path, archive key, 문서 본문, 정책번호, password의 API/log 부재
 - 키보드와 작은 화면에서 접힌 등록 document set 편집기·미연결 자료 구분
+
+## Source-verified component publication (v0.5)
+
+Worker는 보존 IR에서 역할 제목과 명시적인 보험사·상품·코드·날짜의 원문 위치를
+`document-metadata-v1` 제안으로 저장한다. 이 revision은 IR identity와 독립적이다.
+판본일과 적용 시작/종료일을 구분하고 상충 값·해석 불가 필드를 보존한다. 인접 페이지는
+각 페이지의 역할 근거와 일치하는 상품/판본 식별 근거가 있을 때만 합친다. 증권·청약서·
+계약변경서는 상품 정보가 같다는 이유로 합치지 않는다.
+
+API는 로컬 원문의 노드·페이지·문자 범위·라벨과 표의 인접 셀을 다시 검증한다.
+로컬 역할 분류는 페이지의 첫 제목 영역으로 한정한다. 먼저 나온 본문·제출 목록·모호한
+열이나 표를 지나서 나타난 역할명은 제목 근거가 아니다. 표와 제목의 선후를 증명할 수
+없는 배치는 미분류로 남긴다. 본문에 나타난 필드는 원문 제안에 보존하되 unresolved로
+표시한다. 실제 가입·대상자·판본 적용 검증은 이 역할 분류와 별도로 수행한다.
+한쪽 상충 값의 누락, 다른 역할 제목, 잘못된 날짜 의미나 lineage는 게시할 수 없다.
+큰 IR도 페이지별로 읽으며 외부 최소화 문자열의 offset을 원문 offset으로 쓰지 않는다.
+
+`document_metadata_publications`는 API 검증 이력과 생성된 component를 상호 참조한다.
+프로그램 생성 component의 `created_by`는 비어 있고 immutable publication 출처가 있다.
+응답의 `PROGRAM_VERIFIED`는 원문 역할/범위 분류만 확인한다. 수동 생성 요청과
+set-item의 `match_state`는 기존 사용자 검토 enum을 유지한다. 사용자가 프로그램 분류
+component의 연결을 확인하면 기존 원문 분류와 별개의 `USER_CONFIRMED` 관계가 된다.
+`amendment` 역할은 계약변경서로 별도 보존한다.
+
+게시자는 current generation·성공 item·문서 version·가정·구성원·삭제 상태를 확인한다.
+같은 원문 bytes와 페이지 범위의 기존 component는 삭제/제외 이력까지 조회하여 자동
+재생성하지 않는다. 제안은 `APPLIED`, `DEFERRED`, `INVALID`로 기록하고 사용자 결정을
+덮지 않는다. 이 단계는 자동 document set, 보험 가입이나 적용 약관 연결을 만들지 않는다.

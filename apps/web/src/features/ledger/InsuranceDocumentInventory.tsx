@@ -17,6 +17,7 @@ import {
 import { useInsuranceDocumentInventory } from "./useInsuranceDocumentInventory";
 
 const ROLE_LABELS: Record<InventoryComponentResponse["role"], string> = {
+  amendment: "계약변경서",
   application: "청약서",
   policy: "증권",
   product_explanation: "상품설명서",
@@ -43,6 +44,7 @@ const REVIEW_LABELS: Record<
   REJECTED: "제외",
   SUGGESTED: "연결 제안",
   USER_CONFIRMED: "사용자 확인",
+  PROGRAM_VERIFIED: "원문 분류 확인",
 };
 
 const MATCH_LABELS: Record<InventorySetItemResponse["match_state"], string> = {
@@ -66,6 +68,7 @@ const CLASSIFICATION_LABELS: Record<
   string
 > = {
   APPLICATION_ONLY: "청약서만 있는 자료",
+  AMENDMENT_ONLY: "계약변경서만 있는 자료",
   POLICY_UNREVIEWED: "증권 검토 대기 자료",
   PRODUCT_EXPLANATION_ONLY: "상품설명서만 있는 자료",
   SUPPORTING_ONLY: "보조자료만 있는 자료",
@@ -486,7 +489,9 @@ function UnpairedComponent({
 }) {
   const componentId = component.id;
   const availableTargets = targets ?? [];
-  const attachable = component.review_state === "USER_CONFIRMED";
+  const attachable = ["USER_CONFIRMED", "PROGRAM_VERIFIED"].includes(
+    component.review_state,
+  );
   return (
     <li className="insurance-inventory-unpaired-item">
       <div className="insurance-inventory-role-heading">
@@ -730,7 +735,11 @@ export function InsuranceDocumentInventory({
   }, [targets, unpairedComponentIds]);
 
   async function attach(component: InventoryComponentResponse): Promise<void> {
-    if (!data || !component.id || component.review_state !== "USER_CONFIRMED")
+    if (
+      !data ||
+      !component.id ||
+      !["USER_CONFIRMED", "PROGRAM_VERIFIED"].includes(component.review_state)
+    )
       return;
     const targetKey = selectedTargets[component.id] ?? targets[0]?.key;
     const target = targets.find((candidate) => candidate.key === targetKey);

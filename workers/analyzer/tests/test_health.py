@@ -365,6 +365,10 @@ def test_environment_prepares_stored_documents_without_private_roots_or_api_key(
     assert isinstance(runner, FairJobRunner)
     preparations = [item for item in runner._runners if isinstance(item, DocumentPreparationRunner)]
     assert len(preparations) == 1
+    from familycare_worker.document_metadata_repository import DocumentMetadataRunner
+
+    metadata = [item for item in runner._runners if isinstance(item, DocumentMetadataRunner)]
+    assert len(metadata) == 1
 
 
 def test_private_work_root_alone_does_not_enable_the_document_runner(

@@ -405,45 +405,58 @@ describe("insurance document inventory", () => {
     });
   });
 
-  it("attaches an unpaired component with USER_CONFIRMED and reloads the inventory", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(ATTACHABLE_INVENTORY))
-      .mockResolvedValueOnce(
-        jsonResponse(
-          {
-            id: "synthetic-item-attached-001",
-            insurance_document_component_id: "synthetic-component-unpaired-001",
-            insurance_document_set_id: "synthetic-set-001",
-            match_state: "USER_CONFIRMED",
-            role: "terms",
-            version: 1,
-          },
-          201,
-        ),
-      )
-      .mockResolvedValueOnce(jsonResponse(INVENTORY));
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
+  it.each(["USER_CONFIRMED", "PROGRAM_VERIFIED"] as const)(
+    "attaches a %s component with a separate user-confirmed relationship",
+    async (reviewState) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            ...ATTACHABLE_INVENTORY,
+            unpaired_components: ATTACHABLE_INVENTORY.unpaired_components.map(
+              (component) => ({ ...component, review_state: reviewState }),
+            ),
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              id: "synthetic-item-attached-001",
+              insurance_document_component_id:
+                "synthetic-component-unpaired-001",
+              insurance_document_set_id: "synthetic-set-001",
+              match_state: "USER_CONFIRMED",
+              role: "terms",
+              version: 1,
+            },
+            201,
+          ),
+        )
+        .mockResolvedValueOnce(jsonResponse(INVENTORY));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
 
-    renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+      renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
 
-    const target = await screen.findByRole("combobox", {
-      name: /문서를 연결할 보험/i,
-    });
-    expect(target).toHaveValue("synthetic-set-001");
-    await user.click(screen.getByRole("button", { name: /약관.*문서 연결$/ }));
+      const target = await screen.findByRole("combobox", {
+        name: /문서를 연결할 보험/i,
+      });
+      expect(target).toHaveValue("synthetic-set-001");
+      await user.click(
+        screen.getByRole("button", { name: /약관.*문서 연결$/ }),
+      );
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      "/api/v1/insurance-document-sets/synthetic-set-001/items",
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
-      expected_set_version: 2,
-      insurance_document_component_id: "synthetic-component-unpaired-001",
-      match_state: "USER_CONFIRMED",
-    });
-  });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        "/api/v1/insurance-document-sets/synthetic-set-001/items",
+      );
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+        expected_set_version: 2,
+        insurance_document_component_id: "synthetic-component-unpaired-001",
+        match_state: "USER_CONFIRMED",
+      });
+    },
+  );
 
   it("creates a registered document set before the first attachment", async () => {
     const fetchMock = vi

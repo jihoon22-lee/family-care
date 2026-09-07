@@ -32,6 +32,7 @@ from familycare_worker.ai.recommender import (
 from familycare_worker.ai.schemas import openai_schema_registry
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
+from familycare_worker.document_metadata_repository import DocumentMetadataRunner
 from familycare_worker.document_preparation import DocumentPreparationRunner
 from familycare_worker.event_jobs import EventStructuringJobQueue
 from familycare_worker.health import (
@@ -88,15 +89,17 @@ class FairJobRunner:
         imports: JobRunner | None = None,
         recommendations: JobRunner | None = None,
         preparations: JobRunner | None = None,
+        metadata: JobRunner | None = None,
     ) -> None:
         self.events = events
         self.documents = documents
         self.imports = imports
         self.recommendations = recommendations
         self.preparations = preparations
+        self.metadata = metadata
         self._runners = tuple(
             runner
-            for runner in (events, documents, imports, recommendations, preparations)
+            for runner in (events, documents, imports, recommendations, preparations, metadata)
             if runner is not None
         )
         self._first = 0
@@ -213,11 +216,13 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     document_root = os.getenv("FAMILYCARE_DOCUMENT_ROOT")
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
     preparation_runner = DocumentPreparationRunner(database_url)
+    metadata_runner = DocumentMetadataRunner(database_url)
     if not document_root:
         base_runner: JobRunner = FairJobRunner(
             events=event_runner,
             recommendations=recommendation_runner,
             preparations=preparation_runner,
+            metadata=metadata_runner,
         )
     elif not work_root:
         LOGGER.error("document_runner_configuration_incomplete")
@@ -225,6 +230,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             events=event_runner,
             recommendations=recommendation_runner,
             preparations=preparation_runner,
+            metadata=metadata_runner,
         )
     else:
         queue = JobQueue(database_url)
@@ -242,6 +248,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             documents=document_runner,
             recommendations=recommendation_runner,
             preparations=preparation_runner,
+            metadata=metadata_runner,
         )
 
     private_values = {

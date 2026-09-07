@@ -10,6 +10,7 @@ from time import monotonic
 
 from fastapi import FastAPI
 
+from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 
@@ -18,6 +19,7 @@ LOGGER = logging.getLogger(__name__)
 
 async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
     canonical = CanonicalLinkRepository(projector.database_url)
+    metadata = DocumentMetadataProjector(projector.database_url)
     next_canonical_refresh = 0.0
     while not stop.is_set():
         try:
@@ -25,6 +27,13 @@ async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
         except Exception:
             # DB/provider payloads and credentials must never appear in exception logs.
             LOGGER.warning("range_enrollment_projection_unavailable")
+        if not stop.is_set():
+            try:
+                await asyncio.to_thread(
+                    metadata.project_pending, limit=5, stop_requested=stop.is_set
+                )
+            except Exception:
+                LOGGER.warning("document_metadata_projection_unavailable")
         if not stop.is_set() and monotonic() >= next_canonical_refresh:
             try:
                 await asyncio.to_thread(canonical.refresh_pending)

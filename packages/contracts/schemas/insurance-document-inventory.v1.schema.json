@@ -46,11 +46,15 @@
     },
     "Role": {
       "type": "string",
-      "enum": ["policy", "terms", "product_explanation", "application", "supporting"]
+      "enum": ["policy", "terms", "product_explanation", "application", "supporting", "amendment"]
     },
     "ReviewState": {
       "type": "string",
       "enum": ["SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED"]
+    },
+    "ComponentReviewState": {
+      "type": "string",
+      "enum": ["SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED", "PROGRAM_VERIFIED"]
     },
     "ProcessingState": {
       "type": "string",
@@ -81,7 +85,7 @@
         "role": { "$ref": "#/$defs/Role" },
         "page_start": { "type": "integer", "minimum": 1, "maximum": 500 },
         "page_end": { "type": "integer", "minimum": 1, "maximum": 500 },
-        "review_state": { "$ref": "#/$defs/ReviewState" },
+        "review_state": { "$ref": "#/$defs/ComponentReviewState" },
         "processing_state": { "$ref": "#/$defs/ProcessingState" },
         "duplicate_state": { "$ref": "#/$defs/DuplicateState" }
       }
@@ -203,6 +207,7 @@
             "TERMS_ONLY",
             "PRODUCT_EXPLANATION_ONLY",
             "APPLICATION_ONLY",
+            "AMENDMENT_ONLY",
             "POLICY_UNREVIEWED",
             "SUPPORTING_ONLY"
           ]

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from familycare_api.insurance_documents.domain import (
     Completeness,
+    ComponentReviewState,
     DocumentRole,
     DuplicateState,
     InsuranceDocumentComponentRecord,
@@ -99,7 +100,7 @@ class InventoryComponentResponse(BaseModel):
     role: DocumentRole
     page_start: int = Field(ge=1, le=500)
     page_end: int = Field(ge=1, le=500)
-    review_state: ReviewState
+    review_state: ComponentReviewState
     processing_state: ProcessingState
     duplicate_state: DuplicateState
 
@@ -291,7 +292,7 @@ class InsuranceDocumentComponentResponse(BaseModel):
     role: DocumentRole
     page_start: int = Field(ge=1)
     page_end: int = Field(ge=1)
-    review_state: ReviewState
+    review_state: ComponentReviewState
     version: int = Field(ge=1)
 
     @classmethod

@@ -599,3 +599,32 @@ Web/공유 계약/manifest/lock은 `3f255a4`와 동일하여 Web 169개/build·C
 기존 증거를 유지한다. 최신 독립 정적 리뷰의 저장·scope·원자성·투영 발견 사항도 반영했다.
 실제 source/원문·provider·운영 migration·태그·배포는 실행하지 않았다. component/판본과
 보호된 수용, 최신 push 후 CI/image 검증은 별도 후속이다.
+
+## Independently verified document components
+
+`document-metadata-v1` 제안은 기존 IR을 바꾸지 않고 원문 역할·보험사·상품/특약/판본 코드와
+서로 다른 날짜 의미를 보존한다. API가 전체 상충 값, 원문 offset·라벨·인접 셀·페이지/lineage를
+독립 검증한 component만 `PROGRAM_VERIFIED`로 등록한다. 본문 제출 목록의 역할명은 제목으로
+쓰지 않으며, 제목보다 앞선 표·모호한 배치는 미분류로 남긴다. 사용자 확인·제외·삭제와 동일
+bytes의 겹치는 범위는 자동 재생성하지 않는다. 생성자는 가짜 AppUser 대신 immutable
+publication FK로 구분하고, component와 publication의 양방향 참조를 transaction 끝에 검사한다.
+
+Worker/API는 큰 IR을 페이지 단위로 읽는다. metadata 실패/DB 저장 실패는 기존 IR을 보존하며
+독립적으로 최대 3회 시도한다. 잘못된/중복 component 식별자는 PREPARED 저장에서 거부하여
+후속 작업을 막지 않는다. neutral schema와 생성 타입·어휘의 drift 검사도 연결했다.
+Worker와 API startup 소비, inventory 응답·연결 화면을 함께 연결했다. HTTP 요청에서는
+프로그램 검증 상태를 주장할 수 없으며, 역할 검증과 사용자 확인한 적용 관계를 구분한다.
+계약변경서 역할을 별도 보존한다. 자동 set/약관 판본/적용 관계는 이 변경에 포함하지 않는다.
+
+검증 소스는 `afe9005` 위의 해당 metadata·migration·inventory·생성 계약 변경이다.
+모듈 부재, 위조/누락 근거, paged 준비 실패, INSERT 실패 재시도, 잘못된 origin 참조,
+제출 목록 오분류의 RED를 확인한 뒤 구현했다. 전용 합성 PostgreSQL에서 빈 metadata 이력의
+`0038 → 0036 → head` 왕복과 전체 통합 352개가 통과했다 (`pytest -m integration
+apps/api/tests workers/analyzer/tests -q`, 245.53초). 마지막 표 위치 비교의 반복 연산 제거 후
+관련 순수 46개·PG 22개·mypy 2개를 재검증했다.
+
+`web:check`는 170개·빌드, `CI=true ... test:e2e`는 Chromium mock 17개를 통과했다.
+전체 기본 pytest는 2,053개·3 subtests 통과/통합 353개 제외, Ruff 609 files와 전체 mypy
+254 sources, 계약·컨테이너 정의·workflow·문서 50개·안전 803 paths·diff 검사가 통과했다.
+실제 문서/provider·운영 migration·Windows/모바일·이미지 빌드/배포 검증은 이번 변경에서
+실행하지 않았다. B02의 판본 연결·보호된 수용과 최신 원격 CI는 후속이다.

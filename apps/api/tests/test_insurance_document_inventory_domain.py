@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 import pytest
@@ -66,6 +67,65 @@ def test_registered_policy_without_reviewed_set_is_certificate_only() -> None:
     assert registered.missing_document_roles == ("terms",)
     assert registered.documents[0].role == "policy"
     assert registered.documents[0].source_count == 1
+
+
+@pytest.mark.parametrize(
+    "match_state,expected",
+    [("USER_CONFIRMED", "CERTIFICATE_AND_TERMS"), ("SUGGESTED", "CERTIFICATE_ONLY")],
+)
+def test_program_role_validation_requires_a_separate_terms_relationship(
+    match_state: str, expected: str
+) -> None:
+    policy_component = _component(
+        91,
+        "policy",
+        content="f" * 64,
+        document_version_id=POLICY_VERSION_ID,
+        page_start=1,
+        page_end=1,
+    )
+    terms = replace(_component(92, "terms"), review_state="PROGRAM_VERIFIED")
+    document_set = InventorySet(
+        UUID(int=93),
+        POLICY_ID,
+        "Sample Insurer",
+        "Sample Policy",
+        "Sample Policy",
+        1,
+        (
+            InventorySetItem(policy_component, "USER_CONFIRMED"),
+            InventorySetItem(terms, match_state),
+        ),
+    )
+    result = build_member_inventory(MEMBER_ID, policies=(_policy(),), document_sets=(document_set,))
+    assert result.registered_policies[0].completeness == expected
+
+
+def test_client_cannot_claim_program_component_or_pairing_authority() -> None:
+    from familycare_api.insurance_documents.schemas import (
+        ComponentCreateRequest,
+        DocumentSetItemCreateRequest,
+    )
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ComponentCreateRequest.model_validate(
+            {
+                "document_batch_item_id": str(UUID(int=94)),
+                "role": "terms",
+                "page_start": 1,
+                "page_end": 1,
+                "review_state": "PROGRAM_VERIFIED",
+            }
+        )
+    with pytest.raises(ValidationError):
+        DocumentSetItemCreateRequest.model_validate(
+            {
+                "insurance_document_component_id": str(UUID(int=95)),
+                "match_state": "PROGRAM_VERIFIED",
+                "expected_set_version": 1,
+            }
+        )
 
 
 def test_only_confirmed_authoritative_policy_and_terms_complete_a_policy() -> None:
