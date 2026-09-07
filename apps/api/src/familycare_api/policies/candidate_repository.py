@@ -358,7 +358,19 @@ class CandidateRepository:
                            AND member.deleted_at IS NULL
                           WHERE candidate_evidence.candidate_version_id = candidate.id
                             AND job.family_member_id = %(family_member_id)s
-                            AND job.state = 'succeeded'
+                            AND (job.state = 'succeeded' OR EXISTS (
+                                SELECT 1 FROM policy_range_candidate_sources AS range_source
+                                JOIN analysis_candidate_versions AS source_candidate
+                                  ON source_candidate.id = range_source.candidate_version_id
+                                JOIN document_policy_ranges AS source_range
+                                  ON source_range.job_id = range_source.job_id
+                                 AND source_range.envelope_id = range_source.envelope_id
+                                WHERE range_source.job_id = job.id
+                                  AND source_candidate.review_item_id = candidate.review_item_id
+                                  AND source_candidate.household_space_id =
+                                      candidate.household_space_id
+                                  AND source_range.state IN ('COMPLETE', 'REVIEW')
+                            ))
                       )
             """
         try:
@@ -768,9 +780,18 @@ class CandidateRepository:
                 JOIN lineage AS child ON child.parent_version_id = parent.id
                 WHERE parent.household_space_id = %s
             )
-            SELECT DISTINCT structuring_job_id
+            SELECT structuring_job_id, bool_or(EXISTS (
+                SELECT 1 FROM policy_range_candidate_sources AS source
+                JOIN document_policy_ranges AS source_range
+                  ON source_range.job_id = source.job_id
+                 AND source_range.envelope_id = source.envelope_id
+                WHERE source.candidate_version_id = lineage.id
+                  AND source.job_id = lineage.structuring_job_id
+                  AND source_range.state IN ('COMPLETE', 'REVIEW')
+            )) AS retained_range
             FROM lineage
             WHERE structuring_job_id IS NOT NULL
+            GROUP BY structuring_job_id
             """,
             (candidate_version_id, household_space_id, household_space_id),
         ).fetchall()
@@ -809,12 +830,14 @@ class CandidateRepository:
              AND member.deleted_at IS NULL
             WHERE job.id = %s
               AND job.household_space_id = %s
-              AND job.state = 'succeeded'
+              AND (job.state = 'succeeded' OR %s)
             """,
-            (structuring_job_id, household_space_id),
+            (structuring_job_id, household_space_id, bool(lineage_rows[0].get("retained_range"))),
         ).fetchone()
         if context is None:
             raise InvalidCandidateCorrection
+        if lineage_rows[0].get("retained_range"):
+            context["retained_range"] = True
         return context
 
     def _review_item(
@@ -916,6 +939,10 @@ class CandidateRepository:
             household_space_id,
             candidate_version_id,
         )
+        if private_context is not None and private_context.get("retained_range"):
+            # Range facts require their contract/insured association projector. The
+            # legacy job-wide aggregate would join different contracts and parties.
+            return False
         field_rows = connection.execute(
             "SELECT field_id, value FROM analysis_candidate_fields WHERE candidate_version_id = %s",
             (candidate_version_id,),

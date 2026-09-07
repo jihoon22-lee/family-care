@@ -132,6 +132,21 @@ publication하지 않고 재시도한다.
 사용한다. 범위 publication과 기본 실행 전환은 함께 연결해야 하며, 저장 결과만으로 기존
 가입 원장·사용자 교정·청구 이력을 변경하지 않는다.
 
+`0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
+반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
+ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고
+240자 excerpt는 미리보기로만 사용한다. 일부 범위가 실패한 문서의 후보도 해당 가정·구성원의
+검토 목록에 남으며, 다른 실패한 legacy job의 권한을 확대하지 않는다.
+
+원장 반영에 앞서 `range_grounding.py`는 명시된 필드명·단위·날짜와 담보명을 인용과 대조한다.
+지원하지 않는 형식은 검토 대상으로 보존한다. 증권에 적힌 과거 active 상태를 최신 상태로
+승격하지 않는다. `policy_source_association.py`는 로컬 원문의 피보험자 label/value를 가정의
+구성원과 정확히 대조하고, 같은 문서 버전의 명시적 계약번호로 페이지를 연결한다. 계약자·
+수익자·이름의 부분 일치·등록 시 선택한 구성원은 피보험자 근거가 아니다. 여러 계약/대상자가
+모호하면 자동 연결하지 않는다. 원문 식별값은 외부 DTO에 넣지 않고 opaque scope와 원문
+위치만 연결 정보에 보존하며, publication 때 전체 구성원 identity/version을 다시 검사한다.
+이 단계는 후보·로컬 연결 근거의 저장이며 자동 원장 projector와 기본 Worker 전환은 후속이다.
+
 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 
 ## Coverage rule DSL

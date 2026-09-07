@@ -40,7 +40,23 @@ def ranges_database(request: pytest.FixtureRequest) -> Any:
             )
     job = PolicyStructuringJobQueue(url).claim_next_job(WORKER)
     assert job is not None and job.id == source_job.id
-    yield url, job
+    try:
+        yield url, job
+    finally:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            keys = connection.execute(
+                "SELECT DISTINCT ce.evidence_id FROM analysis_candidate_evidence ce "
+                "JOIN analysis_candidate_versions c ON c.id = ce.candidate_version_id "
+                "WHERE c.structuring_job_id = %s",
+                (job.id,),
+            ).fetchall()
+            connection.execute("TRUNCATE document_structure_generations CASCADE")
+            connection.execute(
+                "DELETE FROM analysis_candidate_versions WHERE structuring_job_id = %s", (job.id,)
+            )
+            connection.execute(
+                "DELETE FROM evidence WHERE id = ANY(%s)", ([row[0] for row in keys],)
+            )
 
 
 def _no_facts(work: Any, *, unresolved: bool = False) -> PolicyRangeBatch:
@@ -433,3 +449,220 @@ def test_unknown_primary_role_cannot_create_an_ai_verified_contract(ranges_datab
         assert saved[0] == "REVIEW"
         assert saved[1]["result"]["candidates"][0]["status"] == "NEEDS_REVIEW"
         assert "UNSUPPORTED_STRUCTURE" in saved[1]["result"]["candidates"][0]["issue_codes"]
+
+
+def _one_contract(work: Any, *, candidate_id: Any = None) -> tuple[Any, Any]:
+    from familycare_worker.ai.schemas import CandidateField, PolicyCandidate, StructurerCandidate
+
+    source = StructurerCandidate(
+        schema_version="1",
+        candidate_id=candidate_id or uuid4(),
+        candidate_kind="policy_contract",
+        fields=tuple(
+            CandidateField(
+                field_id=key, value=value, evidence_ids=(work.envelope.primary_evidence_ids[0],)
+            )
+            for key, value in (("insurer", "Sample Insurer"), ("product_name", "Sample Plan"))
+        ),
+    )
+    dispositions = _no_facts(work).ranges
+    batch = PolicyRangeBatch(
+        schema_version="3",
+        candidates=(source,),
+        ranges=(
+            dispositions[0].model_copy(
+                update={"outcome": "CANDIDATES", "candidate_ids": (source.candidate_id,)}
+            ),
+            *dispositions[1:],
+        ),
+    )
+    result = CandidatePipelineResult(
+        classification="SUCCESS",
+        candidates=(
+            PolicyCandidate(
+                candidate_id=source.candidate_id,
+                candidate_kind=source.candidate_kind,
+                fields=source.fields,
+                status="AI_VERIFIED",
+                issue_codes=(),
+                provider_request_ids=("synthetic-structure", "synthetic-verify"),
+            ),
+        ),
+    )
+    return batch, result
+
+
+def test_range_candidates_publish_with_exact_span_and_envelope_scoped_identity(
+    ranges_database: Any,
+) -> None:
+    url, job = ranges_database
+    repository = PolicyRangeRepository(url)
+    candidate_id = uuid4()
+    for _ in range(2):
+        work = repository.next(job, WORKER, sensitive_terms=())
+        assert work is not None
+        batch, result = _one_contract(work, candidate_id=candidate_id)
+        repository.save(job, WORKER, work, batch, result)
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            rows = connection.execute(
+                "SELECT c.status, ce.bounded_excerpt, e.extraction_id, s.source_refs "
+                "FROM policy_range_candidate_sources s "
+                "JOIN analysis_candidate_versions c ON c.id = s.candidate_version_id "
+                "JOIN analysis_candidate_evidence ce ON ce.candidate_version_id = c.id "
+                "JOIN evidence e ON e.id = ce.evidence_id "
+                "WHERE s.job_id = %s AND s.envelope_id = %s",
+                (job.id, work.envelope.envelope_id),
+            ).fetchall()
+            assert len(rows) == 2
+            assert all(
+                row[0] == "NEEDS_REVIEW" and len(row[1]) <= 240 and row[2] == job.extraction_id
+                for row in rows
+            )
+            ref = rows[0][3][0]
+            assert ref["node_id"] == work.envelope.evidence[0].node_id
+            assert ref["start"] == work.envelope.evidence[0].start
+            assert ref["end"] == work.envelope.evidence[0].end
+        job = PolicyStructuringJobQueue(url).claim_next_job(WORKER)
+        assert job is not None
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT count(DISTINCT source_candidate_id) FROM analysis_candidate_versions "
+            "WHERE structuring_job_id = %s",
+            (job.id,),
+        ).fetchone() == (2,)
+        with pytest.raises(psycopg.IntegrityError), connection.transaction():
+            connection.execute("UPDATE policy_range_candidate_sources SET source_refs = '[]'")
+
+
+def test_supported_page_cannot_publish_an_invented_product(ranges_database: Any) -> None:
+    url, job = ranges_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE extraction_blocks SET text = %s WHERE reading_order = 0",
+            ("보험증권 가입금액 Sample Insurer Different Plan",),
+        )
+    repository = PolicyRangeRepository(url)
+    work = repository.next(job, WORKER, sensitive_terms=())
+    assert work is not None and work.envelope.evidence[0].source_role == "policy"
+    batch, result = _one_contract(work)
+    repository.save(job, WORKER, work, batch, result)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        saved = connection.execute(
+            "SELECT result_json FROM document_policy_ranges WHERE result_json IS NOT NULL"
+        ).fetchone()[0]
+        candidate = saved["result"]["candidates"][0]
+        assert (
+            candidate["status"] == "NEEDS_REVIEW" and "INVENTED_FIELD" in candidate["issue_codes"]
+        )
+
+
+def test_partial_range_candidates_remain_visible_only_to_the_scoped_member(
+    ranges_database: Any,
+) -> None:
+    from familycare_api.common.scope import HouseholdScope
+    from familycare_api.policies.candidate_repository import CandidateRepository
+    from psycopg.rows import dict_row
+
+    url, job = ranges_database
+    ranges = PolicyRangeRepository(url)
+    work = ranges.next(job, WORKER, sensitive_terms=())
+    batch, result = _one_contract(work)
+    ranges.save(job, WORKER, work, batch, result)
+    api = CandidateRepository(url)
+    scope = HouseholdScope(job.household_space_id)
+    items = api.list_review_items(scope, family_member_id=job.family_member_id)
+    assert len(items) == 1
+    assert api.list_review_items(scope, family_member_id=uuid4()) == []
+    assert (
+        api.list_review_items(HouseholdScope(uuid4()), family_member_id=job.family_member_id) == []
+    )
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        version = connection.execute(
+            "SELECT id FROM analysis_candidate_versions WHERE structuring_job_id = %s", (job.id,)
+        ).fetchone()
+        context = api._private_structuring_context(
+            connection, job.household_space_id, version["id"]
+        )
+        assert context is not None and context["family_member_id"] == job.family_member_id
+
+
+@pytest.mark.parametrize("rename_after_plan", [False, True])
+def test_local_insured_association_is_retained_and_rechecked_before_publication(
+    ranges_database: Any,
+    rename_after_plan: bool,
+) -> None:
+    url, job = ranges_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE family_members SET display_name = 'Family Member A' WHERE id = %s",
+            (job.family_member_id,),
+        )
+        connection.execute(
+            "UPDATE extraction_blocks SET text = %s WHERE reading_order = 0",
+            (
+                "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
+                "피보험자: Family Member A\nSample Insurer Sample Plan",
+            ),
+        )
+    repository = PolicyRangeRepository(url)
+    work = repository.next(job, WORKER, sensitive_terms=("Family Member A",))
+    assert work is not None
+    if rename_after_plan:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute(
+                "UPDATE family_members SET version = version + 1, display_name = 'Family Member B' "
+                "WHERE id = %s",
+                (job.family_member_id,),
+            )
+    batch, result = _one_contract(work)
+    repository.save(job, WORKER, work, batch, result)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        association = connection.execute(
+            "SELECT association_json FROM policy_range_candidate_sources WHERE job_id = %s",
+            (job.id,),
+        ).fetchone()[0]
+        assert association["state"] == ("UNRESOLVED" if rename_after_plan else "RESOLVED")
+        if not rename_after_plan:
+            assert association["family_member_id"] == str(job.family_member_id)
+            assert association["anchor_refs"]
+        assert "Family Member A" not in str(association)
+        assert "synthetic-policy-001" not in str(association)
+
+
+def test_generic_confirmation_cannot_bypass_unresolved_range_insured_identity(
+    ranges_database: Any,
+) -> None:
+    from familycare_api.policies.candidate_repository import CandidateRepository
+    from psycopg.rows import dict_row
+
+    url, job = ranges_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE extraction_blocks SET text = %s WHERE reading_order = 0",
+            (
+                "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
+                "피보험자: Unknown Member\nSample Insurer Sample Plan",
+            ),
+        )
+    repository = PolicyRangeRepository(url)
+    work = repository.next(job, WORKER, sensitive_terms=())
+    batch, result = _one_contract(work)
+    repository.save(job, WORKER, work, batch, result)
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        version = connection.execute(
+            "SELECT id FROM analysis_candidate_versions WHERE structuring_job_id = %s", (job.id,)
+        ).fetchone()
+        connection.execute(
+            "UPDATE analysis_candidate_versions SET status = 'USER_CONFIRMED' WHERE id = %s",
+            (version["id"],),
+        )
+        assert not CandidateRepository(url)._publish_projection(
+            connection, job.household_space_id, version["id"]
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) AS total FROM policy_parties WHERE household_space_id = %s",
+                (job.household_space_id,),
+            ).fetchone()["total"]
+            == 0
+        )

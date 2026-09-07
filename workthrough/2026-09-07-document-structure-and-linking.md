@@ -183,3 +183,37 @@ Python default `1747 passed, 219 deselected, 3 subtests passed`, 계약/containe
 기본 Worker 실행 전환은 범위 publication 구현과 함께 진행한다. 현재 선택 가능한 범위
 runner의 결과 저장을 기존 원장 반영 완료로 보고하지 않으며 B02는 계속 draft다. 운영
 schema/자료는 변경하지 않았고 실제 provider 호출·태그·배포는 수행하지 않았다.
+
+## Range candidate provenance and local insured association (2026-09-07)
+
+기준 `21db1a5` 이후 migration `0030`과 range publication을 추가했다. 완료 범위·후보·실제
+Evidence FK·원문 node/문자 위치를 한 transaction으로 저장하고, provider 후보 ID를 범위별로
+구분한다. 240자 excerpt는 미리보기이며 전체 최소화 입력과 원문 위치는 별도로 유지한다.
+문서 일부가 실패해도 해당 가정/구성원의 검토 후보와 교정 lineage가 조회된다.
+
+필드 grounding은 명시 label·단위·날짜·담보명을 대조하고 보험료/한도를 가입금액으로 쓰지
+않는다. 로컬 피보험자/계약 resolver는 정확한 역할/값·인접 셀과 같은 계약 anchor를 사용하며
+잘못된 대상자·중복 이름·다른 계약·자료 역할·변경된 구성원 identity를 보수적으로 처리한다.
+원문 이름/계약 식별자는 provider DTO나 연결 metadata에 복사하지 않는다. 연결에 필요한
+opaque scope·구성원 revision·원문 위치만 유지한다. 미지원 문서 형식의 자동 판독을 주장하지
+않는다. 기존 job 단위 projection은 새 범위 계약/피보험자 연결을 건너뛰므로 새 범위 후보와
+그 교정 자손이 해당 경로로 가입되는 것을 막았다. 자동 원장 projector·판본·공통 담보 식별과
+기본 Worker 실행 전환은 아직 남아 있다.
+
+새 모듈/저장 컬럼 부재, 중복 provider ID, 부분 후보 조회 누락, 과도한 필드/중복 인용,
+잘못된 product, 범위 교정의 피보험자 우회, 희소 셀과 약관 예시 이름의 잘못된 연결을 RED로
+확인하고 수정했다. 빈 합성 DB에서 `0030` downgrade/upgrade를 검증했다. 개발 중 컬럼 추가
+전 DB를 수정된 downgrade로 되돌리는 시도가 실패했으며, 새 컬럼의 조건부 drop을 적용한
+후 downgrade/upgrade와 대상 통합이 통과했다. 실제 runtime DB는 변경하지 않았다.
+
+2026-09-07 08:39–08:46 UTC, `21db1a5` + 이 절의 변경에서 필수 검사를 직렬 실행했다.
+`web:check`의 format/lint/typecheck·164 tests·build, Ruff format 557개/lint, mypy 232개,
+기본 pytest `1773 passed, 226 deselected, 3 subtests passed`, 계약/생성 타입·container/workflow
+정적 검사, 전체 합성 PostgreSQL `225 passed, 1500 deselected`가 통과했다. 문서 50개·저장소
+안전 750 paths·diff 검사도 통과했다. Web 이후 변경은 API/Worker와 문서이며 Web source는
+동일하다. 새 image build는 다음 PR CI에서 확인한다. 이전 head `21db1a5`의 CI 7개는 모두
+통과했다. 실제 문서 수용·외부 provider·Windows/모바일·운영 전환·태그/배포는 미실행이다.
+
+마일스톤 설명·#59 진행 원장·#60·WP02 #62·WP03 #63·PR #76의 본문을 실제 단계에 맞춰
+동기화했다. PR push마다 세부 진행과 검증을 함께 갱신한다. 기본 구현 PR 8개 중 B01 merge,
+B02 진행이며, 이 단계 완료를 WP02/WP03 전체 수용이나 마일스톤 완료로 표시하지 않는다.

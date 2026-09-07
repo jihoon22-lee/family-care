@@ -18,6 +18,7 @@ from familycare_worker.ai.policy_ranges import (
     RangeEvidenceSlice,
     build_policy_envelopes,
 )
+from familycare_worker.ai.range_grounding import ground_range_candidate
 from familycare_worker.ai.range_structurer import PolicyRangeBatch
 from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.document_structure import plan_structure_chunks
@@ -25,6 +26,12 @@ from familycare_worker.document_structure_repository import DocumentStructureRep
 from familycare_worker.document_structure_source import load_stored_structure
 from familycare_worker.jobs import psycopg_database_url
 from familycare_worker.policy_jobs import PolicyStructuringJobRecord
+from familycare_worker.policy_range_publication import publish_range_candidates
+from familycare_worker.policy_source_association import (
+    associate_policy_sources,
+    load_local_members,
+    member_identity_fingerprint,
+)
 
 
 class PolicyRangeConflict(RuntimeError):
@@ -145,15 +152,29 @@ class PolicyRangeRepository:
                 envelopes = build_policy_envelopes(
                     structure, chunks, sensitive_terms=sensitive_terms
                 )
+                members = load_local_members(connection, job.household_space_id)
+                associations = {
+                    "member_fingerprint": member_identity_fingerprint(members),
+                    "nodes": {
+                        key: value.to_dict()
+                        for key, value in associate_policy_sources(
+                            structure,
+                            members=members,
+                            expected_member_id=job.family_member_id,
+                        ).items()
+                    },
+                }
                 connection.execute(
                     "INSERT INTO document_policy_range_plans "
-                    "(job_id, generation_id, privacy_fingerprint, state, unprocessed_json) "
-                    "VALUES (%s, %s, %s, 'PROCESSING', %s)",
+                    "(job_id, generation_id, privacy_fingerprint, state, unprocessed_json, "
+                    "associations_json) "
+                    "VALUES (%s, %s, %s, 'PROCESSING', %s, %s)",
                     (
                         job.id,
                         generation_id,
                         privacy_fingerprint,
                         Jsonb([asdict(item) for item in envelopes.unprocessed]),
+                        Jsonb(associations),
                     ),
                 )
                 for position, envelope in enumerate(envelopes.envelopes):
@@ -244,6 +265,18 @@ class PolicyRangeRepository:
                     ),
                 }
             )
+        grounded = tuple(
+            ground_range_candidate(candidate, work.envelope.evidence)
+            for candidate in result.candidates
+        )
+        result = result.model_copy(
+            update={
+                "candidates": grounded,
+                "classification": "NEEDS_REVIEW"
+                if any(item.status != "AI_VERIFIED" for item in grounded)
+                else result.classification,
+            }
+        )
         review = result.classification != "SUCCESS" or any(
             item.outcome == "UNRESOLVED" for item in batch.ranges
         )
@@ -294,6 +327,13 @@ class PolicyRangeRepository:
             ).fetchone()
             if row is None:
                 raise PolicyRangeConflict
+            if "result" in payload:
+                publish_range_candidates(
+                    connection,
+                    job,
+                    work.envelope,
+                    CandidatePipelineResult.model_validate_json(json.dumps(payload["result"])),
+                )
             self._advance(connection, job)
 
     @staticmethod

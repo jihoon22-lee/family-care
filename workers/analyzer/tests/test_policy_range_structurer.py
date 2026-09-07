@@ -125,3 +125,22 @@ def test_non_enrollment_range_returns_zero_candidates_without_fabrication() -> N
     )
     assert batch.candidates == ()
     assert batch.ranges[0].outcome == "NO_ENROLLMENT_FACTS"
+
+
+@pytest.mark.parametrize(
+    "change", ["oversize", "duplicate_field", "duplicate_evidence", "empty_evidence"]
+)
+def test_unpersistable_provider_fields_are_rejected_before_verification(change: str) -> None:
+    envelope = _envelope()
+    payload = _payload(envelope)
+    field = payload["candidates"][0]["fields"][0]
+    if change == "oversize":
+        field["value"] = "S" * 241
+    elif change == "duplicate_field":
+        payload["candidates"][0]["fields"].append(deepcopy(field))
+    elif change == "duplicate_evidence":
+        field["evidence_ids"] *= 2
+    else:
+        field["evidence_ids"] = []
+    with pytest.raises(RangePayloadInvalid):
+        structure_policy_range(envelope=envelope, provider=Provider(payload), model="synthetic")

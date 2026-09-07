@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from typing import Literal, Self
 from uuid import UUID
 
@@ -40,6 +41,17 @@ class PolicyRangeBatch(BaseModel):
 
     @model_validator(mode="after")
     def candidate_and_range_identity(self) -> Self:
+        for candidate in self.candidates:
+            if len({field.field_id for field in candidate.fields}) != len(candidate.fields):
+                raise ValueError("duplicate range field")
+            for field in candidate.fields:
+                if (
+                    not field.evidence_ids
+                    or len(set(field.evidence_ids)) != len(field.evidence_ids)
+                    or (isinstance(field.value, str) and len(field.value) > 240)
+                    or (isinstance(field.value, float) and not math.isfinite(field.value))
+                ):
+                    raise ValueError("invalid range field")
         ids = {item.candidate_id for item in self.candidates}
         if (
             len(ids) != len(self.candidates)
