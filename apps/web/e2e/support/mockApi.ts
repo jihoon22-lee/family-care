@@ -30,7 +30,7 @@ const AUTH_OTHER_SESSION_ID = "synthetic-session-other";
 type JsonObject = Record<string, unknown>;
 
 export interface SyntheticEventApiOptions {
-  result?: "complete" | "partial_stale";
+  result?: "complete" | "partial_stale" | "local";
   structuring?: "success" | "failure";
 }
 
@@ -267,6 +267,62 @@ function resultResponse(
     schema_version: "2",
     source_failure_codes: [],
     stale: partial,
+    local_guidance:
+      resultMode === "local"
+        ? {
+            schema_version: "1",
+            family_member_id: MEMBER_ID,
+            medical_event_id: EVENT_ID,
+            event_version: eventVersion,
+            event_date: "2026-08-25",
+            outcome: "CANDIDATES",
+            versions: {
+              engine: "local-guidance-v1",
+              assumption_policy: "document-continuity-v1",
+            },
+            support: {
+              total_coverages: 1,
+              evaluated_coverages: 1,
+              unsupported_coverages: 0,
+            },
+            review_state: "NOT_REQUESTED",
+            candidates: [
+              {
+                ref: {
+                  kind: "PRIVATE_KNOWLEDGE_COVERAGE",
+                  contract_id: RESULT_ID,
+                  coverage_id: RIDER_MATCH_ID,
+                },
+                contract_label: "Sample Policy",
+                coverage_label: "Sample Local Coverage",
+                benefit_kind: "FIXED",
+                group: "PRIMARY",
+                enrollment: "DOCUMENTED",
+                freshness: "DOCUMENT_CONTINUITY",
+                condition_result: "MATCH",
+                reason_codes: ["DOCUMENTED_RELEVANT_COVERAGE"],
+                assumptions: ["DOCUMENT_CONTINUITY_ASSUMED"],
+                conditions: [],
+                questions: [],
+                estimate: {
+                  kind: "POINT",
+                  currency: "KRW",
+                  amount: "100",
+                  formula: "가입금액 × 1",
+                  reason_code: "DOCUMENT_BASED_ESTIMATE",
+                  evidence: [
+                    {
+                      kind: "TERMS_SECTION",
+                      evidence_id: EVIDENCE_ID,
+                      page_start: 2,
+                      page_end: 2,
+                    },
+                  ],
+                },
+              },
+            ],
+          }
+        : null,
   };
 }
 

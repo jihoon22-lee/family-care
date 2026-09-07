@@ -164,7 +164,8 @@ def test_actual_coverage_decision_response_serialization_matches_schema() -> Non
     serialized = json.loads(response.model_dump_json())
 
     assert not _schema_validator()(schema, serialized)
-    assert set(serialized) == set(schema["required"])
+    assert set(serialized) == set(schema["required"]) | {"local_guidance"}
+    assert serialized["local_guidance"] is None
     _assert_private_response_boundary(serialized)
 
 

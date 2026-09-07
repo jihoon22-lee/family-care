@@ -6,6 +6,45 @@ import {
   mockSyntheticEventApi,
 } from "./support/mockApi";
 
+test("shows document-based local guidance at 320px without automatic AI requests", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await installStorageWriteSpy(page);
+  const mock = await mockSyntheticEventApi(page, { result: "local" });
+  await mockAuthenticatedSession(page);
+  await page.goto("/app/events/new?member=synthetic-member-a");
+  await page
+    .getByRole("textbox", { name: "현재 상황" })
+    .fill("Synthetic situation");
+  await page.getByRole("button", { name: "현재 후보 보기" }).click();
+  await page.getByRole("button", { name: "결과 확인" }).click();
+  await expect(page.getByRole("heading", { name: "주요 후보" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Sample Local Coverage" }),
+  ).toBeVisible();
+  await expect(page.getByText("100원", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "청구 검토 시작", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/문서에 기록된 계약이 사건일까지 유지/),
+  ).toBeVisible();
+  expect(mock.structureRequests).toBe(0);
+  expect(mock.analysisRequests).toBe(1);
+  expect(mock.forbiddenRequests).toEqual([]);
+  const size = await page.evaluate(() => ({
+    width: innerWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
+  expect(size.scroll).toBeLessThanOrEqual(size.width);
+  expect(await page.evaluate(() => window.__familyCareStorageWrites)).toEqual({
+    indexedDB: 0,
+    localStorage: 0,
+    sessionStorage: 0,
+  });
+});
+
 test("creates a minimal event and reaches action-first results at 320px", async ({
   page,
 }) => {

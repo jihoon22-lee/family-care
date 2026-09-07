@@ -129,9 +129,6 @@ function EventEditor({
   const [medicalEvent, setMedicalEvent] = useState(initialEvent);
   const [receiptLines, setReceiptLines] = useState(initialReceiptLines);
   const [editorRevision, setEditorRevision] = useState(0);
-  const [autoStructuringAttempted, setAutoStructuringAttempted] = useState(
-    initialEvent?.auto_structuring_attempted ?? false,
-  );
 
   async function persistDraft(draft: EventDraftView): Promise<MedicalEvent> {
     if (!medicalEvent) {
@@ -177,7 +174,6 @@ function EventEditor({
 
   async function structure(draft: EventDraftView): Promise<void> {
     const saved = await persistDraft(draft);
-    setAutoStructuringAttempted(true);
     const accepted = await structureMedicalEvent(saved.id, saved.version);
     await waitForStructuring(accepted.status_url);
     const structured = await getMedicalEvent(saved.id);
@@ -186,24 +182,7 @@ function EventEditor({
   }
 
   async function analyze(draft: EventDraftView): Promise<void> {
-    let saved = await persistDraft(draft);
-    const hasStructuredFacts =
-      draft.facts.length > 0 || (saved.structured_facts?.length ?? 0) > 0;
-    const hasAttemptedStructuring =
-      autoStructuringAttempted || saved.auto_structuring_attempted;
-    if (!hasStructuredFacts && !hasAttemptedStructuring) {
-      setAutoStructuringAttempted(true);
-      try {
-        const accepted = await structureMedicalEvent(saved.id, saved.version);
-        await waitForStructuring(accepted.status_url);
-        saved = await getMedicalEvent(saved.id);
-        setMedicalEvent(saved);
-      } catch {
-        // Structuring is an optional provider-assisted step. When it is not
-        // configured or temporarily unavailable, retain the deterministic
-        // search path instead of making the result action fail.
-      }
-    }
+    const saved = await persistDraft(draft);
     const result = await analyzeMedicalEvent(saved.id);
     window.location.assign(
       `/app/events/${encodeURIComponent(saved.id)}/result/${result.event_version}`,

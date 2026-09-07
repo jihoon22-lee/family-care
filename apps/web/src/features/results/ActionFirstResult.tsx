@@ -6,6 +6,7 @@ import type {
 import { AnalysisCompleteness } from "./AnalysisCompleteness";
 import { BenefitSummaries } from "./BenefitSummaries";
 import { CalculationDetails } from "./CalculationDetails";
+import { LocalGuidancePanel } from "./LocalGuidancePanel";
 import {
   PartialResultBanner,
   partialFailureCount,
@@ -34,6 +35,52 @@ export function ActionFirstResult({
   result: CoverageDecisionResponse;
   riderLabels?: Record<string, string>;
 }) {
+  if (result.local_guidance) {
+    const operationalCandidates = result.candidates.filter(
+      (candidate) => candidate.source.kind === "OPERATIONAL_RIDER",
+    );
+    const operationalEvaluations = result.evaluations.filter(
+      (evaluation) => evaluation.source.kind === "OPERATIONAL_RIDER",
+    );
+    return (
+      <div className={styles.resultBody}>
+        <StaleResultBanner result={result} onReanalyze={onReanalyze} />
+        <LocalGuidancePanel
+          guidance={result.local_guidance}
+          onRetry={onReanalyze}
+          showEmpty={operationalCandidates.length === 0}
+        />
+        <PartialResultBanner
+          count={partialFailureCount(
+            operationalCandidates,
+            operationalEvaluations,
+          )}
+          reasonCodes={partialReasonCodes(
+            operationalCandidates,
+            operationalEvaluations,
+          )}
+          onRetry={onReanalyze}
+        />
+        {operationalCandidates.length > 0
+          ? (["claim_review", "needs_information", "mismatch"] as const).map(
+              (group) => (
+                <ResultGroup
+                  key={group}
+                  calculations={calculations?.calculations ?? []}
+                  candidates={operationalCandidates}
+                  evaluations={operationalEvaluations}
+                  group={group}
+                  claimStartEnabled={!result.stale}
+                  onOpenEvidence={onOpenEvidence}
+                  onStartClaim={onStartClaim}
+                  riderLabels={riderLabels}
+                />
+              ),
+            )
+          : null}
+      </div>
+    );
+  }
   const partialCount = partialFailureCount(
     result.candidates,
     result.evaluations,

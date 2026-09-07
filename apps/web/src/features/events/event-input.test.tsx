@@ -194,7 +194,7 @@ describe("hybrid medical event input", () => {
     expect(analyzeRequests).toBe(1);
   });
 
-  it("structures an unstructured event before requesting its result", async () => {
+  it("requests a local result without automatically invoking AI structuring", async () => {
     const user = userEvent.setup();
     const baseEvent = {
       deleted: false,
@@ -303,14 +303,7 @@ describe("hybrid medical event input", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "결과를 확인하지 못했습니다",
     );
-    expect(requestOrder).toEqual([
-      "save",
-      "structure",
-      "wait-for-structure",
-      "wait-for-structure",
-      "reload-structured-event",
-      "analyze",
-    ]);
+    expect(requestOrder).toEqual(["save", "analyze"]);
   });
 
   it("does not repeat automatic structuring after an earlier attempt", async () => {

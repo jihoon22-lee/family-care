@@ -525,9 +525,13 @@ class PostgresKnowledgeDecisionRepository:
             coverage_id = cast(UUID, row["knowledge_coverage_id"])
             rider_id = cast(UUID | None, row.get("rider_id"))
             history_fact = None
-            if row.get("operational_binding_decision") == "MATCH" and rider_id is not None:
+            if (
+                row.get("operational_binding_decision") == "MATCH"
+                and rider_id is not None
+                and history.get(rider_id, 0) > 0
+            ):
                 history_fact = KnowledgeFact(
-                    value=history.get(rider_id, 0),
+                    value=history[rider_id],
                     provenance="DERIVED_CONFIRMED",
                 )
             (

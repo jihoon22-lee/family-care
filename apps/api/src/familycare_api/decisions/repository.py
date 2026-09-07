@@ -51,6 +51,8 @@ from familycare_api.decisions.structuring_repository import _merge_user_override
 from familycare_api.decisions.structuring_repository import (
     _questions as _structured_question_records,
 )
+from familycare_api.guidance.engine import LocalGuidanceEngine
+from familycare_api.guidance.models import LocalGuidanceResponse
 from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
 
 
@@ -445,6 +447,7 @@ class DecisionRepository:
                     status_projection_digest_sha256=None,
                 )
                 knowledge_result = None
+                local_guidance = None
                 knowledge_failures: tuple[str, ...] = ()
                 try:
                     with connection.transaction():
@@ -454,6 +457,9 @@ class DecisionRepository:
                             event,
                         )
                         if knowledge_read.context is not None:
+                            local_guidance = LocalGuidanceEngine().evaluate(
+                                scope, event, knowledge_read.context
+                            )
                             knowledge_result = self.knowledge_engine.evaluate(
                                 scope,
                                 event,
@@ -491,6 +497,7 @@ class DecisionRepository:
                     result,
                     status="partial" if source_failures else "succeeded",
                     knowledge_result=knowledge_result,
+                    local_guidance=local_guidance,
                     analysis_completeness=completeness,
                     source_failure_codes=source_failures,
                     catalog_coverage=knowledge_read.catalog_coverage,
@@ -983,10 +990,10 @@ class DecisionRepository:
               knowledge_contract_count, knowledge_benefit_coverage_count,
               knowledge_published_coverage_count, knowledge_advisory_coverage_count,
               knowledge_blocked_coverage_count,
-              knowledge_not_applicable_coverage_count
+              knowledge_not_applicable_coverage_count, local_guidance_json
             ) VALUES (
               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
@@ -1011,6 +1018,9 @@ class DecisionRepository:
                 result.catalog_coverage.advisory_coverage_count,
                 result.catalog_coverage.blocked_coverage_count,
                 result.catalog_coverage.not_applicable_coverage_count,
+                Jsonb(result.local_guidance.model_dump(mode="json"))
+                if result.local_guidance is not None
+                else None,
             ),
         )
         for evaluation in result.evaluations:
@@ -1179,6 +1189,11 @@ class DecisionRepository:
                 str, run.get("event_fact_schema_version", "medical-event-facts.v2")
             ),
             assistance=assistance,
+            local_guidance=(
+                LocalGuidanceResponse.model_validate(run["local_guidance_json"])
+                if run.get("local_guidance_json") is not None
+                else None
+            ),
         )
 
 

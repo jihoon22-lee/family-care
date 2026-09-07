@@ -203,6 +203,36 @@
       "title": "AssistanceCitationResponse",
       "type": "object"
     },
+    "CanonicalCoverageRef": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "format": "uuid",
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "PRIVATE_KNOWLEDGE_COVERAGE",
+            "OPERATIONAL_RIDER"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "contract_id",
+        "coverage_id"
+      ],
+      "title": "CanonicalCoverageRef",
+      "type": "object"
+    },
     "CatalogCoverageResponse": {
       "additionalProperties": false,
       "properties": {
@@ -300,6 +330,479 @@
         "unresolved_candidate_count"
       ],
       "title": "ConditionalFixedSubtotalResponse",
+      "type": "object"
+    },
+    "GuidanceCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "condition_result": {
+          "enum": [
+            "MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Condition Result",
+          "type": "string"
+        },
+        "conditions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceCondition"
+          },
+          "maxItems": 128,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "contract_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Contract Label",
+          "type": "string"
+        },
+        "coverage_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Coverage Label",
+          "type": "string"
+        },
+        "enrollment": {
+          "const": "DOCUMENTED",
+          "default": "DOCUMENTED",
+          "title": "Enrollment",
+          "type": "string"
+        },
+        "estimate": {
+          "$ref": "#/$defs/GuidanceEstimate"
+        },
+        "freshness": {
+          "enum": [
+            "CONFIRMED_AT_EVENT",
+            "DOCUMENT_CONTINUITY",
+            "STATUS_UNRESOLVED"
+          ],
+          "title": "Freshness",
+          "type": "string"
+        },
+        "group": {
+          "enum": [
+            "PRIMARY",
+            "CONDITIONAL"
+          ],
+          "title": "Group",
+          "type": "string"
+        },
+        "questions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceQuestion"
+          },
+          "maxItems": 64,
+          "title": "Questions",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "ref": {
+          "$ref": "#/$defs/CanonicalCoverageRef"
+        }
+      },
+      "required": [
+        "ref",
+        "contract_label",
+        "coverage_label",
+        "benefit_kind",
+        "group",
+        "freshness",
+        "condition_result",
+        "reason_codes",
+        "estimate"
+      ],
+      "title": "GuidanceCandidate",
+      "type": "object"
+    },
+    "GuidanceCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/GuidanceEvidence"
+          },
+          "maxItems": 64,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "rule_id": {
+          "format": "uuid",
+          "title": "Rule Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule_id",
+        "result",
+        "reason_code",
+        "evidence"
+      ],
+      "title": "GuidanceCondition",
+      "type": "object"
+    },
+    "GuidanceEstimate": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceEvidence"
+          },
+          "maxItems": 64,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "formula": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Formula"
+        },
+        "kind": {
+          "enum": [
+            "POINT",
+            "RANGE",
+            "FORMULA",
+            "UNAVAILABLE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lower"
+        },
+        "missing_inputs": {
+          "default": [],
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Missing Inputs",
+          "type": "array"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Upper"
+        }
+      },
+      "required": [
+        "kind",
+        "reason_code"
+      ],
+      "title": "GuidanceEstimate",
+      "type": "object"
+    },
+    "GuidanceEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "TERMS_SECTION",
+            "OPERATIONAL_EVIDENCE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "page_end": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "publication_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Id"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        }
+      },
+      "required": [
+        "kind",
+        "evidence_id",
+        "page_start",
+        "page_end"
+      ],
+      "title": "GuidanceEvidence",
+      "type": "object"
+    },
+    "GuidanceQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_path",
+        "reason_code"
+      ],
+      "title": "GuidanceQuestion",
+      "type": "object"
+    },
+    "GuidanceSupport": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluated_coverages": {
+          "minimum": 0,
+          "title": "Evaluated Coverages",
+          "type": "integer"
+        },
+        "failure_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Failure Codes",
+          "type": "array"
+        },
+        "total_coverages": {
+          "minimum": 0,
+          "title": "Total Coverages",
+          "type": "integer"
+        },
+        "unsupported_coverages": {
+          "minimum": 0,
+          "title": "Unsupported Coverages",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_coverages",
+        "evaluated_coverages",
+        "unsupported_coverages"
+      ],
+      "title": "GuidanceSupport",
+      "type": "object"
+    },
+    "GuidanceVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "assumption_policy": {
+          "const": "document-continuity-v1",
+          "default": "document-continuity-v1",
+          "title": "Assumption Policy",
+          "type": "string"
+        },
+        "catalog_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Import Run Id"
+        },
+        "engine": {
+          "const": "local-guidance-v1",
+          "default": "local-guidance-v1",
+          "title": "Engine",
+          "type": "string"
+        },
+        "rule_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Import Run Id"
+        },
+        "status_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Digest"
+        }
+      },
+      "title": "GuidanceVersions",
       "type": "object"
     },
     "IndemnitySummaryResponse": {
@@ -718,6 +1221,86 @@
         "event_fact_schema_version"
       ],
       "title": "KnowledgeSnapshotVersionResponse",
+      "type": "object"
+    },
+    "LocalGuidanceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/GuidanceCandidate"
+          },
+          "maxItems": 1000,
+          "title": "Candidates",
+          "type": "array"
+        },
+        "event_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Date"
+        },
+        "event_version": {
+          "minimum": 1,
+          "title": "Event Version",
+          "type": "integer"
+        },
+        "family_member_id": {
+          "format": "uuid",
+          "title": "Family Member Id",
+          "type": "string"
+        },
+        "medical_event_id": {
+          "format": "uuid",
+          "title": "Medical Event Id",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "CANDIDATES",
+            "NO_RELEVANT_COVERAGE",
+            "INPUT_UNRESOLVED",
+            "KNOWLEDGE_PENDING"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "review_state": {
+          "const": "NOT_REQUESTED",
+          "default": "NOT_REQUESTED",
+          "title": "Review State",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "support": {
+          "$ref": "#/$defs/GuidanceSupport"
+        },
+        "versions": {
+          "$ref": "#/$defs/GuidanceVersions"
+        }
+      },
+      "required": [
+        "family_member_id",
+        "medical_event_id",
+        "event_version",
+        "event_date",
+        "outcome",
+        "versions",
+        "candidates",
+        "support"
+      ],
+      "title": "LocalGuidanceResponse",
       "type": "object"
     },
     "OperationalCandidateResponse": {
@@ -1480,6 +2063,17 @@
     },
     "knowledge_snapshot_version": {
       "$ref": "#/$defs/KnowledgeSnapshotVersionResponse"
+    },
+    "local_guidance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LocalGuidanceResponse"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "medical_event_id": {
       "format": "uuid",

@@ -87,6 +87,10 @@ FIELD_PATHS = frozenset(
         "MedicalEvent.event_date",
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
+        "MedicalEvent.admission",
+        "MedicalEvent.performed",
+        "MedicalEvent.planned",
+        "MedicalEvent.diagnosis_confirmed",
         "MedicalEvent.diagnosis_code",
         "MedicalEvent.procedure_code",
         "MedicalEvent.anatomical_site_code",
@@ -99,8 +103,10 @@ FIELD_PATHS = frozenset(
         "Rider.status",
         "Rider.insured_amount",
         "ClaimHistory.counted_occurrence",
+        "ClaimHistory.remaining_occurrences",
         "Receipt.confirmed_amount",
         "Receipt.covered_amount",
+        "Receipt.other_cost_status",
     }
 )
 
@@ -222,6 +228,10 @@ _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "MedicalEvent.event_date": _FieldSpec("date", frozenset({"date"})),
     "MedicalEvent.classification": _FieldSpec("string", frozenset()),
     "MedicalEvent.admission_days": _FieldSpec("integer", frozenset({"days"})),
+    "MedicalEvent.admission": _FieldSpec("boolean", frozenset()),
+    "MedicalEvent.performed": _FieldSpec("boolean", frozenset()),
+    "MedicalEvent.planned": _FieldSpec("boolean", frozenset()),
+    "MedicalEvent.diagnosis_confirmed": _FieldSpec("boolean", frozenset()),
     "MedicalEvent.diagnosis_code": _FieldSpec("string", frozenset()),
     "MedicalEvent.procedure_code": _FieldSpec("string", frozenset()),
     "MedicalEvent.anatomical_site_code": _FieldSpec("string", frozenset()),
@@ -234,8 +244,10 @@ _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "Rider.status": _FieldSpec("string", frozenset()),
     "Rider.insured_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
     "ClaimHistory.counted_occurrence": _FieldSpec("integer", frozenset({"occurrences"})),
+    "ClaimHistory.remaining_occurrences": _FieldSpec("integer", frozenset({"occurrences"})),
     "Receipt.confirmed_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
     "Receipt.covered_amount": _FieldSpec("decimal", frozenset({"amount", "currency"})),
+    "Receipt.other_cost_status": _FieldSpec("string", frozenset()),
 }
 
 _RIDER_STATUSES = frozenset({"active", "inactive", "expired", "cancelled", "unknown"})

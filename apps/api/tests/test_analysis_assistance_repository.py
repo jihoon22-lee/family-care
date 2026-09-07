@@ -148,7 +148,7 @@ def _search_row() -> dict[str, Any]:
 
 
 def test_create_projection_searches_exact_scope_and_persists_only_bounded_results() -> None:
-    connection = _Connection(search_rows=[_search_row()])
+    connection = _Connection(search_rows=[_search_row()], job_state="SUCCEEDED")
     repository = AnalysisAssistanceRepository()
 
     result = repository.create_search_projection(
@@ -159,7 +159,7 @@ def test_create_projection_searches_exact_scope_and_persists_only_bounded_result
     )
 
     assert result.mode == "STRUCTURED_SEARCH"
-    assert result.state == "LLM_PENDING"
+    assert result.state == "SEARCH_READY"
     assert result.job_id == JOB_ID
     assert result.recommendations[0].coverage_label == "Sample Coverage"
     search_sql = next(
@@ -191,6 +191,8 @@ def test_create_projection_searches_exact_scope_and_persists_only_bounded_result
         params for query, params in connection.calls if query.startswith("INSERT INTO")
     ]
     assert "sensitive_event_marker" not in repr(insert_params)
+    assert "QUEUED" not in repr(insert_params)
+    assert "LOCAL_SEARCH_ONLY" in repr(insert_params)
     assert all(len(item.excerpt) <= 240 for item in result.recommendations)
 
 

@@ -1,0 +1,22 @@
+.card {
+  overflow-wrap: anywhere;
+}
+
+.card h3 {
+  margin: 6px 0 0;
+}
+
+.estimate {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+}
+
+.estimate p {
+  margin: 0;
+}
+
+.formula {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}

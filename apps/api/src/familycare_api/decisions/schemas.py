@@ -37,6 +37,7 @@ from familycare_api.decisions.structuring_schemas import (
     StructuredFactResponse,
     is_valid_structured_fact_value,
 )
+from familycare_api.guidance.models import LocalGuidanceResponse
 
 FactScalar = str | int | Decimal | date | None
 _EVENT_FIELDS = frozenset(
@@ -784,6 +785,16 @@ class CoverageDecisionResponse(StrictModel):
     indemnity_summary: IndemnitySummaryResponse
     source_failure_codes: list[ReasonCode] = Field(max_length=32)
     assistance: AnalysisAssistanceResponse
+    local_guidance: LocalGuidanceResponse | None = None
+
+    @model_validator(mode="after")
+    def guidance_matches_event_version(self) -> Self:
+        if self.local_guidance is not None and (
+            self.local_guidance.medical_event_id != self.medical_event_id
+            or self.local_guidance.event_version != self.event_version
+        ):
+            raise ValueError("guidance event snapshot mismatch")
+        return self
 
     @classmethod
     def from_value(cls, value: DecisionRunResult | dict[str, object]) -> Self:
@@ -864,6 +875,7 @@ class CoverageDecisionResponse(StrictModel):
                 ),
                 source_failure_codes=list(value.source_failure_codes),
                 assistance=AnalysisAssistanceResponse.from_domain(value.assistance),
+                local_guidance=value.local_guidance,
             )
         return cls.model_validate(value)
 

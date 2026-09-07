@@ -21,6 +21,7 @@ from familycare_api.common.scope import HouseholdScope
 if TYPE_CHECKING:
     from familycare_api.decisions.assistance import AnalysisAssistance
     from familycare_api.decisions.knowledge_domain import KnowledgeDecisionResult
+    from familycare_api.guidance.models import LocalGuidanceResponse
 
 TriState = Literal["MATCH", "NO_MATCH", "UNKNOWN"]
 FactConfirmation = Literal["user", "ai_structured", "unconfirmed", "conflicting"]
@@ -366,6 +367,7 @@ class DecisionRunResult:
     knowledge_status_projection_digest: str | None = None
     event_fact_schema_version: str = "medical-event-facts.v2"
     assistance: AnalysisAssistance | None = None
+    local_guidance: LocalGuidanceResponse | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"succeeded", "partial", "failed"}:

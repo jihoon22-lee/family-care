@@ -947,6 +947,12 @@ export type CandidateStatus =
 
 export type CandidateVersionId = string;
 
+export interface CanonicalCoverageRef {
+  contract_id: string;
+  coverage_id: string;
+  kind: "PRIVATE_KNOWLEDGE_COVERAGE" | "OPERATIONAL_RIDER";
+}
+
 export interface CatalogCoverageResponse {
   advisory_coverage_count: number;
   benefit_coverage_count: number;
@@ -1209,6 +1215,7 @@ export interface CoverageDecisionResponse {
   event_version: number;
   indemnity_summary: IndemnitySummaryResponse;
   knowledge_snapshot_version: KnowledgeSnapshotVersionResponse;
+  local_guidance?: LocalGuidanceResponse | null;
   medical_event_id: string;
   policy_snapshot_at: string;
   rule_set_version: string;
@@ -1432,6 +1439,71 @@ export interface FamilyMemberUpdateRequest {
   display_name?: string | null;
   expected_version: number;
   internal_alias?: string | null;
+}
+
+export interface GuidanceCandidate {
+  assumptions?: Array<string>;
+  benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  condition_result: "MATCH" | "UNKNOWN";
+  conditions?: Array<GuidanceCondition>;
+  contract_label: string;
+  coverage_label: string;
+  enrollment?: "DOCUMENTED";
+  estimate: GuidanceEstimate;
+  freshness: "CONFIRMED_AT_EVENT" | "DOCUMENT_CONTINUITY" | "STATUS_UNRESOLVED";
+  group: "PRIMARY" | "CONDITIONAL";
+  questions?: Array<GuidanceQuestion>;
+  reason_codes: Array<string>;
+  ref: CanonicalCoverageRef;
+}
+
+export interface GuidanceCondition {
+  evidence: Array<GuidanceEvidence>;
+  reason_code: string;
+  result: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  rule_id: string;
+}
+
+export interface GuidanceEstimate {
+  amount?: string | null;
+  assumptions?: Array<string>;
+  currency?: string | null;
+  evidence?: Array<GuidanceEvidence>;
+  formula?: string | null;
+  kind: "POINT" | "RANGE" | "FORMULA" | "UNAVAILABLE";
+  lower?: string | null;
+  missing_inputs?: Array<string>;
+  reason_code: string;
+  upper?: string | null;
+}
+
+export interface GuidanceEvidence {
+  evidence_id: string;
+  kind: "TERMS_SECTION" | "OPERATIONAL_EVIDENCE";
+  page_end: number;
+  page_start: number;
+  publication_id?: string | null;
+  source_sha256?: string | null;
+}
+
+export interface GuidanceQuestion {
+  field_path: string;
+  reason_code: string;
+}
+
+export interface GuidanceSupport {
+  evaluated_coverages: number;
+  failure_codes?: Array<string>;
+  total_coverages: number;
+  unsupported_coverages: number;
+}
+
+export interface GuidanceVersions {
+  assumption_policy?: "document-continuity-v1";
+  catalog_import_run_id?: string | null;
+  engine?: "local-guidance-v1";
+  rule_import_run_id?: string | null;
+  status_digest?: string | null;
 }
 
 export interface HTTPValidationError {
@@ -1729,6 +1801,23 @@ export interface KnowledgeTermsSectionResponse {
     "DIRECT_REVIEWED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "UNKNOWN";
   section_summary: string;
   warnings: Array<string>;
+}
+
+export interface LocalGuidanceResponse {
+  candidates: Array<GuidanceCandidate>;
+  event_date: string | null;
+  event_version: number;
+  family_member_id: string;
+  medical_event_id: string;
+  outcome:
+    | "CANDIDATES"
+    | "NO_RELEVANT_COVERAGE"
+    | "INPUT_UNRESOLVED"
+    | "KNOWLEDGE_PENDING";
+  review_state?: "NOT_REQUESTED";
+  schema_version?: "1";
+  support: GuidanceSupport;
+  versions: GuidanceVersions;
 }
 
 export interface LoginRequest {
