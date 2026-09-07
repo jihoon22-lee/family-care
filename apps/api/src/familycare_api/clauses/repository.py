@@ -116,6 +116,13 @@ _TERMS_CURRENT_SOURCE = """(source_component_id IS NULL OR terms_edition_allows_
 def _lock_terms_source(
     connection: psycopg.Connection[dict[str, Any]], scope: HouseholdScope, edition_id: UUID
 ) -> None:
+    source = connection.execute(
+        "SELECT content_sha256 FROM terms_editions WHERE id=%s AND household_space_id=%s",
+        (edition_id, scope.household_space_id),
+    ).fetchone()
+    if source is None:
+        return
+    _lock_terms_content(connection, scope.household_space_id, source["content_sha256"])
     connection.execute(
         """SELECT c.id FROM terms_editions e
         JOIN insurance_document_components c ON c.id=e.source_component_id
@@ -133,10 +140,9 @@ def _lock_terms_content(
 ) -> None:
     """Serialize manual and program edition registration across same-byte imports."""
 
-    connection.execute(
-        "SELECT pg_advisory_xact_lock(hashtextextended(%s || ':' || %s,0))",
-        (str(household_id), content_sha256),
-    )
+    from familycare_api.common.document_locks import lock_document_content
+
+    lock_document_content(connection, household_id, content_sha256)
 
 
 class TermsEditionRepository:
@@ -317,8 +323,7 @@ class TermsEditionRepository:
         target = "NULL" if restore else "clock_timestamp()"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-                if restore:
-                    _lock_terms_source(connection, scope, terms_edition_id)
+                _lock_terms_source(connection, scope, terms_edition_id)
                 row = connection.execute(
                     f"""
                     UPDATE terms_editions
@@ -326,6 +331,9 @@ class TermsEditionRepository:
                         updated_at = clock_timestamp()
                     WHERE id = %s AND household_space_id = %s AND version = %s
                       AND {source_predicate}
+                      AND NOT EXISTS(SELECT 1 FROM insurance_document_components c
+                        WHERE c.id=terms_editions.source_component_id
+                          AND c.superseded_by_component_id IS NOT NULL)
                     RETURNING {_TERMS_COLUMNS}
                     """,
                     (terms_edition_id, scope.household_space_id, version),

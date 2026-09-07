@@ -181,6 +181,7 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
+                              AND component.superseded_by_component_id IS NULL
                               AND component.review_state = 'USER_CONFIRMED'
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
@@ -198,6 +199,7 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
+                              AND component.superseded_by_component_id IS NULL
                               AND component.review_state = 'USER_CONFIRMED'
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
@@ -215,6 +217,7 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
+                              AND component.superseded_by_component_id IS NULL
                               AND component.review_state = 'USER_CONFIRMED'
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s

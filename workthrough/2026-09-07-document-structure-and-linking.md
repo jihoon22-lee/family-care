@@ -691,3 +691,32 @@ lint·mypy **255개**, 생성 계약·container/workflow·문서 **50개**·안�
 최초 왕복 검사는 테스트 URL의 driver 표기 누락으로 시작하지 못했으며 `postgresql+psycopg`
 표기를 고쳐 성공했다. Web UI/외부 응답 형태는 그대로이므로 Chromium mock E2E는 이번에
 반복하지 않았다. 실제 Windows/모바일, PDF 재추출/OCR·외부 API·운영 DB 적용은 미실행이다.
+
+## Immutable component refinements
+
+`0041_component_supersession`와 API projector는 같은 DocumentVersion의 미교정 프로그램
+분류에 더 강한 원문 metadata가 생기면 successor를 등록한다. 기존 해결 필드는 모두 보존하고
+새 필드 또는 허용된 범위 확장이 있어야 한다. 이전 component/publication/TermsEdition의
+원문 snapshot을 보존하고 현재 조회에서만 successor를 사용한다. 기존 판본이 있으면 새 판본
+등록과 교체를 같은 transaction으로 처리하며 실패 시 이전 판본이 계속 조회된다.
+
+사용자 확인·거부·삭제·버전 변경·과거 set 연결·조항 이력은 자동 교체를 막는다. 같은 bytes의
+다른 import 이력도 보존한다. 불변 receipt와 현재 component 제약은 직접 DB 변경에도 적용한다.
+문서 등록·판본 변경·set 연결·자동 projector는 같은 content 잠금을 먼저 획득한다. HTTP/생성
+계약은 바뀌지 않았다. 증권·청약·변경 문서는 상품 identity만으로 범위를 확장하지 않는다.
+
+`4789e4a` 위의 해당 migration/API/테스트/설계 변경에서 최소 pure test의 모듈 부재 RED와
+이전 판본 표시가 남는 PostgreSQL RED를 확인한 뒤 구현했다. SQL trigger alias 충돌을 수정했고,
+강제 잠금 순서 테스트의 `LockNotAvailable` RED와 receipt 없는 retired INSERT의 미거부 RED를
+각각 수정했다. 순환 receipt는 거부되었으며 조상 탐색도 중복 제거로 제한했다. 관련 PostgreSQL
+**24개**는 두 번 연속 보강·이력 보존·동시 삭제/연결·강제 잠금·등록 실패 rollback/재시도·삭제된
+조항을 포함해 통과했다. 최초 조항 이력 테스트의 불완전한 extraction/page fixture는 보완했다.
+
+2026-09-08 05:43~05:53 KST 전체 검증: Web **171개·build**, Ruff format **623 files**/lint,
+mypy **259 sources**, 기본 pytest **2,109 passed / 404 integration deselected / 3 subtests**,
+전용 합성 PostgreSQL **403 passed / 1,827 deselected** (316.67초)가 통과했다. 전체 PG 명령은
+API/Worker 경로이며 기본 pytest는 scripts 경로도 포함한다. 별도 빈 합성 DB에서
+`head → 0039 → head` 왕복을 통과했다. 생성 계약·container/workflow 정책·문서 **50개**·안전
+**817 paths**·diff도 통과했다. HTTP/UI 변경이 없어 기존 Chromium mock 결과는 이전 증거로
+유지하고 이번에 반복하지 않았다. 실제 자료/PDF/OCR·외부 AI·운영 schema/data·Windows/모바일·
+태그·배포는 미실행이다. 약관 분류/본문 범위와 다중 근거 적용 연결·보호된 수용은 B02 후속이다.

@@ -9,6 +9,7 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
+from familycare_api.common.document_locks import lock_document_content
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.domain import (
     ComponentReviewState,
@@ -323,6 +324,7 @@ class InsuranceDocumentRepository:
                       AND set_item.deleted_at IS NULL
                       AND document_set.deleted_at IS NULL
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                     ORDER BY set_item.created_at, set_item.id
                     """,
                     (scope.household_space_id, member_id),
@@ -333,6 +335,7 @@ class InsuranceDocumentRepository:
                     WHERE component.household_space_id = %s
                       AND component.family_member_id = %s
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                       AND NOT EXISTS (
                           SELECT 1 FROM insurance_document_set_items AS active_item
                           JOIN insurance_document_sets AS active_set
@@ -469,6 +472,20 @@ class InsuranceDocumentRepository:
     ) -> InsuranceDocumentComponentRecord | None:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                identity = connection.execute(
+                    "SELECT version.content_sha256 FROM document_batch_items item "
+                    "JOIN document_batches batch ON batch.id=item.batch_id "
+                    "JOIN document_versions version "
+                    "ON version.id=item.processed_document_version_id "
+                    "AND version.document_id=item.document_id WHERE item.id=%s "
+                    "AND batch.household_space_id=%s AND batch.family_member_id=%s",
+                    (document_batch_item_id, scope.household_space_id, member_id),
+                ).fetchone()
+                if identity is None:
+                    return None
+                lock_document_content(
+                    connection, scope.household_space_id, identity["content_sha256"]
+                )
                 source = connection.execute(
                     """
                     SELECT item.id AS document_batch_item_id, item.state,
@@ -506,6 +523,7 @@ class InsuranceDocumentRepository:
                     WHERE household_space_id = %s AND family_member_id = %s
                       AND document_version_id = %s AND role = %s
                       AND deleted_at IS NULL
+                      AND superseded_by_component_id IS NULL
                       AND NOT (page_end < %s OR page_start > %s)
                     LIMIT 1
                     """,
@@ -635,6 +653,16 @@ class InsuranceDocumentRepository:
     ) -> InsuranceDocumentSetItemRecord | None:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                identity = connection.execute(
+                    "SELECT v.content_sha256 FROM insurance_document_components c "
+                    "JOIN document_versions v ON v.id=c.document_version_id "
+                    "WHERE c.id=%s AND c.household_space_id=%s",
+                    (insurance_document_component_id, scope.household_space_id),
+                ).fetchone()
+                if identity is not None:
+                    lock_document_content(
+                        connection, scope.household_space_id, identity["content_sha256"]
+                    )
                 document_set = connection.execute(
                     """
                     SELECT id, family_member_id, policy_contract_id, version
@@ -668,6 +696,7 @@ class InsuranceDocumentRepository:
                       AND batch.household_space_id = component.household_space_id
                       AND batch.family_member_id = component.family_member_id
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                     FOR SHARE OF component, item, batch, version
                     """,
                     (

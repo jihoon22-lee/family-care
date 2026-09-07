@@ -4,6 +4,7 @@ import unicodedata
 from collections.abc import Callable
 from datetime import date
 from typing import Any
+from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
@@ -49,31 +50,49 @@ class ComponentTermsProjector:
                 break
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 connection.execute("SET LOCAL statement_timeout='30s'")
-                source = connection.execute(
-                    """
-                    SELECT c.id,c.household_space_id,c.document_version_id,c.page_start,c.page_end,
-                      p.proof_json,v.content_sha256
-                    FROM insurance_document_components c
-                    JOIN document_metadata_publications p ON p.id=c.metadata_publication_id
-                      AND p.component_id=c.id AND p.outcome='APPLIED'
-                    JOIN document_versions v ON v.id=c.document_version_id
-                    JOIN documents d ON d.id=v.document_id
-                    JOIN family_members m ON m.id=c.family_member_id
-                      AND m.household_space_id=c.household_space_id
-                    WHERE c.role='terms' AND c.review_state='PROGRAM_VERIFIED'
-                      AND c.deleted_at IS NULL AND d.deleted_at IS NULL AND m.deleted_at IS NULL
-                      AND NOT EXISTS (SELECT 1 FROM component_terms_publications published
-                        WHERE published.component_id=c.id AND published.revision=%s)
-                    ORDER BY c.created_at,c.id
-                    FOR UPDATE OF c,d,m SKIP LOCKED LIMIT 1
-                    """,
-                    (REVISION,),
-                ).fetchone()
+                source = self._source(connection)
                 if source is None:
                     break
+                _lock_terms_content(
+                    connection, source["household_space_id"], source["content_sha256"]
+                )
+                source = self._source(connection, component_id=source["id"])
+                if source is None:
+                    continue
                 self._publish(connection, source)
                 completed += 1
         return completed
+
+    @staticmethod
+    def _source(
+        connection: psycopg.Connection[dict[str, Any]],
+        *,
+        component_id: UUID | None = None,
+    ) -> dict[str, Any] | None:
+        lock = "FOR UPDATE OF c,d,m SKIP LOCKED" if component_id is not None else ""
+        return connection.execute(
+            """
+            SELECT c.id,c.household_space_id,c.document_version_id,c.page_start,c.page_end,
+              p.proof_json,v.content_sha256
+            FROM insurance_document_components c
+            JOIN document_metadata_publications p ON p.id=c.metadata_publication_id
+              AND p.component_id=c.id AND p.outcome='APPLIED'
+            JOIN document_versions v ON v.id=c.document_version_id
+            JOIN documents d ON d.id=v.document_id
+            JOIN family_members m ON m.id=c.family_member_id
+              AND m.household_space_id=c.household_space_id
+            WHERE c.role='terms' AND c.review_state='PROGRAM_VERIFIED'
+              AND c.deleted_at IS NULL AND c.superseded_by_component_id IS NULL
+              AND d.deleted_at IS NULL AND m.deleted_at IS NULL
+              AND (%s::uuid IS NULL OR c.id=%s)
+              AND NOT EXISTS (SELECT 1 FROM component_terms_publications published
+                WHERE published.component_id=c.id AND published.revision=%s)
+            ORDER BY c.created_at,c.id
+            """
+            + lock
+            + " LIMIT 1",
+            (component_id, component_id, REVISION),
+        ).fetchone()
 
     @staticmethod
     def _publish(connection: psycopg.Connection[dict[str, Any]], source: dict[str, Any]) -> None:
