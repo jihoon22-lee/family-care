@@ -119,6 +119,8 @@ class RiderClauseLinkValidationContext:
     candidate_review_state: CandidateReviewState
     evidence_integrity_valid: bool
     common_special_terms_conflict: bool
+    # Supplied only by the repository after validating retained source aliases.
+    rider_source_alias_verified: bool = False
 
 
 def _invalid(reason_code: RiderClauseReasonCode) -> NoReturn:
@@ -145,7 +147,10 @@ def validate_rider_clause_link(
         _invalid("RIDER_POLICY_MISMATCH")
     if (
         context.rider_document_kind != "policy"
-        or context.rider_source_evidence.document_version_id != context.policy_document_version_id
+        or (
+            context.rider_source_evidence.document_version_id != context.policy_document_version_id
+            and context.rider_source_alias_verified is not True
+        )
         or context.rider_source_evidence.review_state not in _APPROVED_REVIEW_STATES
     ):
         _invalid("TERMS_ONLY_RIDER")
