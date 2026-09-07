@@ -32,6 +32,7 @@ from familycare_api.insurance_reconciliation.router import (
     router as insurance_reconciliation_router,
 )
 from familycare_api.policies.candidate_router import router as policy_candidate_router
+from familycare_api.policies.enrollment_consumer import enrollment_lifespan
 from familycare_api.policies.router import router as policy_ledger_router
 from familycare_api.private_knowledge.router import router as private_knowledge_router
 
@@ -55,6 +56,7 @@ def create_app(
         title="FamilyCare API",
         version=__version__,
         description="Evidence-first family insurance guidance API",
+        lifespan=enrollment_lifespan,
     )
     install_error_handlers(app)
 

@@ -605,6 +605,10 @@ class CandidateRepository:
         policy_id: UUID | None = None,
         field_id: str | None = None,
     ) -> dict[str, Any]:
+        connection.execute(
+            "SELECT id FROM household_spaces WHERE id = %s FOR UPDATE",
+            (scope.household_space_id,),
+        )
         if review_item_id is not None:
             row = connection.execute(
                 """
@@ -940,9 +944,9 @@ class CandidateRepository:
             candidate_version_id,
         )
         if private_context is not None and private_context.get("retained_range"):
-            # Range facts require their contract/insured association projector. The
-            # legacy job-wide aggregate would join different contracts and parties.
-            return False
+            from familycare_api.policies.range_enrollment import project_range_candidate
+
+            return project_range_candidate(connection, version, private_context)
         field_rows = connection.execute(
             "SELECT field_id, value FROM analysis_candidate_fields WHERE candidate_version_id = %s",
             (candidate_version_id,),

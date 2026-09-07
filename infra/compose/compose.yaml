@@ -26,6 +26,7 @@ services:
       dockerfile: infra/containers/api.Dockerfile
     environment:
       FAMILYCARE_ENV: ${FAMILYCARE_ENV:-development}
+      FAMILYCARE_ENABLE_RANGE_ENROLLMENT: "true"
       FAMILYCARE_DATABASE_URL: postgresql+psycopg://${FAMILYCARE_DATABASE_USER}:${FAMILYCARE_DATABASE_PASSWORD}@db:5432/${FAMILYCARE_DATABASE_NAME}
       FAMILYCARE_IMPORT_ROOT: /var/lib/familycare/import
       FAMILYCARE_SECRET_SOCKET: /run/familycare/secret.sock

@@ -53,6 +53,7 @@ from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.policy_candidates import PolicyCandidatePublisher
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+from familycare_worker.policy_range_repository import PolicyRangeRepository
 from familycare_worker.policy_request_budget import PolicyRequestBudget
 from familycare_worker.recommendation_jobs import PostgresRecommendationJobQueue
 from familycare_worker.repository import BatchRepository, ExtractionRepository
@@ -283,6 +284,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         on_password_discarded=secret_server.deactivate,
     )
     policy_runner = PolicyStructuringJobRunner(
+        range_repository=PolicyRangeRepository(database_url),
         request_budget=PolicyRequestBudget(database_url),
         queue=PolicyStructuringJobQueue(database_url),
         evidence_loader=PolicyEvidenceLoader(database_url),

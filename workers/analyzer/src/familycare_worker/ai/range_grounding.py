@@ -63,13 +63,17 @@ def _grounded(field: CandidateField, text: str, candidate: PolicyCandidate) -> b
             expected = date.fromisoformat(value)
         except ValueError:
             return False
-        matches = re.finditer(
-            rf"(?:{_DATE_LABELS[field.field_id]})\s*[:：|]?\s*"
-            r"([0-9]{4})[-./년]\s*([0-9]{1,2})[-./월]\s*([0-9]{1,2})(?:일)?(?![0-9])",
-            text,
-            re.IGNORECASE,
+        date_matches = tuple(
+            re.finditer(
+                rf"(?:{_DATE_LABELS[field.field_id]})\s*[:：|]?\s*"
+                r"([0-9]{4})[-./년]\s*([0-9]{1,2})[-./월]\s*([0-9]{1,2})(?:일)?(?![0-9])",
+                text,
+                re.IGNORECASE,
+            )
         )
-        for match in matches:
+        if len(date_matches) != 1:
+            return False
+        for match in date_matches:
             try:
                 if date(*map(int, match.groups())) == expected:
                     return True
@@ -77,7 +81,10 @@ def _grounded(field: CandidateField, text: str, candidate: PolicyCandidate) -> b
                 continue
         return False
     if field.field_id in {"sum_assured", "currency"}:
-        for match in _AMOUNT.finditer(text):
+        matches = tuple(_AMOUNT.finditer(text))
+        if len(matches) != 1:
+            return False
+        for match in matches:
             unit = match["unit"].upper()
             currency = "KRW" if unit in _UNITS else unit
             if field.field_id == "currency":
@@ -95,18 +102,23 @@ def _grounded(field: CandidateField, text: str, candidate: PolicyCandidate) -> b
         return False
     if field.field_id == "benefit_type":
         terms = {"fixed": ("정액", "fixed"), "indemnity": ("실손", "indemnity")}
-        return isinstance(value, str) and any(
-            _contains(text, term) for term in terms.get(value, ())
-        )
+        found = {
+            kind
+            for kind, labels in terms.items()
+            if any(_contains(text, label) for label in labels)
+        }
+        return isinstance(value, str) and found == {value}
     if field.field_id == "renewable":
-        return isinstance(value, bool) and any(
-            _contains(text, term)
-            for term in (
-                ("갱신형", "renewable: true")
-                if value
-                else ("비갱신", "비갱신형", "renewable: false")
-            )
-        )
+        conditions = {
+            True: ("갱신형", "renewable: true"),
+            False: ("비갱신", "비갱신형", "renewable: false"),
+        }
+        found_conditions = {
+            kind
+            for kind, labels in conditions.items()
+            if any(_contains(text, label) for label in labels)
+        }
+        return isinstance(value, bool) and found_conditions == {value}
     return False
 
 
@@ -117,14 +129,25 @@ def ground_range_candidate(
     if candidate.status != "AI_VERIFIED":
         return candidate
     sources = {item.evidence_id: item for item in evidence}
+    rider_name = next(
+        (field.value for field in candidate.fields if field.field_id == "rider_name"), None
+    )
     unsupported = False
     for field in candidate.fields:
         cited = [sources[key] for key in field.evidence_ids if key in sources]
+        text = "\n".join(item.text for item in cited)
+        if candidate.candidate_kind == "rider" and isinstance(rider_name, str):
+            # Several enrollment rows may share a PDF block. A neighboring row's
+            # amount/date is not authority for this rider, even if both AIs agree.
+            rows = tuple(
+                dict.fromkeys(line for line in text.splitlines() if _contains(line, rider_name))
+            )
+            text = rows[0] if len(rows) == 1 else ""
         if (
             not cited
             or len(cited) != len(field.evidence_ids)
             or not any(item.primary and item.source_role == "policy" for item in cited)
-            or not _grounded(field, "\n".join(item.text for item in cited), candidate)
+            or not _grounded(field, text, candidate)
         ):
             unsupported = True
             break

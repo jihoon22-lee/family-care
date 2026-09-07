@@ -217,3 +217,35 @@ opaque scope·구성원 revision·원문 위치만 유지한다. 미지원 문�
 마일스톤 설명·#59 진행 원장·#60·WP02 #62·WP03 #63·PR #76의 본문을 실제 단계에 맞춰
 동기화했다. PR push마다 세부 진행과 검증을 함께 갱신한다. 기본 구현 PR 8개 중 B01 merge,
 B02 진행이며, 이 단계 완료를 WP02/WP03 전체 수용이나 마일스톤 완료로 표시하지 않는다.
+
+
+## API enrollment publication (2026-09-07)
+
+기준 `e203e04` 이후 API가 보관 범위 후보를 자동 원장으로 반영한다. `0031`은 원본 후보와
+원장 ID/version/권위의 불변 이력 및 재시도 순서를 저장한다. 계약 scope와 원래 담보명의
+원문 위치가 identity이며 범위 하나에 담보가 여럿 있어도 충돌하지 않는다. 정확한 피보험자
+Evidence와 범위 Evidence를 사용해 기존 원장 조회 경로까지 연결했다. 사용자 교정은 같은
+transaction helper를 사용하며 직접 원장 수정/soft delete는 자동 덮어쓰기 대상이 아니다.
+동일 값의 header 재판독은 원래 교정 권위를 유지한다. 최신 상태는 unknown이다.
+
+API lifespan consumer는 Compose에서 활성화되며 GET은 읽기만 한다. DB 실패는 고정 코드로
+기록하고 보류/값 오류 이후 다른 후보를 계속 처리한다. 기본 Worker는 범위 경로를 사용한다.
+새 실행 연결 부재 RED, 한 블록의 두 담보 ID 충돌 RED, 원장 read의 NEEDS_REVIEW Evidence
+거부 RED와 다른 행 금액 차용 RED를 확인한 뒤 수정했다. 새 PostgreSQL 13개를 포함한
+범위/기존 private confirmation 32개와 관련 unit 48개가 통과했다. 빈 합성 DB의 `0031`
+upgrade와 downgrade/upgrade를 확인했다. 개발 중 테이블 추가 전 revision에 대한 첫
+내림은 미생성 테이블 때문에 실패했고, 빈 개발 DB 호환 처리 후 다시 통과했다.
+
+다른 원문 행/문서 버전의 담보 동등성, private snapshot canonical mapping과 판본 연결은
+아직 별도 후속이다. 실제 자료·provider·운영 DB·태그/배포는 이 변경 검증에서 사용하지 않았다.
+
+
+최종 검증은 2026-09-07 18:19~18:28 KST, `e203e04` + 이 변경의 API/Worker/Compose·테스트·
+문서에 대해 실행했다. `web:check`는 164개 테스트·format/lint/typecheck/build 통과,
+Ruff format 562개·lint 및 mypy 234개 source가 통과했다. 기본 pytest는 1,781 passed /
+239 integration deselected / 3 subtests passed다. 전체 합성 PostgreSQL은 238 passed /
+1,508 deselected이며 계약 생성·container/workflow 정적 검사·문서 50개·안전 755 paths·
+`git diff --check`도 통과했다. 첫 전체 PostgreSQL 실행은 테스트의 다른 합성 fixture 조회로
+1 failed / 237 passed였으며, 테스트 source/job 필터 수정 후 전체 재실행에서 통과했다.
+전체 정적 검사 중 grounding iterator 타입 충돌도 수정 후 재실행으로 해소했다.
+새 이미지 빌드와 브라우저 검사는 로컬에서 재실행하지 않았으며 새 push의 CI에서 확인한다.

@@ -104,3 +104,31 @@ def test_rejected_candidate_and_unknown_status_are_preserved() -> None:
     assert ground_range_candidate(candidate, (source,)) == candidate
     rejected = candidate.model_copy(update={"status": "rejected"})
     assert ground_range_candidate(rejected, ()) == rejected
+
+
+@pytest.mark.parametrize("separator", ["\n", " | "])
+def test_amount_cannot_be_borrowed_from_another_rider_row(separator: str) -> None:
+    source = _evidence(
+        "Sample Rider fixed 가입금액 317원" + separator + "Another Rider fixed 가입금액 619원"
+    )
+    wrong = _candidate(source, rider_name="Sample Rider", sum_assured=619)
+    assert ground_range_candidate(wrong, (source,)).status == "NEEDS_REVIEW"
+
+
+@pytest.mark.parametrize(
+    "text,values",
+    [
+        (
+            "Sample Rider 보장개시일 2025-01-02 Another Rider 보장개시일 2030-01-02",
+            {"coverage_start": "2030-01-02"},
+        ),
+        ("Sample Rider fixed Another Rider indemnity", {"benefit_type": "indemnity"}),
+        ("Sample Rider 비갱신 Another Rider 갱신형", {"renewable": True}),
+    ],
+)
+def test_ambiguous_single_line_conditions_remain_unresolved(
+    text: str, values: dict[str, object]
+) -> None:
+    source = _evidence(text)
+    candidate = _candidate(source, rider_name="Sample Rider", **values)
+    assert ground_range_candidate(candidate, (source,)).status == "NEEDS_REVIEW"

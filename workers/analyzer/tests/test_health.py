@@ -427,6 +427,9 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
         ]
         assert len(policy_runners) == 1
         policy_runner = policy_runners[0]
+        from familycare_worker.policy_range_repository import PolicyRangeRepository
+
+        assert isinstance(policy_runner.range_repository, PolicyRangeRepository)
         provider = policy_runners[0].provider
         assert isinstance(provider, OpenAiResponsesAdapter)
         schemas = provider._schemas

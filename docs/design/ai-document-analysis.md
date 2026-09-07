@@ -128,9 +128,8 @@ publication하지 않고 재시도한다.
 재처리하지 않으며 한 범위의 잘못된 응답도 나머지 범위 처리를 막지 않는다. 일부 미해결이나
 누락이 있으면 전체 완료로 표시하지 않는다. 구성원 최소화 목록이 바뀌면 이전 입력을
 재전송하지 않는다. 기존 요청 예약/캐시로 verifier 재시도는 structurer 결과를 재사용한다.
-이 범위 Worker 경로는 합성 통합에서 연결했으며 기본 실행 설정은 아직 기존 publisher를
-사용한다. 범위 publication과 기본 실행 전환은 함께 연결해야 하며, 저장 결과만으로 기존
-가입 원장·사용자 교정·청구 이력을 변경하지 않는다.
+기본 Worker는 이 범위 경로를 사용한다. 기존 publisher는 과거 합성/호환 경로에 남는다.
+범위 저장 자체는 원장/교정을 덮지 않으며 아래 API projector가 별도로 검증한다.
 
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
@@ -145,9 +144,25 @@ ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/nod
 수익자·이름의 부분 일치·등록 시 선택한 구성원은 피보험자 근거가 아니다. 여러 계약/대상자가
 모호하면 자동 연결하지 않는다. 원문 식별값은 외부 DTO에 넣지 않고 opaque scope와 원문
 위치만 연결 정보에 보존하며, publication 때 전체 구성원 identity/version을 다시 검사한다.
-이 단계는 후보·로컬 연결 근거의 저장이며 자동 원장 projector와 기본 Worker 전환은 후속이다.
+`0031_range_enrollment`의 publication 이력은 원본 후보/연결과 실제 원장 ID·반영 당시
+원장 version·사용자/프로그램 권위를 append-only로 묶는다. API는 보관 후보를 durable inbox로
+소비하며 별도 broker나 GET 부작용을 만들지 않는다. Compose API는
+`FAMILYCARE_ENABLE_RANGE_ENROLLMENT=true`로 활성화하고 2초 간격/최대 25개씩 처리한다.
+직접 API 실행은 이 설정과 DB URL이 있을 때 활성화한다. 실패는 고정 코드만 기록하며
+종료 signal과 DB 연결/statement 제한을 따른다. 개별 보류/DB 값 오류는 다른 후보를 막지
+않도록 시도 시각을 기록한다.
 
-성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
+원장은 문서 버전·로컬 계약 scope별로 만들고 담보는 원래 이름의 정확한 원문 node/문자
+위치에 고정한다. 한 블록의 여러 담보와 다른 계약의 같은 상품을 구분하며, 다른 행의 금액을
+차용하지 않는다. 이름/인용을 교정해도 원래 담보 ID를 유지한다. 동일 source 재시도는
+중복 생성하지 않고, 이미 반영한 값을 자동 결과로 바꾸거나 직접 원장 수정을 덮지 않는다.
+같은 값의 반복 header는 근거만 추가하며 원래 교정 권위를 빼앗지 않는다. 피보험자 anchor의
+정확한 Evidence와 사용한 범위 Evidence만 같은 transaction에서 확인한다. 원본 페이지의
+미검수 Evidence는 승격하지 않는다. 최신 계약 상태는 unknown을 유지하고 가입금액은 지급
+예상액으로 바꾸지 않는다. 다른 source row/document version의 담보 동등성·판본 연결은
+후속 canonical mapping에서 검증해야 하며 이름/금액만으로 합치지 않는다.
+
+과거 묶음 호환 경로는 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 
 ## Coverage rule DSL
 
