@@ -133,6 +133,7 @@ class RecordingProvider:
     def __init__(self, *, failure: BaseException | None = None) -> None:
         self.failure = failure
         self.calls: list[Mapping[str, object]] = []
+        self.schemas: list[str] = []
 
     def complete(
         self,
@@ -142,6 +143,7 @@ class RecordingProvider:
         **_: object,
     ) -> ProviderResponse:
         self.calls.append(input_payload)
+        self.schemas.append(schema_name)
         if self.failure is not None:
             raise self.failure
         if "batch_structurer" in schema_name:
@@ -174,6 +176,8 @@ class RecordingProvider:
                 "evidence_ids": [str(EVIDENCE_ID)],
                 "issue_codes": [],
             }
+            if schema_name == "policy_candidate_batch_verifier_v2":
+                payload = {"schema_version": "2", "decisions": [payload]}
         return ProviderResponse(payload=payload, request_id="synthetic-policy-request")
 
 
@@ -225,6 +229,10 @@ def test_runner_minimizes_member_and_policy_identifiers_before_publishing() -> N
         (JOB_ID, "worker-a"),
     ]
     assert len(provider.calls) == 2
+    assert provider.schemas == [
+        "policy_candidate_batch_structurer_v2",
+        "policy_candidate_batch_verifier_v2",
+    ]
     structurer_evidence = provider.calls[0]["evidence"]
     assert isinstance(structurer_evidence, list)
     minimized_text = structurer_evidence[0]["text"]

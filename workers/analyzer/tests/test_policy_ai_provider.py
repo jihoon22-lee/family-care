@@ -51,6 +51,22 @@ def _schema(properties: Mapping[str, object] | None = None) -> dict[str, object]
     }
 
 
+def test_default_client_does_not_retry_outside_the_durable_request_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_worker.ai.provider import _default_client_factory
+
+    options: dict[str, Any] = {}
+
+    def client(**kwargs: Any) -> _Client:
+        options.update(kwargs)
+        return _Client(_Responses())
+
+    monkeypatch.setattr(openai, "OpenAI", client)
+    _default_client_factory("synthetic-api-key-marker")
+    assert options.get("max_retries") == 0
+
+
 def test_adapter_rejects_a_response_schema_with_forbidden_private_fields() -> None:
     """A registry cannot legitimize private fields before the first request."""
 

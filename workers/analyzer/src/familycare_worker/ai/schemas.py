@@ -96,6 +96,21 @@ class VerifierDecision(BaseModel):
     issue_codes: tuple[IssueCode, ...] = Field(max_length=16)
 
 
+class VerifierDecisionBatch(BaseModel):
+    """Independent decisions, with no ability to add or rewrite candidate facts."""
+
+    model_config = _STRICT
+
+    schema_version: Literal["2"]
+    decisions: tuple[VerifierDecision, ...] = Field(min_length=1, max_length=32)
+
+    @model_validator(mode="after")
+    def unique_candidates(self) -> Self:
+        if len({item.candidate_id for item in self.decisions}) != len(self.decisions):
+            raise ValueError("duplicate verifier candidate")
+        return self
+
+
 class PolicyCandidate(BaseModel):
     """Sanitized candidate retained after the provider boundary."""
 
@@ -127,6 +142,7 @@ def openai_schema_registry() -> dict[str, dict[str, object]]:
         "policy_candidate_structurer_v1": StructurerCandidate.model_json_schema(),
         "policy_candidate_batch_structurer_v2": StructurerCandidateBatch.model_json_schema(),
         "policy_candidate_verifier_v1": VerifierDecision.model_json_schema(),
+        "policy_candidate_batch_verifier_v2": VerifierDecisionBatch.model_json_schema(),
     }
 
 

@@ -68,14 +68,21 @@ class _SyntheticPolicyProvider:
                 "riders": [],
             }
         else:
-            candidate = input_payload["candidate"]
+            candidates = input_payload["candidates"]
+            assert isinstance(candidates, list) and len(candidates) == 1
+            candidate = candidates[0]
             assert isinstance(candidate, Mapping)
             payload = {
-                "schema_version": "1",
-                "candidate_id": candidate["candidate_id"],
-                "decision": "approved",
-                "evidence_ids": [evidence_id],
-                "issue_codes": [],
+                "schema_version": "2",
+                "decisions": [
+                    {
+                        "schema_version": "1",
+                        "candidate_id": candidate["candidate_id"],
+                        "decision": "approved",
+                        "evidence_ids": [evidence_id],
+                        "issue_codes": [],
+                    }
+                ],
             }
         return ProviderResponse(payload=payload, request_id="synthetic-policy-request")
 

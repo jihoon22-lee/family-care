@@ -121,3 +121,32 @@ Web component 15 passed, Worker startup 31 passed, API batch unit 51 passed다.
 Chromium mock E2E는 초기 `14 passed, 1 failed`였다. 완료 문구를 구분한 변경에 맞춰
 합성 import 시나리오의 기대값과 내용 준비 상태를 갱신한 뒤 `15 passed`를 확인했다.
 후속 E2E 파일의 ESLint·Web typecheck도 통과했다. 실제 backend/Windows/mobile 검증은 아니다.
+
+## Retained provider stages and bounded spend (2026-09-07)
+
+기준 `e6b9891` 이후 정책 Worker를 구조화 1회·묶음 검증 1회로 바꿨다. migration `0028`과
+`policy_request_budget.py`는 외부 요청 전 예약 commit, 동일 단계 성공 응답 재사용, 문서 누적
+4회/전체 정책 구조화 UTC 일일 8회 한도를 제공한다. timeout·실패도 소비량에 포함하며 SDK
+내부 재시도를 끈다. 예산 대기는 처리 시도 횟수를 소모하지 않는다. 모델·schema·최소화된
+입력·지침이 바뀌면 캐시를 재사용하지 않는다. 예약은 가정/구성원/문서/추출/파이프라인과
+현재 lease owner·시도 번호를 확인하며, 이력을 삭제하거나 결과를 원장 권위로 승격하지 않는다.
+기존 API와 원장 schema는 유지한다. Worker 출력 상한은 구조화 8192·검증 4096 token이다.
+
+모듈/묶음 schema/출력 상한 부재 및 다른 lease 시도 허용을 각각 RED로 확인했다. 합성
+PostgreSQL에서는 동시 마지막 예산, 중복 진행 요청, 다른 문서의 일일 예산 공유, 잘못된
+구성원, timeout 소비, 네트워크 직전 commit, 예산 보류, Worker verifier 재시도의 structurer
+재사용을 검증한다. 신규 source window helper는 구간을 자르기 전 식별자 span을 계산한다.
+관련 합성 unit 83개와 Web 164개·format/lint/typecheck/build가 통과했다. 최종 필수 명령은
+2026-09-07 07:36–07:40 UTC, `e6b9891` + 이 절의 변경에서 실행했다. Ruff format 544개/lint,
+mypy 226개, Python default `1734 passed, 210 deselected, 3 subtests passed`, 계약/생성 타입,
+container/workflow 정적 검사, 문서 50개, 안전 737 paths, `git diff --check`가 통과했다.
+전체 PostgreSQL은 `208 passed, 1 failed, 1461 deselected`였다. 실패는 기존 import 합성
+provider가 이전 단일 verifier 응답 형식만 지원한 데서 발생했다. 해당 fixture를 새 묶음
+계약으로 갱신한 뒤 import 흐름과 신규 예산 통합을 함께 실행해 `9 passed`를 확인했다.
+fixture 후속 변경의 Ruff format/lint도 통과했다. 전체 DB suite를 다시 실행했다고 표현하지
+않으며, 이전 PR source의 image-build 증거를 이번 변경에 적용하지 않는다.
+
+전체 IR 범위 scheduler·범위별 publication·가입/판본 연결은 남아 있으며 B02 전체 완료를
+주장하지 않는다. 합성 테스트와 전용 합성 DB에만 `0028`을 적용했다. 실제 provider 호출은
+0회이며 보호된 원문·키·경로를 읽거나 출력하지 않았다. 실제 런타임 migration/전환·태그·배포는
+수행하지 않았다.

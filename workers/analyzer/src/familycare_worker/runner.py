@@ -18,7 +18,10 @@ from familycare_worker.ai.evidence_loader import (
     PolicyEvidenceLoader,
 )
 from familycare_worker.ai.minimizer import EvidenceMinimizationError, minimize_evidence
-from familycare_worker.ai.policy_pipeline import run_policy_batch_pipeline, run_policy_pipeline
+from familycare_worker.ai.policy_pipeline import (
+    run_bounded_policy_batch_pipeline,
+    run_policy_pipeline,
+)
 from familycare_worker.ai.provider import (
     DEFAULT_STRUCTURER_MODEL,
     DEFAULT_VERIFIER_MODEL,
@@ -84,6 +87,7 @@ from familycare_worker.policy_jobs import (
     PolicyStructuringQueueUnavailable,
     map_policy_structuring_error,
 )
+from familycare_worker.policy_request_budget import BudgetedPolicyProvider, PolicyRequestBudget
 from familycare_worker.recommendation_jobs import (
     InvalidRecommendationWork,
     RecommendationJobRecord,
@@ -238,6 +242,7 @@ class PolicyStructuringJobRunner:
         structurer_model: str = DEFAULT_STRUCTURER_MODEL,
         verifier_model: str = DEFAULT_VERIFIER_MODEL,
         lease_seconds: int = 180,
+        request_budget: PolicyRequestBudget | None = None,
     ) -> None:
         if (
             not isinstance(structurer_model, str)
@@ -249,6 +254,7 @@ class PolicyStructuringJobRunner:
             or not 1 <= lease_seconds <= 3_600
         ):
             raise ValueError("invalid policy structuring runner configuration")
+        self.request_budget = request_budget
         self.queue = queue
         self.evidence_loader = evidence_loader
         self.provider = provider
@@ -276,21 +282,29 @@ class PolicyStructuringJobRunner:
                 family_member_id=job.family_member_id,
             )
             minimized = minimize_evidence(evidence, sensitive_terms=member_terms)
+            provider = self.provider
+            if self.request_budget is not None:
+                provider = BudgetedPolicyProvider(
+                    provider=provider, budget=self.request_budget, job=job, worker_id=worker_id
+                )
             leased_provider = _LeasedPolicyProvider(
-                self.provider,
+                provider,
                 lambda: self.queue.heartbeat(
                     job.id,
                     worker_id,
                     lease_seconds=self.lease_seconds,
                 ),
             )
-            result = run_policy_batch_pipeline(
+            result = run_bounded_policy_batch_pipeline(
                 evidence=minimized,
                 provider=leased_provider,
                 structurer_model=self.structurer_model,
                 verifier_model=self.verifier_model,
             )
-            if not result.candidates:
+            if isinstance(provider, BudgetedPolicyProvider) and provider.budget_exhausted:
+                provider.budget.pause(job, worker_id)
+                return True
+            if result.classification not in {"SUCCESS", "NEEDS_REVIEW"} or not result.candidates:
                 self._safe_fail(
                     job.id,
                     worker_id,

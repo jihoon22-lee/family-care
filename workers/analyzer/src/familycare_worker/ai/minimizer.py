@@ -124,4 +124,68 @@ def minimize_evidence(
     return tuple(minimized)
 
 
-__all__ = ["EvidenceMinimizationError", "minimize_evidence", "minimize_text"]
+def minimize_source_window(
+    source: str,
+    *,
+    start: int,
+    end: int,
+    sensitive_terms: Sequence[str],
+) -> str:
+    """Resolve redaction against retained context before cutting a transport range.
+
+    Source offsets continue to identify the original text; replacement length
+    never changes which original range was consumed. No truncation claims that
+    an oversized or unminimizable range was fully handled.
+    """
+
+    terms = _bounded_terms(sensitive_terms)
+    if (
+        not isinstance(source, str)
+        or len(source) > 1_048_576
+        or isinstance(start, bool)
+        or not isinstance(start, int)
+        or isinstance(end, bool)
+        or not isinstance(end, int)
+        or not 0 <= start < end <= len(source)
+        or end - start > 8192
+    ):
+        raise EvidenceMinimizationError
+    spans: list[tuple[int, int]] = []
+    patterns = (
+        (_EMAIL_PATTERN, None),
+        (_PHONE_PATTERN, None),
+        (_POLICY_IDENTIFIER_PATTERN, "value"),
+        (_LABELLED_IDENTITY_PATTERN, "value"),
+        *((re.compile(re.escape(term), re.IGNORECASE), None) for term in terms),
+    )
+    for pattern, group in patterns:
+        for match in pattern.finditer(source):
+            left, right = match.span(group if group is not None else 0)
+            if left < end and right > start:
+                spans.append((max(left, start), min(right, end)))
+                if len(spans) > 32768:
+                    raise EvidenceMinimizationError
+    merged: list[tuple[int, int]] = []
+    for left, right in sorted(spans):
+        if merged and left <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], right))
+        else:
+            merged.append((left, right))
+    result: list[str] = []
+    cursor = start
+    for left, right in merged:
+        result.extend((source[cursor:left], _REDACTED))
+        cursor = right
+    result.append(source[cursor:end])
+    minimized = "".join(result)
+    if not minimized or len(minimized) > 8192:
+        raise EvidenceMinimizationError
+    return minimized
+
+
+__all__ = [
+    "EvidenceMinimizationError",
+    "minimize_evidence",
+    "minimize_text",
+    "minimize_source_window",
+]

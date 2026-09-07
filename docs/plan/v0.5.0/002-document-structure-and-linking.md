@@ -17,11 +17,13 @@
    stale lease·동시 claim의 PostgreSQL 7개 회귀를 통과했다. runtime 소비와 source 처리
    상태 노출을 연결했다. 원문 없음과 처리 실패를 구분하며 새 버전이 과거 준비 상태를
    최신 완료로 표시하지 않는다. 신규 준비 통합 6개와 전체 PostgreSQL 201개가 통과했다.
-3. in_progress — 검증된 가입 행의 출처를 보존하는 원장 반영과 자동 component/판본 연결,
+3. pending — 검증된 가입 행의 출처를 보존하는 원장 반영과 자동 component/판본 연결,
    공통 담보 identity·중복 제거·사용자 교정 우선순위를 실제 소비 경로에 연결한다.
-4. pending — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
+4. in_progress — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
    기존 키 재사용·보호된 자료 처리·최소 전송은 세션에서 승인받았다. 낮은 API 잔액에
    맞춰 로컬 재사용을 우선하고 범위별 호출 예산을 구현한 뒤 제한적으로 실행한다.
+   기존 정책 Worker에 묶음 검증·영속 요청 예약/캐시·문서 누적/UTC 일일 예산을 연결했다.
+   전체 IR 범위 scheduler와 해당 범위 publication 연결은 아직 남아 있다.
 5. pending — 전체 필수 검사·합성 PostgreSQL/문서 흐름·리뷰·CI 후 B02를 merge한다.
 
 ## Local data contract

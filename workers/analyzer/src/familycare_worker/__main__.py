@@ -53,6 +53,7 @@ from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.ocr.renderer import PdfiumPageRenderer
 from familycare_worker.policy_candidates import PolicyCandidatePublisher
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+from familycare_worker.policy_request_budget import PolicyRequestBudget
 from familycare_worker.recommendation_jobs import PostgresRecommendationJobQueue
 from familycare_worker.repository import BatchRepository, ExtractionRepository
 from familycare_worker.runner import (
@@ -184,6 +185,8 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         },
         output_token_limits={
             EVENT_STRUCTURER_SCHEMA_NAME: DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
+            "policy_candidate_batch_structurer_v2": 8_192,
+            "policy_candidate_batch_verifier_v2": 4_096,
         },
         request_timeouts={
             EVENT_STRUCTURER_SCHEMA_NAME: EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS,
@@ -279,6 +282,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         on_password_discarded=secret_server.deactivate,
     )
     policy_runner = PolicyStructuringJobRunner(
+        request_budget=PolicyRequestBudget(database_url),
         queue=PolicyStructuringJobQueue(database_url),
         evidence_loader=PolicyEvidenceLoader(database_url),
         provider=provider,

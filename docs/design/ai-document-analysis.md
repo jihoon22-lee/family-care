@@ -89,6 +89,33 @@ Private policy ingestion의 후보 입력 loader는 household, DocumentVersion, 
 
 Provider-bound minimizer는 선택된 구성원 한 명만이 아니라 같은 HouseholdSpace의 모든 active FamilyMember 표시값과 내부 별칭을 최대 16개까지 수집한다. 한도를 넘거나 구성원·가정 범위를 증명하지 못하면 provider 호출 전에 fail closed한다. 수집한 값, label이 붙은 policy/contract identifier, email, phone뿐 아니라 한글·영문 계약자·피보험자·수익자·성명·주소·생년월일·식별번호 field의 값도 `[REDACTED]`로 대체한다. 날짜와 가입금액처럼 구조화에 필요한 비식별 숫자는 blanket digit masking으로 제거하지 않는다. 최소화 뒤에도 각 slice는 240자를 넘지 않으며 `EvidenceSlice`의 `repr`은 text를 포함하지 않는다.
 
+### Retained policy stages and request accounting
+
+정책 구조화 Worker는 `policy_candidate_batch_structurer_v2` 1회와
+`policy_candidate_batch_verifier_v2` 1회로 후보 묶음을 처리한다. 검증 응답은 입력과 정확히
+같은 candidate ID 집합이어야 하며 추가 필드·중복·잘못된 Evidence를 거부한다. 개별 후보의
+문제는 다른 후보의 결과를 지우지 않는다. provider 실패가 발생한 부분 결과는 완료로
+publication하지 않고 재시도한다.
+
+`0028_policy_request_budget`의 `policy_provider_requests`는 요청 전에 commit한 예약으로
+실제 시도 수를 센다. SDK 내부 자동 재시도는 끈다. 동일 job의 모델·schema 이름·지침·최소화
+입력 hash가 같은 성공 응답은 비공개 DB에서 재사용한다. 원문 입력 자체는 이 표에 저장하지
+않는다. verifier timeout 후에는 structurer를 재호출하지 않는다. 응답 캐시는 분석 검증이나
+원장 반영 권위를 부여하지 않으며 기존 validator·lease·publisher 검사를 다시 거친다.
+
+기본 문서 전체 이력 한도는 4회, Worker 정책 구조화 전체의 UTC 일일 한도는 8회다. 새 문서
+버전이나 job도 같은 document의 소비량을 초기화하지 않는다. 타임아웃·실패·프로세스 중단
+예약도 계산하며 예약을 환불하거나 이력을 삭제하지 않는다. DB advisory lock으로 마지막
+예산의 동시 소비를 막고, 동일 입력의 진행 중 예약은 중복 호출하지 않는다. 예산 대기는
+처리 재시도 횟수를 소모하지 않고 다음 UTC 날짜까지 보류한다. 문서 누적 한도는 날짜가
+바뀌어도 복구되지 않으므로 정책 변경 전에는 계속 대기한다. 출력은 구조화 8192 token,
+묶음 검증 4096 token으로 제한하며 초과/불완전 출력은 schema 실패로 다룬다.
+
+이 단계는 기존 bounded 입력의 비용 보호다. 전체 IR을 provider 범위로 나누는 scheduler와
+해당 범위의 완료 추적은 별도 구현 대상이며, 비용 보호를 전체 문서 분석 완료로 해석하지
+않는다. 원문 window 최소화 helper는 범위를 자르기 전 전체 source에서 식별자 구간을 찾지만
+아직 범위 scheduler에 연결되지 않았다.
+
 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 
 ## Coverage rule DSL

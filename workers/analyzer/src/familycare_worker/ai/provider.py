@@ -163,7 +163,7 @@ ClientFactory = Callable[[str], _OpenAiClient]
 
 
 def _default_client_factory(api_key: str) -> _OpenAiClient:
-    return cast(_OpenAiClient, openai.OpenAI(api_key=api_key))
+    return cast(_OpenAiClient, openai.OpenAI(api_key=api_key, max_retries=0))
 
 
 def _forbidden_keys(value: object) -> set[str]:
