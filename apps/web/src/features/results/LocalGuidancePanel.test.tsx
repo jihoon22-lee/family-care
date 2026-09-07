@@ -151,6 +151,77 @@ function show(response: CoverageDecisionResponse) {
 }
 
 describe("local guidance result", () => {
+  it.each([true, false])(
+    "preserves operational claim actions when private guidance has candidates: %s",
+    async (hasPrivateCandidates) => {
+      const response = result(
+        hasPrivateCandidates
+          ? guidance()
+          : {
+              ...guidance([]),
+              outcome: "KNOWLEDGE_PENDING",
+              support: {
+                total_coverages: 1,
+                evaluated_coverages: 0,
+                unsupported_coverages: 1,
+              },
+            },
+      );
+      response.candidates.push({
+        aggregate_result: "MATCH",
+        benefit_kind: "FIXED",
+        calculation: null,
+        candidate_id: "synthetic-operational-candidate",
+        claim_start_ready: true,
+        contract_label: "Sample Operational Policy",
+        coverage_label: "Sample Operational Coverage",
+        hold_reason_codes: [],
+        questions: [],
+        required_match_count: 1,
+        required_no_match_count: 0,
+        required_unknown_count: 0,
+        source: {
+          kind: "OPERATIONAL_RIDER",
+          rider_id: "synthetic-operational-rider",
+        },
+      });
+      const { onStartClaim } = show(response);
+      expect(
+        screen.getByText("Sample Operational Coverage"),
+      ).toBeInTheDocument();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /청구 검토 시작/ }));
+      expect(onStartClaim).toHaveBeenCalledWith("synthetic-operational-rider");
+      if (!hasPrivateCandidates) {
+        expect(
+          screen.getByRole("button", { name: "다시 확인" }),
+        ).toBeInTheDocument();
+      }
+      expect(
+        screen.queryByText(/관련 담보를 확인하지 못했습니다/),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps successful guidance visible while retrying unsupported coverages", async () => {
+    const response = result({
+      ...guidance(),
+      support: {
+        total_coverages: 2,
+        evaluated_coverages: 1,
+        unsupported_coverages: 1,
+        failure_codes: ["GUIDANCE_COVERAGE_FAILED"],
+      },
+    });
+    const { onReanalyze } = show(response);
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "다시 확인" }));
+    expect(onReanalyze).toHaveBeenCalledOnce();
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+  });
+
   it("shows document-based coverage and money despite an UNKNOWN legacy result", () => {
     const { onOpenEvidence } = show(result(guidance()));
     expect(

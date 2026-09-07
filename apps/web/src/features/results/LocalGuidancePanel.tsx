@@ -170,8 +170,12 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
 
 export function LocalGuidancePanel({
   guidance,
+  onRetry,
+  showEmpty = true,
 }: {
   guidance: LocalGuidanceResponse;
+  onRetry: () => void;
+  showEmpty?: boolean;
 }) {
   const id = useId();
   const questions = [
@@ -203,7 +207,7 @@ export function LocalGuidancePanel({
           해지·실효·변경이 있다면 결과가 달라질 수 있습니다.
         </p>
       ) : null}
-      {guidance.candidates.length === 0 ? (
+      {showEmpty && guidance.candidates.length === 0 ? (
         <p className={styles.emptyGroup}>{emptyCopy[guidance.outcome]}</p>
       ) : null}
       {(["PRIMARY", "CONDITIONAL"] as const).map((group) => {
@@ -252,10 +256,19 @@ export function LocalGuidancePanel({
       ) : null}
       {guidance.support.unsupported_coverages > 0 ||
       guidance.support.failure_codes?.length ? (
-        <p className={styles.scopeWarning}>
-          일부 담보의 자료를 해석하지 못했습니다. 위에서 확인된 후보와 예상
-          금액은 계속 볼 수 있습니다.
-        </p>
+        <div className={styles.scopeWarning}>
+          <p>
+            일부 담보의 자료를 해석하지 못했습니다. 위에서 확인된 후보와 예상
+            금액은 계속 볼 수 있습니다.
+          </p>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            onClick={onRetry}
+          >
+            다시 확인
+          </button>
+        </div>
       ) : null}
     </div>
   );

@@ -25,6 +25,9 @@ test("shows document-based local guidance at 320px without automatic AI requests
   ).toBeVisible();
   await expect(page.getByText("100원", { exact: true })).toBeVisible();
   await expect(
+    page.getByRole("button", { name: "청구 검토 시작", exact: true }),
+  ).toBeVisible();
+  await expect(
     page.getByText(/문서에 기록된 계약이 사건일까지 유지/),
   ).toBeVisible();
   expect(mock.structureRequests).toBe(0);

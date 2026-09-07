@@ -89,6 +89,16 @@ legacy p50 0.302ms/p95 0.501ms였다. API/DB/네트워크/import 경합을 포�
 
 ## Publication and remaining acceptance
 
-PR CI·merge는 후속 기록으로 연결한다. 실제 자료·외부 AI·Windows/모바일·운영 전환은
+[PR #75](https://github.com/jihoon22-lee/family-care/pull/75)의 `e57ed4a` 대상 CI
+[34085797688](https://github.com/jihoon22-lee/family-care/actions/runs/34085797688)는
+7개 검사와 세 이미지 빌드가 모두 통과했다. merge 전 추가 정적 UI 리뷰에서 혼합 결과의
+operational 후보/청구 버튼 유실과 부분 실패 재시도 유실을 발견했다. 새 회귀 3개를 RED로
+확인하고 기존 operational 그룹/계산/근거/청구 경로를 새 안내와 함께 렌더하도록 수정했다.
+해당 구성원 private 담보가 없거나 실패해도 기존 operational 답변을 숨기지 않는다.
+수정 후 Web 전체 162개(24파일)/포맷·린트·타입·빌드와 browser E2E 15개가 통과했다.
+혼합 답변의 320px 청구 버튼도 browser에서 확인했다. 변경되지 않은 Python/API/DB/계약은
+위 소스에 연결된 통과 증거를 유지한다. 최종 CI·merge는 후속 기록으로 연결한다.
+
+실제 자료·외부 AI·Windows/모바일·운영 전환은
 미실행이다. 태그/이미지 공개/배포는 이 B01에서 수행하지 않았으며 전체 마일스톤 수용 후
 승인된 릴리스 범위에서 진행한다. 사용자 컨텍스트·자동 압축 설정은 변경하지 않았다.
