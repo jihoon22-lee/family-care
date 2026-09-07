@@ -1,15 +1,22 @@
 # FamilyCare development instructions
 
-이 문서는 FamilyCare 저장소에서 작업하는 사람과 자동화 에이전트가 반드시 따라야 할 개발 규칙입니다. 사용자 요청이 이 문서보다 우선하지만, 개인정보 이동·외부 전송·삭제·운영 변경처럼 권한 범위를 넓히는 행동은 명시적 승인이 필요합니다.
+FamilyCare 공통 개발 규칙입니다. 사용자 요청은 저장소·스킬 지침보다 우선하며, 개인정보 접근·이동·외부 전송·삭제·운영 변경은 명시적으로 승인된 범위에서만 수행합니다. 이미 받은 승인은 해당 범위에서 재사용합니다. 스킬 호출이나 마일스톤 등록 자체는 권한을 확대하지 않습니다.
 
 ## Start every task
 
 1. `pwd`, `git status --short --branch`, `git remote -v`로 정확한 저장소와 변경 상태를 확인합니다.
-2. 저장소 루트부터 현재 파일까지 적용되는 `AGENTS.md`를 읽습니다.
-3. `docs/design/`의 관련 설계와 `docs/plan/`의 실행 계획을 읽습니다.
+2. 루트에서 시작했더라도 수정 대상 경로의 `AGENTS.md`·`AGENTS.override.md`를 확인합니다. 같은 디렉터리에서는 override가 우선합니다.
+3. [현재 로드맵](docs/plan/000-project-roadmap.md)에서 해당 마일스톤·요구사항·WP를 확인하고 관련 설계만 읽습니다. 과거 계획의 상태를 현재 작업으로 추정하지 않습니다.
 4. 기존 변경은 사용자 소유로 간주하고, 요청과 무관한 수정·정리·포맷 변경을 하지 않습니다.
-5. 기능 또는 동작 변경은 테스트를 먼저 작성하고 예상한 이유로 실패하는지 확인합니다.
-6. 작업 범위, 외부 의존성, 직접 검증할 수 없는 항목을 구분합니다.
+5. 검토·문서/설정·기능 구현 중 작업 유형과 완료 기준을 정합니다. 검토 요청은 계획 상태·코드·커밋을 변경하지 않습니다.
+6. 구현 요청은 승인된 로컬 작업을 검증까지 진행합니다. 통상적인 구현 선택은 판단하고, 결과를 바꾸는 필수 정보나 권한만 확인합니다. 중단이 지침 때문이면 해당 파일·문구·적용 이유를 설명합니다.
+
+## Current milestone and skills
+
+- v0.5 기준은 [메인 #59](https://github.com/jihoon22-lee/family-care/issues/59) → [요구사항 #60](https://github.com/jihoon22-lee/family-care/issues/60) → 해당 WP입니다. 시작점은 [#61 / B01](https://github.com/jihoon22-lee/family-care/issues/61)입니다.
+- 이슈는 진행·결정·수용 증거, 저장소 설계는 코드와 함께 버전 관리하는 계약을 소유합니다. 충돌은 해당 구현에서 명시적으로 해소하고 역사적 완료 기록은 보존합니다.
+- 마일스톤 작업에는 `.agents/skills/familycare-milestone-work/SKILL.md`, 검증 선택·실행에는 `.agents/skills/familycare-verify/SKILL.md`를 사용합니다.
+- 모델·스킬 선택과 공식 근거는 [에이전트 작업 안내](docs/agent-workflow.md)를 참고합니다. 모델명이나 컨텍스트·자동 압축 설정을 이 문서로 재정의하지 않습니다.
 
 ## Non-negotiable privacy rules
 
@@ -27,54 +34,9 @@
 
 ## Branch and commit conventions
 
-### Branches
-
-작업 브랜치는 다음 정규 형식을 사용합니다.
-
-```text
-<type>/<kebab-case-description>
-```
-
-허용 `type`:
-
-- `feat`: 사용자 기능
-- `fix`: 버그 수정
-- `docs`: 문서 전용
-- `build`: 빌드·환경·컨테이너
-- `ci`: CI/CD와 저장소 자동화
-- `chore`: 제품 동작을 바꾸지 않는 유지보수
-- `refactor`: 동작을 유지하는 코드 구조 변경
-- `test`: 테스트 전용
-- `release`: 릴리스 준비
-
-예: `build/project-foundation`, `feat/policy-ledger`.
-
-`main`, 대문자, 밑줄, 공백, 의미 없는 번호만 있는 이름은 feature 브랜치에 사용하지 않습니다. 사용자 요청 없이 force push하거나 이미 공유된 브랜치 이력을 다시 쓰지 않습니다.
-
-GitHub Dependabot이 소유한 `dependabot/<ecosystem>/<slug>` 브랜치만 자동화 예외입니다. 사람이 만드는 브랜치에는 이 예외를 사용하지 않습니다.
-
-### Commits
-
-모든 커밋 제목은 Conventional Commits를 따릅니다.
-
-```text
-<type>(<optional-scope>): <imperative description>
-```
-
-- 허용 type은 `feat`, `fix`, `docs`, `build`, `ci`, `chore`, `refactor`, `test`, `perf`, `style`, `revert`입니다.
-- 제목은 영문 소문자 type으로 시작하고 72자를 넘지 않으며 마침표로 끝내지 않습니다.
-- 하나의 커밋은 하나의 검토 가능한 목적을 가집니다.
-- 호환성을 깨는 변경은 `type(scope)!:`와 `BREAKING CHANGE:` footer를 사용합니다.
-- 코드 변경과 해당 테스트, 필요한 문서 변경은 같은 논리 단위에 포함합니다.
-- 임시 저장, 의미 없는 메시지, 검증을 통과하지 않은 커밋은 공유하지 않습니다.
-
-예:
-
-```text
-docs(plan): define foundation implementation
-feat(api): add health endpoints
-ci: validate repository safety
-```
+- 작업 브랜치는 `<type>/<kebab-case-description>`, 커밋은 Conventional Commits를 사용합니다. 허용 type·예외·제목 제한은 [CONTRIBUTING.md](CONTRIBUTING.md#branch-and-commit-conventions)가 기준입니다.
+- 변경·테스트·필요 문서는 같은 검토 목적에 묶습니다. 이슈와 PR의 1:1 대응을 강제하지 않고 현재 메인의 PR 묶음을 따릅니다.
+- 사용자 요청 없이 force push하거나 공유 이력을 다시 쓰지 않습니다. GitHub 게시·merge는 세션에서 승인된 범위로 한정합니다.
 
 ## Architecture boundaries
 
@@ -88,6 +50,8 @@ ci: validate repository safety
 
 ## Insurance decision rules
 
+다음은 v0.4 호환성 기준입니다. v0.5의 새 수용 기준은 #60/#61을 따릅니다. 최신성 미확인으로 답변 전체를 보류하는 동작과 전역 tri-state 제약은 B01에서 계약·실패하는 테스트·최소 구현과 함께 개정합니다. 준비 문서만으로 런타임이 변경됐다고 주장하거나 과거 테스트를 새 요구사항보다 우선하지 않습니다.
+
 - 약관에 존재한다는 이유만으로 가입 Rider로 판단하지 않습니다.
 - 증권과 최신 계약 상태에서 실제 가입과 유효성을 먼저 확인합니다.
 - 판정 값은 `MATCH`, `NO_MATCH`, `UNKNOWN`만 사용합니다.
@@ -99,36 +63,23 @@ ci: validate repository safety
 
 ## Implementation workflow
 
-1. 계획의 현재 Task를 `in_progress`로 표시합니다.
-2. 실패하는 최소 테스트를 먼저 작성합니다.
-3. 테스트가 기능 부재 때문에 실패하는지 확인합니다.
-4. 테스트를 통과하는 최소 구현을 작성합니다.
-5. 관련 전체 테스트와 정적 검사를 직렬로 실행합니다.
-6. `git diff --check`와 저장소 안전 검사를 실행합니다.
-7. 변경을 검토한 뒤 Conventional Commit으로 커밋합니다.
-8. 다음 Task로 이동합니다.
+1. 해당 로컬 계획의 현재 Task를 `in_progress`로 표시합니다. 기존 계획을 재사용하고 GitHub 상태 변경은 요청 범위에 포함될 때 수행합니다.
+2. 기능·동작 변경은 최소 테스트를 먼저 작성하고 기능 부재 때문에 실패하는지 확인한 뒤 구현합니다. 문서·설정은 구조 검사나 해당 설정을 소비하는 명령으로 확인합니다.
+3. 개발 중 관련 테스트를 실행하고, 완료 시 아래 검증 범위를 충족합니다. 성공 뒤 변경·실패·미해결 우려 없이 같은 검사를 반복하지 않습니다.
+4. 전체 diff를 검토하고 실제 증거를 PR 묶음 또는 작업 단위의 workthrough 하나에 기록한 뒤 Conventional Commit으로 커밋합니다.
 
-설정 파일과 순수 문서처럼 직접 단위 테스트하기 어려운 항목은 구조 검사 스크립트, 실제 빌드, `docker compose config`, workflow 정책 검사로 검증합니다.
+## Parallel work
+
+- 독립된 탐색·공식 문서 확인·리뷰가 유용하고 주 에이전트도 별도 작업을 진행할 수 있을 때 서브에이전트에 위임합니다. 동시에 최대 2개이며 단순 수정에는 사용하지 않습니다.
+- 범위·읽을 자료·기대 결과를 지정하고 파일·라인 근거와 발견 사항 요약을 받습니다. 주 에이전트가 통합 판단과 완료 보고를 책임집니다.
+- 기본 위임은 읽기 전용입니다. 병렬 구현이 필요한 경우 별도 worktree와 파일 소유 범위를 정합니다. 공용 계약·migration·계획의 작성자는 하나로 제한합니다.
+- 서브에이전트도 아래 자원·개인정보 경계를 따릅니다. 무거운 검사의 동시 실행을 위임으로 우회하지 않습니다.
 
 ## Required verification
 
-완료 주장은 같은 작업 턴에서 실행한 최신 증거가 있어야 합니다. 일부 검사 통과를 전체 통과로 확대 해석하지 않습니다.
+검증 범위·명령의 단일 기준은 [검증 전략](docs/design/test-strategy.md#verification-by-change)입니다. 문서 전용은 문서·안전·diff 검사, 코드·실행 설정 변경의 PR 완료는 전체 필수 검사와 관련 통합 검증을 수행합니다. CI required checks는 축소하지 않습니다.
 
-기본 순서:
-
-```bash
-python3 scripts/check_documentation.py
-python3 scripts/check_repository_safety.py
-corepack pnpm@11.22.0 web:check
-TMPDIR=/tmp uv run ruff format --check .
-TMPDIR=/tmp uv run ruff check .
-TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts
-TMPDIR=/tmp uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q
-TMPDIR=/tmp uv run python scripts/check_contracts.py
-TMPDIR=/tmp uv run python scripts/check_containers.py
-TMPDIR=/tmp uv run python scripts/check_workflows.py
-git diff --check
-```
+완료 증거는 명령·실행 시점·소스 SHA와 미커밋 변경 범위·설정/환경에 연결합니다. 현재 상태와 일치하는지 확인하고 변경된 입력이 영향을 주는 검사는 다시 실행합니다. 단순 후속 설명 때문에 전체 검사를 재실행하지 않으며 이전 결과를 이번 턴 실행으로 표현하지 않습니다. 일부 검사 통과를 전체 통과로 확대 해석하지 않습니다.
 
 - 프런트엔드와 Python 검사는 동시에 실행하지 않습니다.
 - WSL에서 `TEMP` 또는 `TMP`가 Windows mount를 가리키면 Python 명령에 `TMPDIR=/tmp`를 사용합니다.
@@ -147,7 +98,7 @@ git diff --check
 - 사용자 요청 없이 태그를 만들거나 push하지 않습니다.
 - Cloud Run과 운영 배포는 별도 승인된 설계 전까지 구성하지 않습니다.
 
-## Security review expectations
+## Code Review Rules
 
 - 취약점을 주장할 때 입력 source에서 권한 검사·정규화·저장·출력 sink까지 실제 경로를 추적합니다.
 - 정적 분석만 수행했으면 동적 검증을 수행한 것처럼 표현하지 않습니다.
@@ -156,7 +107,7 @@ git diff --check
 
 ## Completion report
 
-최종 보고에는 다음을 포함합니다.
+보고는 작업 규모에 맞춰 간결하게 작성합니다. 해당하지 않는 계약·PR·배포 항목은 한 문장으로 묶고, 다음의 관련 항목을 포함합니다.
 
 - 목적과 사용자 영향
 - 생성·수정한 주요 파일

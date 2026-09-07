@@ -142,13 +142,61 @@ v0.1 security tests additionally verify family-scoped batch password reuse and d
 
 WSL의 측정된 메모리 압력에서는 Vitest worker 시작 timeout을 피하기 위해 Web `test` script가 `vitest run --maxWorkers=1`을 사용합니다. 이는 테스트 범위를 줄이지 않고 worker 동시성만 직렬화하며, Web 검증은 Python·컨테이너 검증과 함께 직렬로 실행합니다.
 
+## Verification by change
+
+| 작업 유형/시점 | 필요한 검증 |
+|---|---|
+| 읽기 전용 검토 | 질문에 필요한 조회·근거 확인. 코드 검증을 실행하지 않았다면 명시 |
+| 문서·AGENTS·스킬 지침만 변경 | 문서 검사·저장소 안전 검사·`git diff --check`; 스킬은 구조 validator와 링크·명령·실행 조건 검토 |
+| 기능 구현 중 | 기능 부재로 실패하는 최소 테스트와 관련 suite; 문구를 복제하는 테스트는 작성하지 않음 |
+| 코드·실행 설정 변경의 PR 완료 | 아래 전체 필수 검사와 변경 영역의 통합 검증 |
+| 릴리스·보호된 자료 적용 | 해당 소스·schema·이미지·환경에 대한 별도 승인된 수용 검증 |
+
+혼합 변경은 해당 범위의 합집합으로 검증한다. 문서가 실행 설정·CI 정책을 바꾸도록
+요구한다면 실제 설정/소비 명령도 검토한다. CI required checks는 문서 전용 변경에서도
+우회하거나 제거하지 않는다. CLI 플래그·설정은 해당 parser/명령으로 확인한다.
+
+개발 중 선택 검사는 PR 완료 검증을 대체하지 않는다. 이미 성공한 검사는 실행 입력이
+같고 미해결 우려가 없으면 후속 설명만을 위해 반복하지 않는다. 소스 SHA만으로 작업 트리를
+식별하지 않고 관련 미커밋 변경·잠금 파일·설정·fixture·환경도 함께 확인한다.
+입력이 바뀌면 영향을 받는 검사를 다시 실행하고 이전 결과의 실행 시점을 숨기지 않는다.
+
+## Required completion commands
+
+저장소 루트에서 다음 순서로 직렬 실행한다. 문서 전용은 앞의 두 검사와 마지막 diff 검사가
+기본이며, 코드·실행 설정 PR은 전체를 실행한다. 추가 명령은 아래 영역별 기준을 따른다.
+
+```bash
+python3 scripts/check_documentation.py
+python3 scripts/check_repository_safety.py
+corepack pnpm web:check
+TMPDIR=/tmp uv run ruff format --check .
+TMPDIR=/tmp uv run ruff check .
+TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts
+TMPDIR=/tmp uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q
+TMPDIR=/tmp uv run python scripts/check_contracts.py
+TMPDIR=/tmp uv run python scripts/check_containers.py
+TMPDIR=/tmp uv run python scripts/check_workflows.py
+git diff --check
+```
+
+pnpm 버전은 루트 `package.json`의 `packageManager`를 사용한다. Corepack을 거쳐
+잠금 버전을 선택하며 임의 최신 버전으로 실행하지 않는다.
+
+- 기본 pytest는 `pyproject.toml`에 따라 integration을 제외한다. migration/repository/queue 변경은 위의 전용 PostgreSQL 통합 검증을 추가한다.
+- `web:check`는 format/lint/type/unit/build를 포함한다. browser E2E는 별도 `corepack pnpm --filter @familycare/web test:e2e`로 실행하며 mock/실제 backend 연결을 구분한다.
+- `check_containers.py`는 정적 정책 검사다. 이미지 빌드·runtime 검증과 동등하지 않으며 Docker 변경은 해당 이미지와 Compose 구성을 추가 확인한다.
+- workflow 변경은 `actionlint -oneline .github/workflows/*.yml`도 실행한다.
+- 커밋 전 `TMPDIR=/tmp uv run python scripts/check_git_conventions.py`는 브랜치만 검사한다. 커밋 후에는 확인한 PR 기준 SHA를 사용해 `TMPDIR=/tmp uv run python scripts/check_git_conventions.py --range <base-sha>..HEAD`로 실제 커밋 제목도 검사한다. 빈 범위를 커밋 검증 성공으로 처리하지 않는다.
+- 실제 자료·외부 provider·운영·Windows/모바일 확인은 공개 합성 CI와 별도 상태로 남긴다.
+
 ## Foundation command matrix
 
 | Area | Command | External secret |
 |---|---|---|
 | Documentation | `python3 scripts/check_documentation.py` | 없음 |
 | Repository safety | `python3 scripts/check_repository_safety.py` | 없음 |
-| Web | `corepack pnpm@11.22.0 web:check` | 없음 |
+| Web | `corepack pnpm web:check` (루트 `packageManager` 버전) | 없음 |
 | Python style | `uv run ruff format --check ...` | 없음 |
 | Python lint | `uv run ruff check ...` | 없음 |
 | Python types | `uv run mypy ...` | 없음 |
@@ -221,6 +269,7 @@ Coverage 감소는 누락 테스트를 확인하는 신호이며, 생성 코드�
 각 PR은 다음을 기록합니다.
 
 - 실행한 정확한 명령
+- 실행 시점, 소스 SHA, 관련 미커밋 변경과 사용한 설정/fixture 범위
 - test 수와 failure 수
 - lint/type/build exit 결과
 - 사용한 PostgreSQL·Node·Python 주 버전

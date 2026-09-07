@@ -9,12 +9,43 @@ FamilyCare는 공개 저장소이지만 실제 보험·의료 자료를 다루�
 3. 작은 논리 단위로 구현하고 관련 검증을 직렬 실행합니다.
 4. `<type>(<optional-scope>): <imperative description>` 형식으로 커밋합니다.
 5. PR 템플릿의 개인정보와 검증 항목을 실제로 확인합니다.
-6. 필수 GitHub Actions가 모두 성공한 뒤 merge합니다.
-7. merge를 확인한 뒤 완료된 원격·로컬 브랜치와 전용 worktree를 삭제합니다. 다른 세션이
+6. 세션의 요청이 merge를 포함하고 필수 GitHub Actions가 모두 성공한 뒤 merge합니다.
+7. 승인된 merge·정리 작업에서는 merge를 확인한 뒤 완료된 원격·로컬 브랜치와 전용 worktree를 삭제합니다. 다른 세션이
    사용하는 worktree나 미병합 변경은 삭제하지 않습니다.
 
-허용된 브랜치 type과 커밋 type의 전체 목록은 `AGENTS.md`가 기준입니다.
-`dependabot/<ecosystem>/<slug>` 형식은 GitHub Dependabot이 만든 브랜치에만 허용됩니다.
+현재 마일스톤과 PR 묶음은 [로드맵](docs/plan/000-project-roadmap.md)을 확인합니다.
+문서·설정·기능 변경의 검사 선택은 [검증 전략](docs/design/test-strategy.md#verification-by-change)을 따릅니다.
+
+## Branch and commit conventions
+
+브랜치는 `<type>/<kebab-case-description>` 형식입니다.
+
+| Type | 목적 |
+|---|---|
+| `feat` | 사용자 기능 |
+| `fix` | 버그 수정 |
+| `docs` | 문서 전용 |
+| `build` | 빌드·환경·컨테이너 |
+| `ci` | CI/CD와 저장소 자동화 |
+| `chore` | 제품 동작을 바꾸지 않는 유지보수 |
+| `refactor` | 동작을 유지하는 코드 구조 변경 |
+| `test` | 테스트 전용 |
+| `release` | 릴리스 준비 |
+
+예: `build/project-foundation`, `feat/policy-ledger`.
+`main`, 대문자, 밑줄, 공백, 의미 없는 번호만 있는 이름은 feature 브랜치에 사용하지 않습니다.
+GitHub Dependabot이 소유한 `dependabot/<ecosystem>/<slug>`만 자동화 예외이며 사람이 만든 브랜치에는 적용하지 않습니다.
+사용자 요청 없이 force push하거나 공유 이력을 다시 쓰지 않습니다.
+
+커밋 제목은 `<type>(<optional-scope>): <imperative description>` 형식입니다.
+
+- 허용 type: `feat`, `fix`, `docs`, `build`, `ci`, `chore`, `refactor`, `test`, `perf`, `style`, `revert`.
+- 영문 소문자 type으로 시작하고 72자를 넘지 않으며 마침표로 끝내지 않습니다.
+- 하나의 커밋은 하나의 검토 가능한 목적이며 코드·관련 테스트·필요 문서를 함께 포함합니다.
+- 호환성을 깨는 변경은 `type(scope)!:`와 `BREAKING CHANGE:` footer를 사용합니다.
+- 임시 저장, 의미 없는 메시지, 검증을 통과하지 않은 커밋은 공유하지 않습니다.
+
+예: `docs(plan): define foundation implementation`, `feat(api): add health endpoints`, `ci: validate repository safety`.
 
 ## Synthetic data only
 
