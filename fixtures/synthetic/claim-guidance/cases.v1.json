@@ -1,0 +1,1019 @@
+[
+  {
+    "case_id": "synthetic-dev-maintenance",
+    "split": "dev",
+    "contract_group": "synthetic-dev-maintenance-contract",
+    "scenario_id": "S01",
+    "candidate_pool": [
+      "synthetic-dev-maintenance-surgery",
+      "synthetic-dev-maintenance-history",
+      "synthetic-dev-maintenance-fracture"
+    ],
+    "expected_primary": [
+      "synthetic-dev-maintenance-surgery"
+    ],
+    "expected_conditional": [
+      "synthetic-dev-maintenance-history"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "surgery",
+        "event.performed": true
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-maintenance-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "calculation": {
+            "kind": "fixed",
+            "amount": "120",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-dev-maintenance-history",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.first_claim",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-dev-maintenance-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-terms-only",
+    "split": "dev",
+    "contract_group": "synthetic-dev-terms-only-contract",
+    "scenario_id": "S02",
+    "candidate_pool": [
+      "synthetic-dev-terms-only-terms",
+      "synthetic-dev-terms-only-surgery"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-terms-only-terms",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "not_enrolled",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-dev-terms-only-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-planned",
+    "split": "dev",
+    "contract_group": "synthetic-dev-planned-contract",
+    "scenario_id": "S05",
+    "candidate_pool": [
+      "synthetic-dev-planned-surgery",
+      "synthetic-dev-planned-fracture"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [
+      "synthetic-dev-planned-surgery"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "surgery",
+        "event.planned": true
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-planned-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.performed",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-dev-planned-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-negated",
+    "split": "dev",
+    "contract_group": "synthetic-dev-negated-contract",
+    "scenario_id": "S05",
+    "candidate_pool": [
+      "synthetic-dev-negated-surgery",
+      "synthetic-dev-negated-admission"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "surgery",
+        "event.performed": false
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-negated-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.performed",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-dev-negated-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-ai-off",
+    "split": "dev",
+    "contract_group": "synthetic-dev-ai-off-contract",
+    "scenario_id": "S06",
+    "candidate_pool": [
+      "synthetic-dev-ai-off-diagnosis",
+      "synthetic-dev-ai-off-surgery"
+    ],
+    "expected_primary": [
+      "synthetic-dev-ai-off-diagnosis"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis",
+        "event.confirmed": true
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-ai-off-diagnosis",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.confirmed",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-dev-ai-off-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-daily",
+    "split": "dev",
+    "contract_group": "synthetic-dev-daily-contract",
+    "scenario_id": "S07",
+    "candidate_pool": [
+      "synthetic-dev-daily-daily",
+      "synthetic-dev-daily-fracture"
+    ],
+    "expected_primary": [
+      "synthetic-dev-daily-daily"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "admission",
+        "event.days": 5
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-daily-daily",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "calculation": {
+            "kind": "daily",
+            "rate": "11",
+            "days_field": "event.days",
+            "deduct_days": 1,
+            "cap_days": 3,
+            "expected_amount": "33",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-dev-daily-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-partial-cost",
+    "split": "dev",
+    "contract_group": "synthetic-dev-partial-cost-contract",
+    "scenario_id": "S08",
+    "candidate_pool": [
+      "synthetic-dev-partial-cost-cost",
+      "synthetic-dev-partial-cost-second-cost",
+      "synthetic-dev-partial-cost-surgery"
+    ],
+    "expected_primary": [
+      "synthetic-dev-partial-cost-cost"
+    ],
+    "expected_conditional": [
+      "synthetic-dev-partial-cost-second-cost"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "outpatient",
+        "event.eligible_cost": "75"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-partial-cost-cost",
+          "event_field": "event.kind",
+          "event_value": "outpatient",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "INDEMNITY",
+          "source_count": 1,
+          "calculation": {
+            "kind": "indemnity",
+            "cost_field": "event.eligible_cost",
+            "deductible": "15",
+            "expected_amount": "60",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-dev-partial-cost-second-cost",
+          "event_field": "event.kind",
+          "event_value": "outpatient",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "INDEMNITY",
+          "source_count": 1,
+          "required_field": "event.other_cost",
+          "required_value": "known"
+        },
+        {
+          "coverage_key": "synthetic-dev-partial-cost-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false,
+      "aggregation": "no-indemnity-sum"
+    }
+  },
+  {
+    "case_id": "synthetic-dev-duplicate-source",
+    "split": "dev",
+    "contract_group": "synthetic-dev-duplicate-source-contract",
+    "scenario_id": "S09",
+    "candidate_pool": [
+      "synthetic-dev-duplicate-source-fracture",
+      "synthetic-dev-duplicate-source-surgery"
+    ],
+    "expected_primary": [
+      "synthetic-dev-duplicate-source-fracture"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "fracture"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-duplicate-source-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 2
+        },
+        {
+          "coverage_key": "synthetic-dev-duplicate-source-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-other-member",
+    "split": "dev",
+    "contract_group": "synthetic-dev-other-member-contract",
+    "scenario_id": "S10",
+    "candidate_pool": [
+      "synthetic-dev-other-member-other",
+      "synthetic-dev-other-member-surgery"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-other-member-other",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "other_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-dev-other-member-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-dev-historical",
+    "split": "dev",
+    "contract_group": "synthetic-dev-historical-contract",
+    "scenario_id": "S11",
+    "candidate_pool": [
+      "synthetic-dev-historical-historical",
+      "synthetic-dev-historical-terminated",
+      "synthetic-dev-historical-fracture"
+    ],
+    "expected_primary": [
+      "synthetic-dev-historical-historical"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "surgery",
+        "event.period": "past"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-dev-historical-historical",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "active_at_event",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-dev-historical-terminated",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "terminated",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-dev-historical-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-renewal",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-renewal-contract",
+    "scenario_id": "S01",
+    "candidate_pool": [
+      "synthetic-holdout-renewal-admission",
+      "synthetic-holdout-renewal-frequency",
+      "synthetic-holdout-renewal-diagnosis"
+    ],
+    "expected_primary": [
+      "synthetic-holdout-renewal-admission"
+    ],
+    "expected_conditional": [
+      "synthetic-holdout-renewal-frequency"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "admission",
+        "event.days": 2
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-renewal-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-renewal-frequency",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.remaining_uses",
+          "required_value": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-renewal-diagnosis",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-unenrolled",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-unenrolled-contract",
+    "scenario_id": "S02",
+    "candidate_pool": [
+      "synthetic-holdout-unenrolled-terms",
+      "synthetic-holdout-unenrolled-admission"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "fracture"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-unenrolled-terms",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "not_enrolled",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-unenrolled-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-incomplete",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-incomplete-contract",
+    "scenario_id": "S05",
+    "candidate_pool": [
+      "synthetic-holdout-incomplete-diagnosis",
+      "synthetic-holdout-incomplete-admission"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [
+      "synthetic-holdout-incomplete-diagnosis"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-incomplete-diagnosis",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.confirmed",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-holdout-incomplete-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-negative-admission",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-negative-admission-contract",
+    "scenario_id": "S05",
+    "candidate_pool": [
+      "synthetic-holdout-negative-admission-admission",
+      "synthetic-holdout-negative-admission-fracture"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "admission",
+        "event.admitted": false
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-negative-admission-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "required_field": "event.admitted",
+          "required_value": true
+        },
+        {
+          "coverage_key": "synthetic-holdout-negative-admission-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-offline-server",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-offline-server-contract",
+    "scenario_id": "S06",
+    "candidate_pool": [
+      "synthetic-holdout-offline-server-fracture",
+      "synthetic-holdout-offline-server-admission"
+    ],
+    "expected_primary": [
+      "synthetic-holdout-offline-server-fracture"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "fracture",
+        "event.confirmed": true
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-offline-server-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "active",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-offline-server-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-ratio",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-ratio-contract",
+    "scenario_id": "S07",
+    "candidate_pool": [
+      "synthetic-holdout-ratio-ratio",
+      "synthetic-holdout-ratio-diagnosis"
+    ],
+    "expected_primary": [
+      "synthetic-holdout-ratio-ratio"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "surgery",
+        "event.reduction_applies": true
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-ratio-ratio",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "calculation": {
+            "kind": "ratio",
+            "base": "240",
+            "rate": "0.25",
+            "reduction": "0.5",
+            "cap": "80",
+            "expected_amount": "30",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-holdout-ratio-diagnosis",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-missing-cost",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-missing-cost-contract",
+    "scenario_id": "S08",
+    "candidate_pool": [
+      "synthetic-holdout-missing-cost-cost-a",
+      "synthetic-holdout-missing-cost-cost-b",
+      "synthetic-holdout-missing-cost-admission"
+    ],
+    "expected_primary": [
+      "synthetic-holdout-missing-cost-cost-a",
+      "synthetic-holdout-missing-cost-cost-b"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "outpatient"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-missing-cost-cost-a",
+          "event_field": "event.kind",
+          "event_value": "outpatient",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "INDEMNITY",
+          "source_count": 1,
+          "calculation": {
+            "kind": "indemnity",
+            "cost_field": "event.eligible_cost",
+            "deductible": "8",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-holdout-missing-cost-cost-b",
+          "event_field": "event.kind",
+          "event_value": "outpatient",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "INDEMNITY",
+          "source_count": 1,
+          "calculation": {
+            "kind": "indemnity",
+            "cost_field": "event.eligible_cost",
+            "deductible": "13",
+            "unit": "synthetic-credit"
+          }
+        },
+        {
+          "coverage_key": "synthetic-holdout-missing-cost-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false,
+      "aggregation": "no-indemnity-sum"
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-two-contracts",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-two-contracts-contract",
+    "scenario_id": "S09",
+    "candidate_pool": [
+      "synthetic-holdout-two-contracts-contract-a",
+      "synthetic-holdout-two-contracts-contract-b",
+      "synthetic-holdout-two-contracts-surgery"
+    ],
+    "expected_primary": [
+      "synthetic-holdout-two-contracts-contract-a",
+      "synthetic-holdout-two-contracts-contract-b"
+    ],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-two-contracts-contract-a",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "contract_identity": "synthetic-distinct-contract-a"
+        },
+        {
+          "coverage_key": "synthetic-holdout-two-contracts-contract-b",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1,
+          "contract_identity": "synthetic-distinct-contract-b"
+        },
+        {
+          "coverage_key": "synthetic-holdout-two-contracts-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-unrelated",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-unrelated-contract",
+    "scenario_id": "S10",
+    "candidate_pool": [
+      "synthetic-holdout-unrelated-fracture",
+      "synthetic-holdout-unrelated-surgery",
+      "synthetic-holdout-unrelated-admission"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "routine-check"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-unrelated-fracture",
+          "event_field": "event.kind",
+          "event_value": "fracture",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-unrelated-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-unrelated-admission",
+          "event_field": "event.kind",
+          "event_value": "admission",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  },
+  {
+    "case_id": "synthetic-holdout-conflicting",
+    "split": "holdout",
+    "contract_group": "synthetic-holdout-conflicting-contract",
+    "scenario_id": "S11",
+    "candidate_pool": [
+      "synthetic-holdout-conflicting-conflict",
+      "synthetic-holdout-conflicting-terminated",
+      "synthetic-holdout-conflicting-surgery"
+    ],
+    "expected_primary": [],
+    "expected_conditional": [
+      "synthetic-holdout-conflicting-conflict"
+    ],
+    "answerable": true,
+    "scenario_parameters": {
+      "event_facts": {
+        "event.kind": "diagnosis"
+      },
+      "coverages": [
+        {
+          "coverage_key": "synthetic-holdout-conflicting-conflict",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "conflicting",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-conflicting-terminated",
+          "event_field": "event.kind",
+          "event_value": "diagnosis",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "terminated",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        },
+        {
+          "coverage_key": "synthetic-holdout-conflicting-surgery",
+          "event_field": "event.kind",
+          "event_value": "surgery",
+          "enrollment": "confirmed",
+          "subject": "same_member",
+          "status": "unknown",
+          "benefit_type": "FIXED",
+          "source_count": 1
+        }
+      ],
+      "ai_enabled": false
+    }
+  }
+]
