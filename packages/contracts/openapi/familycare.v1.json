@@ -9924,6 +9924,18 @@
             "title": "Document Version Id",
             "type": "string"
           },
+          "edition_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition Date"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -9958,6 +9970,42 @@
             "minLength": 1,
             "title": "Product Key",
             "type": "string"
+          },
+          "source_component_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Component Id"
+          },
+          "source_page_end": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Page End"
+          },
+          "source_page_start": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Page Start"
           },
           "version": {
             "minimum": 1.0,

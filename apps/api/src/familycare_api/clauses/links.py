@@ -170,6 +170,8 @@ def validate_rider_clause_link(
         _invalid("TERMS_EDITION_MISMATCH")
     if context.contract_date is None:
         _invalid("CONTRACT_DATE_UNKNOWN")
+    if edition.source_component_id is not None and edition.source_period_verified is not True:
+        _invalid("TERMS_EDITION_NOT_APPLICABLE")
     if (
         edition.applicability_start is not None
         and context.contract_date < edition.applicability_start
@@ -185,6 +187,7 @@ def validate_rider_clause_link(
         link.clause_id != clause.id
         or clause.terms_edition_id != edition.id
         or clause.deleted_at is not None
+        or not edition.contains_pages(clause.physical_page_start, clause.physical_page_end)
         or not clause.evidence
         or any(
             evidence.document_version_id != edition.document_version_id

@@ -256,3 +256,8 @@ component의 연결을 확인하면 기존 원문 분류와 별개의 `USER_CONF
 같은 원문 bytes와 페이지 범위의 기존 component는 삭제/제외 이력까지 조회하여 자동
 재생성하지 않는다. 제안은 `APPLIED`, `DEFERRED`, `INVALID`로 기록하고 사용자 결정을
 덮지 않는다. 이 단계는 자동 document set, 보험 가입이나 적용 약관 연결을 만들지 않는다.
+
+별도 `component-terms-v1` 소비자가 이미 게시된 프로그램 terms component도 찾아
+판본을 등록한다. component별 등록/보류 이력과 원문 metadata snapshot을 보존하며,
+기존 사용자 판본과 삭제 이력은 자동 재등록하지 않는다. 판본의 페이지 경계와 현재 사용
+조건은 [약관 연결 설계](clause-linking-search.md#terms-structure)를 따른다.

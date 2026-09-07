@@ -841,6 +841,17 @@ class DecisionRepository:
               ON policy.id = rider.policy_contract_id
              AND policy.household_space_id = %(scope)s
              AND policy.deleted_at IS NULL
+            JOIN clauses AS clause
+              ON clause.id=link.clause_id AND clause.terms_edition_id=link.terms_edition_id
+             AND clause.household_space_id=%(scope)s AND clause.deleted_at IS NULL
+             AND terms_edition_allows_pages(clause.terms_edition_id,clause.household_space_id,
+               clause.physical_page_start,clause.physical_page_end)
+            JOIN terms_editions AS edition ON edition.id=clause.terms_edition_id
+             AND (edition.source_component_id IS NULL OR (
+               terms_edition_has_printed_period(edition.id)
+               AND policy.contract_date>=edition.applicability_start
+               AND (edition.applicability_end IS NULL
+                 OR policy.contract_date<=edition.applicability_end)))
             LEFT JOIN coverage_rule_evidence AS linked
               ON linked.coverage_rule_version_id = version.id
             LEFT JOIN evidence

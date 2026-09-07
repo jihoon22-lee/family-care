@@ -628,3 +628,29 @@ apps/api/tests workers/analyzer/tests -q`, 245.53초). 마지막 표 위치 비�
 254 sources, 계약·컨테이너 정의·workflow·문서 50개·안전 803 paths·diff 검사가 통과했다.
 실제 문서/provider·운영 migration·Windows/모바일·이미지 빌드/배포 검증은 이번 변경에서
 실행하지 않았다. B02의 판본 연결·보호된 수용과 최신 원격 CI는 후속이다.
+
+## Component-scoped Terms editions
+
+`0039_component_terms`와 API startup 소비자로 같은 파일의 검증된 terms component마다
+판본을 등록한다. 원래 component·페이지·판본일·metadata snapshot과 등록/보류 이력은
+불변이며 상품명이 없으면 명시된 상품코드만 표시한다. 같은 bytes의 수동 판본과 삭제
+결정을 보존하고, 수동/자동 등록을 같은 transaction lock으로 직렬화한다.
+
+Clause 생성·검색·링크·현재 규칙/계산 사용은 판본의 페이지 범위와 현재 component를
+확인한다. 제외·삭제·범위 교정은 현재 사용에서 제외하되 과거 규칙 버전 조회는 유지한다.
+누락·상충·잘못된 적용 날짜를 무제한 적용으로 해석하지 않으며 판본일은 적용일과 별개다.
+복원 실패가 먼저 commit되던 경로도 고쳐 tombstone/version을 보존한다. API와 생성 Web
+계약에 component/page/date를 추가하고 판본 선택에서 날짜·페이지를 표시한다.
+
+2026-09-08 03:00~03:40 KST, `1a8d494` 위의 해당 migration/API/소비/UI/테스트/설계 변경을
+검증했다. 범위·기간·복원·재가져오기·정규화 회귀와 API/소비/UI 누락의 RED를 확인했다.
+`web:check`는 포맷 수정 후 **171개·빌드 통과**. 전체 기본 pytest는 추가 nullable 응답의
+기존 기대값 수정 후 **2,063 passed / 374 deselected / 3 subtests**였다. 전체 합성
+PostgreSQL은 **374 passed / 2,063 deselected**, 292.69초였다. 그 뒤 Unicode 정규화 확장의
+DB 길이 오류를 재현하여 원장과 같은 key 길이 제한을 적용했고 관련 PG **22개**를 재검증했다.
+`CI=true ... test:e2e`의 Chromium mock **17개**도 통과했다. 실제 Windows/모바일은 미검증이다.
+Ruff format 614개/lint, mypy 255개, 생성 계약·container/workflow·문서/안전·diff도 통과했다.
+빈 합성 DB의 `0039 → 0038 → head` 왕복을 실행했다. 독립 정적 리뷰의 정규화/기간/복원/
+동일 bytes 보존 발견 사항을 반영했다. 실제 자료/provider·운영 변경·태그·배포는 실행하지
+않았다. 다중 근거 자동 적용 연결, 기존 프로그램 component 보강·본문 범위 확장과 보호된
+수용은 B02 후속이며 이 판본 등록만으로 완료를 주장하지 않는다.

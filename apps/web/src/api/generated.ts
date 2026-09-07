@@ -2558,12 +2558,16 @@ export interface TermsEditionResponse {
   applicability_start: string | null;
   content_sha256: string;
   document_version_id: string;
+  edition_date?: string | null;
   id: string;
   insurer_display: string;
   insurer_key: string;
   normalization_version: string;
   product_display: string;
   product_key: string;
+  source_component_id?: string | null;
+  source_page_end?: number | null;
+  source_page_start?: number | null;
   version: number;
 }
 

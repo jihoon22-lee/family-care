@@ -11,6 +11,7 @@ import type {
   TermsEditionResponse,
 } from "../../api/generated";
 import { ClauseSearchPage } from "./ClauseSearchPage";
+import { ClauseSearchFilters } from "./ClauseSearchFilters";
 import { renderWithProviders } from "../../test/renderWithProviders";
 
 const TERMS_EDITION_ID = "synthetic-terms-edition-001";
@@ -109,6 +110,42 @@ function installFetch(
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+it("distinguishes editions of the same product by printed date and source pages", () => {
+  renderWithProviders(
+    <ClauseSearchFilters
+      editions={[
+        {
+          ...TERMS_EDITIONS[0],
+          edition_date: "2024-01-01",
+          source_page_start: 1,
+          source_page_end: 12,
+        },
+        {
+          ...TERMS_EDITIONS[0],
+          id: "synthetic-edition-002",
+          edition_date: "2025-01-01",
+          source_page_start: 13,
+          source_page_end: 24,
+        },
+      ]}
+      values={{
+        effectiveOn: "",
+        insurerKey: "",
+        productKey: "",
+        termsEditionId: "",
+      }}
+      onChange={vi.fn()}
+      onReset={vi.fn()}
+    />,
+  );
+  expect(
+    screen.getByRole("option", { name: /판본일 2024-01-01.*1–12쪽/ }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("option", { name: /판본일 2025-01-01.*13–24쪽/ }),
+  ).toBeInTheDocument();
 });
 
 describe("private clause search", () => {

@@ -13,6 +13,23 @@
 
 `TermsEdition`은 product/contract applicability, effective period, DocumentVersion과 content hash를 가진다. `Clause`는 parent-child hierarchy, type, label, normalized title/text, 1-based page range와 optional bbox Evidence를 가진다.
 
+v0.5의 프로그램 판본은 검증된 terms component마다 등록하며 동일 파일의 여러 판본을
+구분한다. `source_component_id`, 원래 물리 페이지 범위, 판본일과 metadata 원문 검증
+snapshot은 불변이다. 판본일을 적용 시작일로 바꾸지 않는다. 상품명 없이 명시된 상품코드만
+있으면 그 코드를 표시값으로 보존한다. 기존 전체 문서 판본에는 component를 추정하여
+채우지 않으며 같은 가정/bytes의 수동 판본·삭제 이력은 자동 등록보다 우선한다.
+수동/프로그램 등록은 같은 content transaction lock으로 직렬화한다.
+
+Clause 전체 범위와 Evidence는 해당 판본 범위 안에 있어야 한다. 현재 catalog·검색·링크·
+규칙 사용은 component 역할/범위 교정·제외·삭제와 문서/구성원 삭제를 확인하며 검색 제한
+이전에 무효 범위를 제외한다. 이미 저장한 규칙 버전의 이력 조회는 원래 snapshot을 유지한다.
+복원 실패는 transaction 안에서 끝내므로 삭제 상태/버전이 바뀌지 않는다.
+
+신규 판본은 원문 적용 시작일과 선택적 종료일을 검증한 경우에만 기존 날짜 검증 경로를
+사용한다. 누락·잘못된 날짜·상충 기간을 무제한 적용으로 해석하지 않는다. 전체 문서의
+legacy NULL 날짜 의미는 호환용으로 유지한다. 판본 등록은 계약에 대한 적용 연결과 별개다.
+코드·판본 참조·계약일 등 다중 근거 연결과 더 넓은 본문 범위 생산은 B02 후속 작업이다.
+
 지원 type:
 
 - chapter, section, article, paragraph, item

@@ -99,6 +99,10 @@ class TermsEditionResponse(BaseModel):
     content_sha256: str = Field(pattern=_SHA256_PATTERN)
     normalization_version: str = Field(min_length=1, max_length=32)
     version: int = Field(ge=1)
+    source_component_id: UUID | None = None
+    source_page_start: int | None = Field(default=None, ge=1)
+    source_page_end: int | None = Field(default=None, ge=1)
+    edition_date: date | None = None
 
     @classmethod
     def from_domain(cls, edition: TermsEdition) -> TermsEditionResponse:
@@ -114,6 +118,10 @@ class TermsEditionResponse(BaseModel):
             content_sha256=edition.content_sha256,
             normalization_version=edition.normalization_version,
             version=edition.version,
+            source_component_id=edition.source_component_id,
+            source_page_start=edition.source_page_start,
+            source_page_end=edition.source_page_end,
+            edition_date=edition.edition_date,
         )
 
 

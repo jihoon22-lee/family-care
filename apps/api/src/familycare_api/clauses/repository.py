@@ -75,6 +75,11 @@ def _terms_edition(row: dict[str, Any]) -> TermsEdition:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         deleted_at=row.get("deleted_at"),
+        source_component_id=row.get("source_component_id"),
+        source_page_start=row.get("source_page_start"),
+        source_page_end=row.get("source_page_end"),
+        edition_date=row.get("edition_date"),
+        source_period_verified=row.get("source_period_verified", False),
     )
 
 
@@ -99,8 +104,39 @@ _TERMS_COLUMNS = """
     id, household_space_id, document_version_id,
     insurer_display, insurer_key, product_display, product_key,
     applicability_start, applicability_end, content_sha256,
-    normalization_version, version, created_at, updated_at, deleted_at
+    normalization_version, version, created_at, updated_at, deleted_at,
+    source_component_id,source_page_start,source_page_end,edition_date,
+    terms_edition_has_printed_period(id) AS source_period_verified
 """
+
+_TERMS_CURRENT_SOURCE = """(source_component_id IS NULL OR terms_edition_allows_pages(
+  id,household_space_id,source_page_start,source_page_end))"""
+
+
+def _lock_terms_source(
+    connection: psycopg.Connection[dict[str, Any]], scope: HouseholdScope, edition_id: UUID
+) -> None:
+    connection.execute(
+        """SELECT c.id FROM terms_editions e
+        JOIN insurance_document_components c ON c.id=e.source_component_id
+        JOIN family_members m ON m.id=c.family_member_id
+        JOIN document_versions v ON v.id=c.document_version_id
+        JOIN documents d ON d.id=v.document_id
+        WHERE e.id=%s AND e.household_space_id=%s
+        FOR SHARE OF e,c,m,d""",
+        (edition_id, scope.household_space_id),
+    ).fetchall()
+
+
+def _lock_terms_content(
+    connection: psycopg.Connection[dict[str, Any]], household_id: UUID, content_sha256: str
+) -> None:
+    """Serialize manual and program edition registration across same-byte imports."""
+
+    connection.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended(%s || ':' || %s,0))",
+        (str(household_id), content_sha256),
+    )
 
 
 class TermsEditionRepository:
@@ -126,6 +162,13 @@ class TermsEditionRepository:
     ) -> TermsEdition:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                _lock_terms_content(connection, scope.household_space_id, content_sha256)
+                if connection.execute(
+                    "SELECT 1 FROM terms_editions WHERE household_space_id=%s "
+                    "AND content_sha256=%s AND source_component_id IS NOT NULL LIMIT 1",
+                    (scope.household_space_id, content_sha256),
+                ).fetchone():
+                    raise ClauseStateConflict
                 row = connection.execute(
                     f"""
                     INSERT INTO terms_editions (
@@ -191,6 +234,8 @@ class TermsEditionRepository:
         deleted_only: bool = False,
     ) -> tuple[TermsEdition, ...]:
         predicate = "deleted_at IS NOT NULL" if deleted_only else "deleted_at IS NULL"
+        if not deleted_only:
+            predicate += f" AND {_TERMS_CURRENT_SOURCE}"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 rows = connection.execute(
@@ -215,6 +260,8 @@ class TermsEditionRepository:
         deleted_only: bool = False,
     ) -> TermsEdition | None:
         predicate = "deleted_at IS NOT NULL" if deleted_only else "deleted_at IS NULL"
+        if not deleted_only:
+            predicate += f" AND {_TERMS_CURRENT_SOURCE}"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 row = connection.execute(
@@ -270,6 +317,8 @@ class TermsEditionRepository:
         target = "NULL" if restore else "clock_timestamp()"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                if restore:
+                    _lock_terms_source(connection, scope, terms_edition_id)
                 row = connection.execute(
                     f"""
                     UPDATE terms_editions
@@ -281,6 +330,18 @@ class TermsEditionRepository:
                     """,
                     (terms_edition_id, scope.household_space_id, version),
                 ).fetchone()
+                if restore and row is not None and row["source_component_id"] is not None:
+                    allowed = connection.execute(
+                        "SELECT terms_edition_allows_pages(%s,%s,%s,%s) AS valid",
+                        (
+                            terms_edition_id,
+                            scope.household_space_id,
+                            row["source_page_start"],
+                            row["source_page_end"],
+                        ),
+                    ).fetchone()
+                    if allowed is None or not allowed["valid"]:
+                        raise ClauseVersionConflict
         except psycopg.Error:
             raise ClauseRepositoryUnavailable from None
         if row is None:
@@ -366,6 +427,22 @@ class ClauseRepository:
             raise ClauseEvidenceInvalid
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                _lock_terms_source(connection, scope, terms_edition_id)
+                allowed = connection.execute(
+                    "SELECT terms_edition_allows_pages(id,household_space_id,%s,%s) AS valid "
+                    "FROM terms_editions WHERE id=%s AND household_space_id=%s "
+                    "AND deleted_at IS NULL FOR SHARE",
+                    (
+                        physical_page_start,
+                        physical_page_end,
+                        terms_edition_id,
+                        scope.household_space_id,
+                    ),
+                ).fetchone()
+                if allowed is None:
+                    raise TermsEditionNotFound
+                if not allowed["valid"]:
+                    raise ClauseEvidenceInvalid
                 row = connection.execute(
                     """
                     INSERT INTO clauses (
@@ -482,6 +559,8 @@ class ClauseRepository:
                     """
                     SELECT 1 FROM terms_editions
                     WHERE id = %s AND household_space_id = %s AND deleted_at IS NULL
+                      AND (source_component_id IS NULL OR terms_edition_allows_pages(
+                        id,household_space_id,source_page_start,source_page_end))
                     """,
                     (terms_edition_id, scope.household_space_id),
                 ).fetchone()
@@ -509,6 +588,8 @@ class ClauseRepository:
               ON edition.id = clause.terms_edition_id
              AND edition.household_space_id = clause.household_space_id
              AND edition.deleted_at IS NULL
+             AND terms_edition_allows_pages(edition.id,edition.household_space_id,
+               clause.physical_page_start,clause.physical_page_end)
             LEFT JOIN clause_evidence AS link ON link.clause_id = clause.id
             LEFT JOIN evidence
               ON evidence.id = link.evidence_id
@@ -602,6 +683,8 @@ class ClauseRepository:
                         WHERE edition.id = clauses.terms_edition_id
                           AND edition.household_space_id = clauses.household_space_id
                           AND edition.deleted_at IS NULL
+                          AND terms_edition_allows_pages(edition.id,edition.household_space_id,
+                            clauses.physical_page_start,clauses.physical_page_end)
                       )
             """
             if restore
@@ -609,6 +692,14 @@ class ClauseRepository:
         )
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                if restore:
+                    source = connection.execute(
+                        "SELECT terms_edition_id FROM clauses WHERE id=%s "
+                        "AND household_space_id=%s",
+                        (clause_id, scope.household_space_id),
+                    ).fetchone()
+                    if source is not None:
+                        _lock_terms_source(connection, scope, source["terms_edition_id"])
                 row = connection.execute(
                     f"""
                     UPDATE clauses
@@ -633,13 +724,13 @@ class ClauseRepository:
                     if restore
                     else ()
                 )
+                if restore and len(clauses) != 1:
+                    raise ClauseVersionConflict
         except ClauseVersionConflict:
             raise
         except psycopg.Error:
             raise ClauseRepositoryUnavailable from None
         if restore:
-            if len(clauses) != 1:
-                raise ClauseRepositoryUnavailable
             return clauses[0]
         return None
 
@@ -669,6 +760,8 @@ WITH ranked AS (
     WHERE c.household_space_id = %(household_space_id)s
       AND c.deleted_at IS NULL
       AND t.deleted_at IS NULL
+      AND terms_edition_allows_pages(t.id,t.household_space_id,
+        c.physical_page_start,c.physical_page_end)
       AND (
         plainto_tsquery('simple', %(normalized_query)s) @@ c.search_vector
         OR (
@@ -850,6 +943,9 @@ class RiderClauseLinkRepository:
                       ON clause.id = link.clause_id
                      AND clause.household_space_id = link.household_space_id
                      AND clause.deleted_at IS NULL
+                     AND clause.terms_edition_id=link.terms_edition_id
+                     AND terms_edition_allows_pages(clause.terms_edition_id,
+                       clause.household_space_id,clause.physical_page_start,clause.physical_page_end)
                     LEFT JOIN rider_clause_link_evidence AS linked
                       ON linked.rider_clause_link_id = link.id
                     LEFT JOIN evidence ON evidence.id = linked.evidence_id
@@ -1056,11 +1152,13 @@ class RiderClauseLinkRepository:
             ),
         )
 
+        _lock_terms_source(connection, scope, link_row["terms_edition_id"])
         edition_row = connection.execute(
             f"""
             SELECT {_TERMS_COLUMNS}
             FROM terms_editions
             WHERE id = %s AND household_space_id = %s AND deleted_at IS NULL
+            FOR SHARE
             """,
             (link_row["terms_edition_id"], scope.household_space_id),
         ).fetchone()
