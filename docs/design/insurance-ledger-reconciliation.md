@@ -193,9 +193,12 @@ Evidence 원장, 후보 검토를 막지 않으며 각 경계가 독립적으로
 기존 API background consumer가 30초 간격으로 연결 이력을 갱신한다. 현재 유효한 이력만
 통합 계약 조회의 `PROGRAM_VERIFIED_SOURCE_IDENTITY`로 표시하고 Web에서 자동 연결을
 다시 검토할 수 있다. 새 사용자 확인은 기존 mutation 계약의 `expected_current_link_id`를
-사용한다. 가입/유효성·약관 판본·청구 가능성은 별도 상태로 유지한다. 한 번에 읽는 source inventory의
-JSON 크기를 합계 64 MiB로 제한하고 이를 넘으면 자동 연결을 보류한다. 과거 이력과 다른 원장은
-보존한다. 약관 판본/component 연결은 후속 작업이다.
+사용한다. 가입/유효성·약관 판본·청구 가능성은 별도 상태로 유지한다. source inventory는 현재
+증권 검토의 alias와 물리 페이지만 요청한다. 각 페이지의 전체 native/OCR 노드와 명시된
+문맥 노드를 모든 동일 bytes 재추출본에서 SQL로 투영하고, 그 합계가 64 MiB를 넘으면 해당
+페이지 연결만 보류한다. 다른 약관·페이지·중복된 source snapshot 본문은 Python으로 읽지
+않으며 마지막 페이지 하나만 캐시한다. 이 제한은 직렬화 JSON 제한이며 전체 프로세스나 DB의
+RAM 상한은 아니다. 과거 이력과 원본 IR은 보존한다. 약관 판본/component 연결은 후속 작업이다.
 
 
 상세 담보와 로컬 안내의 optional `canonical_identity`는 공통 ref와 두 출처의 원래 ID,

@@ -238,6 +238,76 @@ def test_canonical_writer_preserves_sources_and_revalidates_current_identity(
         ).fetchone() == (619,)
 
 
+def test_inventory_budget_measures_needed_page_nodes_not_duplicate_full_sources(
+    canonical_database: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_api.insurance_reconciliation import canonical_repository as canonical
+
+    url, job, scope, coverage, rider = canonical_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        total, projected = connection.execute(
+            "SELECT octet_length(structure_json::text), octet_length(jsonb_build_object("
+            "'lineage',structure_json->'lineage','nodes',structure_json->'nodes')::text) "
+            "FROM document_structure_generations WHERE document_version_id=%s",
+            (job.document_version_id,),
+        ).fetchone()
+    assert projected + 10 < total
+    monkeypatch.setattr(canonical, "_MAX_INVENTORY_BYTES", projected + 10)
+    repository = canonical.CanonicalLinkRepository(url)
+    assert repository.refresh(scope) == 1
+    assert repository.read_current(scope)[0].rider_id == rider
+    # Insufficient space for even the complete source page cannot justify a link.
+    monkeypatch.setattr(canonical, "_MAX_INVENTORY_BYTES", projected - 1)
+    assert repository.read_current(scope) == ()
+
+
+def test_page_inventory_retains_context_and_isolates_an_oversized_other_page(
+    canonical_database: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_api.insurance_reconciliation import canonical_repository as canonical
+    from psycopg.rows import dict_row
+
+    url, job, scope, coverage, rider = canonical_database
+    # Exercise the storage projection with wholly synthetic extra nodes. These
+    # are inventory fixtures, not enrollment publications or verified source data.
+    header = {"node_id": "synthetic-context", "page_number": 2, "text": "Rider name"}
+    bulk = {"node_id": "synthetic-other-page", "page_number": 2, "text": "Sample " * 20000}
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        original = connection.execute(
+            "SELECT * FROM document_structure_generations WHERE document_version_id=%s",
+            (job.document_version_id,),
+        ).fetchone()
+        structure = original["structure_json"]
+        original_ids = {node["node_id"] for node in structure["nodes"]}
+        structure["nodes"][0]["context_node_ids"] = [header["node_id"]]
+        structure["nodes"].extend([header, bulk])
+        second = uuid4()
+        connection.execute(
+            "INSERT INTO document_structure_generations(id,household_space_id,family_member_id,"
+            "batch_item_id,document_version_id,extraction_id,identity_sha256,structure_version,"
+            "structure_json,plan_json,range_plan_complete) SELECT %s,household_space_id,"
+            "family_member_id,batch_item_id,document_version_id,extraction_id,%s,structure_version,"
+            "%s,plan_json,range_plan_complete FROM document_structure_generations WHERE id=%s",
+            (second, "8" * 64, Jsonb(structure), original["id"]),
+        )
+        monkeypatch.setattr(canonical, "_MAX_INVENTORY_BYTES", 100000)
+        inventory = canonical._SourceInventory(connection, scope)
+        assert inventory.page(structure["lineage"]["content_sha256"], 2) == {}
+        pages = inventory.page(structure["lineage"]["content_sha256"], 1)
+        assert set(pages) == {original["id"], second}
+        assert set(pages[second]) == {"lineage", "nodes"}
+        assert {node["node_id"] for node in pages[second]["nodes"]} == original_ids | {
+            header["node_id"]
+        }
+        assert pages[second]["lineage"] == structure["lineage"]
+        assert (
+            canonical._SourceInventory(connection, HouseholdScope(uuid4())).page(
+                structure["lineage"]["content_sha256"], 1
+            )
+            == {}
+        )
+
+
 @pytest.mark.parametrize(
     "change",
     [

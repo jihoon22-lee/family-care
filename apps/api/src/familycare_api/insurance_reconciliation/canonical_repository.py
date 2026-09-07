@@ -27,6 +27,8 @@ from familycare_api.insurance_reconciliation.canonical_match import (
 from familycare_api.insurance_reconciliation.source_inventory import unique_native_name_location
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
 
+_MAX_INVENTORY_BYTES = 64 * 1024 * 1024
+
 
 class CanonicalLinkError(RuntimeError):
     def __init__(self) -> None:
@@ -76,6 +78,92 @@ def _digest(value: object) -> str:
     ).hexdigest()
 
 
+class _SourceInventory:
+    """Read every generation of one bound page; retain only the last page in RAM."""
+
+    def __init__(
+        self, connection: psycopg.Connection[dict[str, Any]], scope: HouseholdScope
+    ) -> None:
+        self.connection = connection
+        self.scope = scope
+        self.key: tuple[str, int] | None = None
+        self.value: dict[UUID, dict[str, Any]] = {}
+
+    def page(self, content_sha256: str, physical_page: int) -> dict[UUID, dict[str, Any]]:
+        key = content_sha256, physical_page
+        if self.key == key:
+            return self.value
+        # SQL projects complete page nodes and their explicit context references.
+        # Both published and unpublished generations participate. The byte bound
+        # covers all projections of this page before any JSON enters the driver.
+        rows = self.connection.execute(
+            """
+            WITH generations AS MATERIALIZED (
+              SELECT g.id,g.structure_json FROM document_structure_generations g
+              JOIN document_versions v ON v.id=g.document_version_id
+              JOIN documents d ON d.id=v.document_id AND d.deleted_at IS NULL
+              WHERE g.household_space_id=%s AND v.content_sha256=%s
+              ORDER BY g.id LIMIT 10001
+            ), projected AS MATERIALIZED (
+              SELECT g.id,jsonb_build_object('lineage',g.structure_json->'lineage',
+                'nodes',page.nodes) AS structure
+              FROM generations g CROSS JOIN LATERAL (
+                WITH nodes AS MATERIALIZED (
+                  SELECT node,position FROM jsonb_array_elements(g.structure_json->'nodes')
+                    WITH ORDINALITY AS n(node,position)
+                ), selected AS MATERIALIZED (
+                  SELECT * FROM nodes WHERE node->'page_number'=to_jsonb(%s::integer)
+                ), contexts AS (
+                  SELECT jsonb_array_elements_text(
+                    COALESCE(node->'context_node_ids','[]'::jsonb)) AS id FROM selected
+                )
+                SELECT COALESCE(jsonb_agg(node ORDER BY position),'[]'::jsonb) AS nodes
+                FROM nodes WHERE node->'page_number'=to_jsonb(%s::integer)
+                  OR node->>'node_id' IN (SELECT id FROM contexts)
+              ) page
+            )
+            SELECT id, CASE WHEN count(*) OVER () <= 10000 AND
+                sum(octet_length(structure::text)) OVER () <= %s
+              THEN structure ELSE NULL END AS structure_json FROM projected
+            """,
+            (
+                self.scope.household_space_id,
+                content_sha256,
+                physical_page,
+                physical_page,
+                _MAX_INVENTORY_BYTES,
+            ),
+        ).fetchall()
+        self.key = key
+        self.value = (
+            {row["id"]: row["structure_json"] for row in rows}
+            if rows and all(row["structure_json"] is not None for row in rows)
+            else {}
+        )
+        return self.value
+
+
+def _certificate_pages(coverages: list[dict[str, Any]]) -> dict[str, set[int]]:
+    pages: dict[str, set[int]] = defaultdict(set)
+    for coverage in coverages:
+        source = coverage["source_record_json"]
+        if _digest(source) != coverage["source_record_digest_sha256"]:
+            continue
+        review = source.get("certificate_review")
+        if not isinstance(review, dict):
+            continue
+        locations = review.get("evidence_locations")
+        if not isinstance(locations, list):
+            continue
+        for location in locations:
+            if not isinstance(location, dict):
+                continue
+            alias, page = location.get("document_alias"), location.get("physical_page")
+            if isinstance(alias, str) and type(page) is int and 1 <= page <= 500:
+                pages[alias].add(page)
+    return pages
+
+
 def _proposals(
     connection: psycopg.Connection[dict[str, Any]], scope: HouseholdScope
 ) -> tuple[CanonicalCoverageLink, ...]:
@@ -104,6 +192,9 @@ def _proposals(
         raise CanonicalLinkError
     if not coverages:
         return ()
+    requested_pages = _certificate_pages(coverages)
+    if not requested_pages:
+        return ()
     run_id = coverages[0]["import_run_id"]
     bindings = connection.execute(
         """
@@ -121,8 +212,9 @@ def _proposals(
         JOIN extractions x ON x.id=e.extraction_id AND x.document_version_id=v.id AND
         x.status='succeeded'
         WHERE b.import_run_id=%s AND b.household_space_id=%s AND b.is_current
+          AND d.source_alias=ANY(%s)
     """,
-        (run_id, scope.household_space_id),
+        (run_id, scope.household_space_id, list(requested_pages)),
     ).fetchall()
     by_alias = {
         row["source_alias"]: VerifiedDocumentBinding(
@@ -136,6 +228,9 @@ def _proposals(
     }
     if not by_alias:
         return ()
+    bound_pages: dict[str, set[int]] = defaultdict(set)
+    for alias, binding in by_alias.items():
+        bound_pages[binding.content_sha256].update(requested_pages[alias])
     rows = connection.execute(
         """
         SELECT p.candidate_version_id, p.policy_contract_id,p.rider_id,
@@ -211,43 +306,24 @@ def _proposals(
     ).fetchall()
     if len(rows) > 10000:
         raise CanonicalLinkError
-    retained = connection.execute(
-        """
-        SELECT g.id, octet_length(g.structure_json::text) AS byte_count
-        FROM document_structure_generations g
-        JOIN document_versions v ON v.id=g.document_version_id
-        JOIN documents d ON d.id=v.document_id AND d.deleted_at IS NULL
-        WHERE g.household_space_id=%s AND v.content_sha256=ANY(%s)
-        ORDER BY g.id LIMIT 10001
-    """,
-        (scope.household_space_id, list({b.content_sha256 for b in by_alias.values()})),
-    ).fetchall()
-    if len(retained) > 10000:
-        raise CanonicalLinkError
-    if sum(row["byte_count"] for row in retained) > 64 * 1024 * 1024:
-        return ()
-    structures = connection.execute(
-        "SELECT id,structure_json FROM document_structure_generations WHERE id=ANY(%s)",
-        ([row["id"] for row in retained],),
-    ).fetchall()
-    inventory = {row["id"]: row["structure_json"] for row in structures}
+    inventory = _SourceInventory(connection, scope)
     candidates: list[ProgramEnrollmentSource] = []
     operational = {}
     located_publications: set[UUID] = set()
     for row in rows:
         if row["candidate_version_id"] in located_publications:
             continue
-        row["structure_json"] = inventory.get(row["generation_id"])
-        if row["structure_json"] is None:
-            continue
         refs = [ref for ref in row["source_refs"] if ref["evidence_id"] in row["name_ids"]]
-        locator = physical_enrollment_locator(
-            row["structure_json"], row["original_rider_name"], refs
-        )
-        if locator is None or locator["content_sha256"] != row["content_sha256"]:
-            continue
         primary = [ref for ref in refs if ref["primary"] and ref["source_role"] == "policy"]
-        if len(primary) != 1:
+        if len(primary) != 1 or primary[0]["page"] not in bound_pages[row["content_sha256"]]:
+            continue
+        structure = inventory.page(row["content_sha256"], primary[0]["page"]).get(
+            row["generation_id"]
+        )
+        if structure is None:
+            continue
+        locator = physical_enrollment_locator(structure, row["original_rider_name"], refs)
+        if locator is None or locator["content_sha256"] != row["content_sha256"]:
             continue
         # Identity follows the original proven mention. A corrected native name
         # is considered only when the original name has no physical proof.
@@ -270,7 +346,6 @@ def _proposals(
             name_source_candidate_version_id=row["name_source_candidate_version_id"],
         )
         candidates.append(enrollment)
-        inventory[row["generation_id"]] = row["structure_json"]
         operational[row["rider_id"]] = row
     user_links = connection.execute(
         """
@@ -331,30 +406,29 @@ def _proposals(
             for link in user_links
         ):
             continue
-        if not all(
-            unique_native_name_location(
-                inventory[p.generation_id],
-                p.private_evidence_location["physical_page"],
-                source["certificate_review"]["name"],
-                p.physical_locator,
-            )
-            for p in match.proofs
-        ):
-            continue
-        if any(
-            not unique_native_name_location(
-                structure,
+        source_unique = True
+        for proof in match.proofs:
+            structures = inventory.page(
+                proof.physical_locator["content_sha256"],
                 proof.private_evidence_location["physical_page"],
-                source["certificate_review"]["name"],
-                proof.physical_locator,
             )
-            for proof in match.proofs
-            for structure in inventory.values()
-            if structure["lineage"]["content_sha256"] == proof.physical_locator["content_sha256"]
-        ):
+            if proof.generation_id not in structures or not all(
+                unique_native_name_location(
+                    structure,
+                    proof.private_evidence_location["physical_page"],
+                    source["certificate_review"]["name"],
+                    proof.physical_locator,
+                )
+                for structure in structures.values()
+            ):
+                source_unique = False
+                break
+        if not source_unique:
             continue
         row = operational[match.rider_id]
-        proof = tuple(json.loads(json.dumps(asdict(p), default=str)) for p in match.proofs)
+        retained_proofs = tuple(
+            json.loads(json.dumps(asdict(p), default=str)) for p in match.proofs
+        )
         fields: tuple[CoverageConflictField, ...] = ("insured_amount", "currency", "display_name")
         field_conflicts = tuple(field for field in fields if coverage[field] != row[field])
         data = dict(
@@ -367,7 +441,7 @@ def _proposals(
             ledger_version=row["ledger_version"],
             field_value_conflict=bool(field_conflicts),
             field_conflicts=field_conflicts,
-            proofs=proof,
+            proofs=retained_proofs,
         )
         fingerprint = _digest({"source_digest": coverage["source_record_digest_sha256"], **data})
         result.append(CanonicalCoverageLink(**data, fingerprint=fingerprint))

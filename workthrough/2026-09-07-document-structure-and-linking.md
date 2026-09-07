@@ -503,3 +503,43 @@ Ruff format 589개/lint, mypy 245개, 문서 50개·안전 782 paths·생성 계
 통과했으며 사용자 proof가 있으면 rollback을 거부하는 회귀도 포함한다. Web·공유 계약·
 manifest/lock 입력은 `4a5d140`과 동일함을 diff로 확인하여 Web 169개/build·Chromium 17개의
 기존 증거를 유지한다. 이 source의 image/CI와 보호된 실제 자료 수용은 별도다.
+
+
+## Bounded source-page reads
+
+공통 담보 연결은 증권 검토에서 실제 참조한 alias/페이지만 조회한다. 같은 bytes의 모든
+재추출본에서 해당 페이지 전체 노드와 명시된 문맥 노드를 SQL로 투영한다. native/OCR,
+미처리 단어, 표와 원문 위치는 그대로 검사하며 중복 source snapshot을 Python으로 읽지
+않는다. 64 MiB JSON 한도는 한 페이지의 모든 재추출본 합계에 적용하며 넘는 페이지는
+연결을 보류한다. 다른 페이지의 연결은 계속 가능하고 캐시는 마지막 페이지 하나다.
+
+기존 전체 source JSON 때문에 작은 조회 예산에서도 연결이 누락되는 PG RED를 확인한 뒤
+수정했다. 원문 snapshot 제외·한도 초과 보류·다른 큰 페이지 격리·문맥 노드 보존·다른 가정
+거부와 기존 미발행 중복 이름 회귀를 포함해 canonical PostgreSQL 25개가 통과했다.
+첫 실행은 예시 test DB 이름으로 접속하여 identity guard에서 중단됐고 결과가 없었다.
+올바른 전용 합성 DB 설정 후 위 RED/GREEN을 확인했다. 실제 runtime DB로 fallback하지 않았다.
+
+페이지 투영은 원본 저장 형태나 보험 계약/HTTP 응답을 바꾸지 않는다. 큰 문서의 전체
+IR 보존 용량과 남은 component/판본 연결은 별도 후속 작업이며 이 조회 개선만으로
+전체 문서 처리나 보호된 자료 수용을 완료했다고 보고하지 않는다.
+
+
+Worker의 진행/취소/재개는 전체 IR·범위 계획 대신 완료 여부와 미처리 개수만 조회한다.
+metadata 전용 조회 부재의 PG RED 후 해당 저장소 8개 회귀가 통과했다. 원본·범위 이력,
+취소 상태와 재개 결과는 보존한다. 독립 변경 `677cc25`를 `0dc22d7`로 통합했다.
+
+처음부터 만든 100페이지×1,000단어 실험에서 source JSON 6,247,065 bytes가 원본 단어와
+줄/좌표/출처를 보존하는 IR 77,891,754 bytes로 확장됐다. plan 2,410,180 bytes,
+105,000 nodes·5,000 chunks·누락 0이며 build 2.964초/전체 6.234초, peak RSS
+465,476 KiB였다. 이는 구조화 성공 측정이며 현재 64 MiB DB 보존 성공은 아니다.
+parser 한도를 올리지 않고 전체 보존 방식을 개선할 필요가 확인됐다. 실제 자료의 크기나
+본문에서 만든 fixture가 아니며 외부 전송은 없었다.
+
+
+2026-09-08 00:46~00:51 KST, `0dc22d7` + 이 절의 canonical 조회/테스트/문서 변경에서
+기본 Python **1,983 passed / 311 deselected / 3 subtests**, 전체 합성 PostgreSQL
+**310 passed / 1,701 deselected**가 통과했다. 이름 충돌 변수의 mypy 오류와 후속 줄 길이
+오류를 수정한 뒤 Ruff format 590개/lint·mypy 245개, 생성 계약·container/workflow 정적
+검사·diff가 통과했다. Web/공유 계약/manifest/lock은 `c9fe22c`와 동일하여 앞선
+Web 169개/build·Chromium mock 17개 증거를 유지한다. image/CI는 push 후 별도로 확인한다.
+실제 원문·provider·runtime migration·태그·배포 변경은 없다.
