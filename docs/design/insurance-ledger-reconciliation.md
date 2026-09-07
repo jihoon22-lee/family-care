@@ -195,8 +195,7 @@ Evidence 원장, 후보 검토를 막지 않으며 각 경계가 독립적으로
 다시 검토할 수 있다. 새 사용자 확인은 기존 mutation 계약의 `expected_current_link_id`를
 사용한다. 가입/유효성·약관 판본·청구 가능성은 별도 상태로 유지한다. 한 번에 읽는 source inventory의
 JSON 크기를 합계 64 MiB로 제한하고 이를 넘으면 자동 연결을 보류한다. 과거 이력과 다른 원장은
-보존한다. 사용자 확인으로 최초 생성된 publication만 있는 경우의 자동 연결과 약관
-판본/component 연결은 후속 작업이다.
+보존한다. 약관 판본/component 연결은 후속 작업이다.
 
 
 상세 담보와 로컬 안내의 optional `canonical_identity`는 공통 ref와 두 출처의 원래 ID,
@@ -211,3 +210,20 @@ JSON 크기를 합계 64 MiB로 제한하고 이를 넘으면 자동 연결을 �
 identity 조회 실패는 savepoint 안에서 격리하여 기존 private catalog·통합 계약·로컬 안내를
 숨기지 않는다. 실패한 identity는 현재 공통 연결로 반환하지 않는다. 과거 결과의 원본 JSON은
 새 연결이나 원장 교정 때문에 다시 쓰지 않으며 새 분석은 최신 source 검증을 사용한다.
+
+
+`0035_user_identity_proof`는 최초 publication이 사용자 확인인 경우에도 native 원문에서
+identity를 독립적으로 검증한다. proof의 `publication_authority`와
+`name_source_candidate_version_id`는 원래 확인 주체의 종류와 이름을 가져온 정확한 후보
+버전을 남긴다. 기존 사용자 publication을 프로그램 publication으로 다시 쓰지 않는다.
+원래 이름의 물리 위치를 우선 사용하고 원래 이름에 위치 근거가 없을 때만 교정된 이름을
+같은 source 범위의 native 원문과 대조한다. 원장 표시명 변경은 원래 담보 identity를 바꾸지
+않는다. 현재 편집 중인 후보가 있어도 마지막 publication과 원장 값이 유효하면 연결을
+유지한다. 계약 연결의 명시적 거부·충돌과 삭제된 문서/관계는 계속 별도로 반영한다.
+
+canonical 표시명과 증권 검토의 원래 이름이 달라도 양쪽의 canonical 계약/담보 ID가
+명시적으로 일치하면 증권 검토 이름으로 원문을 검증한다. 전체 원문 중복 검사는 이 원래
+이름을 사용한다. 알려진 source alias를 활용하는 경로이며 이름 유사도만으로 연결하지
+않는다. 원래 publication authority를 속이거나 다른 후보를 이름 근거로 쓰는 DB 입력은
+거부한다. 사용자 publication을 참조하는 새 이력이 있으면 지원하지 않는 이전 guard로의
+schema downgrade도 거부하여 원본을 보존한다.

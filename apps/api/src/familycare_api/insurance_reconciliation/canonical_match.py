@@ -34,6 +34,8 @@ class VerifiedDocumentBinding:
 
 @dataclass(frozen=True, repr=False)
 class ProgramEnrollmentSource:
+    """Repository-verified identity, with original publication authority retained."""
+
     household_space_id: UUID
     family_member_id: UUID
     policy_contract_id: UUID
@@ -50,6 +52,8 @@ class ProgramEnrollmentSource:
     authority: str = "PROGRAM_VERIFIED"
     source_layer: str = "native"
     conflict: bool = False
+    publication_authority: Literal["PROGRAM_VERIFIED", "USER_CONFIRMED"] = "PROGRAM_VERIFIED"
+    name_source_candidate_version_id: UUID | None = None
 
 
 @dataclass(frozen=True, repr=False)
@@ -62,6 +66,8 @@ class CanonicalEnrollmentProof:
     document_version_id: UUID
     physical_locator: dict[str, Any]
     source_refs: tuple[dict[str, Any], ...]
+    publication_authority: Literal["PROGRAM_VERIFIED", "USER_CONFIRMED"]
+    name_source_candidate_version_id: UUID
 
 
 @dataclass(frozen=True, repr=False)
@@ -98,6 +104,11 @@ def _binding_valid(binding: VerifiedDocumentBinding) -> bool:
 def _native_box(candidate: ProgramEnrollmentSource) -> tuple[float, ...] | None:
     if (
         candidate.authority != "PROGRAM_VERIFIED"
+        or candidate.publication_authority not in {"PROGRAM_VERIFIED", "USER_CONFIRMED"}
+        or (
+            candidate.name_source_candidate_version_id is not None
+            and not _uuid(candidate.name_source_candidate_version_id)
+        )
         or candidate.source_layer != "native"
         or candidate.conflict is not False
         or not all(
@@ -165,7 +176,14 @@ def _review_name(source: Mapping[str, Any]) -> str | None:
         or not isinstance(source.get("name"), str)
         or not isinstance(review.get("name"), str)
         or not _name(source["name"])
-        or _name(source["name"]) != _name(review["name"])
+        or not _name(review["name"])
+    ):
+        return None
+    if _name(source["name"]) != _name(review["name"]) and not all(
+        isinstance(source.get(key), str)
+        and 0 < len(source[key]) <= 240
+        and source[key] == review.get(key)
+        for key in ("canonical_policy_id", "canonical_rider_id")
     ):
         return None
     mapping = source.get("terms_mapping")
@@ -178,7 +196,9 @@ def _review_name(source: Mapping[str, Any]) -> str | None:
     for key in ("canonical_policy_id", "canonical_rider_id"):
         if key in source and source[key] != review.get(key):
             return None
-    return _name(source["name"])
+    # A canonical label is presentation metadata. Its explicit certificate
+    # review supplies the original name after the stable record IDs agree.
+    return _name(review["name"])
 
 
 def match_canonical_enrollment(
@@ -252,6 +272,11 @@ def match_canonical_enrollment(
                         document_version_id=candidate.document_version_id,
                         physical_locator=deepcopy(dict(candidate.physical_locator)),
                         source_refs=tuple(deepcopy(dict(ref)) for ref in candidate.source_refs),
+                        publication_authority=candidate.publication_authority,
+                        name_source_candidate_version_id=(
+                            candidate.name_source_candidate_version_id
+                            or candidate.publication_candidate_version_id
+                        ),
                     )
                 )
             if len(physical) != 1 or len(identities) != 1:

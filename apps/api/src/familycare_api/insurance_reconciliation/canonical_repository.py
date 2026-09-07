@@ -139,11 +139,13 @@ def _proposals(
     rows = connection.execute(
         """
         SELECT p.candidate_version_id, p.policy_contract_id,p.rider_id,
+          p.authority AS publication_authority,
           r.version AS ledger_version,r.insured_amount,r.display_name,r.currency,
           s.source_refs, f.value AS original_rider_name, g.id AS generation_id,
+          f.candidate_version_id AS name_source_candidate_version_id,
           g.document_version_id,v.content_sha256,j.family_member_id,
           ARRAY(SELECT a.evidence_id::text FROM analysis_candidate_evidence a
-            WHERE a.candidate_version_id=s.candidate_version_id AND a.field_id='rider_name')
+            WHERE a.candidate_version_id=f.candidate_version_id AND a.field_id='rider_name')
             name_ids
         FROM range_enrollment_publications p
         JOIN riders r ON r.id=p.rider_id AND r.household_space_id=p.household_space_id
@@ -152,12 +154,9 @@ def _proposals(
           AND policy.household_space_id=p.household_space_id AND policy.deleted_at IS NULL
         JOIN policy_range_candidate_sources s ON
         s.candidate_version_id=p.source_candidate_version_id
-        JOIN analysis_candidate_fields f ON f.candidate_version_id=s.candidate_version_id AND
-        f.field_id='rider_name'
+        JOIN analysis_candidate_fields f ON f.candidate_version_id IN
+          (s.candidate_version_id,p.candidate_version_id) AND f.field_id='rider_name'
         JOIN analysis_candidate_versions root ON root.id=s.candidate_version_id
-        JOIN analysis_candidate_versions current ON current.review_item_id=root.review_item_id
-          AND current.is_current AND current.deleted_at IS NULL
-          AND current.status IN ('AI_VERIFIED','USER_CONFIRMED')
         JOIN policy_structuring_jobs j ON j.id=s.job_id AND
         j.household_space_id=p.household_space_id
         JOIN document_policy_range_plans plan ON plan.job_id=j.id
@@ -170,7 +169,8 @@ def _proposals(
         x.document_version_id=v.id
         JOIN family_members member ON member.id=j.family_member_id
           AND member.household_space_id=p.household_space_id AND member.deleted_at IS NULL
-        WHERE p.household_space_id=%s AND p.authority='PROGRAM_VERIFIED'
+        WHERE p.household_space_id=%s
+          AND p.authority IN ('PROGRAM_VERIFIED','USER_CONFIRMED')
           AND v.content_sha256=ANY(%s)
           AND NOT EXISTS (
             SELECT 1 FROM jsonb_array_elements(s.source_refs) ref WHERE NOT EXISTS (
@@ -203,7 +203,9 @@ def _proposals(
             AND party.household_space_id=p.household_space_id AND
             party.family_member_id=j.family_member_id
             AND party.role='primary_insured' AND party.deleted_at IS NULL)
-        ORDER BY p.candidate_version_id LIMIT 10001
+        ORDER BY p.candidate_version_id,
+          (f.candidate_version_id=s.candidate_version_id) DESC, f.candidate_version_id
+        LIMIT 10001
     """,
         (scope.household_space_id, list({b.content_sha256 for b in by_alias.values()})),
     ).fetchall()
@@ -231,7 +233,10 @@ def _proposals(
     inventory = {row["id"]: row["structure_json"] for row in structures}
     candidates: list[ProgramEnrollmentSource] = []
     operational = {}
+    located_publications: set[UUID] = set()
     for row in rows:
+        if row["candidate_version_id"] in located_publications:
+            continue
         row["structure_json"] = inventory.get(row["generation_id"])
         if row["structure_json"] is None:
             continue
@@ -244,6 +249,9 @@ def _proposals(
         primary = [ref for ref in refs if ref["primary"] and ref["source_role"] == "policy"]
         if len(primary) != 1:
             continue
+        # Identity follows the original proven mention. A corrected native name
+        # is considered only when the original name has no physical proof.
+        located_publications.add(row["candidate_version_id"])
         enrollment = ProgramEnrollmentSource(
             household_space_id=scope.household_space_id,
             family_member_id=row["family_member_id"],
@@ -258,6 +266,8 @@ def _proposals(
             generation_id=row["generation_id"],
             physical_locator=locator,
             source_refs=tuple(refs),
+            publication_authority=row["publication_authority"],
+            name_source_candidate_version_id=row["name_source_candidate_version_id"],
         )
         candidates.append(enrollment)
         inventory[row["generation_id"]] = row["structure_json"]
@@ -325,7 +335,7 @@ def _proposals(
             unique_native_name_location(
                 inventory[p.generation_id],
                 p.private_evidence_location["physical_page"],
-                source["name"],
+                source["certificate_review"]["name"],
                 p.physical_locator,
             )
             for p in match.proofs
@@ -335,7 +345,7 @@ def _proposals(
             not unique_native_name_location(
                 structure,
                 proof.private_evidence_location["physical_page"],
-                source["name"],
+                source["certificate_review"]["name"],
                 proof.physical_locator,
             )
             for proof in match.proofs

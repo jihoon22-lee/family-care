@@ -48,8 +48,52 @@ def canonical_database(request: pytest.FixtureRequest, monkeypatch: pytest.Monke
             ]
         ),
     )
-    _retain_native(url, job)
-    assert RangeEnrollmentProjector(url).project_pending() == 2
+    fixture_mode = getattr(request, "param", None)
+    label_alias = fixture_mode == "label_alias"
+    confirmation_mode = None if label_alias else fixture_mode
+    _retain_native(
+        url,
+        job,
+        review_rider=confirmation_mode is not None,
+        candidate_name="Synthetic Misread Name" if confirmation_mode == "correct_name" else None,
+    )
+    assert RangeEnrollmentProjector(url).project_pending() == (
+        1 if confirmation_mode is not None else 2
+    )
+    if confirmation_mode is not None:
+        from familycare_api.policies.candidate_models import CandidateCorrectionRequest
+        from familycare_api.policies.candidate_repository import CandidateRepository
+
+        candidates = CandidateRepository(url)
+        candidate_scope = HouseholdScope(job.household_space_id)
+        item = next(
+            item
+            for item in candidates.list_review_items(candidate_scope, status="NEEDS_REVIEW")
+            if item.candidate_kind == "rider"
+        )
+        actor = uuid4()
+        if confirmation_mode != "confirm":
+            field = next(field for field in item.fields if field.field_id == "rider_name")
+            item = candidates.correct_field(
+                candidate_scope,
+                request=CandidateCorrectionRequest(
+                    expected_version=item.expected_version,
+                    field_id="rider_name",
+                    value="Sample Rider"
+                    if confirmation_mode == "correct_name"
+                    else "Friendly Sample Coverage",
+                    evidence_id=field.evidence_ids[0],
+                ),
+                actor_id=actor,
+                review_item_id=item.review_item_id,
+            )
+        candidates.transition(
+            candidate_scope,
+            item.review_item_id,
+            expected_version=item.expected_version,
+            status="USER_CONFIRMED",
+            actor_id=actor,
+        )
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute("TRUNCATE private_knowledge_import_runs CASCADE")
         actor = connection.execute(
@@ -96,6 +140,16 @@ def canonical_database(request: pytest.FixtureRequest, monkeypatch: pytest.Monke
                 "evidence_locations": [{"document_alias": alias, "physical_page": 1, "line": 9000}],
             },
         }
+        if label_alias:
+            source.update(
+                name="Sample Normalized Coverage",
+                canonical_policy_id="synthetic-policy-001",
+                canonical_rider_id="synthetic-coverage-001",
+            )
+            source["certificate_review"].update(
+                canonical_policy_id="synthetic-policy-001",
+                canonical_rider_id="synthetic-coverage-001",
+            )
         digest = hashlib.sha256(
             json.dumps(source, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
@@ -105,13 +159,14 @@ def canonical_database(request: pytest.FixtureRequest, monkeypatch: pytest.Monke
             "component_classification,enrollment_decision,benefit_type,insured_amount,"
             "currency,renewal_state,operational_binding_reason_code,source_record_json,"
             "source_record_digest_sha256) VALUES (%s,%s,%s,%s,'synthetic-coverage-001',"
-            "'Sample Rider','RIDER','BENEFIT_COVERAGE','MATCH','UNKNOWN',317,'KRW',"
+            "%s,'RIDER','BENEFIT_COVERAGE','MATCH','UNKNOWN',317,'KRW',"
             "'UNKNOWN','NO_EXACT_BINDING',%s,%s)",
             (
                 coverage,
                 seed.RUN_ID,
                 job.household_space_id,
                 seed.CONTRACT_ID,
+                source["name"],
                 Jsonb(source),
                 digest,
             ),
@@ -339,12 +394,12 @@ def test_concurrent_refresh_is_idempotent_and_history_cannot_be_changed(
         ):
             with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
                 connection.execute(sql)
-        with pytest.raises(psycopg.Error), connection.transaction():
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
             connection.execute(
                 "INSERT INTO private_knowledge_canonical_links SELECT "
                 "(jsonb_populate_record(NULL::private_knowledge_canonical_links,"
                 "to_jsonb(c)||jsonb_build_object('id',%s::uuid,'household_space_id',"
-                "%s::uuid,'fingerprint',%s))).* FROM private_knowledge_canonical_links c",
+                "%s::uuid,'fingerprint',%s::text))).* FROM private_knowledge_canonical_links c",
                 (uuid4(), uuid4(), "f" * 64),
             )
     assert len(CanonicalLinkRepository(url).read_current(scope)) == 1
@@ -558,3 +613,113 @@ def test_identity_lookup_failure_does_not_hide_existing_catalog(
     assert result.coverages[0].canonical_identity is None
     summary = InsuranceReconciliationRepository(url).get_member(scope, job.family_member_id)
     assert summary is not None and summary.summary.total_contracts == 1
+
+
+@pytest.mark.parametrize("canonical_database", ["confirm", "correct_name", "rename"], indirect=True)
+def test_user_first_enrollment_gets_independent_native_identity_proof(
+    canonical_database: Any,
+) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+
+    url, job, scope, coverage, rider = canonical_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT authority FROM range_enrollment_publications WHERE rider_id=%s", (rider,)
+        ).fetchall() == [("USER_CONFIRMED",)]
+    repository = CanonicalLinkRepository(url)
+    assert repository.refresh(scope) == 1
+    current = repository.read_current(scope)
+    assert len(current) == 1 and current[0].rider_id == rider
+    assert current[0].proofs[0]["publication_authority"] == "USER_CONFIRMED"
+    assert current[0].identity().authority == "PROGRAM_VERIFIED_SOURCE_IDENTITY"
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        for field, value in (
+            ("publication_authority", "PROGRAM_VERIFIED"),
+            ("name_source_candidate_version_id", str(uuid4())),
+        ):
+            proofs = json.loads(json.dumps(current[0].proofs))
+            proofs[0][field] = value
+            with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+                connection.execute(
+                    "INSERT INTO private_knowledge_canonical_links SELECT "
+                    "(jsonb_populate_record(NULL::private_knowledge_canonical_links, "
+                    "to_jsonb(link)||jsonb_build_object('id',%s::uuid,'fingerprint',%s::text, "
+                    "'proofs',%s::jsonb))).* FROM private_knowledge_canonical_links link "
+                    "WHERE link.knowledge_coverage_id=%s",
+                    (uuid4(), "e" * 64, Jsonb(proofs), coverage),
+                )
+        assert connection.execute(
+            "SELECT authority FROM range_enrollment_publications WHERE rider_id=%s", (rider,)
+        ).fetchall() == [("USER_CONFIRMED",)]
+
+
+@pytest.mark.parametrize("canonical_database", ["confirm"], indirect=True)
+def test_user_identity_history_prevents_unsupported_downgrade(canonical_database: Any) -> None:
+    from alembic import command
+    from alembic.config import Config
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from sqlalchemy.exc import DBAPIError
+
+    url, job, scope, coverage, rider = canonical_database
+    assert CanonicalLinkRepository(url).refresh(scope) == 1
+    config = Config(Path(__file__).resolve().parents[3] / "apps/api/alembic.ini")
+    with pytest.raises(DBAPIError, match="user publication identity history must be retained"):
+        command.downgrade(config, "0034_canonical_links")
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
+            "0035_user_identity_proof",
+        )
+    assert len(CanonicalLinkRepository(url).read_current(scope)) == 1
+
+
+@pytest.mark.parametrize("canonical_database", ["label_alias"], indirect=True)
+def test_declared_canonical_label_uses_the_original_reviewed_name(canonical_database: Any) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+
+    url, job, scope, coverage, rider = canonical_database
+    repository = CanonicalLinkRepository(url)
+    assert repository.refresh(scope) == 1
+    current = repository.read_current(scope)
+    assert current[0].rider_id == rider
+    assert current[0].field_conflicts == ("display_name",)
+
+
+@pytest.mark.parametrize("canonical_database", [None, "confirm"], indirect=True)
+def test_pending_correction_keeps_last_published_identity(canonical_database: Any) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from familycare_api.policies.candidate_models import CandidateCorrectionRequest
+    from familycare_api.policies.candidate_repository import CandidateRepository
+
+    url, job, scope, coverage, rider = canonical_database
+    repository = CanonicalLinkRepository(url)
+    assert repository.refresh(scope) == 1
+    original = repository.read_current(scope)
+    status = (
+        "USER_CONFIRMED"
+        if original[0].proofs[0]["publication_authority"] == "USER_CONFIRMED"
+        else "AI_VERIFIED"
+    )
+    candidates = CandidateRepository(url)
+    item = next(
+        item
+        for item in candidates.list_review_items(scope, status=status)
+        if item.candidate_kind == "rider"
+    )
+    field = next(field for field in item.fields if field.field_id == "sum_assured")
+    candidates.correct_field(
+        scope,
+        request=CandidateCorrectionRequest(
+            expected_version=item.expected_version,
+            field_id="sum_assured",
+            value=619,
+            evidence_id=field.evidence_ids[0],
+        ),
+        actor_id=uuid4(),
+        review_item_id=item.review_item_id,
+    )
+    assert repository.read_current(scope) == original
+    assert repository.refresh(scope) == 0
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT insured_amount FROM riders WHERE id=%s", (rider,)
+        ).fetchone() == (317,)

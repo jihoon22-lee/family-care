@@ -108,7 +108,14 @@ def _store_words(url: str, job: Any, blocks: list[dict[str, Any]]) -> None:
 
 
 def _retain_native(
-    url: str, job: Any, *, name: str = "Sample Rider", amount: int = 317, position: int = 0
+    url: str,
+    job: Any,
+    *,
+    name: str = "Sample Rider",
+    amount: int = 317,
+    position: int = 0,
+    candidate_name: str | None = None,
+    review_rider: bool = False,
 ) -> Any:
     ranges = PolicyRangeRepository(url)
     work = ranges.next(job, WORKER, sensitive_terms=("Family Member A",))
@@ -124,7 +131,7 @@ def _retain_native(
             "rider",
             name,
             {
-                "rider_name": name,
+                "rider_name": candidate_name or name,
                 "rider_key": name.lower().replace(" ", "-"),
                 "benefit_type": "unknown",
                 "sum_assured": amount,
@@ -172,8 +179,12 @@ def _retain_native(
                 candidate_id=c.candidate_id,
                 candidate_kind=c.candidate_kind,
                 fields=c.fields,
-                status="AI_VERIFIED",
-                issue_codes=(),
+                status="NEEDS_REVIEW"
+                if review_rider and c.candidate_kind == "rider"
+                else "AI_VERIFIED",
+                issue_codes=("LOW_CONFIDENCE",)
+                if review_rider and c.candidate_kind == "rider"
+                else (),
                 provider_request_ids=("synthetic-structure", "synthetic-verify"),
             )
             for c in candidates

@@ -473,3 +473,33 @@ Web 전체 format/lint/typecheck·**169 tests·build**, Chromium mock **17 tests
 마지막 문구는 필드 차이를 사용자 수정으로 단정하지 않도록 중립적으로 바꾸고 관련 Web
 17개와 typecheck/production build를 다시 통과했다. 실제 backend/browser·실자료·provider·
 Windows/mobile·image build는 로컬 결과에 포함하지 않는다. 기존 runtime·tag·배포 변경은 없다.
+
+
+## Independently verified user enrollment identity
+
+`0035`는 사용자 확인으로 처음 등록한 담보를 기존 native identity 검사에 연결한다.
+원래 publication의 `USER_CONFIRMED`와 정확한 이름 출처 후보 ID를 proof에 보존한다.
+원래 이름이 실제 원문 위치에 있으면 그것을 유지하며, 오독한 이름의 위치가 없을 때는
+교정된 이름을 원문에서 다시 검증한다. canonical 표시명은 명시된 동일 계약/담보 ID 아래의
+증권 검토 이름과 달라도 허용한다. 이름 유사도나 금액으로 합병하지 않는다.
+
+최초 단순 확인·오독 이름 교정·표시명 변경의 3개 PG RED 후 모두 통과했다. 이후 잘못된
+publication 종류/이름 출처를 삽입하는 경우는 실제 DB guard의 CheckViolation으로 거부했다.
+음성 fixture의 JSONB 문자 매개변수 형식을 명시하여 SQL parse 오류를 거부 증거로 쓰지
+않도록 정정했다. 사용자 proof가 있으면 downgrade도 거부한다. 표시명 alias는 helper와
+DB 경로를 각각 RED로 확인했고, 편집 시작만으로 마지막 연결이 사라지는 2개 RED를 고쳐
+프로그램/사용자 publication의 기존 원장·identity를 유지했다.
+
+이 절은 사용자 확인 값 자체를 프로그램 검증 값으로 바꾸지 않는다. 원문 필드 차이와
+기존 사용자 연결 결정은 이전 consumer의 독립 경계로 유지한다. 관련 순수 69개와 기존
+canonical PG 21개 및 추가 편집 대기 2개가 통과했다.
+실제 자료·provider·runtime·tag·배포 변경은 없다. component/판본과 보호된 수용은 남아 있다.
+
+
+`4a5d140` + 이 절의 변경에서 기본 Python **1,981 passed / 308 deselected / 3 subtests**,
+Ruff format 589개/lint, mypy 245개, 문서 50개·안전 782 paths·생성 계약·container/workflow
+정적 검사·diff 검사가 통과했다. 최종 전체 합성 PostgreSQL은 2026-09-08 00:10~00:13 KST에
+**307 passed / 1,699 deselected**로 통과했다. 빈 합성 DB의 `0035` downgrade/upgrade도
+통과했으며 사용자 proof가 있으면 rollback을 거부하는 회귀도 포함한다. Web·공유 계약·
+manifest/lock 입력은 `4a5d140`과 동일함을 diff로 확인하여 Web 169개/build·Chromium 17개의
+기존 증거를 유지한다. 이 source의 image/CI와 보호된 실제 자료 수용은 별도다.

@@ -296,3 +296,41 @@ def test_multiple_private_locations_must_resolve_to_one_rider() -> None:
 )
 def test_binding_must_be_a_verified_policy_document(change: dict[str, Any]) -> None:
     assert _match(binding=replace(_binding(), **change)) is None
+
+
+def test_independent_identity_proof_retains_user_publication_and_name_origin() -> None:
+    candidate = replace(
+        _candidate(),
+        publication_authority="USER_CONFIRMED",
+        name_source_candidate_version_id=_id(44),
+    )
+    result = _match(candidates=(candidate,))
+    assert result is not None
+    assert result.proofs[0].publication_authority == "USER_CONFIRMED"
+    assert result.proofs[0].name_source_candidate_version_id == _id(44)
+
+
+@pytest.mark.parametrize("field", ["publication_authority", "name_source_candidate_version_id"])
+def test_unknown_publication_authority_or_name_origin_is_rejected(field: str) -> None:
+    value = "AI_VERIFIED" if field == "publication_authority" else _id(0)
+    candidate = replace(_candidate(), **{field: value})
+    assert _match(candidates=(candidate,)) is None
+
+
+def test_canonical_display_label_can_differ_from_its_bound_certificate_name() -> None:
+    source = _private()
+    source.update(
+        name="Sample Normalized Coverage",
+        canonical_policy_id="synthetic-policy-001",
+        canonical_rider_id="synthetic-coverage-001",
+    )
+    source["certificate_review"].update(
+        canonical_policy_id="synthetic-policy-001",
+        canonical_rider_id="synthetic-coverage-001",
+    )
+    result = _match(source)
+    assert result is not None and result.rider_id == _candidate().rider_id
+    source["certificate_review"]["canonical_rider_id"] = "synthetic-other-coverage"
+    assert _match(source) is None
+    source["certificate_review"]["canonical_rider_id"] = None
+    assert _match(source) is None
