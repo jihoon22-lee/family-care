@@ -1,5 +1,6 @@
 """Synthetic source-scoped component publication and retained manual decisions."""
 
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from uuid import uuid4
@@ -25,14 +26,101 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
-def publication_database(request: pytest.FixtureRequest) -> Any:
-    return request.getfixturevalue("structure_database")
+def publication_database(request: pytest.FixtureRequest) -> Iterator[Any]:
+    database = request.getfixturevalue("structure_database")
+    with psycopg.connect(_psycopg_url(database[0])) as connection:
+        connection.execute("TRUNCATE document_structure_generations CASCADE")
+    try:
+        yield database
+    finally:
+        with psycopg.connect(_psycopg_url(database[0])) as connection:
+            connection.execute("TRUNCATE evidence CASCADE")
 
 
 def _prepared(database: Any) -> tuple[str, Any, Any]:
     url, job, generation = _seed(database)
     assert DocumentMetadataRunner(url).run_once("synthetic-worker")
     return url, job, generation
+
+
+def test_revised_cover_metadata_publishes_a_component_edition(publication_database: Any) -> None:
+    from familycare_api.clauses.component_editions import ComponentTermsProjector
+    from familycare_api.clauses.repository import TermsEditionRepository
+
+    url, job, _ = _seed(
+        publication_database,
+        text=("무배당 Sample 가족보험\n보험약관\n보험회사 Sample Assurance\n상품코드 SAMPLE-A"),
+    )
+    assert DocumentMetadataRunner(url).run_once("synthetic-worker")
+    assert DocumentMetadataProjector(url).project_pending() == 1
+    assert ComponentTermsProjector(url).project_pending() == 1
+    editions = TermsEditionRepository(url).list(HouseholdScope(job.household_space_id))
+    assert len(editions) == 1 and editions[0].product_display == "무배당 Sample 가족보험"
+
+
+def test_legacy_proposals_keep_their_validator_and_immutable_publication(
+    publication_database: Any,
+) -> None:
+    from familycare_worker.document_metadata import metadata_proposal
+
+    from apps.api.tests.test_document_metadata_validation import _legacy_identity
+    from workers.analyzer.tests.test_document_metadata_repository import _source
+
+    url, job, generation = _seed(publication_database)
+    source = _source(job)
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        identity = connection.execute(
+            "SELECT identity_sha256 FROM document_structure_generations WHERE id=%s", (generation,)
+        ).fetchone()["identity_sha256"]
+        payload = metadata_proposal(source, generation, identity)
+        payload["revision"] = "document-metadata-v1"
+        _legacy_identity(payload["components"][0], source.to_dict())
+        connection.execute(
+            "INSERT INTO document_metadata_proposals("
+            "generation_id,revision,state,attempts,proposal_json) "
+            "VALUES(%s,'document-metadata-v1','PREPARED',1,%s)",
+            (generation, Jsonb(payload)),
+        )
+    projector = DocumentMetadataProjector(url)
+    assert projector.project_pending() == 1
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        original = connection.execute("SELECT * FROM document_metadata_publications").fetchone()
+        assert original["validator_revision"] == "document-metadata-api-v1"
+        assert original["outcome"] == "APPLIED"
+    assert DocumentMetadataRunner(url).run_once("synthetic-worker")
+    assert projector.project_pending() == 1
+    assert projector.project_pending() == 0
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        assert (
+            connection.execute(
+                "SELECT * FROM document_metadata_publications WHERE id=%s", (original["id"],)
+            ).fetchone()
+            == original
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) AS n FROM insurance_document_components "
+                "WHERE document_batch_item_id=%s",
+                (job.batch_item_id,),
+            ).fetchone()["n"]
+            == 1
+        )
+
+
+def test_publication_cannot_claim_a_validator_for_another_proposal_revision(
+    publication_database: Any,
+) -> None:
+    url, _, _ = _prepared(publication_database)
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        proposal = connection.execute("SELECT * FROM document_metadata_proposals").fetchone()
+        component = proposal["proposal_json"]["components"][0]
+        with pytest.raises(psycopg.IntegrityError), connection.transaction():
+            connection.execute(
+                "INSERT INTO document_metadata_publications(proposal_id,component_identity,"
+                "validator_revision,outcome,proof_json) VALUES(%s,%s,'document-metadata-api-v1',"
+                "'DEFERRED',%s)",
+                (proposal["id"], component["identity"], Jsonb(component)),
+            )
 
 
 def test_program_components_publish_without_a_user_and_remain_unpaired(
@@ -168,7 +256,7 @@ def test_publication_cannot_claim_an_unrelated_manual_component(publication_data
             connection.execute(
                 "INSERT INTO document_metadata_publications(proposal_id,component_identity,"
                 "validator_revision,outcome,component_id,proof_json) "
-                "VALUES(%s,%s,'document-metadata-api-v1','APPLIED',%s,%s)",
+                "VALUES(%s,%s,'document-metadata-api-v2','APPLIED',%s,%s)",
                 (proposal["id"], component["identity"], component_id, Jsonb(component)),
             )
             connection.execute("SET CONSTRAINTS ALL IMMEDIATE")

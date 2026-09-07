@@ -61,7 +61,7 @@ class DocumentMetadataFact(TypedDict):
 class DocumentMetadataProposal(TypedDict):
     components: list[DocumentMetadataComponent]
     generation_id: str
-    revision: Literal["document-metadata-v1"]
+    revision: Literal["document-metadata-v1", "document-metadata-v2"]
     schema_version: Literal["1"]
     structure_identity_sha256: str
     unresolved_pages: list[int]

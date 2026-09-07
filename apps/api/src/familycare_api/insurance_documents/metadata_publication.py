@@ -13,7 +13,7 @@ from psycopg.types.json import Jsonb
 from familycare_api.insurance_documents.metadata_validation import validate_component_metadata
 from familycare_api.insurance_documents.repository import _database_url
 
-VALIDATOR_REVISION = "document-metadata-api-v1"
+VALIDATOR_REVISION = "document-metadata-api-v2"
 
 
 class DocumentMetadataProjector:
@@ -34,6 +34,9 @@ class DocumentMetadataProjector:
                 source = connection.execute(
                     """
                     SELECT proposal.id AS proposal_id,proposal.proposal_json,
+                      proposal.revision AS metadata_revision,
+                      replace(proposal.revision,'document-metadata-','document-metadata-api-')
+                        AS validator_revision,
                       g.id AS generation_id,g.household_space_id,g.family_member_id,
                       g.batch_item_id,g.document_version_id,g.structure_json->'lineage' AS lineage
                     FROM document_metadata_proposals proposal
@@ -48,7 +51,7 @@ class DocumentMetadataProjector:
                       AND version.document_id=item.document_id
                     JOIN documents document ON document.id=version.document_id
                     WHERE proposal.state='PREPARED' AND g.is_current
-                      AND proposal.revision='document-metadata-v1'
+                      AND proposal.revision IN ('document-metadata-v1','document-metadata-v2')
                       AND item.state='succeeded' AND member.deleted_at IS NULL
                       AND document.deleted_at IS NULL
                       AND (item.processed_document_version_id IS NULL
@@ -57,11 +60,11 @@ class DocumentMetadataProjector:
                         SELECT 1 FROM jsonb_array_elements(proposal.proposal_json->'components') c
                         WHERE NOT EXISTS (SELECT 1 FROM document_metadata_publications p
                           WHERE p.proposal_id=proposal.id AND p.component_identity=c->>'identity'
-                            AND p.validator_revision=%s))
+                            AND p.validator_revision=replace(proposal.revision,
+                              'document-metadata-','document-metadata-api-')))
                     ORDER BY proposal.created_at,proposal.id
                     FOR UPDATE OF g,item,batch,member,document SKIP LOCKED LIMIT 1
                     """,
-                    (VALIDATOR_REVISION,),
                 ).fetchone()
                 if source is None:
                     break
@@ -76,13 +79,14 @@ class DocumentMetadataProjector:
         source: dict[str, Any],
         stop_requested: Callable[[], bool] | None,
     ) -> None:
+        validator_revision = source["validator_revision"]
         for component in source["proposal_json"]["components"]:
             if stop_requested and stop_requested():
                 break
             if connection.execute(
                 "SELECT 1 FROM document_metadata_publications WHERE proposal_id=%s "
                 "AND component_identity=%s AND validator_revision=%s",
-                (source["proposal_id"], component["identity"], VALIDATOR_REVISION),
+                (source["proposal_id"], component["identity"], validator_revision),
             ).fetchone():
                 continue
 
@@ -96,7 +100,10 @@ class DocumentMetadataProjector:
                 return dict(projection["source"])
 
             valid = validate_component_metadata(
-                component, {"lineage": source["lineage"], "nodes": []}, page_loader=load_page
+                component,
+                {"lineage": source["lineage"], "nodes": []},
+                page_loader=load_page,
+                revision=source["metadata_revision"],
             )
             outcome = "APPLIED" if valid else "INVALID"
             if valid:
@@ -127,7 +134,7 @@ class DocumentMetadataProjector:
                     publication_id,
                     source["proposal_id"],
                     component["identity"],
-                    VALIDATOR_REVISION,
+                    validator_revision,
                     outcome,
                     component_id,
                     Jsonb(component),

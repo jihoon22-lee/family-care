@@ -15,7 +15,7 @@ from familycare_worker.document_structure_repository import (
 from familycare_worker.document_structure_source import load_stored_structure
 from familycare_worker.jobs import psycopg_database_url
 
-PREPARATION_REVISION = "stored-structure-lines-v2-ch4096-context4096-max16384"
+PREPARATION_REVISION = "stored-structure-geometry-v3-ch4096-context4096-max16384"
 
 
 class DocumentPreparationRunner:

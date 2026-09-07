@@ -61,7 +61,7 @@ def test_mixed_document_roles_come_from_source_and_preserve_all_spans() -> None:
         (3, 3),
         (4, 4),
     ]
-    assert result.revision == "document-metadata-v1"
+    assert result.revision == "document-metadata-v2"
     assert result.unresolved_pages == ()
     nodes = {node.node_id: node for node in source.nodes}
     for component in result.components:
@@ -317,3 +317,176 @@ def test_opening_title_and_native_metadata_table_preserve_resolved_fields() -> N
     component = analyze_document_metadata(built).components[0]
     assert component.facts[0].value == "SAMPLE-001"
     assert component.unresolved_fields == ()
+
+
+@pytest.mark.parametrize(
+    "heading", ["무배당 Sample 가족보험\n보험약관", "무배당 Sample 가족보험 약관"]
+)
+def test_product_cover_title_does_not_require_a_standalone_first_line(heading: str) -> None:
+    source = _structure(heading + "\n보험회사 Sample Assurance\n상품코드 SAMPLE-A\n제1조 목적")
+    metadata = analyze_document_metadata(source)
+    assert len(metadata.components) == 1
+    component = metadata.components[0]
+    assert component.role == "terms"
+    facts = {fact.field: fact.value for fact in component.facts}
+    assert facts["product_name"] == "무배당 Sample 가족보험"
+    assert facts["insurer"] == "Sample Assurance"
+    assert facts["product_code"] == "SAMPLE-A"
+    node = source.nodes[0]
+    for fact in component.facts:
+        for span in fact.spans:
+            assert node.text[span.start : span.end] == span.text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "보험금 청구 제출서류\n보험약관",
+        "Sample 보험 참고자료\n보험약관",
+        "무배당 Sample 보험 예시 약관",
+        "보험약관을 읽어 주십시오",
+        "참고할 보험약관 목록\nSample 보험 약관",
+    ],
+)
+def test_product_words_in_reference_lists_do_not_open_a_cover_title(text: str) -> None:
+    assert analyze_document_metadata(_structure(text)).components == ()
+
+
+def test_unlabelled_product_body_is_not_cover_metadata() -> None:
+    component = analyze_document_metadata(
+        _structure("보험약관\n제1조 목적\n무배당 Sample 가족보험\n상품코드 SAMPLE-A")
+    ).components[0]
+    assert not any(fact.field == "product_name" for fact in component.facts)
+    assert "product_code" in component.unresolved_fields
+
+
+def test_plain_product_label_does_not_become_part_of_the_product_value() -> None:
+    component = analyze_document_metadata(
+        _structure("보험약관\n상품명 Sample 가족보험")
+    ).components[0]
+    assert [f.value for f in component.facts if f.field == "product_name"] == ["Sample 가족보험"]
+    assert component.conflicting_fields == ()
+
+
+def _table_cover(*, checklist: bool = False) -> DocumentStructure:
+    source = _structure("보험약관")
+    raw = source.to_dict()["source_extraction"]
+    page = raw["pages"][0]
+    page["blocks"] = [
+        {"text": "보험약관", "reading_order": 0, "bbox": [10, 20, 150, 40]},
+        {"text": "보험회사", "reading_order": 1, "bbox": [10, 60, 110, 80]},
+        {"text": "Sample Assurance", "reading_order": 2, "bbox": [120, 60, 350, 80]},
+    ]
+    cells = [
+        {"row_index": 1, "column_index": 0, "text": "보험약관", "bbox": [10, 20, 350, 40]},
+        {"row_index": 2, "column_index": 0, "text": "보험회사", "bbox": [10, 60, 110, 80]},
+        {"row_index": 2, "column_index": 1, "text": "Sample Assurance", "bbox": [120, 60, 350, 80]},
+    ]
+    if checklist:
+        cells.insert(
+            0,
+            {"row_index": 0, "column_index": 0, "text": "청구 제출서류", "bbox": [10, 1, 350, 15]},
+        )
+    page["tables"] = [{"bbox": [10, 1, 350, 80], "cells": cells}]
+    return build_document_structure(
+        raw, extraction_id=UUID(int=202), extraction_revision="synthetic-table-cover-v1"
+    )
+
+
+def test_a_cover_in_a_single_table_cell_uses_original_cell_geometry() -> None:
+    source = _table_cover()
+    result = analyze_document_metadata(source)
+    assert len(result.components) == 1 and result.components[0].role == "terms"
+    assert (
+        next(f.value for f in result.components[0].facts if f.field == "insurer")
+        == "Sample Assurance"
+    )
+    span = result.components[0].role_spans[0]
+    node = next(node for node in source.nodes if node.node_id == span.node_id)
+    assert node.kind == "TABLE_ROW" and node.text[span.start : span.end] == "보험약관"
+
+
+def test_single_cell_body_titles_cannot_escape_the_preceding_checklist_cell() -> None:
+    assert analyze_document_metadata(_table_cover(checklist=True)).components == ()
+
+
+@pytest.mark.parametrize("table", [False, True])
+def test_an_explicit_reference_label_remains_metadata_without_application_authority(
+    table: bool,
+) -> None:
+    if not table:
+        component = analyze_document_metadata(
+            _structure("보험약관\n참조약관코드 SAMPLE-TERMS")
+        ).components[0]
+        assert component.unresolved_fields == ()
+        assert component.facts[0].field == "terms_reference"
+        return
+    source = _table_cover()
+    nodes = list(source.nodes)
+    row = next(node for node in nodes if node.kind == "TABLE_ROW" and len(node.cells) == 2)
+    nodes[nodes.index(row)] = replace(
+        row,
+        text="참조약관코드\tSAMPLE-TERMS",
+        cells=(
+            replace(row.cells[0], text="참조약관코드"),
+            replace(row.cells[1], text="SAMPLE-TERMS"),
+        ),
+    )
+    component = analyze_document_metadata(replace(source, nodes=tuple(nodes))).components[0]
+    assert component.unresolved_fields == ()
+    assert [(fact.field, fact.value) for fact in component.facts] == [
+        ("terms_reference", "SAMPLE-TERMS")
+    ]
+
+
+@pytest.mark.parametrize("header", [False, True])
+def test_table_headers_and_checklists_with_a_metadata_label_do_not_classify(header: bool) -> None:
+    source = _table_cover(checklist=not header)
+    nodes = list(source.nodes)
+    if header:
+        nodes = [
+            replace(node, row_role="header") if node.kind == "TABLE_ROW" else node for node in nodes
+        ]
+    else:
+        row = next(node for node in nodes if node.kind == "TABLE_ROW" and node.row_index == 0)
+        updated = replace(
+            row,
+            text="청구 제출서류\t보험사",
+            cells=(
+                replace(row.cells[0], bbox=(10, 1, 110, 15)),
+                replace(row.cells[0], column_index=1, text="보험사", bbox=(120, 1, 350, 15)),
+            ),
+        )
+        nodes[nodes.index(row)] = updated
+    assert analyze_document_metadata(replace(source, nodes=tuple(nodes))).components == ()
+
+
+def test_plain_label_cannot_hide_a_submission_list_heading() -> None:
+    assert (
+        analyze_document_metadata(
+            _structure("보험사 제출 서류\n보험약관\n상품명 Sample 가족보험")
+        ).components
+        == ()
+    )
+
+
+def test_table_geometry_cannot_reverse_native_reading_order_across_columns() -> None:
+    source = _table_cover()
+    table = next(node for node in source.nodes if len(node.cells) == 2)
+    caption = replace(
+        source.nodes[0],
+        text="청구 제출서류",
+        bbox=(10, 22, 100, 40),
+        schedulable=True,
+        reading_order=0,
+    )
+    title = replace(
+        source.nodes[0],
+        node_id="synthetic-right-column",
+        text="보험약관",
+        bbox=(250, 20, 350, 40),
+        schedulable=True,
+        reading_order=1,
+    )
+    source = replace(source, nodes=(caption, title, table))
+    assert analyze_document_metadata(source).components == ()

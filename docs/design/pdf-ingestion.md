@@ -330,6 +330,15 @@ runtime boundary is `docs/design/private-data-runtime.md` and authentication rem
 
 ## v0.5 local structure page storage
 
+기존 추출 BLOCK에 유한 숫자 네 개지만 폭·높이가 0이거나 역전·음수인 rectangle이 있으면,
+로컬 adapter는 원문과 raw 좌표를 보존하고 파생 `bbox`만 `null`로 둔다.
+`SOURCE_BBOX_UNAVAILABLE`은 위치를 확인할 수 없다는 뜻이며 원문 없음이나 추출 실패가
+아니다. 좌표 기반 줄 결합·물리 위치 연결에는 쓰지 않는다. 문자열·페이지 근거는 기존의
+독립 가입/필드 검증을 통과할 수 있으며 모든 내용을 일괄 수동 검토 상태로 바꾸지 않는다.
+배열 형태·숫자 타입 오류와 table/cell의 잘못된 좌표는 계속 거부한다. 준비 revision은
+`stored-structure-geometry-v3-ch4096-context4096-max16384`이며 이전 실패 이력을 수정하지
+않고 재시도한다. 유효한 기존 원문의 IR identity·형식은 유지한다.
+
 `0036_structure_page_storage`는 큰 파생 IR을 페이지 payload로 보존한다. parser의 64 MiB 출력,
 500페이지·CPU·메모리·timeout과 adapter의 합산 source 한도는 유지한다. 원문 단어와
 줄/좌표/출처를 함께 보존하면 작은 source도 큰 IR로 확장되므로 파생 저장 한도는 별도다.

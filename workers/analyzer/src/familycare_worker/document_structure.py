@@ -104,7 +104,7 @@ def _digest(value: object) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _bbox(value: object) -> BBox | None:
+def _bbox(value: object, *, quarantine_geometry: bool = False) -> BBox | None:
     if value is None:
         return None
     numbers = _sequence(value)
@@ -115,6 +115,8 @@ def _bbox(value: object) -> BBox | None:
         raise DocumentStructureError
     x0, y0, x1, y1 = (float(cast(int | float, item)) for item in numbers)
     if x0 < 0 or y0 < 0 or x1 <= x0 or y1 <= y0:
+        if quarantine_geometry:
+            return None
         raise DocumentStructureError
     return x0, y0, x1, y1
 
@@ -369,7 +371,7 @@ def _page_nodes(
             raise DocumentStructureError
         source_path = f"{path}/blocks/{position}"
         node_id = _digest((identity, source_path))
-        box = _bbox(block.get("bbox"))
+        box = _bbox(block.get("bbox"), quarantine_geometry=True)
         node = StructureNode(
             node_id=node_id,
             kind="BLOCK",
@@ -379,7 +381,11 @@ def _page_nodes(
             text=_text(block.get("text")),
             source_path=source_path,
             bbox=box,
-            schedulable=not any(
+            issue_codes=("SOURCE_BBOX_UNAVAILABLE",)
+            if box is None and block.get("bbox") is not None
+            else (),
+            schedulable=box is None
+            or not any(
                 _inside(box, _bbox(_mapping(raw_cell).get("bbox")))
                 and bool(_text(block.get("text")))
                 and _text(block.get("text")) in _text(_mapping(raw_cell).get("text"))

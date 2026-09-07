@@ -68,6 +68,65 @@ def test_runtime_prepares_once_without_key_or_source_files(
         )
 
 
+def test_geometry_revision_retries_old_failure_without_rewriting_raw_blocks(
+    request: pytest.FixtureRequest,
+) -> None:
+    url, job = request.getfixturevalue("structure_database")
+    _seed_page(url, job)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE extraction_blocks SET bbox='[10,10,10,20]' "
+            "WHERE page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s)",
+            (job.extraction_id,),
+        )
+        connection.execute(
+            "INSERT INTO document_structure_preparations(batch_item_id,extraction_id,"
+            "pipeline_revision,state,attempts,error_code) "
+            "VALUES(%s,%s,'stored-structure-lines-v2-ch4096-context4096-max16384',"
+            "'FAILED',1,'STRUCTURE_SOURCE_INVALID')",
+            (job.batch_item_id, job.extraction_id),
+        )
+    runner = DocumentPreparationRunner(url, batch_item_id=job.batch_item_id)
+    assert runner.run_once("synthetic-worker")
+    assert not runner.run_once("synthetic-worker")
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        assert {
+            row["state"]
+            for row in connection.execute("SELECT state FROM document_structure_preparations")
+        } == {"FAILED", "PREPARED"}
+        stored = connection.execute(
+            "SELECT structure_json FROM document_structure_generations"
+        ).fetchone()["structure_json"]
+        assert stored["nodes"][0]["bbox"] is None
+        assert "SOURCE_BBOX_UNAVAILABLE" in stored["nodes"][0]["issue_codes"]
+        assert stored["source_extraction"]["pages"][0]["blocks"][0]["bbox"] == [10, 10, 10, 20]
+
+
+def test_new_preparation_revision_reuses_an_unchanged_valid_source_generation(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_worker import document_preparation as module
+
+    url, job = request.getfixturevalue("structure_database")
+    _seed_page(url, job)
+    current_revision = module.PREPARATION_REVISION
+    monkeypatch.setattr(
+        module, "PREPARATION_REVISION", "stored-structure-lines-v2-ch4096-context4096-max16384"
+    )
+    runner = DocumentPreparationRunner(url, batch_item_id=job.batch_item_id)
+    assert runner.run_once("synthetic-worker")
+    monkeypatch.setattr(module, "PREPARATION_REVISION", current_revision)
+    assert runner.run_once("synthetic-worker")
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT count(*),count(DISTINCT generation_id) FROM document_structure_preparations"
+        ).fetchone() == (2, 1)
+        assert connection.execute(
+            "SELECT count(*) FROM document_structure_generations"
+        ).fetchone() == (1,)
+
+
 def test_missing_extraction_pages_are_a_processing_failure_not_missing_documents(
     request: pytest.FixtureRequest,
 ) -> None:

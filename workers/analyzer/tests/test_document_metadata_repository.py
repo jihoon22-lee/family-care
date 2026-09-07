@@ -47,7 +47,7 @@ def test_malformed_prepared_component_cannot_stall_the_publisher(
             connection.execute(
                 "INSERT INTO document_metadata_proposals("
                 "generation_id,revision,state,attempts,proposal_json) "
-                "VALUES(%s,'document-metadata-v1','PREPARED',1,%s)",
+                "VALUES(%s,'document-metadata-v2','PREPARED',1,%s)",
                 (generation, Jsonb(payload)),
             )
 
@@ -57,7 +57,7 @@ def metadata_database(request: pytest.FixtureRequest) -> Any:
     return request.getfixturevalue("structure_database")
 
 
-def _source(job: Any) -> Any:
+def _source(job: Any, *, text: str | None = None) -> Any:
     return build_document_structure(
         {
             "document_version_id": str(job.document_version_id),
@@ -68,7 +68,8 @@ def _source(job: Any) -> Any:
                     "quality": {"classification": "TEXT_SUFFICIENT"},
                     "blocks": [
                         {
-                            "text": "보험약관\n보험사: Sample Assurance\n상품코드: 001-SAMPLE",
+                            "text": text
+                            or "보험약관\n보험사: Sample Assurance\n상품코드: 001-SAMPLE",
                             "reading_order": 0,
                             "bbox": [10, 10, 400, 80],
                         }
@@ -82,9 +83,9 @@ def _source(job: Any) -> Any:
     )
 
 
-def _seed(database: Any) -> tuple[str, Any, Any]:
+def _seed(database: Any, *, text: str | None = None) -> tuple[str, Any, Any]:
     url, job = database
-    source = _source(job)
+    source = _source(job, text=text)
     generation = _prepare(
         DocumentStructureRepository(url),
         job,

@@ -92,6 +92,42 @@ def test_every_character_after_excerpt_and_every_block_after_sixty_four_is_prese
     assert plan.processed_characters == plan.total_characters
 
 
+@pytest.mark.parametrize("bbox", [[10, 10, 10, 20], [20, 10, 10, 20], [-1, 10, 10, 20]])
+def test_degenerate_retained_block_geometry_does_not_discard_source_text(bbox: list[int]) -> None:
+    first = _block("Synthetic retained text without a usable rectangle")
+    first["bbox"] = bbox
+    source = _extraction(_page(1, [first]), _page(2, [_block("Synthetic intact page")]))
+    structure = _build(source)
+    assert structure.to_dict()["source_extraction"] == source
+    assert structure.nodes[0].text == first["text"]
+    assert structure.nodes[0].bbox is None
+    assert "SOURCE_BBOX_UNAVAILABLE" in structure.nodes[0].issue_codes
+    assert structure.nodes[1].bbox == (10, 10, 400, 18)
+    plan = plan_structure_chunks(
+        structure, max_content_chars=4096, max_context_chars=0, max_chunks=10
+    )
+    assert plan.complete and [chunk.text for chunk in plan.chunks] == [
+        first["text"],
+        "Synthetic intact page",
+    ]
+
+
+@pytest.mark.parametrize("bbox", [[1, 2], [1, "invalid", 3, 4]])
+def test_malformed_coordinate_types_remain_a_source_contract_error(bbox: Any) -> None:
+    block = _block("Synthetic malformed geometry")
+    block["bbox"] = bbox
+    with pytest.raises(DocumentStructureError):
+        _build(_extraction(_page(1, [block])))
+
+
+@pytest.mark.parametrize("target", ["table", "cell"])
+def test_geometry_quarantine_does_not_relax_table_or_cell_bounds(target: str) -> None:
+    table = _table([["Synthetic value"]])
+    (table if target == "table" else table["cells"][0])["bbox"] = [10, 100, 10, 120]
+    with pytest.raises(DocumentStructureError):
+        _build(_extraction(_page(1, [_block("Synthetic caption")], tables=[table])))
+
+
 def test_budget_exhaustion_is_an_explicit_nonoverlapping_partition_of_source() -> None:
     structure = _build(_extraction(_page(1, [_block("X" * 701)])))
     plan = plan_structure_chunks(

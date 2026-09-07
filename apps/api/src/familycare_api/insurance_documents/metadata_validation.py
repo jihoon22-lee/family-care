@@ -29,7 +29,7 @@ _DATES = frozenset(
 )
 _MULTIPLE = frozenset({"rider_code", "terms_reference", "edition_reference"})
 _IDENTITY = frozenset({"product_code", "product_name", "terms_code", "edition_code"})
-_PATTERNS = {
+_LEGACY_PATTERNS = {
     name: re.compile(
         r"^\s*(?:"
         + "|".join(re.escape(label) for label in labels)
@@ -38,6 +38,62 @@ _PATTERNS = {
     )
     for name, labels in METADATA_FIELD_LABELS.items()
 }
+_PATTERNS = {
+    name: re.compile(
+        r"^\s*(?:"
+        + "|".join(re.escape(label) for label in labels)
+        + r")(?:\s*[:：]\s*|\s+)(?P<value>\S(?:.*\S)?)\s*$",
+        re.IGNORECASE,
+    )
+    for name, labels in METADATA_FIELD_LABELS.items()
+}
+_REFERENCE_HEADING = re.compile(
+    r"예시|예제|참고|목록|제출|구비|청구|서류|설명|읽어|참조|안내|"
+    r"\b(?:example|sample\s+(?:of|document)|checklist|reference|submit|read)\b",
+    re.IGNORECASE,
+)
+
+
+def _product_caption(text: str) -> bool:
+    return bool(
+        3 < len(text) <= 200
+        and not _REFERENCE_HEADING.search(text)
+        and not re.search(r"[:：.!?。]|제\s*\d+\s*조", text)
+        and not re.search(r"(?:생명보험|손해보험|화재해상보험|주식회사)$", text)
+        and re.fullmatch(r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?", text, re.IGNORECASE)
+    )
+
+
+def _cover_caption(text: str) -> bool:
+    return bool(
+        len(text) <= 160
+        and not _REFERENCE_HEADING.search(text)
+        and (
+            _product_caption(text)
+            or re.fullmatch(
+                r"(?:\(?무배당\)?|\(?갱신형\)?|\S+(?:생명|화재|손해보험|생명보험|주식회사)|"
+                r"[\w ]+(?:Assurance|Life|Insurance Company))",
+                text,
+                re.IGNORECASE,
+            )
+        )
+    )
+
+
+def _cover_role(text: str) -> tuple[str, int, int, int] | None:
+    for role, titles in METADATA_ROLE_TITLES.items():
+        for title in sorted(titles, key=len, reverse=True):
+            pattern = (
+                r"\s*".join(re.escape(char) for char in title)
+                if re.search(r"[가-힣]", title)
+                else re.escape(title).replace(r"\ ", r"\s+")
+            )
+            match = re.search(pattern + r"$", text, re.IGNORECASE)
+            if match is not None:
+                prefix = text[: match.start()].rstrip()
+                if not prefix or (role == "terms" and _product_caption(prefix)):
+                    return role, match.start(), match.end(), len(prefix)
+    return None
 
 
 def _key(value: str) -> str:
@@ -131,8 +187,71 @@ def _table(node: dict[str, Any], observed: _Observed, metadata_area_open: bool) 
         offset += len(left["text"]) + 1
 
 
-def _observe(nodes: list[dict[str, Any]]) -> _Observed:
+def _source_layout(nodes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+    if not any(node["kind"] == "TABLE_ROW" for node in nodes):
+        return nodes, False
+    represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
+    positioned = []
+    bottoms: dict[str, float] = {}
+    native_order = []
+    for index, node in enumerate(nodes):
+        if node["kind"] == "BLOCK" and (
+            node["node_id"] in represented or not node.get("schedulable", True)
+        ):
+            continue
+        if node["kind"] == "TABLE_ROW":
+            cells = node["cells"]
+            if not cells or any(cell.get("bbox") is None for cell in cells):
+                return nodes, False
+            top, left = (
+                min(cell["bbox"][1] for cell in cells),
+                min(cell["bbox"][0] for cell in cells),
+            )
+            bottoms[node["node_id"]] = max(cell["bbox"][3] for cell in cells)
+        else:
+            if node.get("bbox") is None:
+                return nodes, False
+            left, top = node["bbox"][:2]
+            bottoms[node["node_id"]] = node["bbox"][3]
+            native_order.append(node["node_id"])
+        positioned.append((top, left, index, node))
+    ordered = sorted(positioned, key=lambda item: item[:3])
+    if [item[3]["node_id"] for item in ordered if item[3]["kind"] != "TABLE_ROW"] != native_order:
+        return nodes, False
+    if any(
+        right[0] < bottoms[left[3]["node_id"]]
+        for left, right in zip(ordered, ordered[1:], strict=False)
+    ):
+        return nodes, False
+    return [item[3] for item in ordered], True
+
+
+def _metadata_row_context(node: dict[str, Any]) -> bool:
+    cells = node["cells"]
+    if node.get("row_role") == "header" or not cells or len(cells) % 2:
+        return False
+    labels = {label for names in METADATA_FIELD_LABELS.values() for label in names}
+    for left, right in zip(cells[::2], cells[1::2], strict=True):
+        if (
+            _key(left["text"].strip().rstrip(":：")) not in labels
+            or not right["text"].strip()
+            or _key(right["text"].strip().rstrip(":：")) in labels
+            or right["column_index"] != left["column_index"] + 1
+            or right["row_index"] != left["row_index"]
+            or any(
+                cell.get(axis) not in (None, 1)
+                for cell in (left, right)
+                for axis in ("row_span", "column_span")
+            )
+        ):
+            return False
+    return True
+
+
+def _observe(nodes: list[dict[str, Any]], *, legacy: bool = False) -> _Observed:
     observed = _Observed()
+    patterns = _LEGACY_PATTERNS if legacy else _PATTERNS
+    nodes, positioned = (nodes, False) if legacy else _source_layout(nodes)
     title_area_open = True
     metadata_area_open = True
     tables = [node for node in nodes if node["kind"] == "TABLE_ROW"]
@@ -150,7 +269,7 @@ def _observe(nodes: list[dict[str, Any]]) -> _Observed:
             observed.unresolved.update(
                 name
                 for line in node["text"].splitlines()
-                for name, pattern in _PATTERNS.items()
+                for name, pattern in patterns.items()
                 if pattern.fullmatch(line)
             )
             continue
@@ -159,31 +278,90 @@ def _observe(nodes: list[dict[str, Any]]) -> _Observed:
         if node["kind"] == "BLOCK" and not node.get("schedulable", True):
             title_area_open = False
             continue
-        if node["kind"] == "TABLE_ROW":
+        cell_text_flow = (
+            positioned
+            and node["kind"] == "TABLE_ROW"
+            and node.get("row_role") != "header"
+            and len(node["cells"]) == 1
+            and node["text"] == node["cells"][0]["text"]
+        )
+        if node["kind"] == "TABLE_ROW" and not cell_text_flow:
+            if positioned and node["text"].strip() and not _metadata_row_context(node):
+                title_area_open = False
+                metadata_area_open = False
             _table(node, observed, metadata_area_open)
             continue
-        if node["kind"] not in {"BLOCK", "TEXT_LINE"}:
+        if node["kind"] not in {"BLOCK", "TEXT_LINE"} and not cell_text_flow:
             continue
         offset = 0
         for line in node["text"].splitlines(keepends=True):
             raw = line.rstrip("\r\n")
-            title = _key(raw.strip(" \t[]【】"))
-            known_title = any(title in titles for titles in METADATA_ROLE_TITLES.values())
-            labelled = any(pattern.fullmatch(raw) for pattern in _PATTERNS.values())
-            if raw.strip() and not known_title and not labelled:
+            trimmed = raw.strip(" \t[]【】")
+            trim_start = len(raw) - len(raw.lstrip(" \t[]【】"))
+            title = _key(trimmed)
+            cover_role = None if legacy else _cover_role(trimmed)
+            known_title = (
+                any(title in titles for titles in METADATA_ROLE_TITLES.values())
+                if legacy
+                else cover_role is not None
+            )
+            labelled = any(pattern.fullmatch(raw) for pattern in patterns.values())
+            if (
+                not legacy
+                and labelled
+                and not re.search(r"[:：\t]", raw)
+                and any(
+                    _REFERENCE_HEADING.search(match["value"])
+                    for pattern in patterns.values()
+                    if (match := pattern.fullmatch(raw))
+                )
+            ):
+                labelled = False
+            prelude = not legacy and _cover_caption(trimmed)
+            if raw.strip() and not known_title and not labelled and not prelude:
                 title_area_open = False
                 metadata_area_open = False
-            table_barrier = bool(tables) and (
-                node.get("bbox") is None or table_top < node["bbox"][3]
+            table_barrier = (
+                not positioned
+                and bool(tables)
+                and (node.get("bbox") is None or table_top < node["bbox"][3])
             )
             for role, titles in METADATA_ROLE_TITLES.items():
-                if title_area_open and not table_barrier and title in titles:
+                if legacy and title_area_open and not table_barrier and title in titles:
                     left = offset + len(raw) - len(raw.lstrip(" \t[]【】"))
                     right = offset + len(raw.rstrip(" \t[]【】"))
                     observed.roles.setdefault(role, set()).add(
                         _span(node, left, right, offset, offset + len(raw))
                     )
-            for name, pattern in _PATTERNS.items():
+            if title_area_open and not table_barrier and cover_role is not None:
+                role, left, right, _ = cover_role
+                observed.roles.setdefault(role, set()).add(
+                    _span(
+                        node,
+                        offset + trim_start + left,
+                        offset + trim_start + right,
+                        offset,
+                        offset + len(raw),
+                    )
+                )
+            product_end = (
+                cover_role[3]
+                if cover_role is not None
+                else (len(trimmed) if not legacy and _product_caption(trimmed) else 0)
+            )
+            if metadata_area_open and not table_barrier and not labelled and product_end:
+                observed.add(
+                    "product_name",
+                    trimmed[:product_end],
+                    _span(
+                        node,
+                        offset + trim_start,
+                        offset + trim_start + product_end,
+                        offset,
+                        offset + len(raw),
+                    ),
+                )
+            for name, pattern in patterns.items():
                 match = pattern.fullmatch(raw)
                 if match:
                     if not metadata_area_open:
@@ -227,6 +405,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
+    revision: str = "document-metadata-v2",
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
 
@@ -234,7 +413,7 @@ def validate_component_metadata(
     Metadata classification confers neither enrollment nor edition applicability.
     """
     try:
-        return _validate(component, projection, page_loader)
+        return _validate(component, projection, page_loader, revision)
     except KeyError, TypeError, ValueError, AttributeError, OverflowError:
         return None
 
@@ -243,7 +422,10 @@ def _validate(
     component: dict[str, Any],
     projection: dict[str, Any],
     page_loader: Callable[[int], dict[str, Any]] | None,
+    revision: str,
 ) -> ValidatedComponent | None:
+    if revision not in {"document-metadata-v1", "document-metadata-v2"}:
+        return None
     if set(component) != DocumentMetadataComponent.__required_keys__:
         return None
     for name, limit in (
@@ -270,7 +452,7 @@ def _validate(
     identity = hashlib.sha256(
         json.dumps(
             [
-                "document-metadata-v1",
+                revision,
                 lineage["document_version_id"],
                 lineage["extraction_id"],
                 lineage["source_payload_sha256"],
@@ -304,7 +486,7 @@ def _validate(
             identifiers = [node["node_id"] for node in page_nodes]
             if len(set(identifiers)) != len(identifiers):
                 return None
-        page = _observe(page_nodes)
+        page = _observe(page_nodes, legacy=revision == "document-metadata-v1")
         if set(page.roles) != {role}:
             return None
         scalars = {name: _key(value) for name, value in page.facts if name not in _MULTIPLE}

@@ -654,3 +654,40 @@ Ruff format 614개/lint, mypy 255개, 생성 계약·container/workflow·문서/
 동일 bytes 보존 발견 사항을 반영했다. 실제 자료/provider·운영 변경·태그·배포는 실행하지
 않았다. 다중 근거 자동 적용 연결, 기존 프로그램 component 보강·본문 범위 확장과 보호된
 수용은 B02 후속이며 이 판본 등록만으로 완료를 주장하지 않는다.
+
+## Retained geometry and revised cover metadata
+
+검증된 보관 추출을 읽다가 유한 숫자 네 개지만 rectangle을 만들지 못하는 BLOCK 좌표
+때문에 문서 전체의 구조화가 실패하는 경로를 확인했다. 원문과 raw 좌표는 그대로 보존하고
+파생 bbox만 비워 `SOURCE_BBOX_UNAVAILABLE`을 표시한다. 잘못된 타입과 table/cell 좌표는
+기존처럼 거부하며, 좌표 없는 BLOCK을 줄/물리 위치로 결합하지 않는다. 문자열·페이지
+근거의 기존 가입 검증은 유지한다. 준비 revision은 이전 FAILED 이력을 보존하며 다시
+처리하고, 정상 source의 기존 IR identity는 바꾸지 않는다.
+
+`document-metadata-v2`는 상품 표제와 정식 약관 제목, 공백 라벨과 검증 가능한 단일 표지
+셀을 읽는다. 원본 표 셀과 native 순서·좌표가 모두 증명될 때만 metadata용 순서를 만들고
+원래 IR은 수정하지 않는다. 열 제목, 라벨이 섞인 제출 목록, 공백 라벨로 오인한 본문,
+native 순서를 뒤집는 열 배치는 각각 RED로 재현한 뒤 거부하도록 보완했다. API도 원문
+전체 필드와 span을 독립 검증한다. `0040_metadata_revisions`는 v1/v2 제안과 해당 validator의
+대응을 검사하고 v1의 검증/게시 이력을 그대로 읽는다. 겹치는 기존 component의 자동
+보강과 본문 범위 확장은 아직 구현하지 않았으며 기존 사용자 결정을 덮지 않는다.
+
+`31182bb` 위의 해당 Worker/API/schema/migration·테스트 변경으로 순수 구조/metadata
+94개, preparation PostgreSQL 8개를 통과했다. 그 전에 metadata Worker/API PostgreSQL
+25개에서 새 revision·판본 등록·v1 이력·잘못된 validator 대응을 검증했다. 이후 추가한
+정상 generation 재사용과 table/cell 거부 테스트는 최종 회귀 검사에 포함한다.
+승인된 기존 보관 추출에 대해 읽기 전용·메모리 내 adapter를 실행하고 허용된 집계만
+출력했다. 수정 후 해당 추출과 모든 저장 페이지를 구조화할 수 있었지만 약관 자동 분류는
+여전히 충분하지 않다. 기존 지식의 후보 metadata와 필요한 원문 구역을 재사용하는 경로가
+후속이며 이 결과를 약관 적용/지식화/보호된 전환 완료로 확대하지 않는다. 실제 원문·값은
+저장소/fixture/로그에 넣지 않았고 provider·운영 쓰기·태그·배포는 실행하지 않았다.
+
+2026-09-08 04:40~04:55 KST 최종 회귀: `web:check` **171개·build**, 전체 기본 pytest
+**2,091 passed / 380 integration deselected / 3 subtests**, 전체 합성 PostgreSQL
+**380 passed / 2,091 deselected** (285.61초)가 통과했다. 마지막 정상 참조 라벨 보완 후
+관련 순수 **99개**와 metadata/판본 PostgreSQL **45개**를 재검증했다. Ruff format **615개**,
+lint·mypy **255개**, 생성 계약·container/workflow·문서 **50개**·안전 **809 paths**·diff가
+통과했다. 별도 빈 합성 DB에서 `head → 0039 → head`를 검증하고 그 테스트 DB만 정리했다.
+최초 왕복 검사는 테스트 URL의 driver 표기 누락으로 시작하지 못했으며 `postgresql+psycopg`
+표기를 고쳐 성공했다. Web UI/외부 응답 형태는 그대로이므로 Chromium mock E2E는 이번에
+반복하지 않았다. 실제 Windows/모바일, PDF 재추출/OCR·외부 API·운영 DB 적용은 미실행이다.

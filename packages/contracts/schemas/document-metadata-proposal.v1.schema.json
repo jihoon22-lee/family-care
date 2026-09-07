@@ -10,7 +10,7 @@
       "const": "1"
     },
     "revision": {
-      "const": "document-metadata-v1"
+      "enum": ["document-metadata-v1", "document-metadata-v2"]
     },
     "generation_id": {
       "type": "string",
