@@ -2,13 +2,29 @@
 
 - 상태: Phase 0~8과 private knowledge/advisory·원장 대사 결과 구현, `v0.1.0`~`v0.4.0` 컨테이너·GitHub
   Release 완료; 보호된 acceptance와 남은 실제 형식·기기·복구 경계 분리
-- 기준 설계: `docs/design/v0.1-product.md`
-- 현재 공개 버전: `v0.4.0`; 다음 버전 미지정
+- 현재 구현 기준 설계: `docs/design/v0.1-product.md`; v0.5 전환 기준은 아래 현재 마일스톤 참조
+- 현재 공개 버전: `v0.4.0`; 다음 계획 버전: `v0.5.0` (구현·수용은 별도 추적)
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
+
+## Current milestone
+
+- [v0.5.0 — Local-first claim guidance](https://github.com/jihoon22-lee/family-care/milestone/1)
+- 진행·의존성·PR 묶음: [메인 #59](https://github.com/jihoon22-lee/family-care/issues/59)
+- 제품 요구사항·수용 기준: [명세 #60](https://github.com/jihoon22-lee/family-care/issues/60)
+- 실행 시작: [WP01 / B01 #61](https://github.com/jihoon22-lee/family-care/issues/61), 후속 WP #62~#70
+
+2026-09-07 확인 시 계획 이슈 12개가 열려 있으며 구현·실행 검증은 planned 상태다.
+작업 시작 때 GitHub의 최신 상태와 실제 PR 증거를 다시 확인한다. 이 문서는 완료율을 복제하지 않는다.
+v0.5는 문서 기준 사실·가정·부족한 정보를 구분하고 AI 없이 가능한 후보·금액을 먼저 제공한다.
+기존 tri-state·최신성 사전조건은 B01에서 계약·회귀 테스트·최소 실행 경로와 함께 개정한다.
+아래 Phase 0~8 기록은 기존 구현의 역사이며 v0.5 수용 기준을 대신하지 않는다.
+
+사용자가 별도로 요청한 개발 지침 준비 작업은 [021 계획](021-agent-workflow-optimization.md)이다.
+해당 준비 완료는 #61의 제품 구현 완료를 의미하지 않는다.
 
 ## Plan rules
 
-1. 각 기능은 독립적으로 검토 가능한 branch, Conventional Commit, PR, CI, merge commit을 가진다.
+1. 변경은 독립적으로 검토 가능한 branch, Conventional Commit, PR, CI 증거에 연결한다. 현재 메인의 PR 묶음을 따르고 이슈·기능별 1:1 PR은 강제하지 않는다. merge commit은 실제 merge 뒤 기록한다.
 2. 하나의 거대한 Phase 2~8 PR을 만들지 않는다.
 3. 각 PR 직전 root agent가 전체 diff와 최신 검증을 한 번 집중 검토한다.
 4. 기능·동작 변경은 실패하는 test를 먼저 작성한다.
