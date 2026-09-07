@@ -326,3 +326,41 @@ canonical 연결은 완료로 주장하지 않는다.
 Web/manifest/lock/Node 입력은 `28a60b3`과 동일함을 diff로 확인했으며 해당 Web 166개·전체
 정적/빌드와 Chromium mock E2E 16개 통과 증거를 유지한다. 이 변경에서 Web/브라우저를 다시
 실행했다고 표현하지 않는다. 새 이미지 빌드는 다음 push의 CI에서 확인한다.
+
+## Reimport contract aliases and downstream evidence (2026-09-07)
+
+기준 `83f77dc` 이후 변경이다. 원문 계약 locator helper `0ca2f5e`를 `db242cb`, 약관 context
+helper `a465b75`를 `2ee3653`으로 통합했다. 일반 가져오기처럼 같은 bytes의 새 문서/버전과
+새 추출을 만들어도, 정확한 로컬 계약번호 anchor·가정·피보험자와 기존 publication을
+대조해 한 계약을 재사용한다. 원문 native 이름 위치가 같은 담보도 기존 ID를 유지한다.
+다른 bytes는 합치지 않고, 과거의 중복 계약이 여럿이면 자동 삭제/합병하지 않는다.
+
+새로 발견한 담보의 Evidence가 재가져온 문서에 있을 때 원장 조회와 약관 연결 검증 모두
+`enrollment_alias.py`를 사용한다. 원래 계약과 새 담보의 publication, 정확한 Evidence,
+현재 문서 hash·추출·가정·피보험자·원문 계약을 재검증한다. 약관 링크 context의 새 boolean은
+서버 내부 기본 false이며 외부 API/JSON Schema는 바꾸지 않는다. 두 번째 import 계약의
+사용자 교정도 원래 PolicyContract/Party 문서 근거를 유지한다. 별도 migration은 없다.
+
+재가져오기 시 두 계약 생성 RED, 새 담보 원장 조회 실패 RED, 두 번째 계약 교정 후 조회
+실패 RED, 지원하지 않는 기존 locator 때문에 같은 문서의 다른 계약까지 보류되는 RED,
+새 문서 담보의 약관 연결 실패 RED를 각각 확인 후 수정했다. 새 helper 단위 39개와
+약관 context 단위 31개(11 RED 후 통과)를 검증했다. 관련 PostgreSQL 46개가 통과했으며
+사용자 교정/직접 원장 수정·구성원 변경 보호, 동등 bytes 반복/별도 행, 근거 없는 Evidence
+교체·변경 hash·누락 Party 거부, 다른 bytes/과거 복수 계약 보존, 실제 약관 연결 확인을 포함한다.
+
+초기 테스트는 잘못된 합성 DB 계정 때문에 guard에서 중단되었으며 데이터 검증 결과가
+아니다. fixture에 없는 documents 가정 열을 제거했고, 약관 fixture의 RESTRICT 정리 순서를
+수정했다. 실패로 남은 fixture는 destructive guard를 통과한 전용 합성 test DB에서만
+정리했다. 초기 alias SQL 괄호/정적 검사 오류도 수정했다. 실제 자료나 provider는 사용하지 않았다.
+
+2026-09-07 21:06~21:10 KST, `2ee3653` + 이 절의 API/테스트/문서 변경에서 직렬 검증했다.
+`ruff format --check .` 574 files, `ruff check .`, `mypy apps/api/src workers/analyzer/src scripts`
+238 sources, 기본 `pytest apps/api/tests workers/analyzer/tests scripts/tests -q` 1,896 passed /
+267 deselected / 3 subtests passed, 전용 합성 DB의 전체 `pytest -m integration apps/api/tests
+workers/analyzer/tests -q` 266 passed / 1,623 deselected가 통과했다. 문서 50개·안전 767 paths·
+생성 계약·container/workflow 정적 검사·diff도 통과했다. Web/계약/lock/toolchain 입력이
+`83f77dc`와 동일함을 diff로 확인했으며 기존 Web 166개·Chromium mock E2E 16개 증거를
+유지한다. 새 Web/브라우저/이미지 빌드를 이 로컬 실행으로 주장하지 않는다. 현재 기준
+`83f77dc` CI 34118286689는 required 7개(이미지 3개 포함)가 모두 통과했다. 다음 push의 CI는
+별도로 확인한다. 운영/private snapshot 공통 담보 identity, 자동 component/약관 판본 연결과
+보호된 자료 수용은 아직 남아 있다.

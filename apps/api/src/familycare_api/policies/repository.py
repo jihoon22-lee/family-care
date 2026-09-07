@@ -23,6 +23,7 @@ from familycare_api.policies.domain import (
     PolicyStatus,
     Rider,
 )
+from familycare_api.policies.enrollment_alias import proven_rider_source_alias
 from familycare_api.policies.errors import (
     PolicyRepositoryUnavailable,
     PolicyStateConflict,
@@ -572,6 +573,10 @@ class PolicyLedgerRepository:
                     query,
                     (policy_id, scope.household_space_id, scope.household_space_id),
                 ).fetchall()
+                for row in rows:
+                    row["proven_source_alias"] = row["source_document_version_id"] != row[
+                        "policy_source_document_version_id"
+                    ] and proven_rider_source_alias(connection, scope.household_space_id, row)
         except psycopg.Error:
             raise PolicyRepositoryUnavailable from None
         result: list[Rider] = []
@@ -580,7 +585,10 @@ class PolicyLedgerRepository:
             status_evidence = _evidence(row, "status")
             if (
                 source is None
-                or source.document_version_id != row.get("policy_source_document_version_id")
+                or (
+                    source.document_version_id != row.get("policy_source_document_version_id")
+                    and not row.get("proven_source_alias")
+                )
                 or source.review_state == "NEEDS_REVIEW"
                 or row.get("policy_document_kind") != "policy"
                 or (status_evidence is not None and status_evidence.review_state == "NEEDS_REVIEW")

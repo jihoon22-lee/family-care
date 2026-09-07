@@ -66,9 +66,15 @@ def native_database(request: pytest.FixtureRequest) -> Iterator[Any]:
                 (job.household_space_id,),
             )
             connection.execute(
-                "DELETE FROM extractions WHERE document_version_id=%s AND "
+                "DELETE FROM extractions WHERE document_version_id IN (SELECT v.id FROM "
+                "document_versions v JOIN documents d ON d.id=v.document_id WHERE "
+                "v.id=%s OR d.source_key LIKE %s) AND "
                 "extractor_version='synthetic-native-reextract'",
-                (job.document_version_id,),
+                (job.document_version_id, f"synthetic-native-reimport/{job.household_space_id}/%"),
+            )
+            connection.execute(
+                "DELETE FROM documents WHERE source_key LIKE %s",
+                (f"synthetic-native-reimport/{job.household_space_id}/%",),
             )
             connection.execute(
                 "DELETE FROM document_batches WHERE family_member_id IN (SELECT id FROM "
@@ -177,16 +183,33 @@ def _retain_native(
     return work
 
 
-def _reextract(url: str, job: Any) -> Any:
+def _reextract(url: str, job: Any, *, reimport: bool = False) -> Any:
     extraction, item, next_job = uuid4(), uuid4(), uuid4()
     with psycopg.connect(_psycopg_url(url)) as connection:
+        document_version = job.document_version_id
+        document = connection.execute(
+            "SELECT document_id FROM document_versions WHERE id=%s", (document_version,)
+        ).fetchone()[0]
+        if reimport:
+            document, document_version = uuid4(), uuid4()
+            connection.execute(
+                "INSERT INTO documents(id,source_key,document_kind,status) "
+                "VALUES (%s,%s,'policy','ready')",
+                (document, f"synthetic-native-reimport/{job.household_space_id}/{document}"),
+            )
+            connection.execute(
+                "INSERT INTO document_versions(id,document_id,version_number,content_sha256,"
+                "byte_size,page_count) SELECT %s,%s,1,content_sha256,byte_size,page_count "
+                "FROM document_versions WHERE id=%s",
+                (document_version, document, job.document_version_id),
+            )
         connection.execute(
             "INSERT INTO "
             "extractions(id,document_version_id,extractor_name,extractor_version,extractor_conf"
             "ig_hash,quality_rule_version,status,succeeded_at) SELECT "
-            "%s,document_version_id,extractor_name,'synthetic-native-reextract',%s,quality_rule"
+            "%s,%s,extractor_name,'synthetic-native-reextract',%s,quality_rule"
             "_version,'succeeded',clock_timestamp() FROM extractions WHERE id=%s",
-            (extraction, uuid4().hex * 2, job.extraction_id),
+            (extraction, document_version, uuid4().hex * 2, job.extraction_id),
         )
         page = connection.execute(
             "INSERT INTO "
@@ -208,18 +231,18 @@ def _reextract(url: str, job: Any) -> Any:
             "INSERT INTO "
             "evidence(household_space_id,document_version_id,extraction_id,content_sha256,physi"
             "cal_page,review_state) SELECT "
-            "household_space_id,document_version_id,%s,content_sha256,1,'NEEDS_REVIEW' FROM "
+            "household_space_id,%s,%s,content_sha256,1,'NEEDS_REVIEW' FROM "
             "evidence WHERE extraction_id=%s LIMIT 1",
-            (extraction, job.extraction_id),
+            (document_version, extraction, job.extraction_id),
         )
         connection.execute(
             "INSERT INTO "
             "document_batch_items(id,batch_id,document_id,source_id,source_key,display_label,do"
             "cument_kind,state,available_at,completed_at) SELECT "
-            "%s,batch_id,document_id,%s,source_key,'Synthetic Native "
+            "%s,batch_id,%s,%s,source_key,'Synthetic Native "
             "Reanalysis',document_kind,state,available_at,completed_at FROM "
             "document_batch_items WHERE id=%s",
-            (item, uuid4().hex * 2, job.batch_item_id),
+            (item, document, uuid4().hex * 2, job.batch_item_id),
         )
         connection.execute(
             "INSERT INTO "
@@ -233,12 +256,370 @@ def _reextract(url: str, job: Any) -> Any:
                 job.household_space_id,
                 item,
                 job.family_member_id,
-                job.document_version_id,
+                document_version,
                 extraction,
                 WORKER,
             ),
         )
     return PolicyStructuringJobQueue(url).get_job(next_job)
+
+
+@pytest.mark.parametrize(
+    "new_row,proof_change",
+    [
+        (False, None),
+        (True, None),
+        (True, "unbound_evidence"),
+        (True, "content_hash"),
+        (True, "member"),
+        (True, "terms_link"),
+    ],
+)
+def test_reimport_same_bytes_keeps_one_contract_and_reads_each_proven_rider(
+    native_database: Any, new_row: bool, proof_change: str | None
+) -> None:
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+                "Another Rider sum assured: 619 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    scope = HouseholdScope(job.household_space_id)
+    ledger = PolicyLedgerRepository(url)
+    original = ledger.list_policies(scope)[0]
+    first_rider = ledger.list_policy_riders(scope, original.id)[0]
+    second = _reextract(url, job, reimport=True)
+    assert second.document_version_id != job.document_version_id
+    _retain_native(
+        url,
+        second,
+        name="Another Rider" if new_row else "Sample Rider",
+        amount=619 if new_row else 317,
+    )
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    assert ledger.list_policies(scope) == [original]
+    riders = ledger.list_policy_riders(scope, original.id)
+    assert first_rider in riders
+    assert len(riders) == (2 if new_row else 1)
+    if new_row:
+        added = next(r for r in riders if r.id != first_rider.id)
+        assert added.source_evidence.document_version_id == second.document_version_id
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT count(DISTINCT s.job_id) FROM range_enrollment_publications p "
+            "JOIN policy_range_candidate_sources s ON "
+            "s.candidate_version_id=p.source_candidate_version_id WHERE p.policy_contract_id=%s",
+            (original.id,),
+        ).fetchone() == (2,)
+    if proof_change == "terms_link":
+        _confirm_reimport_terms_link(url, scope, original, added)
+    elif proof_change is not None:
+        from familycare_api.policies.errors import PolicyRepositoryUnavailable
+
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            if proof_change == "unbound_evidence":
+                unbound = connection.execute(
+                    "INSERT INTO evidence(household_space_id,document_version_id,extraction_id,"
+                    "content_sha256,physical_page,review_state) SELECT household_space_id,"
+                    "document_version_id,extraction_id,content_sha256,physical_page,'AI_VERIFIED' "
+                    "FROM evidence WHERE id=%s RETURNING id",
+                    (added.source_evidence.evidence_id,),
+                ).fetchone()[0]
+                connection.execute(
+                    "UPDATE riders SET source_evidence_id=%s WHERE id=%s", (unbound, added.id)
+                )
+            elif proof_change == "content_hash":
+                connection.execute(
+                    "UPDATE document_versions SET content_sha256=%s WHERE id=%s",
+                    ("d" * 64, second.document_version_id),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM policy_parties WHERE policy_contract_id=%s", (original.id,)
+                )
+        with pytest.raises(PolicyRepositoryUnavailable):
+            ledger.list_policy_riders(scope, original.id)
+
+
+def _confirm_reimport_terms_link(url: str, scope: HouseholdScope, policy: Any, rider: Any) -> None:
+    from datetime import date
+
+    from familycare_api.clauses.repository import RiderClauseLinkRepository
+    from psycopg.rows import dict_row
+
+    from apps.api.tests.test_rider_clause_rules_integration import (
+        _insert_candidate,
+        _insert_document,
+        _insert_evidence,
+    )
+
+    doc, version, extraction, evidence, edition, clause, candidate, link = [
+        uuid4() for _ in range(8)
+    ]
+    try:
+        with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+            _insert_document(
+                connection,
+                document_id=doc,
+                document_version_id=version,
+                extraction_id=extraction,
+                source_key="synthetic-alias-terms/" + str(doc),
+                document_kind="terms",
+                content_sha256="b" * 64,
+                pages=(1,),
+            )
+            _insert_evidence(
+                connection,
+                evidence_id=evidence,
+                household_id=scope.household_space_id,
+                document_version_id=version,
+                extraction_id=extraction,
+                content_sha256="b" * 64,
+                page=1,
+            )
+            connection.execute(
+                "UPDATE policy_contracts SET contract_date=%s WHERE id=%s",
+                (date(2025, 1, 1), policy.id),
+            )
+            connection.execute(
+                "INSERT INTO terms_editions(id,household_space_id,document_version_id,"
+                "insurer_display,insurer_key,product_display,product_key,content_sha256,"
+                "normalization_version) "
+                "VALUES (%s,%s,%s,'Sample Insurer',%s,'Sample Plan',%s,%s,'unicode-nfc-v1')",
+                (
+                    edition,
+                    scope.household_space_id,
+                    version,
+                    policy.insurer_key,
+                    policy.product_key,
+                    "b" * 64,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO clauses(id,household_space_id,terms_edition_id,clause_type,label,"
+                "normalized_title,normalized_text,physical_page_start,physical_page_end,"
+                "normalization_version) "
+                "VALUES (%s,%s,%s,'article','Article A','synthetic eligibility',"
+                "'Synthetic clause body',1,1,'unicode-nfc-v1')",
+                (clause, scope.household_space_id, edition),
+            )
+            connection.execute(
+                "INSERT INTO clause_evidence(clause_id,evidence_id) VALUES (%s,%s)",
+                (clause, evidence),
+            )
+            _insert_candidate(
+                connection,
+                candidate_id=candidate,
+                review_item_id=uuid4(),
+                household_id=scope.household_space_id,
+                candidate_kind="rider_clause",
+                aggregate_id=link,
+                evidence=(
+                    (
+                        "rider_id",
+                        rider.source_evidence.document_version_id,
+                        rider.source_evidence.evidence_id,
+                        rider.source_evidence.physical_page,
+                    ),
+                    ("clause_id", version, evidence, 1),
+                ),
+            )
+            connection.execute(
+                "INSERT INTO rider_clause_links(id,household_space_id,rider_id,terms_edition_id,"
+                "clause_id,candidate_version_id,review_state,applicability_reason_code) "
+                "VALUES (%s,%s,%s,%s,%s,%s,'AI_VERIFIED','APPLICABLE')",
+                (link, scope.household_space_id, rider.id, edition, clause, candidate),
+            )
+            connection.execute(
+                "INSERT INTO rider_clause_link_evidence(rider_clause_link_id,evidence_id) "
+                "VALUES (%s,%s),(%s,%s)",
+                (link, rider.source_evidence.evidence_id, link, evidence),
+            )
+        confirmed = RiderClauseLinkRepository(url).confirm(scope, link, expected_version=1)
+        assert confirmed.review_state == "USER_CONFIRMED"
+        assert {e.evidence_id for e in confirmed.evidence} == {
+            rider.source_evidence.evidence_id,
+            evidence,
+        }
+    finally:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute(
+                "DELETE FROM rider_clause_link_evidence WHERE rider_clause_link_id=%s", (link,)
+            )
+            connection.execute("DELETE FROM rider_clause_links WHERE id=%s", (link,))
+            connection.execute("DELETE FROM clause_evidence WHERE clause_id=%s", (clause,))
+            connection.execute("DELETE FROM clauses WHERE id=%s", (clause,))
+            connection.execute("DELETE FROM terms_editions WHERE id=%s", (edition,))
+            connection.execute("DELETE FROM analysis_candidate_versions WHERE id=%s", (candidate,))
+            connection.execute("DELETE FROM evidence WHERE id=%s", (evidence,))
+            connection.execute("DELETE FROM documents WHERE id=%s", (doc,))
+
+
+def test_contract_correction_on_reimport_preserves_original_source_and_party(
+    native_database: Any,
+) -> None:
+    from familycare_api.policies.candidate_models import CandidateCorrectionRequest
+    from familycare_api.policies.candidate_repository import CandidateRepository
+
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    scope = HouseholdScope(job.household_space_id)
+    ledger = PolicyLedgerRepository(url)
+    original = ledger.list_policies(scope)[0]
+    second = _reextract(url, job, reimport=True)
+    _retain_native(url, second)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    repository = CandidateRepository(url)
+    item = next(
+        item
+        for item in repository.list_review_items(scope, status="AI_VERIFIED")
+        if item.candidate_kind == "policy_contract"
+        and item.evidence[0].document_version_id == second.document_version_id
+    )
+    field = next(field for field in item.fields if field.field_id == "product_name")
+    actor = uuid4()
+    corrected = repository.correct_field(
+        scope,
+        request=CandidateCorrectionRequest(
+            expected_version=item.expected_version,
+            field_id="product_name",
+            value="Corrected Sample Plan",
+            evidence_id=field.evidence_ids[0],
+        ),
+        actor_id=actor,
+        review_item_id=item.review_item_id,
+    )
+    repository.transition(
+        scope,
+        item.review_item_id,
+        expected_version=corrected.expected_version,
+        status="USER_CONFIRMED",
+        actor_id=actor,
+    )
+    current = ledger.list_policies(scope)
+    assert len(current) == 1 and current[0].id == original.id
+    assert current[0].product_display == "Corrected Sample Plan"
+    assert current[0].source_evidence == original.source_evidence
+    assert ledger.list_policy_riders(scope, original.id)
+
+
+@pytest.mark.parametrize("scenario", ["changed_content", "legacy_conflict"])
+def test_reimport_does_not_merge_different_bytes_or_ambiguous_legacy_contracts(
+    native_database: Any, monkeypatch: pytest.MonkeyPatch, scenario: str
+) -> None:
+    from uuid import UUID
+
+    from familycare_api.policies import range_enrollment
+
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    second = _reextract(url, job, reimport=True)
+    if scenario == "changed_content":
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute(
+                "UPDATE document_versions SET content_sha256=%s WHERE id=%s",
+                ("d" * 64, second.document_version_id),
+            )
+            connection.execute(
+                "UPDATE evidence SET content_sha256=%s WHERE document_version_id=%s",
+                ("d" * 64, second.document_version_id),
+            )
+        _retain_native(url, second)
+        assert RangeEnrollmentProjector(url).project_pending() == 2
+    else:
+        # Reproduce the previous publication policy without rewriting immutable evidence.
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                range_enrollment,
+                "_policy_identity",
+                lambda connection, source: UUID(source["association_json"]["contract_scope_id"]),
+            )
+            _retain_native(url, second)
+            assert RangeEnrollmentProjector(url).project_pending() == 2
+    ledger = PolicyLedgerRepository(url)
+    scope = HouseholdScope(job.household_space_id)
+    originals = ledger.list_policies(scope)
+    assert len(originals) == 2
+    if scenario == "legacy_conflict":
+        third = _reextract(url, job, reimport=True)
+        _retain_native(url, third)
+        assert RangeEnrollmentProjector(url).project_pending() == 0
+        assert ledger.list_policies(scope) == originals
+
+
+def test_unresolved_old_locator_does_not_block_another_contract_in_same_document(
+    native_database: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_api.policies import range_enrollment
+
+    url, job = native_database
+    lines = [
+        "Policy certificate",
+        "Policy number: synthetic-policy-001",
+        "Insured: Family Member A",
+        "Sample Insurer Sample Plan",
+        "Sample Rider sum assured: 317 KRW",
+    ]
+    _store_words(url, job, _words(lines))
+    first = _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    second = _reextract(url, job)
+    lines[1] = "Policy number: synthetic-policy-002"
+    _store_words(url, second, _words(lines))
+    _retain_native(url, second)
+    original_locator = range_enrollment.contract_source_locator
+
+    def legacy_locator(structure: Any, association: Any) -> Any:
+        # Older retained structure can lack a currently supported locator.
+        if structure["lineage"]["extraction_id"] == str(job.extraction_id):
+            return None
+        return original_locator(structure, association)
+
+    assert first.generation_id is not None
+    monkeypatch.setattr(range_enrollment, "contract_source_locator", legacy_locator)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    assert (
+        len(PolicyLedgerRepository(url).list_policies(HouseholdScope(job.household_space_id))) == 2
+    )
 
 
 def test_same_pdf_new_extraction_reuses_one_rider_and_preserves_both_sources(
@@ -279,7 +660,10 @@ def test_same_pdf_new_extraction_reuses_one_rider_and_preserves_both_sources(
 
 
 @pytest.mark.parametrize("change", ["direct_edit", "user_correction"])
-def test_reextraction_preserves_existing_user_changes(native_database: Any, change: str) -> None:
+@pytest.mark.parametrize("reimport", [False, True])
+def test_reextraction_preserves_existing_user_changes(
+    native_database: Any, change: str, reimport: bool
+) -> None:
     from familycare_api.policies.candidate_models import CandidateCorrectionRequest
     from familycare_api.policies.candidate_repository import CandidateRepository
 
@@ -336,7 +720,7 @@ def test_reextraction_preserves_existing_user_changes(native_database: Any, chan
             actor_id=actor,
         )
     expected = ledger.list_policy_riders(scope, policy.id)
-    second = _reextract(url, job)
+    second = _reextract(url, job, reimport=reimport)
     _retain_native(url, second)
     assert RangeEnrollmentProjector(url).project_pending() == 1
     assert ledger.list_policy_riders(scope, policy.id) == expected
@@ -528,8 +912,10 @@ def test_text_line_and_table_views_share_the_original_physical_enrollment(
         )
 
 
+@pytest.mark.parametrize("reimport", [False, True])
 def test_existing_contract_is_not_rebound_to_another_member_after_name_changes(
     native_database: Any,
+    reimport: bool,
 ) -> None:
     url, job = native_database
     _store_words(
@@ -547,7 +933,7 @@ def test_existing_contract_is_not_rebound_to_another_member_after_name_changes(
     )
     _retain_native(url, job)
     assert RangeEnrollmentProjector(url).project_pending() == 2
-    second = _reextract(url, job)
+    second = _reextract(url, job, reimport=reimport)
     member, batch = uuid4(), uuid4()
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(

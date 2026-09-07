@@ -49,6 +49,7 @@ from familycare_api.clauses.rules import (
 from familycare_api.common.evidence import EvidenceBbox, EvidenceRef, EvidenceReviewState
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.common.versions import require_expected_version
+from familycare_api.policies.enrollment_alias import proven_rider_source_alias
 
 
 def _database_url(value: str) -> str:
@@ -1043,6 +1044,17 @@ class RiderClauseLinkRepository:
         rider_evidence = _evidence(policy_row, "source")
         if rider_evidence is None:
             raise RiderClauseLinkInvalid("LINK_EVIDENCE_INVALID")
+        alias_verified = rider_evidence.document_version_id != policy_row[
+            "policy_document_version_id"
+        ] and proven_rider_source_alias(
+            connection,
+            scope.household_space_id,
+            dict(
+                policy_row,
+                id=link_row["rider_id"],
+                policy_source_document_version_id=policy_row["policy_document_version_id"],
+            ),
+        )
 
         edition_row = connection.execute(
             f"""
@@ -1084,7 +1096,7 @@ class RiderClauseLinkRepository:
         )
         link = _rider_clause_link(link_row, link_evidence)
         evidence_integrity_valid = link_evidence_valid and self._policy_evidence_valid(
-            policy_row, rider_evidence
+            policy_row, rider_evidence, source_alias_verified=alias_verified
         )
         issues = candidate.get("issues")
         common_special_conflict = isinstance(issues, list) and any(
@@ -1110,15 +1122,21 @@ class RiderClauseLinkRepository:
             candidate_review_state=cast(CandidateReviewState, candidate["status"]),
             evidence_integrity_valid=evidence_integrity_valid,
             common_special_terms_conflict=common_special_conflict,
+            rider_source_alias_verified=alias_verified,
         )
 
     @staticmethod
-    def _policy_evidence_valid(row: dict[str, Any], evidence: EvidenceRef) -> bool:
+    def _policy_evidence_valid(
+        row: dict[str, Any], evidence: EvidenceRef, *, source_alias_verified: bool = False
+    ) -> bool:
         width = row.get("source_page_width")
         height = row.get("source_page_height")
         return bool(
             row.get("rider_document_kind") == "policy"
-            and evidence.document_version_id == row.get("policy_document_version_id")
+            and (
+                evidence.document_version_id == row.get("policy_document_version_id")
+                or source_alias_verified
+            )
             and evidence.content_sha256 == row.get("policy_content_sha256")
             and evidence.review_state in {"AI_VERIFIED", "USER_CONFIRMED"}
             and row.get("source_extraction_status") == "succeeded"

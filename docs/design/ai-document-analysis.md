@@ -177,8 +177,23 @@ header 자체는 가입 담보 근거가 아니다. 필요한 header/unit Eviden
 변경하지 않으며 기존 publication과 정확한 content hash·물리 페이지·이름 단어 bbox를
 비교한다. 금액·교정된 표시명·배열 순서·표 전체 bbox는 동등성 근거가 아니다. 좌표가 없는
 같은 이름의 재추출은 추가 가입으로 만들지 않고 보류한다. 기존 원장 교정/soft delete와
-primary insured 구성원이 달라진 경우도 자동 반영하지 않는다. 별도 DocumentVersion을
-만드는 일반 재가져오기와 private knowledge의 동등성은 후속 canonical 연결 대상이다.
+primary insured 구성원이 달라진 경우도 자동 반영하지 않는다.
+
+일반 재가져오기에서 새 DocumentVersion을 만들더라도 `contract_source_locator.py`가
+불변 원문의 정확한 계약번호 anchor와 기존 local scope를 재검증한다. 같은 가정·bytes·
+정규화된 계약번호 hash·피보험자가 일치하는 기존 publication의 계약 ID가 하나이면 이를
+재사용한다. 서로 다른 bytes를 합치지 않고, 복수 기존 계약이나 입증할 수 없는 다른 문서의
+동등성은 보류한다. 같은 문서의 서로 다른 local contract scope는 독립 계약으로 유지한다.
+기존 원장/교정/청구와 source 이력은 수정·삭제하지 않으며, 새 publication이 별도 출처를
+기존 계약/담보에 연결한다. 두 번째 문서에서 계약을 교정해도 PolicyContract/Party의 원래
+DocumentVersion과 Evidence를 유지하고 교정 필드 근거는 새 publication에 남긴다.
+
+재가져온 문서에서 추가된 담보를 읽거나 약관 링크를 검증할 때 `enrollment_alias.py`는 원래
+계약 publication과 해당 담보의 정확한 source Evidence publication을 함께 조회한다. 현재
+문서 hash·generation·extraction·가정·primary insured·원문 계약 locator가 모두 맞아야
+문서 ID 차이를 허용한다. 클라이언트는 이 검증 값을 설정할 수 없다. 약관 판본·계약일·문서
+종류·Evidence 검토 상태·무결성·정확한 인용 검사는 유지한다. 운영/private knowledge의
+공통 담보 identity와 서로 다른 bytes의 계약/약관 판본 동등성은 후속 연결 대상이다.
 
 `document-structure-v2`는 단어별 원본 BLOCK을 보존하고, 같은 layer/줄에서 가까이 이어지는
 단어를 `TEXT_LINE`으로 묶는다. 삽입한 공백 이외의 문자와 원본 block/line 문자 범위는

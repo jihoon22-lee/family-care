@@ -19,11 +19,51 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from familycare_api.policies.contract_source_locator import contract_source_locator
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
 
 
 def _key(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _policy_identity(
+    connection: psycopg.Connection[dict[str, Any]], source: dict[str, Any]
+) -> UUID | None:
+    """Reuse one proven contract across imports while retaining every source alias."""
+    association = source["association_json"]
+    locator = contract_source_locator(source["structure_json"], association)
+    previous = connection.execute(
+        "SELECT DISTINCT p.policy_contract_id,s.association_json,g.id,g.structure_json "
+        "FROM range_enrollment_publications p JOIN policy_range_candidate_sources s ON "
+        "s.candidate_version_id=p.source_candidate_version_id "
+        "JOIN document_policy_range_plans plan ON plan.job_id=s.job_id "
+        "JOIN document_structure_generations g ON g.id=plan.generation_id "
+        "JOIN document_versions v ON v.id=g.document_version_id "
+        "WHERE p.household_space_id=%s AND v.content_sha256=%s",
+        (source["household_space_id"], source["structure_json"]["lineage"]["content_sha256"]),
+    ).fetchall()
+    matches: set[UUID] = set()
+    for row in previous:
+        old_association = row["association_json"]
+        old = contract_source_locator(row["structure_json"], old_association)
+        if old_association["contract_scope_id"] == association["contract_scope_id"]:
+            # This also routes a changed member to the existing party guard.
+            matches.add(row["policy_contract_id"])
+        elif row["structure_json"]["lineage"]["document_version_id"] == str(
+            source["document_version_id"]
+        ):
+            # Distinct local scopes already distinguish contracts in one document.
+            continue
+        elif locator is None or old is None:
+            return None
+        elif old["contract_number_sha256"] == locator["contract_number_sha256"]:
+            if old != locator:
+                return None
+            matches.add(row["policy_contract_id"])
+    if len(matches) > 1:
+        return None
+    return next(iter(matches)) if matches else UUID(association["contract_scope_id"])
 
 
 def _physical_rider_identity(
@@ -305,7 +345,9 @@ def project_range_candidate(
     ]
     if not primary:
         return False
-    policy_id = UUID(association["contract_scope_id"])
+    policy_id = _policy_identity(connection, source)
+    if policy_id is None:
+        return False
     enrolled_members = connection.execute(
         "SELECT p.id, ARRAY(SELECT party.family_member_id FROM policy_parties party "
         "WHERE party.policy_contract_id=p.id AND party.household_space_id=p.household_space_id "
@@ -379,6 +421,13 @@ def project_range_candidate(
             return False
     common = {"source_evidence_id": primary[0]["evidence_id"]}
     if rider_id is None:
+        if (
+            target is not None
+            and target["source_document_version_id"] != context["document_version_id"]
+        ):
+            # Keep the policy and its party on their original document. The
+            # appended publication retains the corrected import's field proof.
+            common["source_evidence_id"] = target["source_evidence_id"]
         insurer, product = values.get("insurer"), values.get("product_name")
         if not isinstance(insurer, str) or not 1 <= len(insurer) <= 160:
             return False
