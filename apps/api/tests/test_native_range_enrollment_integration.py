@@ -287,9 +287,18 @@ def _reextract(url: str, job: Any, *, reimport: bool = False) -> Any:
         (True, "terms_link"),
     ],
 )
+@pytest.mark.parametrize("paged_storage", [False, True])
 def test_reimport_same_bytes_keeps_one_contract_and_reads_each_proven_rider(
-    native_database: Any, new_row: bool, proof_change: str | None
+    native_database: Any,
+    new_row: bool,
+    proof_change: str | None,
+    paged_storage: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if paged_storage:
+        from familycare_worker import document_structure_repository as storage
+
+        monkeypatch.setattr(storage, "_INLINE_STRUCTURE_BYTES", 0)
     url, job = native_database
     _store_words(
         url,
@@ -640,9 +649,16 @@ def test_unresolved_old_locator_does_not_block_another_contract_in_same_document
     )
 
 
+@pytest.mark.parametrize("paged_storage", [False, True])
 def test_same_pdf_new_extraction_reuses_one_rider_and_preserves_both_sources(
     native_database: Any,
+    paged_storage: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if paged_storage:
+        from familycare_worker import document_structure_repository as storage
+
+        monkeypatch.setattr(storage, "_INLINE_STRUCTURE_BYTES", 0)
     url, job = native_database
     _store_words(
         url,

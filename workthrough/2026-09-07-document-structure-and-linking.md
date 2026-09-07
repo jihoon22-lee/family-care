@@ -543,3 +543,59 @@ parser 한도를 올리지 않고 전체 보존 방식을 개선할 필요가 �
 검사·diff가 통과했다. Web/공유 계약/manifest/lock은 `c9fe22c`와 동일하여 앞선
 Web 169개/build·Chromium mock 17개 증거를 유지한다. image/CI는 push 후 별도로 확인한다.
 실제 원문·provider·runtime migration·태그·배포 변경은 없다.
+
+## Lossless page retention for large structures
+
+`0036`과 `structure_storage.py`는 큰 논리 IR을 정확한 header와 페이지 part로 보존한다.
+작은 inline generation과 기존 history를 유지하고, 저장 형식과 무관하게 같은 canonical
+identity를 streaming 계산한다. native/OCR 원문·노드/셀·좌표/배열 순서·문맥/문자 출처를
+보존하며 PostgreSQL `json`으로 음의 0·지수 숫자의 원래 직렬화도 복원한다. codec의
+19개 순수 회귀를 독립 소스 `de6b184`에서 `eb12d87`로 통합했다.
+
+논리 IR이 8 MiB를 넘으면 페이지 저장을 사용한다. 페이지 part 64 MiB/전체 파생 저장 512 MiB와
+기존 plan 64 MiB를 각각 제한하고, parser/source 한도나 외부 전송 예산은 늘리지 않는다.
+metadata와 페이지는 atomic하게 저장하며 불완전 manifest·변경/삭제·추가 part와 지원하지
+않는 downgrade를 거부한다. 공유 SQL 함수가 두 형식에서 가정별 전체 요청 페이지 노드와
+명시 문맥을 읽는다. API/Worker는 필요한 페이지로 조회하고 전체 원문 복원은 로컬 감사용이다.
+
+기존 저장 함수/형식 부재의 PG RED, 페이지 저장에서 가입 publication이 0건인 RED를
+확인한 뒤 원장/alias/공통 담보·Worker grounding 소비를 연결했다. 단일 증권 재추출과
+새 DocumentVersion 재가져오기를 inline/page 두 형식에서 검증하며 기존 교정·근거를 유지한다.
+기존 사용자-history downgrade 시험의 고정 schema 예상값은 실행 전 schema 보존 검사로
+바꿨다. 최초 migration의 예약어 문법 오류와 개발 중 중간 schema 차이는 수정했고,
+전용 합성 DB만 guard 후 재생성하여 최종 migration 전체를 적용했다. 실제 runtime은 미변경이다.
+
+100페이지×1,000개 합성 단어의 IR은 기존 64 MiB monolithic 경로에서 거부되고, 페이지
+저장과 정확한 원문 복원에서는 통과했다. 105,000 nodes/5,000 chunks·누락 0과 1/50/100쪽의
+모든 노드를 확인했다. 해당 PG 시험은 43.56초, 전체 명령 44.09초, peak RSS 576,072 KiB였다.
+이는 이 합성 규모의 실제 DB 보존 증거이며 모든 parser 허용 입력이나 실제 자료의 성공을
+뜻하지 않는다. 큰 단일 페이지/총량 초과는 자원 실패로 남기고 기존 정상 결과를 보존한다.
+
+정적 리뷰에서 JSON 위치 배열의 노드별 반복 파싱을 병렬 배열 순회로 바꾸고, SQL aggregate
+전에 노드 크기를 확인했다. 공통 담보는 generation ID를 먼저 읽고 남은 예산 안에서 하나씩
+투영하며 일부 재추출본만으로 연결을 승인하지 않는다. 문서 alias의 필요한 투영이 NULL이면
+전체 alias 검증을 보류한다. 마지막 경우는 순수 RED 후 통과했다.
+
+지연 DB constraint가 바깥 commit에서만 실패하면 준비 실패 이력도 사라지는 PG RED를
+확인했다. 같은 manifest 검사를 writer savepoint 안에서 실행하여 실패·재시도 횟수를 남기고
+최종 commit의 DB guard도 유지한다. 새 시험은 필요한 SQL 함수 존재도 검사하여 함수
+미적용 오류를 의도한 실패 복구 증거로 사용하지 않는다. 최신 관련 합성 PG 73개와
+codec/NULL 투영 순수 20개가 통과했으며 최종 전체 검증을 이어간다.
+
+
+페이지를 빼먹은 준비는 1/2회에 재시도 상태, 3회에 terminal 실패가 되며 이후 다시 예약되지
+않는 회귀를 통과했다. terminal 상태의 시간을 수정하려던 합성 test setup은 재시도 행만
+갱신하도록 수정했다. 이 수정 전에 착수한 전체 검사는 29개 뒤 중단하여 완료 증거로 쓰지
+않았고, 수정된 대상 검사 통과 후 전체를 새로 실행했다. 새 저장 형식에서도 이전 페이지의
+연속표 header 문맥과 요청 페이지 전체 노드를 함께 읽는 PG 회귀가 통과했다.
+
+2026-09-08 01:24~01:33 KST, `eb12d87` + 이 절의 저장/소비/테스트/문서 변경에서 기본
+Python **2,003 passed / 330 deselected / 3 subtests**, 전체 합성 PostgreSQL **330 passed /
+1,721 deselected**가 통과했다. 마지막 PG 전체는 230.59초이며 큰 문서 저장/복원은
+43.89초였다. 기본 Python 뒤 추가한 연속표 테스트는 integration 전용이며 최종 PG에 포함한다.
+문서 50개·안전 789 paths·Ruff format 596개/lint·mypy 247개·생성 계약·container/workflow
+정적 검사·diff가 통과했다. 최종 빈 합성 DB의 `0036` downgrade/upgrade도 통과했다.
+Web/공유 계약/manifest/lock은 `3f255a4`와 동일하여 Web 169개/build·Chromium mock 17개
+기존 증거를 유지한다. 최신 독립 정적 리뷰의 저장·scope·원자성·투영 발견 사항도 반영했다.
+실제 source/원문·provider·운영 migration·태그·배포는 실행하지 않았다. component/판본과
+보호된 수용, 최신 push 후 CI/image 검증은 별도 후속이다.

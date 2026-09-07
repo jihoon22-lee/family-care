@@ -84,6 +84,38 @@ def test_missing_extraction_pages_are_a_processing_failure_not_missing_documents
         ).fetchone() == ("succeeded",)
 
 
+def test_incomplete_page_storage_records_a_durable_bounded_retry(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_worker import document_structure_repository as storage
+
+    database_url, job = request.getfixturevalue("structure_database")
+    _seed_page(database_url, job)
+    monkeypatch.setattr(storage, "_INLINE_STRUCTURE_BYTES", 0)
+    monkeypatch.setattr(storage, "iter_structure_pages", lambda _: iter(()))
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        assert connection.execute(
+            "SELECT to_regprocedure('validate_structure_page_manifest(uuid)') IS NOT NULL"
+        ).fetchone() == (True,)
+    runner = DocumentPreparationRunner(database_url, batch_item_id=job.batch_item_id)
+    for attempt in range(1, 4):
+        assert runner.run_once("synthetic-worker-a")
+        with psycopg.connect(_psycopg_url(database_url)) as connection:
+            assert connection.execute(
+                "SELECT state,attempts,generation_id FROM document_structure_preparations"
+            ).fetchall() == [("RETRYABLE_FAILED" if attempt < 3 else "FAILED", attempt, None)]
+            assert connection.execute(
+                "SELECT count(*) FROM document_structure_generations"
+            ).fetchone() == (0,)
+        assert not runner.run_once("synthetic-worker-a")
+        with psycopg.connect(_psycopg_url(database_url)) as connection:
+            connection.execute(
+                "UPDATE document_structure_preparations SET available_at=clock_timestamp() "
+                "WHERE state='RETRYABLE_FAILED'"
+            )
+    assert not runner.run_once("synthetic-worker-a")
+
+
 def test_concurrent_preparation_is_single_and_preserves_history(
     request: pytest.FixtureRequest,
 ) -> None:

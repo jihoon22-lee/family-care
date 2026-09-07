@@ -93,53 +93,42 @@ class _SourceInventory:
         key = content_sha256, physical_page
         if self.key == key:
             return self.value
-        # SQL projects complete page nodes and their explicit context references.
-        # Both published and unpublished generations participate. The byte bound
-        # covers all projections of this page before any JSON enters the driver.
-        rows = self.connection.execute(
+        # Read generation metadata first. Stop before building further projections
+        # once the complete-page budget cannot be met; never approve a subset.
+        generations = self.connection.execute(
             """
-            WITH generations AS MATERIALIZED (
-              SELECT g.id,g.structure_json FROM document_structure_generations g
-              JOIN document_versions v ON v.id=g.document_version_id
-              JOIN documents d ON d.id=v.document_id AND d.deleted_at IS NULL
-              WHERE g.household_space_id=%s AND v.content_sha256=%s
-              ORDER BY g.id LIMIT 10001
-            ), projected AS MATERIALIZED (
-              SELECT g.id,jsonb_build_object('lineage',g.structure_json->'lineage',
-                'nodes',page.nodes) AS structure
-              FROM generations g CROSS JOIN LATERAL (
-                WITH nodes AS MATERIALIZED (
-                  SELECT node,position FROM jsonb_array_elements(g.structure_json->'nodes')
-                    WITH ORDINALITY AS n(node,position)
-                ), selected AS MATERIALIZED (
-                  SELECT * FROM nodes WHERE node->'page_number'=to_jsonb(%s::integer)
-                ), contexts AS (
-                  SELECT jsonb_array_elements_text(
-                    COALESCE(node->'context_node_ids','[]'::jsonb)) AS id FROM selected
-                )
-                SELECT COALESCE(jsonb_agg(node ORDER BY position),'[]'::jsonb) AS nodes
-                FROM nodes WHERE node->'page_number'=to_jsonb(%s::integer)
-                  OR node->>'node_id' IN (SELECT id FROM contexts)
-              ) page
-            )
-            SELECT id, CASE WHEN count(*) OVER () <= 10000 AND
-                sum(octet_length(structure::text)) OVER () <= %s
-              THEN structure ELSE NULL END AS structure_json FROM projected
+            SELECT g.id FROM document_structure_generations g
+            JOIN document_versions v ON v.id=g.document_version_id
+            JOIN documents d ON d.id=v.document_id AND d.deleted_at IS NULL
+            WHERE g.household_space_id=%s AND v.content_sha256=%s
+            ORDER BY g.id LIMIT 10001
             """,
-            (
-                self.scope.household_space_id,
-                content_sha256,
-                physical_page,
-                physical_page,
-                _MAX_INVENTORY_BYTES,
-            ),
+            (self.scope.household_space_id, content_sha256),
         ).fetchall()
-        self.key = key
-        self.value = (
-            {row["id"]: row["structure_json"] for row in rows}
-            if rows and all(row["structure_json"] is not None for row in rows)
-            else {}
-        )
+        self.key, self.value = key, {}
+        if len(generations) > 10000:
+            return self.value
+        remaining = _MAX_INVENTORY_BYTES
+        inventory: dict[UUID, dict[str, Any]] = {}
+        for generation in generations:
+            if remaining <= 0:
+                return self.value
+            row = self.connection.execute(
+                """
+                WITH projected AS MATERIALIZED (
+                  SELECT document_structure_projection(%s,%s,ARRAY[%s]::integer[]) AS value
+                )
+                SELECT octet_length(value::text) AS byte_count,
+                  CASE WHEN octet_length(value::text)<=%s THEN value ELSE NULL END AS structure
+                FROM projected
+                """,
+                (generation["id"], self.scope.household_space_id, physical_page, remaining),
+            ).fetchone()
+            if row is None or row["structure"] is None:
+                return self.value
+            remaining -= row["byte_count"]
+            inventory[generation["id"]] = row["structure"]
+        self.value = inventory
         return self.value
 
 

@@ -32,6 +32,19 @@ from apps.api.tests.test_native_range_enrollment_integration import (
 pytestmark = pytest.mark.integration
 
 
+def test_complete_enrollment_and_canonical_identity_use_paged_storage(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from familycare_worker import document_structure_repository as storage
+
+    monkeypatch.setattr(storage, "_INLINE_STRUCTURE_BYTES", 0)
+    url, job, scope, coverage, rider = request.getfixturevalue("canonical_database")
+    repository = CanonicalLinkRepository(url)
+    assert repository.refresh(scope) == 1
+    assert repository.read_current(scope)[0].rider_id == rider
+
+
 @pytest.fixture()
 def canonical_database(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> Any:
     url, job = request.getfixturevalue("native_database")
@@ -733,11 +746,14 @@ def test_user_identity_history_prevents_unsupported_downgrade(canonical_database
     url, job, scope, coverage, rider = canonical_database
     assert CanonicalLinkRepository(url).refresh(scope) == 1
     config = Config(Path(__file__).resolve().parents[3] / "apps/api/alembic.ini")
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        previous_schema = connection.execute("SELECT version_num FROM alembic_version").fetchone()
     with pytest.raises(DBAPIError, match="user publication identity history must be retained"):
         command.downgrade(config, "0034_canonical_links")
     with psycopg.connect(_psycopg_url(url)) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0035_user_identity_proof",
+        assert (
+            connection.execute("SELECT version_num FROM alembic_version").fetchone()
+            == previous_schema
         )
     assert len(CanonicalLinkRepository(url).read_current(scope)) == 1
 

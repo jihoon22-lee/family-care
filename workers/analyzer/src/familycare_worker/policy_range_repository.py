@@ -302,12 +302,15 @@ class PolicyRangeRepository:
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             _lock(connection, job, worker_id)
             source = connection.execute(
-                "SELECT g.structure_json FROM document_policy_ranges r "
+                "SELECT document_structure_projection(g.id,g.household_space_id,%s) "
+                "AS structure_json "
+                "FROM document_policy_ranges r "
                 "JOIN document_structure_generations g ON g.id=r.generation_id "
                 "WHERE r.job_id=%s AND r.generation_id=%s AND r.envelope_id=%s "
                 "AND r.state='PENDING' AND r.envelope_json=%s AND g.household_space_id=%s "
                 "FOR UPDATE OF r",
                 (
+                    sorted({item.page for item in work.envelope.evidence}),
                     job.id,
                     work.generation_id,
                     work.envelope.envelope_id,
@@ -315,7 +318,7 @@ class PolicyRangeRepository:
                     job.household_space_id,
                 ),
             ).fetchone()
-            if source is None:
+            if source is None or source["structure_json"] is None:
                 raise PolicyRangeConflict
             if "result" in payload:
                 result = CandidatePipelineResult.model_validate_json(json.dumps(payload["result"]))

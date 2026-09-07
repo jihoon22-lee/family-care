@@ -6,13 +6,14 @@ from uuid import UUID
 import psycopg
 
 from familycare_api.policies.contract_source_locator import contract_source_locator
+from familycare_api.policies.source_projection import StructureProjectionReader
 
 
 def proven_rider_source_alias(
     connection: psycopg.Connection[dict[str, Any]], household: UUID, row: dict[str, Any]
 ) -> bool:
     publications = connection.execute(
-        "SELECT s.association_json,g.structure_json,j.document_version_id,p.rider_id "
+        "SELECT s.association_json,g.id AS generation_id,j.document_version_id,p.rider_id "
         "FROM range_enrollment_publications p JOIN policy_range_candidate_sources s ON "
         "s.candidate_version_id=p.source_candidate_version_id "
         "JOIN policy_structuring_jobs j ON j.id=s.job_id "
@@ -50,10 +51,16 @@ def proven_rider_source_alias(
     ).fetchall()
     original: set[tuple[tuple[str, str], ...]] = set()
     aliases: set[tuple[tuple[str, str], ...]] = set()
+    reader = StructureProjectionReader(connection, household)
     for publication in publications:
-        locator = contract_source_locator(
-            publication["structure_json"], publication["association_json"]
+        association = publication["association_json"]
+        structure = reader.read(
+            publication["generation_id"],
+            tuple(sorted({ref["page"] for ref in association["anchor_refs"]})),
         )
+        if structure is None:
+            return False
+        locator = contract_source_locator(structure, association)
         if locator is None:
             continue
         key = tuple(sorted(locator.items()))

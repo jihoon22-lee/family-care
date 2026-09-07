@@ -21,6 +21,7 @@ from psycopg.types.json import Jsonb
 
 from familycare_api.policies.contract_source_locator import contract_source_locator
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
+from familycare_api.policies.source_projection import StructureProjectionReader
 
 
 def _key(value: str) -> str:
@@ -34,7 +35,7 @@ def _policy_identity(
     association = source["association_json"]
     locator = contract_source_locator(source["structure_json"], association)
     previous = connection.execute(
-        "SELECT DISTINCT p.policy_contract_id,s.association_json,g.id,g.structure_json "
+        "SELECT DISTINCT p.policy_contract_id,s.association_json,g.id,g.document_version_id "
         "FROM range_enrollment_publications p JOIN policy_range_candidate_sources s ON "
         "s.candidate_version_id=p.source_candidate_version_id "
         "JOIN document_policy_range_plans plan ON plan.job_id=s.job_id "
@@ -44,23 +45,27 @@ def _policy_identity(
         (source["household_space_id"], source["structure_json"]["lineage"]["content_sha256"]),
     ).fetchall()
     matches: set[UUID] = set()
+    reader = StructureProjectionReader(connection, source["household_space_id"])
     for row in previous:
         old_association = row["association_json"]
-        old = contract_source_locator(row["structure_json"], old_association)
         if old_association["contract_scope_id"] == association["contract_scope_id"]:
             # This also routes a changed member to the existing party guard.
             matches.add(row["policy_contract_id"])
-        elif row["structure_json"]["lineage"]["document_version_id"] == str(
-            source["document_version_id"]
-        ):
+        elif row["document_version_id"] == source["document_version_id"]:
             # Distinct local scopes already distinguish contracts in one document.
             continue
-        elif locator is None or old is None:
-            return None
-        elif old["contract_number_sha256"] == locator["contract_number_sha256"]:
-            if old != locator:
+        else:
+            pages = tuple(sorted({ref["page"] for ref in old_association["anchor_refs"]}))
+            old_source = reader.read(row["id"], pages)
+            old = (
+                None if old_source is None else contract_source_locator(old_source, old_association)
+            )
+            if locator is None or old is None:
                 return None
-            matches.add(row["policy_contract_id"])
+            if old["contract_number_sha256"] == locator["contract_number_sha256"]:
+                if old != locator:
+                    return None
+                matches.add(row["policy_contract_id"])
     if len(matches) > 1:
         return None
     return next(iter(matches)) if matches else UUID(association["contract_scope_id"])
@@ -94,21 +99,22 @@ def _physical_rider_identity(
             source["structure_json"]["lineage"]["content_sha256"],
         ),
     ).fetchall()
-    structures = {source["generation_id"]: source["structure_json"]}
+    reader = StructureProjectionReader(connection, source["household_space_id"])
     matches: set[UUID] = set()
+    previous.sort(
+        key=lambda item: (
+            str(item["generation_id"]),
+            tuple(sorted({ref["page"] for ref in item["source_refs"]})),
+        )
+    )
     for item in previous:
         generation_id = item["generation_id"]
-        if generation_id not in structures:
-            row = connection.execute(
-                "SELECT structure_json FROM document_structure_generations WHERE id=%s "
-                "AND household_space_id=%s",
-                (generation_id, source["household_space_id"]),
-            ).fetchone()
-            if row is None:
-                return True, None
-            structures[generation_id] = row["structure_json"]
+        pages = tuple(sorted({ref["page"] for ref in item["source_refs"]}))
+        structure = reader.read(generation_id, pages)
+        if structure is None:
+            return True, None
         old = physical_enrollment_locator(
-            structures[generation_id],
+            structure,
             item["name"],
             [ref for ref in item["source_refs"] if ref["evidence_id"] in item["name_ids"]],
         )
@@ -274,7 +280,11 @@ def project_range_candidate(
         return False
     source = connection.execute(
         "SELECT s.*, j.household_space_id,j.document_version_id,j.extraction_id, "
-        "p.associations_json,p.generation_id,g.structure_json "
+        "p.associations_json,p.generation_id,"
+        "document_structure_projection(g.id,j.household_space_id,"
+        "ARRAY(SELECT (ref->>'page')::integer FROM jsonb_array_elements("
+        "s.source_refs || COALESCE(s.association_json->'anchor_refs','[]'::jsonb)) ref)) "
+        "AS structure_json "
         "FROM policy_range_candidate_sources s "
         "JOIN analysis_candidate_versions root ON root.id=s.candidate_version_id "
         "JOIN policy_structuring_jobs j ON j.id=s.job_id "
@@ -285,7 +295,7 @@ def project_range_candidate(
         "WHERE root.review_item_id=%s AND root.household_space_id=%s AND j.id=%s FOR SHARE OF d",
         (version["review_item_id"], household, context["id"]),
     ).fetchone()
-    if source is None:
+    if source is None or source["structure_json"] is None:
         return False
     association = source["association_json"]
     if association.get("state") != "RESOLVED" or association.get("family_member_id") != str(

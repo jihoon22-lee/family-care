@@ -6,7 +6,6 @@ knowledge completion. Protected source/result payloads never appear in errors.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
@@ -15,7 +14,7 @@ from uuid import UUID, uuid4
 
 import psycopg
 from psycopg.rows import dict_row
-from psycopg.types.json import Jsonb
+from psycopg.types.json import Json, Jsonb
 
 from familycare_worker.document_structure import (
     ChunkPlan,
@@ -24,9 +23,17 @@ from familycare_worker.document_structure import (
     plan_structure_chunks,
 )
 from familycare_worker.jobs import psycopg_database_url
+from familycare_worker.structure_storage import (
+    StructureStorageError,
+    iter_structure_pages,
+    restore_structure_payload,
+    structure_header,
+    structure_identity,
+)
 
 _WORKER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_INLINE_STRUCTURE_BYTES = 8 * 1024 * 1024
 
 
 class StructureScopeError(ValueError):
@@ -75,6 +82,10 @@ def _bounded_json(value: object, *, maximum_bytes: int) -> bytes:
     if len(encoded) > maximum_bytes:
         raise StructureScopeError
     return encoded
+
+
+def _page_json(value: object) -> str:
+    return _bounded_json(value, maximum_bytes=64 * 1024 * 1024).decode("utf-8")
 
 
 class DocumentStructureRepository:
@@ -166,6 +177,7 @@ class DocumentStructureRepository:
         )
         if canonical_structure != structure:
             raise StructureScopeError
+        del canonical_structure
         if not 0 <= plan.max_chunks <= 65536:
             raise StructureScopeError
         canonical_plan = plan_structure_chunks(
@@ -176,10 +188,18 @@ class DocumentStructureRepository:
         )
         if canonical_plan != plan:
             raise StructureScopeError
-        structure_json, plan_json = structure.to_dict(), plan.to_dict()
-        encoded = _bounded_json(structure_json, maximum_bytes=64 * 1024 * 1024)
-        planned = _bounded_json(plan_json, maximum_bytes=64 * 1024 * 1024)
-        identity = hashlib.sha256(encoded + b"\x00" + planned).hexdigest()
+        del canonical_plan
+        try:
+            identity, structure_digest, structure_bytes, _ = structure_identity(structure, plan)
+        except StructureStorageError:
+            raise StructureScopeError from None
+        paged = structure_bytes > _INLINE_STRUCTURE_BYTES
+        structure_json = (
+            structure_header(structure, structure_digest) if paged else structure.to_dict()
+        )
+        _bounded_json(structure_json, maximum_bytes=64 * 1024 * 1024)
+        plan_json = plan.to_dict()
+        _bounded_json(plan_json, maximum_bytes=64 * 1024 * 1024)
         scoped = connection.execute(
             """
             SELECT item.id FROM document_batch_items item
@@ -250,6 +270,29 @@ class DocumentStructureRepository:
         if generation is None:
             raise StructureScopeError
         generation_id = cast(UUID, generation["id"])
+        if paged:
+            try:
+                connection.execute(
+                    "INSERT INTO document_structure_page_payloads "
+                    "(generation_id,part_number,payload_json) VALUES (%s,0,%s)",
+                    (generation_id, Json(structure_json, dumps=_page_json)),
+                )
+                for number, payload in iter_structure_pages(structure):
+                    connection.execute(
+                        "INSERT INTO document_structure_page_payloads "
+                        "(generation_id,part_number,payload_json,node_ids) VALUES (%s,%s,%s,%s)",
+                        (
+                            generation_id,
+                            number,
+                            Json(payload, dumps=_page_json),
+                            [node["node_id"] for node in payload["nodes"]],
+                        ),
+                    )
+                # Validate inside the caller's savepoint so a failure can be
+                # recorded durably; keep the deferred DB guard for other writers.
+                connection.execute("SELECT validate_structure_page_manifest(%s)", (generation_id,))
+            except StructureStorageError:
+                raise StructureScopeError from None
         for position, chunk in enumerate(plan.chunks):
             chunk_json = asdict(chunk)
             _bounded_json(chunk_json, maximum_bytes=32768)
@@ -262,6 +305,37 @@ class DocumentStructureRepository:
                 (generation_id, chunk.chunk_id, position, Jsonb(chunk_json)),
             )
         return generation_id
+
+    def read_structure_payload(
+        self, household_id: UUID, member_id: UUID, generation_id: UUID
+    ) -> dict[str, Any]:
+        """Restore a full protected snapshot for local audits, never HTTP or logging."""
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.execute("SET TRANSACTION READ ONLY")
+                row = connection.execute(
+                    "SELECT structure_json FROM document_structure_generations "
+                    "WHERE id=%s AND household_space_id=%s AND family_member_id=%s",
+                    (generation_id, household_id, member_id),
+                ).fetchone()
+                if row is None:
+                    raise StructureScopeError
+                if row["structure_json"].get("storage_layout") != "page-v1":
+                    return cast(dict[str, Any], row["structure_json"])
+                parts = connection.execute(
+                    "SELECT part_number,payload_json FROM document_structure_page_payloads "
+                    "WHERE generation_id=%s ORDER BY part_number LIMIT 502",
+                    (generation_id,),
+                ).fetchall()
+                if not parts or parts[0]["part_number"] != 0 or len(parts) > 501:
+                    raise StructureScopeError
+                return restore_structure_payload(
+                    parts[0]["payload_json"], [part["payload_json"] for part in parts[1:]]
+                )
+        except StructureStorageError:
+            raise StructureScopeError from None
+        except psycopg.Error:
+            raise StructureRepositoryUnavailable from None
 
     def progress(
         self, household_id: UUID, member_id: UUID, generation_id: UUID
