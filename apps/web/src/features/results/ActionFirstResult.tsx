@@ -6,6 +6,7 @@ import type {
 import { AnalysisCompleteness } from "./AnalysisCompleteness";
 import { BenefitSummaries } from "./BenefitSummaries";
 import { CalculationDetails } from "./CalculationDetails";
+import { LocalGuidancePanel } from "./LocalGuidancePanel";
 import {
   PartialResultBanner,
   partialFailureCount,
@@ -34,6 +35,14 @@ export function ActionFirstResult({
   result: CoverageDecisionResponse;
   riderLabels?: Record<string, string>;
 }) {
+  if (result.local_guidance) {
+    return (
+      <div className={styles.resultBody}>
+        <StaleResultBanner result={result} onReanalyze={onReanalyze} />
+        <LocalGuidancePanel guidance={result.local_guidance} />
+      </div>
+    );
+  }
   const partialCount = partialFailureCount(
     result.candidates,
     result.evaluations,
