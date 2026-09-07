@@ -351,7 +351,8 @@ def project_range_candidate(
     enrolled_members = connection.execute(
         "SELECT p.id, ARRAY(SELECT party.family_member_id FROM policy_parties party "
         "WHERE party.policy_contract_id=p.id AND party.household_space_id=p.household_space_id "
-        "AND party.role='primary_insured') member_ids FROM policy_contracts p "
+        "AND party.role='primary_insured' AND party.deleted_at IS NULL) member_ids "
+        "FROM policy_contracts p "
         "WHERE p.id=%s AND p.household_space_id=%s FOR SHARE OF p",
         (policy_id, household),
     ).fetchone()

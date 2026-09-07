@@ -190,7 +190,7 @@ DocumentVersion과 Evidence를 유지하고 교정 필드 근거는 새 publicat
 
 재가져온 문서에서 추가된 담보를 읽거나 약관 링크를 검증할 때 `enrollment_alias.py`는 원래
 계약 publication과 해당 담보의 정확한 source Evidence publication을 함께 조회한다. 현재
-문서 hash·generation·extraction·가정·primary insured·원문 계약 locator가 모두 맞아야
+문서 hash·generation·extraction·가정·삭제되지 않은 primary insured·원문 계약 locator가 모두 맞아야
 문서 ID 차이를 허용한다. 클라이언트는 이 검증 값을 설정할 수 없다. 약관 판본·계약일·문서
 종류·Evidence 검토 상태·무결성·정확한 인용 검사는 유지한다. 운영/private knowledge의
 공통 담보 identity와 서로 다른 bytes의 계약/약관 판본 동등성은 후속 연결 대상이다.

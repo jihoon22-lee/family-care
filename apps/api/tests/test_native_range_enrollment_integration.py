@@ -272,6 +272,7 @@ def _reextract(url: str, job: Any, *, reimport: bool = False) -> Any:
         (True, "unbound_evidence"),
         (True, "content_hash"),
         (True, "member"),
+        (True, "deleted_member"),
         (True, "terms_link"),
     ],
 )
@@ -343,6 +344,12 @@ def test_reimport_same_bytes_keeps_one_contract_and_reads_each_proven_rider(
                 connection.execute(
                     "UPDATE document_versions SET content_sha256=%s WHERE id=%s",
                     ("d" * 64, second.document_version_id),
+                )
+            elif proof_change == "deleted_member":
+                connection.execute(
+                    "UPDATE policy_parties SET deleted_at=clock_timestamp() "
+                    "WHERE policy_contract_id=%s",
+                    (original.id,),
                 )
             else:
                 connection.execute(
@@ -981,3 +988,33 @@ def test_existing_contract_is_not_rebound_to_another_member_after_name_changes(
                 (job.family_member_id, second.id),
             )
             connection.execute("DELETE FROM document_batches WHERE id=%s", (batch,))
+
+
+@pytest.mark.parametrize("reimport", [False, True])
+def test_removed_primary_insured_blocks_later_automatic_publications(
+    native_database: Any, reimport: bool
+) -> None:
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE policy_parties SET deleted_at=clock_timestamp() WHERE household_space_id=%s",
+            (job.household_space_id,),
+        )
+    second = _reextract(url, job, reimport=reimport)
+    _retain_native(url, second)
+    assert RangeEnrollmentProjector(url).project_pending() == 0
