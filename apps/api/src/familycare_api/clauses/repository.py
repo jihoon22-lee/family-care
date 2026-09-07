@@ -1173,6 +1173,11 @@ class RiderClauseLinkRepository:
         if edition_row is None:
             raise RiderClauseLinkInvalid("TERMS_EDITION_MISMATCH")
         edition = _terms_edition(edition_row)
+        applicability = connection.execute(
+            "SELECT policy_terms_applicability_gate(%s,%s,%s) AS state",
+            (policy_row["policy_contract_id"], edition.id, scope.household_space_id),
+        ).fetchone()
+        assert applicability is not None
         clauses = ClauseRepository._hierarchy_with_connection(
             ClauseRepository(self.database_url),
             connection,
@@ -1229,6 +1234,8 @@ class RiderClauseLinkRepository:
             evidence_integrity_valid=evidence_integrity_valid,
             common_special_terms_conflict=common_special_conflict,
             rider_source_alias_verified=alias_verified,
+            program_applicability_verified=applicability["state"] == "MATCH",
+            program_applicability_blocked=applicability["state"] == "BLOCKED",
         )
 
     @staticmethod

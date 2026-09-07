@@ -847,11 +847,7 @@ class DecisionRepository:
              AND terms_edition_allows_pages(clause.terms_edition_id,clause.household_space_id,
                clause.physical_page_start,clause.physical_page_end)
             JOIN terms_editions AS edition ON edition.id=clause.terms_edition_id
-             AND (edition.source_component_id IS NULL OR (
-               terms_edition_has_printed_period(edition.id)
-               AND policy.contract_date>=edition.applicability_start
-               AND (edition.applicability_end IS NULL
-                 OR policy.contract_date<=edition.applicability_end)))
+             AND policy_terms_link_applicability(policy.id,edition.id,%(scope)s)
             LEFT JOIN coverage_rule_evidence AS linked
               ON linked.coverage_rule_version_id = version.id
             LEFT JOIN evidence

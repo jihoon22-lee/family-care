@@ -3,6 +3,7 @@
 from threading import Event
 
 from familycare_api.clauses.component_editions import ComponentTermsProjector
+from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.main import create_app
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
@@ -17,6 +18,7 @@ def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(CanonicalLinkRepository, "refresh_pending", lambda self: 0)
     monkeypatch.setattr(DocumentMetadataProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", lambda *args, **kwargs: 0)
 
 
 def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPatch) -> None:
@@ -117,3 +119,29 @@ def test_enabled_api_registers_component_editions_without_http(monkeypatch: Monk
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", publish)
     with TestClient(create_app()):
         assert called.wait(timeout=1)
+
+
+def test_enabled_api_assesses_terms_after_component_registration(monkeypatch: MonkeyPatch) -> None:
+    from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
+
+    called = Event()
+    order: list[str] = []
+
+    def editions(self: object, **kwargs: object) -> int:
+        order.append("editions")
+        return 0
+
+    def refresh(self: object, **kwargs: object) -> int:
+        order.append("applicability")
+        assert callable(kwargs["stop_requested"])
+        called.set()
+        return 0
+
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(ComponentTermsProjector, "project_pending", editions)
+    monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", refresh)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert order[:2] == ["editions", "applicability"]

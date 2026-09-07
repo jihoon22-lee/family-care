@@ -528,11 +528,7 @@ class CalculationRepository:
             JOIN policy_contracts AS policy ON policy.id=rider.policy_contract_id
               AND policy.household_space_id=%(scope)s AND policy.deleted_at IS NULL
             JOIN terms_editions AS edition ON edition.id=clause.terms_edition_id
-             AND (edition.source_component_id IS NULL OR (
-               terms_edition_has_printed_period(edition.id)
-               AND policy.contract_date>=edition.applicability_start
-               AND (edition.applicability_end IS NULL
-                 OR policy.contract_date<=edition.applicability_end)))
+             AND policy_terms_link_applicability(policy.id,edition.id,%(scope)s)
             JOIN LATERAL (
               SELECT candidate.*
               FROM coverage_rule_versions AS candidate

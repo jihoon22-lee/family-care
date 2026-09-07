@@ -171,7 +171,7 @@ class InsuranceReconciliationRepository:
                     """
                     SELECT DISTINCT policy.id, policy.insurer_display,
                            policy.product_display, policy.status,
-                           EXISTS (
+                           (EXISTS (
                              SELECT 1
                              FROM insurance_document_sets AS document_set
                              JOIN insurance_document_set_items AS set_item
@@ -182,13 +182,20 @@ class InsuranceReconciliationRepository:
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
                               AND component.superseded_by_component_id IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id
                                AND document_set.deleted_at IS NULL
                                AND component.role = 'terms'
-                           ) AS has_terms,
+                           ) OR EXISTS (
+                             SELECT 1 FROM current_policy_terms_applicability applicable
+                             WHERE applicable.policy_contract_id=policy.id
+                               AND applicable.household_space_id=policy.household_space_id
+                               AND applicable.family_member_id=party.family_member_id
+                               AND applicable.status='MATCH'
+                               AND applicable.selection_state IN ('AUTOMATIC','USER_SELECTED')
+                           )) AS has_terms,
                            EXISTS (
                              SELECT 1
                              FROM insurance_document_sets AS document_set
@@ -200,7 +207,7 @@ class InsuranceReconciliationRepository:
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
                               AND component.superseded_by_component_id IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id
@@ -218,7 +225,7 @@ class InsuranceReconciliationRepository:
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
                               AND component.superseded_by_component_id IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id

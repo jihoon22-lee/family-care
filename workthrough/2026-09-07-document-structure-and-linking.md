@@ -720,3 +720,38 @@ API/Worker 경로이며 기본 pytest는 scripts 경로도 포함한다. 별도 
 **817 paths**·diff도 통과했다. HTTP/UI 변경이 없어 기존 Chromium mock 결과는 이전 증거로
 유지하고 이번에 반복하지 않았다. 실제 자료/PDF/OCR·외부 AI·운영 schema/data·Windows/모바일·
 태그·배포는 미실행이다. 약관 분류/본문 범위와 다중 근거 적용 연결·보호된 수용은 B02 후속이다.
+
+## Source-bound terms applicability
+
+`0042_terms_applicability`와 API projector는 증권 Evidence의 실제 계약/피보험자·version·
+페이지에 연결된 metadata로 적용 판본을 대조한다. 같은 보험사의 명시적 적용 약관/판본
+참조가 모두 맞거나 상품코드·실제 계약일·인쇄 적용기간이 맞으면 `MATCH`다. 표시명·일반
+참조·판본일만으로 적용을 확정하지 않는다. 결정적 모순, 정보 부족, 사용자 선택과 복수 판본
+모호성을 구분하며 원래 source publication·입력 digest·판정 revision을 불변 이력에 보존한다.
+
+보장 시작일에서 유래한 원장 날짜는 실제 range/legacy publication에서 식별하며 기존 원장
+날짜를 재작성하지 않는다. 조항 확인·규칙 게시·현재 판정/계산은 같은 적용 gate를 소비하고,
+과거 규칙 버전 ID 조회는 보존한다. 기존 사용자 set item/actor를 만들지 않는다. 문서 보유 및
+통합 원장 조회는 현재 `MATCH`를 반영하고 Web은 자동 적용과 사용자 선택을 구분한다.
+기존 증권 fallback도 실제 Evidence의 확인 출처를 표시한다. neutral inventory schema,
+OpenAPI와 생성 TypeScript에 읽기 전용 `terms_applicability` 및 검증 출처가 추가됐다.
+
+`57c513f` 위의 해당 API/migration/Web/계약/테스트 변경으로 적용 연결 부재, 보유 현황,
+가짜 사용자 확인 출처, 표시명/날짜 중복 gate, 판정·계산 소비를 RED로 재현하고 수정했다.
+실제 합성 range와 legacy publication에서 날짜 출처를 검증했다. 정적 리뷰에서 찾은 이력별
+반복 계산은 DB 호출 계수 **8 대 1** RED, 시간 초과의 뒤 계약 처리 중단은 실제 PostgreSQL
+`statement_timeout` RED, 날짜 호환 경로의 보장 시작일 차용은 **True 대 False** RED로
+확인한 뒤 수정했다. 현재 조회는 범위별 근거를 한 번 계산하고 실패 계약은 30초 후 재시도한다.
+관련 PostgreSQL **27개**가 이력/사용자 결정/동시성/rollback/범위/날짜/소비 경로를 포함해
+2026-09-08 07:28~07:29 KST 통과했다. 첫 호출 계수 테스트는 함수 인자명 불일치로 실패했고
+fixture를 수정한 뒤 실제 8회 호출 RED를 확인했다.
+
+Web 전체 **172개·build**와 Chromium mock **17개**가 통과했다. 최초 Web 검사는 두 변경
+파일의 Prettier 형식으로 중단됐고 해당 파일만 정리한 뒤 전체 검사를 통과했다. 별도 빈 합성
+DB의 `head → 0039 → head`도 통과했다. 전체 기본 Python **2,165 passed / 431 integration
+deselected / 3 subtests**, 전체 합성 PostgreSQL **430 passed / 1,883 deselected** (342.14초)가
+07:29~07:37 KST 통과했다. Ruff format **633 files**/lint·mypy **261 sources**, 생성 계약·
+container 정의·workflow 정책·diff가 통과했다. 전체 PG는 API/Worker, 기본 pytest는 scripts도
+포함한다. 컨테이너 정의 검사는 이미지 build가 아니다.
+이 변경에서는 실제 자료·외부 provider·운영 schema/data·Windows/모바일·태그·배포를 실행하지
+않았다. 더 넓은 metadata/본문 범위와 변경·갱신 적용, 보호된 수용과 B02 merge는 남아 있다.

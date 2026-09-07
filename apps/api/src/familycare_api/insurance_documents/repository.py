@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import psycopg
@@ -26,6 +26,7 @@ from familycare_api.insurance_documents.domain import (
     PolicyStatus,
     ProcessingState,
     ReviewState,
+    TermsApplicabilityLink,
     UnreadableSource,
     build_member_inventory,
 )
@@ -276,6 +277,7 @@ class InsuranceDocumentRepository:
                         policy.source_document_version_id,
                         version.content_sha256 AS source_content_sha256,
                         source.physical_page AS source_evidence_page,
+                        source.review_state AS source_review_state,
                         policy.insurer_display,
                         policy.product_display,
                         policy.status,
@@ -299,6 +301,18 @@ class InsuranceDocumentRepository:
                       AND party.family_member_id = %s
                     ORDER BY policy.id
                     """,
+                    (scope.household_space_id, member_id),
+                ).fetchall()
+                applicability_rows = connection.execute(
+                    "SELECT a.id AS assessment_id,a.policy_contract_id,a.terms_edition_id,"
+                    "a.policy_component_id,a.status,a.reason_codes,a.matched_by,"
+                    "a.selection_state,component.* "
+                    "FROM current_policy_terms_applicability a "
+                    "JOIN terms_editions edition ON edition.id=a.terms_edition_id "
+                    "JOIN (" + _COMPONENT_SELECT + ") component "
+                    "ON component.component_id=edition.source_component_id "
+                    "WHERE a.household_space_id=%s AND a.family_member_id=%s "
+                    "ORDER BY a.policy_contract_id,a.created_at,a.id",
                     (scope.household_space_id, member_id),
                 ).fetchall()
                 set_rows = connection.execute(
@@ -400,6 +414,7 @@ class InsuranceDocumentRepository:
                 product_display=cast(str, row["product_display"]),
                 status=cast(PolicyStatus, row["status"]),
                 rider_count=int(row["rider_count"]),
+                source_review_state=row["source_review_state"],
             )
             for row in policy_rows
         )
@@ -429,6 +444,20 @@ class InsuranceDocumentRepository:
             member_id,
             policies=policies,
             document_sets=document_sets,
+            terms_applicability=tuple(
+                TermsApplicabilityLink(
+                    assessment_id=row["assessment_id"],
+                    policy_id=row["policy_contract_id"],
+                    terms_edition_id=row["terms_edition_id"],
+                    policy_component_id=row["policy_component_id"],
+                    component=_component(row),
+                    status=cast(Literal["MATCH", "NO_MATCH", "UNKNOWN"], row["status"]),
+                    reason_codes=tuple(row["reason_codes"]),
+                    matched_by=row["matched_by"],
+                    selection_state=row["selection_state"],
+                )
+                for row in applicability_rows
+            ),
             unpaired_components=(
                 tuple(_component(row) for row in unpaired_rows)
                 + tuple(_synthetic_component(row) for row in synthetic_rows)

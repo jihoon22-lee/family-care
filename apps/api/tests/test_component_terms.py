@@ -64,3 +64,37 @@ def test_component_edition_requires_complete_physical_bounds(
             source_page_start=start,
             source_page_end=end,
         )
+
+
+def test_proven_applicability_uses_codes_and_references_without_display_or_date_gate() -> None:
+    context = _context()
+    edition = replace(
+        context.terms_edition,
+        source_component_id=_id(900),
+        source_page_start=2,
+        source_page_end=3,
+        product_key="sample-other-display",
+        applicability_start=None,
+        applicability_end=None,
+    )
+    validate_rider_clause_link(
+        HouseholdScope(context.policy_household_space_id),
+        replace(
+            context, terms_edition=edition, contract_date=None, program_applicability_verified=True
+        ),
+    )
+
+
+def test_applicability_contradiction_cannot_fall_back_to_legacy_display_matching() -> None:
+    context = _context()
+    edition = replace(
+        context.terms_edition,
+        source_component_id=_id(900),
+        source_page_start=2,
+        source_page_end=3,
+        source_period_verified=True,
+    )
+    assert (
+        _reason(replace(context, terms_edition=edition, program_applicability_blocked=True))
+        == "TERMS_EDITION_NOT_APPLICABLE"
+    )

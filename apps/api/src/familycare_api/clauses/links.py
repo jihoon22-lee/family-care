@@ -121,6 +121,8 @@ class RiderClauseLinkValidationContext:
     common_special_terms_conflict: bool
     # Supplied only by the repository after validating retained source aliases.
     rider_source_alias_verified: bool = False
+    program_applicability_verified: bool = False
+    program_applicability_blocked: bool = False
 
 
 def _invalid(reason_code: RiderClauseReasonCode) -> NoReturn:
@@ -162,23 +164,30 @@ def validate_rider_clause_link(
         _invalid("CANDIDATE_NOT_APPROVED")
 
     edition = context.terms_edition
-    if (
-        link.terms_edition_id != edition.id
-        or context.policy_insurer_key != edition.insurer_key
-        or context.policy_product_key != edition.product_key
-    ):
+    if link.terms_edition_id != edition.id:
         _invalid("TERMS_EDITION_MISMATCH")
-    if context.contract_date is None:
-        _invalid("CONTRACT_DATE_UNKNOWN")
-    if edition.source_component_id is not None and edition.source_period_verified is not True:
+    if context.program_applicability_blocked is True:
         _invalid("TERMS_EDITION_NOT_APPLICABLE")
-    if (
-        edition.applicability_start is not None
-        and context.contract_date < edition.applicability_start
-    ) or (
-        edition.applicability_end is not None and context.contract_date > edition.applicability_end
+    if not (
+        edition.source_component_id is not None and context.program_applicability_verified is True
     ):
-        _invalid("TERMS_EDITION_NOT_APPLICABLE")
+        if (
+            context.policy_insurer_key != edition.insurer_key
+            or context.policy_product_key != edition.product_key
+        ):
+            _invalid("TERMS_EDITION_MISMATCH")
+        if context.contract_date is None:
+            _invalid("CONTRACT_DATE_UNKNOWN")
+        if edition.source_component_id is not None and edition.source_period_verified is not True:
+            _invalid("TERMS_EDITION_NOT_APPLICABLE")
+        if (
+            edition.applicability_start is not None
+            and context.contract_date < edition.applicability_start
+        ) or (
+            edition.applicability_end is not None
+            and context.contract_date > edition.applicability_end
+        ):
+            _invalid("TERMS_EDITION_NOT_APPLICABLE")
     if context.common_special_terms_conflict:
         _invalid("TERMS_SCOPE_CONFLICT")
 

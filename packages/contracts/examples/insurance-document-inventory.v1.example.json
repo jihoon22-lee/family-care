@@ -71,7 +71,8 @@
       "has_application": false,
       "missing_document_roles": [],
       "document_set_id": "00000000-0000-4000-8000-000000000601",
-      "document_set_version": 3
+      "document_set_version": 3,
+      "terms_applicability": []
     }
   ],
   "unregistered_document_sets": [

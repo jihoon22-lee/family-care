@@ -396,3 +396,44 @@ def test_unregistered_roles_never_become_enrollment_authority(
     assert inventory.summary.certificate_backed_policies == 0
     assert inventory.unregistered_document_sets[0].primary_classification == expected
     assert inventory.unregistered_document_sets[0].enrollment_confirmed is False
+
+
+def test_program_applicability_completes_inventory_without_a_user_set_item() -> None:
+    from familycare_api.insurance_documents.domain import TermsApplicabilityLink
+
+    terms = replace(_component(951, "terms"), review_state="PROGRAM_VERIFIED")
+    link = TermsApplicabilityLink(
+        assessment_id=UUID(int=952),
+        policy_id=POLICY_ID,
+        terms_edition_id=UUID(int=953),
+        policy_component_id=UUID(int=954),
+        component=terms,
+        status="MATCH",
+        reason_codes=("EXPLICIT_EDITION_REFERENCE_MATCH",),
+        matched_by="EXPLICIT_EDITION_REFERENCE",
+    )
+    inventory = build_member_inventory(
+        MEMBER_ID,
+        policies=(_policy(),),
+        document_sets=(),
+        unpaired_components=(terms,),
+        terms_applicability=(link,),
+    )
+    registered = inventory.registered_policies[0]
+    assert registered.completeness == "CERTIFICATE_AND_TERMS"
+    assert registered.terms_applicability == (link,)
+    assert registered.missing_document_roles == ()
+    assert inventory.summary.terms_only_documents == 0
+    assert not inventory.unpaired_components
+    assert all(document.role != "terms" for document in registered.documents)
+
+
+def test_program_policy_source_is_not_presented_as_user_confirmation() -> None:
+    policy = replace(_policy(), source_review_state="AI_VERIFIED")
+    registered = build_member_inventory(
+        MEMBER_ID, policies=(policy,), document_sets=()
+    ).registered_policies[0]
+    source = registered.documents[0].items[0]
+    assert source.id is None
+    assert source.component.review_state == "PROGRAM_VERIFIED"
+    assert source.match_state == "PROGRAM_VERIFIED"

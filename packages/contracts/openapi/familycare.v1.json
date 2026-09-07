@@ -4972,14 +4972,22 @@
             "title": "Id"
           },
           "match_state": {
-            "enum": [
-              "SUGGESTED",
-              "USER_CONFIRMED",
-              "CONFLICT",
-              "REJECTED"
+            "anyOf": [
+              {
+                "enum": [
+                  "SUGGESTED",
+                  "USER_CONFIRMED",
+                  "CONFLICT",
+                  "REJECTED"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "PROGRAM_VERIFIED",
+                "type": "string"
+              }
             ],
-            "title": "Match State",
-            "type": "string"
+            "title": "Match State"
           },
           "version": {
             "minimum": 1.0,
@@ -9182,6 +9190,15 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "terms_applicability": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TermsApplicabilityResponse"
+            },
+            "maxItems": 500,
+            "title": "Terms Applicability",
+            "type": "array"
           }
         },
         "required": [
@@ -9884,6 +9901,82 @@
           "error_code"
         ],
         "title": "StructuringJobResponse",
+        "type": "object"
+      },
+      "TermsApplicabilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "format": "uuid",
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "component": {
+            "$ref": "#/components/schemas/InventoryComponentResponse"
+          },
+          "matched_by": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched By"
+          },
+          "policy_component_id": {
+            "format": "uuid",
+            "title": "Policy Component Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "selection_state": {
+            "enum": [
+              "AUTOMATIC",
+              "USER_SELECTED",
+              "USER_OWNED",
+              "UNRESOLVED"
+            ],
+            "title": "Selection State",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "terms_edition_id",
+          "policy_component_id",
+          "component",
+          "status",
+          "selection_state",
+          "matched_by",
+          "reason_codes"
+        ],
+        "title": "TermsApplicabilityResponse",
         "type": "object"
       },
       "TermsEditionResponse": {

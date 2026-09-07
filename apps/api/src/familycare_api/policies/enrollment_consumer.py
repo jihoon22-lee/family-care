@@ -11,6 +11,7 @@ from time import monotonic
 from fastapi import FastAPI
 
 from familycare_api.clauses.component_editions import ComponentTermsProjector
+from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
@@ -22,6 +23,7 @@ async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
     canonical = CanonicalLinkRepository(projector.database_url)
     metadata = DocumentMetadataProjector(projector.database_url)
     terms = ComponentTermsProjector(projector.database_url)
+    applicability = TermsApplicabilityProjector(projector.database_url)
     next_canonical_refresh = 0.0
     while not stop.is_set():
         try:
@@ -41,6 +43,13 @@ async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
                 await asyncio.to_thread(terms.project_pending, limit=5, stop_requested=stop.is_set)
             except Exception:
                 LOGGER.warning("component_terms_projection_unavailable")
+        if not stop.is_set():
+            try:
+                await asyncio.to_thread(
+                    applicability.refresh_pending, limit=5, stop_requested=stop.is_set
+                )
+            except Exception:
+                LOGGER.warning("terms_applicability_projection_unavailable")
         if not stop.is_set() and monotonic() >= next_canonical_refresh:
             try:
                 await asyncio.to_thread(canonical.refresh_pending)

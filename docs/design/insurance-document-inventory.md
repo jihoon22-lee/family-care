@@ -34,8 +34,8 @@
 
 등록 보험의 문서 완전성은 다음 두 값만 사용한다.
 
-- `CERTIFICATE_AND_TERMS`: 증권과 사용자 확인된 적용 약관이 모두 있다.
-- `CERTIFICATE_ONLY`: 증권은 있지만 사용자 확인된 적용 약관이 없다.
+- `CERTIFICATE_AND_TERMS`: 증권과 사용자 확인 또는 원문 근거로 적용이 검증된 약관이 있다.
+- `CERTIFICATE_ONLY`: 증권은 있지만 확인된 적용 약관이 없다.
 
 상품설명서와 청약서는 필수 약관을 대체하지 않는다. `has_product_explanation`, `has_application`과 각각의 component/source 건수로 별도 표시하므로 `증권+약관+상품설명서`, `약관+상품설명서이나 증권 없음` 같은 조합을 정확히 표현할 수 있다.
 
@@ -100,7 +100,16 @@ private batch item은 성공 완료 transaction에서 `processed_document_versio
 
 등록 set의 authoritative policy component는 `PolicyContract.source_document_version_id`와 정책 Evidence page에 포함되어야 한다. `PolicyContract`가 여전히 가입 authority이며 component나 set만으로 계약을 생성하지 않는다. 하나의 공통 약관 component가 같은 가족 구성원의 여러 계약에 적용될 수 있으므로 component와 set은 다대다 연결을 허용한다.
 
-`USER_CONFIRMED` active set item만 문서 완전성 계산에 포함한다. AI나 문자열 유사도가 만든 `SUGGESTED`는 검토 대기 자료로만 표시한다. set, 계약, component와 batch item은 같은 HouseholdSpace와 FamilyMember여야 하며, component의 DocumentVersion은 그 batch item이 처리한 document의 version이어야 한다.
+`USER_CONFIRMED` active set item과 현재 원문 검증 `MATCH` 적용 연결을 문서 완전성 계산에
+포함한다. AI나 문자열 유사도가 만든 `SUGGESTED`는 검토 대기 자료로만 표시한다. set, 계약,
+component와 batch item은 같은 HouseholdSpace와 FamilyMember여야 하며, component의
+DocumentVersion은 그 batch item이 처리한 document의 version이어야 한다.
+
+`registered_policies[].terms_applicability`는 판본/양쪽 component ID, 판정·선택 출처·방법·
+고정 사유만 반환한다. 원문 metadata는 반환하지 않는다. 프로그램 연결은 사용자 set item이나
+확인 actor를 만들지 않으며 화면에서 `문서 근거로 약관 연결`과 실제 사용자 선택을 구분한다.
+기존 증권 fallback도 실제 Evidence의 확인 출처를 사용한다. 읽기 전용 `PROGRAM_VERIFIED`를
+사용자가 요청으로 지정할 수 없고 수동 요청의 검수 상태 계약은 그대로 유지한다.
 
 ## Duplicate and shared-copy handling
 

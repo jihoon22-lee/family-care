@@ -32,7 +32,7 @@ from apps.api.tests.test_rider_clause_rules_integration import (
 pytestmark = pytest.mark.integration
 
 
-def _bounded_rule_source(url: str) -> tuple[Any, Any]:
+def _bounded_rule_source(url: str, *, explicit_references: bool = False) -> tuple[Any, Any]:
     seed = _seed(url)
     user, batch, item = uuid4(), uuid4(), uuid4()
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
@@ -82,8 +82,14 @@ def _bounded_rule_source(url: str) -> tuple[Any, Any]:
                     "quality": {"classification": "TEXT_SUFFICIENT"},
                     "blocks": [
                         {
-                            "text": "보험약관\n보험사: Synthetic Insurer\n상품명: Sample Policy\n"
-                            "적용시작일: 2025-01-01\n적용종료일: 2025-12-31",
+                            "text": (
+                                "보험약관\n보험사: Synthetic Insurer\n상품명: Sample Alternate "
+                                "Display\n"
+                                "약관코드: TERMS-A\n판본코드: EDITION-A"
+                                if explicit_references
+                                else "보험약관\n보험사: Synthetic Insurer\n상품명: Sample Policy\n"
+                                "적용시작일: 2025-01-01\n적용종료일: 2025-12-31"
+                            ),
                             "reading_order": 0,
                             "bbox": [10, 10, 400, 80],
                         }
@@ -130,6 +136,18 @@ def _bounded_rule_source(url: str) -> tuple[Any, Any]:
             "UPDATE rider_clause_links SET terms_edition_id=%s WHERE id=%s",
             (row["id"], seed.link_id),
         )
+        if explicit_references:
+            connection.execute(
+                "UPDATE terms_editions SET applicability_start=NULL,applicability_end=NULL,"
+                "product_display='Sample Alternate Display',product_key='sample-alternate-display' "
+                "WHERE id=%s",
+                (row["id"],),
+            )
+            connection.execute(
+                "UPDATE policy_contracts SET contract_date=NULL WHERE id=("
+                "SELECT policy_contract_id FROM riders WHERE id=%s)",
+                (seed.rider_id,),
+            )
     return seed, row
 
 

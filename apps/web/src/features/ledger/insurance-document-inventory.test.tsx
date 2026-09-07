@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -544,4 +544,53 @@ describe("insurance document inventory", () => {
       method: "DELETE",
     });
   });
+});
+
+it("shows program terms applicability without presenting it as user confirmation", async () => {
+  const user = userEvent.setup();
+  const data: MemberInsuranceDocumentInventoryResponse = {
+    ...INVENTORY,
+    registered_policies: [
+      {
+        ...INVENTORY.registered_policies[0],
+        completeness: "CERTIFICATE_AND_TERMS",
+        missing_document_roles: [],
+        documents: [],
+        terms_applicability: [
+          {
+            assessment_id: "synthetic-applicability-001",
+            terms_edition_id: "synthetic-edition-001",
+            policy_component_id: "synthetic-policy-component-001",
+            component: component({
+              role: "terms",
+              review_state: "PROGRAM_VERIFIED",
+              page_start: 3,
+              page_end: 8,
+            }),
+            status: "MATCH",
+            selection_state: "AUTOMATIC",
+            matched_by: "PRODUCT_CODE_PRINTED_PERIOD",
+            reason_codes: ["PRODUCT_CODE_PRINTED_PERIOD_MATCH"],
+          },
+        ],
+      },
+    ],
+    unpaired_components: [],
+    unregistered_document_sets: [],
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(data)));
+  renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+  await user.click(await screen.findByText("연결된 문서 묶음 세부 편집 · 1건"));
+  const label = await screen.findByText("문서 근거로 약관 연결");
+  const card = label.closest("article");
+  expect(card).not.toBeNull();
+  expect(label).toBeVisible();
+  expect(
+    within(card!).getByText("상품코드와 계약일·적용기간 대조"),
+  ).toBeVisible();
+  expect(within(card!).getByText("3–8쪽")).toBeVisible();
+  expect(within(card!).queryByText("사용자 확인")).not.toBeInTheDocument();
+  expect(
+    within(card!).queryByRole("button", { name: /연결 해제/ }),
+  ).not.toBeInTheDocument();
 });

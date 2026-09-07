@@ -1638,7 +1638,12 @@ export interface InventoryComponentResponse {
 export interface InventorySetItemResponse {
   component: InventoryComponentResponse;
   id: string | null;
-  match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  match_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   version: number;
 }
 
@@ -2366,6 +2371,7 @@ export interface RegisteredPolicyInventoryResponse {
   product_display: string;
   rider_count: number;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
+  terms_applicability?: Array<TermsApplicabilityResponse>;
 }
 
 export interface ReviewIssue {
@@ -2551,6 +2557,17 @@ export interface StructuringJobResponse {
     | "retryable_failed"
     | "permanently_failed"
     | "cancelled";
+}
+
+export interface TermsApplicabilityResponse {
+  assessment_id: string;
+  component: InventoryComponentResponse;
+  matched_by: string | null;
+  policy_component_id: string;
+  reason_codes: Array<string>;
+  selection_state: "AUTOMATIC" | "USER_SELECTED" | "USER_OWNED" | "UNRESOLVED";
+  status: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  terms_edition_id: string;
 }
 
 export interface TermsEditionResponse {
