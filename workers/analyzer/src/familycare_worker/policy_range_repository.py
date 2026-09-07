@@ -13,6 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from familycare_worker.ai.minimizer import MINIMIZATION_REVISION
 from familycare_worker.ai.policy_ranges import (
     PolicyRangeEnvelope,
     RangeEvidenceSlice,
@@ -116,7 +117,7 @@ class PolicyRangeRepository:
     ) -> PolicyRangeWork | None:
         privacy_fingerprint = hashlib.sha256(
             json.dumps(
-                ["source-window-minimizer-v1", sorted(set(sensitive_terms))],
+                [MINIMIZATION_REVISION, sorted(set(sensitive_terms))],
                 ensure_ascii=True,
                 separators=(",", ":"),
             ).encode()

@@ -70,6 +70,8 @@ def _normalize(value: str) -> str:
 
 
 def _anchors(node: StructureNode) -> list[tuple[str, str, AnchorRef]]:
+    if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
+        return []
     result = []
     offset = 0
     for line in node.text.splitlines(keepends=True):
@@ -139,7 +141,11 @@ def associate_policy_sources(
         for value in (member.display_name, member.internal_alias):
             if value.strip():
                 names.setdefault(_normalize(value), set()).add(member.id)
-    anchors = {node.node_id: _anchors(node) for node in structure.nodes}
+    line_children = {span.block_node_id for node in structure.nodes for span in node.source_spans}
+    anchors = {
+        node.node_id: [] if node.node_id in line_children else _anchors(node)
+        for node in structure.nodes
+    }
     page_anchors = {
         page.page_number: [anchor for key in page.node_ids for anchor in anchors[key]]
         for page in structure.pages

@@ -164,7 +164,7 @@ ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/nod
 
 연속표는 검증된 이전 가입 표와 연결된 unknown 페이지의 해당 행에만 역할/계약 근거를
 이어 준다. 페이지 전체나 일반 블록을 승격하지 않고, 명시적인 약관/변경/모호한 페이지와
-다른 계약번호·피보험자 충돌은 자동 연결하지 않는다. 요청 envelope revision은 v2다.
+다른 계약번호·피보험자 충돌은 자동 연결하지 않는다. 요청 envelope revision은 v3다.
 `table_grounding.py`는 불변 generation의 실제 data row와 인용된 header/unit 문맥을 읽어
 정확한 담보명 열·가입금액 열·단위를 대조한다. 보험료 열, 병합/충돌 header, 빠진 문맥,
 header 자체는 가입 담보 근거가 아니다. 필요한 header/unit Evidence를 필드 인용에 더하고
@@ -172,8 +172,21 @@ header 자체는 가입 담보 근거가 아니다. 필요한 header/unit Eviden
 표 이름 열 또는 명시적인 가입 담보명/금액 행은 유형 근거가 없어도 `unknown`으로 보존한다.
 명시적 미가입/예시 행과 연결된 표 각주는 `NOT_ENROLLED`로 원장 반영을 막는다.
 첫 반영 전 교정한 필드는 교정값을 사용하고, 반영된 담보 교정은 기존 publication ID를
-유지한다. 표 행 ID는 같은 generation 안의 재시도 identity이며 다른 extraction의 담보
-동등성을 증명하지 않는다.
+유지한다. 원문 이름의 native 단어 좌표를 유일하게 확인하면 같은 DocumentVersion/계약의
+새 extraction과 TEXT_LINE/TABLE_ROW를 같은 담보에 연결한다. raw node ID·추출 이력은
+변경하지 않으며 기존 publication과 정확한 content hash·물리 페이지·이름 단어 bbox를
+비교한다. 금액·교정된 표시명·배열 순서·표 전체 bbox는 동등성 근거가 아니다. 좌표가 없는
+같은 이름의 재추출은 추가 가입으로 만들지 않고 보류한다. 기존 원장 교정/soft delete와
+primary insured 구성원이 달라진 경우도 자동 반영하지 않는다. 별도 DocumentVersion을
+만드는 일반 재가져오기와 private knowledge의 동등성은 후속 canonical 연결 대상이다.
+
+`document-structure-v2`는 단어별 원본 BLOCK을 보존하고, 같은 layer/줄에서 가까이 이어지는
+단어를 `TEXT_LINE`으로 묶는다. 삽입한 공백 이외의 문자와 원본 block/line 문자 범위는
+`source_spans`로 역추적한다. 표 cell 안의 단어를 다시 줄로 예약하지 않고, 다른 열·겹침·
+먼 상태 표시는 미해결 범위로 남긴다. 줄은 4096자 범위 안에서 원자적으로 처리하며 초과분을
+잘라 이름/상태를 잃지 않는다. 준비 revision도 4096자 primary/context 기준으로 갱신했다.
+등록되지 않은 이름도 bare `Insured` label로 최소화하고, 줄 끝의 미가입/예시 상태는 유지해
+가입 반영을 막는다. 최소화 revision이 바뀌면 보관된 이전 전송 입력을 재사용하지 않는다.
 
 과거 묶음 호환 경로는 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 

@@ -277,3 +277,10 @@ def test_two_selected_enrollment_occurrences_are_ambiguous() -> None:
         physical_enrollment_locator(source, "Sample Rider", _refs(source, "line", "second-line"))
         is None
     )
+
+
+def test_shared_primary_header_is_context_for_the_named_data_row() -> None:
+    source = _source()
+    assert physical_enrollment_locator(
+        source, "Sample Rider", _refs(source, "row", "header")
+    ) == physical_enrollment_locator(source, "Sample Rider", _refs(source, "row"))

@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 import re
+from bisect import bisect_left, bisect_right
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from types import MappingProxyType
@@ -126,7 +127,7 @@ class SourceLineage:
     extraction_revision: str
     source_payload_sha256: str
     ocr_revision: str | None = None
-    structure_version: str = "document-structure-v1"
+    structure_version: str = "document-structure-v2"
 
 
 @dataclass(frozen=True, repr=False)
@@ -140,10 +141,19 @@ class StructureCell:
     column_span: int | None = None
 
 
+@dataclass(frozen=True)
+class SourceTextSpan:
+    block_node_id: str
+    block_start: int
+    block_end: int
+    line_start: int
+    line_end: int
+
+
 @dataclass(frozen=True, repr=False)
 class StructureNode:
     node_id: str
-    kind: Literal["BLOCK", "TABLE_ROW"]
+    kind: Literal["BLOCK", "TABLE_ROW", "TEXT_LINE"]
     page_number: int
     source_layer: Layer
     reading_order: int
@@ -158,6 +168,7 @@ class StructureNode:
     continuation_of: str | None = None
     issue_codes: tuple[str, ...] = ()
     schedulable: bool = True
+    source_spans: tuple[SourceTextSpan, ...] = ()
 
 
 @dataclass(frozen=True, repr=False)
@@ -431,6 +442,104 @@ def _page_nodes(
     return nodes, tables
 
 
+def _derive_text_lines(nodes: list[StructureNode], identity: str) -> list[StructureNode]:
+    """Build lossless views only from consecutive, aligned, closely spaced words."""
+    groups: list[list[StructureNode]] = []
+    words: list[StructureNode] = []
+    current: list[StructureNode] = []
+    table_boxes = tuple(node.bbox for node in nodes if node.kind == "TABLE_ROW")
+
+    def flush() -> None:
+        if len(current) > 1:
+            groups.append(list(current))
+        current.clear()
+
+    for node in nodes:
+        box = node.bbox
+        if (
+            node.kind != "BLOCK"
+            or not node.schedulable
+            or box is None
+            or not node.text
+            or any(character.isspace() for character in node.text)
+            or any(_inside(box, table) for table in table_boxes)
+        ):
+            flush()
+            continue
+        if current:
+            previous = current[-1]
+            first_box = current[0].bbox
+            previous_box = previous.bbox
+            assert first_box is not None and previous_box is not None
+            height = box[3] - box[1]
+            first_height = first_box[3] - first_box[1]
+            overlap = min(box[3], first_box[3]) - max(box[1], first_box[1])
+            gap = box[0] - previous_box[2]
+            if (
+                node.source_layer != previous.source_layer
+                or node.reading_order != previous.reading_order + 1
+                or overlap < 0.8 * max(height, first_height)
+                or not 0 <= gap <= 1.5 * min(height, first_height)
+            ):
+                flush()
+        words.append(node)
+        current.append(node)
+    flush()
+    positioned = sorted(words, key=lambda node: cast(BBox, node.bbox)[1])
+    tops = [cast(BBox, node.bbox)[1] for node in positioned]
+    replacements: dict[str, StructureNode] = {}
+    views: dict[str, StructureNode] = {}
+    for group in groups:
+        offset = 0
+        spans = []
+        for node in group:
+            spans.append(
+                SourceTextSpan(node.node_id, 0, len(node.text), offset, offset + len(node.text))
+            )
+            offset += len(node.text) + 1
+            replacements[node.node_id] = replace(node, schedulable=False)
+        boxes = [node.bbox for node in group if node.bbox is not None]
+        group_ids = {node.node_id for node in group}
+        height = boxes[0][3] - boxes[0][1]
+        nearby = positioned[
+            bisect_left(tops, boxes[0][1] - height / 4) : bisect_right(
+                tops, boxes[0][1] + height / 4
+            )
+        ]
+        ambiguous_column = any(
+            node.node_id not in group_ids
+            and node.source_layer == group[0].source_layer
+            and (box := node.bbox) is not None
+            and min(box[3], boxes[0][3]) - max(box[1], boxes[0][1])
+            >= 0.8 * max(height, box[3] - box[1])
+            for node in nearby
+        )
+        line_id = _digest((identity, "text-line-v1", tuple(node.node_id for node in group)))
+        views[group[0].node_id] = StructureNode(
+            node_id=line_id,
+            kind="TEXT_LINE",
+            page_number=group[0].page_number,
+            source_layer=group[0].source_layer,
+            reading_order=group[0].reading_order,
+            text=" ".join(node.text for node in group),
+            source_path=f"/derived/text-lines/{line_id}",
+            bbox=(
+                min(box[0] for box in boxes),
+                min(box[1] for box in boxes),
+                max(box[2] for box in boxes),
+                max(box[3] for box in boxes),
+            ),
+            source_spans=tuple(spans),
+            issue_codes=("LINE_COLUMN_CONTEXT_UNRESOLVED",) if ambiguous_column else (),
+        )
+    result = []
+    for node in nodes:
+        result.append(replacements.get(node.node_id, node))
+        if node.node_id in views:
+            result.append(views[node.node_id])
+    return result
+
+
 def _resolve_table_context(tables: Sequence[_Table]) -> dict[str, StructureNode]:
     by_address = {(table.page_number, table.table_index): table for table in tables}
     replaced: dict[str, StructureNode] = {}
@@ -586,6 +695,7 @@ def build_document_structure(
                 unresolved.append(UnprocessedRange(None, number, 0, 0, failure))
             else:
                 page_nodes, page_tables = _page_nodes(selected, path, number, layer, identity)
+                page_nodes = _derive_text_lines(page_nodes, identity)
             role, codes = _classify(page_nodes)
             label = page.get("printed_page_label")
             if label is not None:
@@ -643,8 +753,14 @@ def plan_structure_chunks(
         reason = None
         if "CONTEXT_REFERENCE_UNRESOLVED" in node.issue_codes:
             reason = "CONTEXT_REFERENCE_UNRESOLVED"
-        elif node.kind == "TABLE_ROW" and len(node.text) > max_content_chars:
-            reason = "ROW_EXCEEDS_CONTENT_BUDGET"
+        elif "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
+            reason = "LINE_COLUMN_CONTEXT_UNRESOLVED"
+        elif node.kind in {"TABLE_ROW", "TEXT_LINE"} and len(node.text) > max_content_chars:
+            reason = (
+                "ROW_EXCEEDS_CONTENT_BUDGET"
+                if node.kind == "TABLE_ROW"
+                else "LINE_EXCEEDS_CONTENT_BUDGET"
+            )
         elif len(context) > max_context_chars:
             reason = "CONTEXT_EXCEEDS_BUDGET"
         if reason is not None:

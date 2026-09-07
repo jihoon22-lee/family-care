@@ -22,10 +22,12 @@ _POLICY_IDENTIFIER_PATTERN = re.compile(
     r"\s*[:#]?\s*(?P<value>[A-Z0-9][A-Z0-9._/-]{4,})",
     re.IGNORECASE,
 )
+MINIMIZATION_REVISION = "source-window-minimizer-v2"
+
 _IDENTITY_LABEL = (
     r"계약자(?:명)?|피보험자(?:명)?|보험\s*수익자|수익자(?:명)?|성명|이름|"
     r"주소|거주지|소재지|생년월일|주민등록번호|"
-    r"policyholder|insured\s+(?:person|name)|beneficiary(?:\s+name)?|"
+    r"policyholder|insured(?!\s+amount\b)(?:\s+(?:person|name))?|beneficiary(?:\s+name)?|"
     r"full\s+name|customer\s+name|address|date\s+of\s+birth"
 )
 _FOLLOWING_FIELD_LABEL = (

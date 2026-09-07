@@ -52,3 +52,10 @@ def test_reusable_source_minimizer_keeps_raw_offsets_for_multiple_windows() -> N
     assert redactor.window(split, len(source)).startswith("[REDACTED]")
     assert redactor.window(split, len(source)).endswith("317")
     assert "Family Member A" not in repr(redactor)
+
+
+def test_bare_insured_label_hides_an_unlisted_name_without_hiding_insured_amount() -> None:
+    source = "Insured\tUnlisted Person\nInsured amount: 317 KRW"
+    minimized = minimize_source_window(source, start=0, end=len(source), sensitive_terms=())
+    assert "Unlisted Person" not in minimized
+    assert "Insured amount: 317 KRW" in minimized

@@ -210,6 +210,10 @@ def physical_enrollment_locator(
                 raw_blocks[node["node_id"]] = node
                 continue
             if node["kind"] == "TABLE_ROW":
+                if node.get("row_role") == "header":
+                    # A shared header can also be a primary range in the envelope.
+                    # It supports the field but is not the enrolled name's position.
+                    continue
                 box = _table_anchor(node, nodes, original_name)
             elif node["kind"] == "TEXT_LINE":
                 box = _line_anchor(node, nodes, original_name)

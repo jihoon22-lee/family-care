@@ -141,7 +141,7 @@ def test_batch_status_exposes_scoped_preparation_without_source_content(
     assert after is not None
     item = next(item for item in after.items if item.source_id == source_id)
     assert item.structure_state == "PREPARED"
-    assert item.structure_planned_chunks > 1
+    assert item.structure_planned_chunks == 1
     assert item.structure_unprocessed_ranges == 0
     assert item.structure_error_code is None
     assert repository.get(household_space_id=uuid4(), batch_id=batch_id) is None

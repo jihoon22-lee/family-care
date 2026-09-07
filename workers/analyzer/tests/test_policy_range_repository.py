@@ -666,3 +666,17 @@ def test_generic_confirmation_cannot_bypass_unresolved_range_insured_identity(
             ).fetchone()["total"]
             == 0
         )
+
+
+def test_pending_envelope_cannot_bypass_a_new_minimization_revision(
+    ranges_database: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import familycare_worker.policy_range_repository as module
+
+    url, job = ranges_database
+    monkeypatch.setattr(module, "MINIMIZATION_REVISION", "synthetic-minimizer-old", raising=False)
+    repository = PolicyRangeRepository(url)
+    assert repository.next(job, WORKER, sensitive_terms=()) is not None
+    monkeypatch.setattr(module, "MINIMIZATION_REVISION", "synthetic-minimizer-new")
+    with pytest.raises(PolicyRangeConflict):
+        repository.next(job, WORKER, sensitive_terms=())

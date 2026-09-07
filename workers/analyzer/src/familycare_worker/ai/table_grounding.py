@@ -35,6 +35,10 @@ def explicitly_unenrolled(text: str) -> bool:
             r"(?:미가입|미선택|가입\s*예시|not enrolled|example only)", value, re.IGNORECASE
         ):
             return True
+        if re.search(
+            r"\s(?:미가입|미선택|가입\s*예시|not\s+enrolled|example\s+only)$", value, re.IGNORECASE
+        ):
+            return True
         if re.search(r"\((?:미가입|미선택|가입\s*예시)\)", value):
             return True
         if re.match(

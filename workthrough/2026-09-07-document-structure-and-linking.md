@@ -1,6 +1,6 @@
 # v0.5 B02 document structure and linking
 
-- 상태: in_progress; 로컬 구조/저장 기반 검증, 자동 가입·판본 연결과 runtime 소비는 미완료
+- 상태: in_progress; 로컬 구조·자동 가입·범위 runtime 검증, 공통 출처/판본 연결과 보호된 수용은 미완료
 - 범위: [WP02 #62](https://github.com/jihoon22-lee/family-care/issues/62),
   [WP03 #63](https://github.com/jihoon22-lee/family-care/issues/63)
 - 기준: B01 merge `b084fd9c62e3e617c4cbc15e57cf959d450349b5`
@@ -288,3 +288,41 @@ Chromium mock E2E 최초 실행은 이전 약관 전용 후보의 확인 허용�
 13 passed / 2 failed였다. 제외 항목(약관 전용·미가입) 확인 차단과 정상 가입 후보 확인 후
 Web Storage/IndexedDB 미기록을 분리한 뒤 16 passed를 확인했다. 변경한 E2E의 Prettier,
 ESLint와 Web typecheck도 통과했다. API/Worker 소스는 이 후속 E2E 변경으로 바뀌지 않았다.
+
+## Native word lines and extraction-stable enrollment (2026-09-07)
+
+기준 `28a60b3` 이후 변경이다. 독립 helper `7734a96`을 `9fa29e1`로 통합하고 projector에
+연결했다. `document-structure-v2`는 원본 단어 BLOCK을 보존한 TEXT_LINE view와 문자별
+source_spans를 만든다. 같은 layer·높이·가까운 수평 간격을 확인하고 표 안의 단어를 중복
+예약하지 않는다. 먼 열/상태 표시는 `LINE_COLUMN_CONTEXT_UNRESOLVED`, 너무 긴 줄은
+`LINE_EXCEEDS_CONTENT_BUDGET`으로 남긴다. 준비 primary/context는 각각 4096자이며
+range envelope은 v3다. 등록되지 않은 bare Insured 이름도 최소화하고 최소화 revision이
+바뀌면 이전 pending envelope을 거부한다. 줄 끝 미가입/예시 표시는 가입으로 반영하지 않는다.
+
+`enrollment_locator.py`는 원래 이름의 native 단어 bbox·content hash·물리 페이지를 사용한다.
+기존 household/계약과 publication을 함께 확인하여 같은 DocumentVersion의 새 extraction,
+TEXT_LINE/TABLE_ROW를 한 Rider에 연결하고 source별 이력을 유지한다. source node ID와
+원본 generation은 불변이다. 같은 이름의 다른 물리 행은 분리하고, 좌표가 불명확한 같은
+이름의 재추출은 추가 가입으로 만들지 않는다. 원장 직접 수정·사용자 교정과 기존 primary
+insured가 다른 구성원인 경우를 보호한다. 일반 private 재가져오기는 새 DocumentVersion을
+만들기 때문에 그 계약 동등성과 private knowledge 연결은 아직 후속 작업이다.
+
+새 line 부재 RED와 실제 ReportLab PDF→extractor의 단어 분리, 다른 열·가까운 미가입 단어,
+미등록 Insured 이름 최소화, 이전 minimization 입력 재사용, 같은 PDF 재추출의 Rider 중복,
+구성원 이름 변경 뒤 다른 구성원의 기존 계약 반영을 RED로 확인했다. 독립 locator 23개는
+module 부재 RED 후 통과했다. shared primary header가 담보 위치로 취급되는 교차 view 실패도
+추가 회귀로 수정했다. 관련 API PG 26개, 범위/준비/native PG 30개와 pure 73개가 통과했다.
+실제 합성 PDF→저장 추출→범위→원장 경로를 포함하며 provider는 합성 응답이다.
+
+개발 중 테스트 schema/tuple 형식과 준비 범위 수 기대값을 수정했다. 구성원 변경 테스트의
+첫 cleanup은 FK 때문에 실패했고, 전용 합성 DB에서 해당 fixture만 정리한 뒤 cleanup 순서를
+고쳐 재실행했다. 실제 데이터나 외부 AI 호출은 없었다. 별도 문서 identity·판본·private
+canonical 연결은 완료로 주장하지 않는다.
+
+2026-09-07 20:36~20:44 KST, `9fa29e1` + 이 절의 API/Worker/테스트/문서 변경에서 직렬
+검증했다. Ruff format 571 files/lint, mypy 236 sources, 기본 pytest 1,846 passed /
+254 integration deselected / 3 subtests passed, 전체 PostgreSQL 253 passed / 1,573 deselected가
+통과했다. 문서 50개·안전 764 paths·생성 계약·container/workflow 정적 검사·diff도 통과했다.
+Web/manifest/lock/Node 입력은 `28a60b3`과 동일함을 diff로 확인했으며 해당 Web 166개·전체
+정적/빌드와 Chromium mock E2E 16개 통과 증거를 유지한다. 이 변경에서 Web/브라우저를 다시
+실행했다고 표현하지 않는다. 새 이미지 빌드는 다음 push의 CI에서 확인한다.

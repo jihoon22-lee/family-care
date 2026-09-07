@@ -22,7 +22,7 @@ from familycare_worker.document_structure import (
     plan_structure_chunks,
 )
 
-RANGE_ENVELOPE_REVISION = "policy-range-envelope-v2"
+RANGE_ENVELOPE_REVISION = "policy-range-envelope-v3"
 
 
 @dataclass(frozen=True, repr=False)

@@ -19,9 +19,75 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from familycare_api.policies.enrollment_locator import physical_enrollment_locator
+
 
 def _key(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _physical_rider_identity(
+    connection: psycopg.Connection[dict[str, Any]],
+    source: dict[str, Any],
+    policy_id: UUID,
+    name: str,
+    refs: list[dict[str, Any]],
+) -> tuple[bool, UUID | None]:
+    locator = physical_enrollment_locator(source["structure_json"], name, refs)
+    previous = connection.execute(
+        "SELECT DISTINCT p.rider_id,s.source_refs,plan.generation_id,f.value AS name, "
+        "ARRAY(SELECT e.evidence_id::text FROM analysis_candidate_evidence e "
+        "WHERE e.candidate_version_id=s.candidate_version_id AND e.field_id='rider_name') name_ids "
+        "FROM range_enrollment_publications p "
+        "JOIN policy_range_candidate_sources s ON "
+        "s.candidate_version_id=p.source_candidate_version_id "
+        "JOIN document_policy_range_plans plan ON plan.job_id=s.job_id "
+        "JOIN document_structure_generations g ON g.id=plan.generation_id "
+        "JOIN document_versions v ON v.id=g.document_version_id "
+        "JOIN analysis_candidate_fields f ON f.candidate_version_id=s.candidate_version_id "
+        "AND f.field_id='rider_name' "
+        "WHERE p.household_space_id=%s AND p.policy_contract_id=%s AND p.rider_id IS NOT NULL "
+        "AND v.content_sha256=%s",
+        (
+            source["household_space_id"],
+            policy_id,
+            source["structure_json"]["lineage"]["content_sha256"],
+        ),
+    ).fetchall()
+    structures = {source["generation_id"]: source["structure_json"]}
+    matches: set[UUID] = set()
+    for item in previous:
+        generation_id = item["generation_id"]
+        if generation_id not in structures:
+            row = connection.execute(
+                "SELECT structure_json FROM document_structure_generations WHERE id=%s "
+                "AND household_space_id=%s",
+                (generation_id, source["household_space_id"]),
+            ).fetchone()
+            if row is None:
+                return True, None
+            structures[generation_id] = row["structure_json"]
+        old = physical_enrollment_locator(
+            structures[generation_id],
+            item["name"],
+            [ref for ref in item["source_refs"] if ref["evidence_id"] in item["name_ids"]],
+        )
+        if locator is not None and old == locator:
+            matches.add(item["rider_id"])
+        elif (
+            (locator is None or old is None)
+            and generation_id != source["generation_id"]
+            and _key(item["name"]) == _key(name)
+        ):
+            # An uncertain repeat is retained for review, never made additive.
+            return True, None
+    if len(matches) > 1:
+        return True, None
+    if matches:
+        return True, next(iter(matches))
+    if locator is not None:
+        return True, uuid5(policy_id, json.dumps(locator, sort_keys=True, separators=(",", ":")))
+    return False, None
 
 
 def _rider_identity(
@@ -56,6 +122,15 @@ def _rider_identity(
             (candidate_id,),
         ).fetchall()
         keys = {str(row["evidence_id"]) for row in root_evidence}
+        addressed, physical_id = _physical_rider_identity(
+            connection,
+            source,
+            policy_id,
+            root_name["value"],
+            [ref for ref in source["source_refs"] if ref["evidence_id"] in keys],
+        )
+        if addressed:
+            return physical_id
         nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
         table_rows = {
             ref["node_id"]
@@ -231,6 +306,17 @@ def project_range_candidate(
     if not primary:
         return False
     policy_id = UUID(association["contract_scope_id"])
+    enrolled_members = connection.execute(
+        "SELECT p.id, ARRAY(SELECT party.family_member_id FROM policy_parties party "
+        "WHERE party.policy_contract_id=p.id AND party.household_space_id=p.household_space_id "
+        "AND party.role='primary_insured') member_ids FROM policy_contracts p "
+        "WHERE p.id=%s AND p.household_space_id=%s FOR SHARE OF p",
+        (policy_id, household),
+    ).fetchone()
+    if enrolled_members is not None and set(enrolled_members["member_ids"]) != {
+        context["family_member_id"]
+    }:
+        return False
     rider_id = None
     if version["candidate_kind"] == "rider":
         rider_id = _rider_identity(connection, source, policy_id, version)
