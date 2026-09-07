@@ -24,7 +24,8 @@
    줄을 연결하고 같은 DocumentVersion의 재추출/표·줄 표현을 물리 이름 좌표로 연결했다.
    동일 bytes·원문 계약번호·피보험자 근거로 일반 재가져오기의 새 DocumentVersion도
    기존 계약/담보에 연결하며 alias 근거가 있는 원장 조회/약관 링크를 허용한다.
-   component/판본 연결·운영/private snapshot 공통 담보 identity는 후속이다.
+   현재 원본 snapshot을 수정하지 않는 exact content manifest 기반 문서 연결 이력과
+   공통 담보 identity를 구현 중이며, component/판본 연결은 후속이다.
 4. in_progress — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
    기존 키 재사용·보호된 자료 처리·최소 전송은 세션에서 승인받았다. 낮은 API 잔액에
    맞춰 로컬 재사용을 우선하고 범위별 호출 예산을 구현한 뒤 제한적으로 실행한다.

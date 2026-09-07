@@ -364,3 +364,41 @@ workers/analyzer/tests -q` 266 passed / 1,623 deselected가 통과했다. 문서
 `83f77dc` CI 34118286689는 required 7개(이미지 3개 포함)가 모두 통과했다. 다음 push의 CI는
 별도로 확인한다. 운영/private snapshot 공통 담보 identity, 자동 component/약관 판본 연결과
 보호된 자료 수용은 아직 남아 있다.
+
+## Exact knowledge source manifests and identity proposals (2026-09-07)
+
+기준 `2b35773` 이후다. 순수 proposal helper `5da2715`를 `bffbe7d`로 통합했다. 기존 package의
+문서 alias는 실제 PDF digest를 갖지 않아 basename 또는 package line→IR ordinal 추정을 하지
+않는다. `0033`과 `source_bindings.py`는 외부 exact manifest를 검증해 별도 append-only 이력을
+저장한다. 원래 snapshot은 그대로 유지하고 현재 run/package·가정·alias·bytes·페이지 수·문서
+종류·성공한 extraction/Evidence를 대조한다. 로컬 명령은 private 경로/식별자를 환경변수로만
+받고 hash·외부 regular file·1 MiB·JSON 중복 key를 검증하며 count/고정 오류만 출력한다.
+
+DB module 부재 8 RED 후 통과했고, 재시도의 alias metadata 검증 누락 RED를 추가해 수정했다.
+문서 source 연결 PG 15개는 atomic replacement/실패 전체 rollback, concurrent retry 1회 반영,
+metadata/삭제/이전 run 재검증, snapshot 불변과 nonempty downgrade 거부를 포함한다. 전용
+합성 DB에서 빈 0033 downgrade/upgrade도 통과했다. CLI module 부재와 duplicate JSON key,
+env-only 경로 회귀를 RED→PASS로 검증했다. 같은 고정 Python 3.14의 깊은 JSON도 고정 오류로
+거부되는지 실제 입력으로 확인했으며, RecursionError 우려는 이 환경에서 재현되지 않았다.
+
+순수 matcher는 37개(모듈/generation 필드 부재 RED 후 PASS)를 통과했다. 결과는 정확한
+publication/Evidence/generation/native 위치와 원래 private 위치를 가진 proposal이며, 현재
+원장의 전체 source inventory·기존 사용자 연결·1:1 충돌 검사와 실제 canonical publication/
+조회/청구 소비는 후속이다. 동일 이름의 다른 행·계약·구성원, inherited evidence와 잘못된
+권위/OCR는 보류하며 금액으로 대상을 고르지 않는다. 실제 자료/외부 AI/운영 변경은 없었다.
+
+최종 검토에서 soft-deleted primary_insured가 range 재반영과 별도 문서의 Rider 근거 조회에
+포함되는 조건을 확인했다. 새 합성 PG 3개가 잘못된 재반영/조회 허용으로 실패한 뒤, 두
+쿼리에서 삭제 관계를 제외해 통과했다. 다른 사용자 수정/원래 이력은 유지한다.
+
+2026-09-07 21:52~21:57 KST, `bffbe7d` + 이 절의 source binding/CLI/삭제 관계 수정/문서에서
+최종 검증했다. 기본 `pytest apps/api/tests workers/analyzer/tests scripts/tests -q`는
+1,942 passed / 285 deselected / 3 subtests passed, `ruff format --check .` 581 files,
+`ruff check .`, `mypy apps/api/src workers/analyzer/src scripts` 242 sources가 통과했다.
+전용 합성 DB 전체 `pytest -m integration apps/api/tests workers/analyzer/tests -q`는
+284 passed / 1,660 deselected로 통과했다. 앞선 281개 통과 뒤 삭제 관계 회귀가 추가되어
+이 후속 실행을 최종 기준으로 쓴다. 문서 50개·저장소 안전 774 paths·생성 계약·container/
+workflow 정적 검사·diff 검사도 통과했다. Web/계약/lock/toolchain 입력은 `2b35773`과 동일함을
+diff로 확인했으며 Web 166개와 Chromium mock E2E 16개의 기존 증거를 유지한다.
+`2b35773` CI 34120477553의 7개 작업(이미지 3개 포함)은 모두 통과했다. 새 source의 이미지
+빌드/CI와 보호된 실제 자료 적용은 별도이며, 실제 canonical writer/조회는 아직 후속이다.

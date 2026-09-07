@@ -169,6 +169,42 @@ run과 같은 `household_space_id`를 중복 보존하고 복합 외래키로 �
 같은 household와 DocumentVersion을 가리키는 exact Evidence가 함께 있어야 `MATCH`가 될 수
 있다. 따라서 다른 가구의 유효한 UUID를 알고 있어도 knowledge snapshot에 연결할 수 없다.
 
+## Exact source binding overlay
+
+`0033_knowledge_source_bindings`는 기존 `KnowledgeDocumentBinding`과 import snapshot을
+수정하지 않고 외부 source manifest의 검증 이력을 추가한다. manifest는 현재 import run과
+package digest, 기존 binding ID·alias digest, DocumentVersion·Evidence, exact content SHA-256,
+page count, document kind와 expected current binding ID를 가진다. 이름·파일명·페이지 수만으로
+원문 동일성을 추정하지 않는다. 이 manifest는 원래 자료의 선언이며 시스템이 빠진 digest를
+유사도에서 만들어 내지 않는다.
+
+`KnowledgeSourceBindingRepository`는 같은 가정의 writer lock 안에서 현재 package와 실제
+저장 metadata·성공한 extraction·Evidence 범위를 대조한다. 여러 entry는 원자적으로 적용하고,
+동일 manifest 재시도도 metadata를 다시 확인한다. 이전 binding은 superseded 이력으로 남기며,
+지워진 문서·바뀐 digest·다른 가정/alias·stale expected ID를 거부한다. authority는
+`PROGRAM_VERIFIED_CONTENT_MANIFEST`이며 가입/최신 상태/계산/사용자 확인 권위를 주지 않는다.
+이력이 있으면 downgrade를 거부한다.
+
+로컬 명령은 `TMPDIR=/tmp uv run python scripts/bind_knowledge_sources.py`다. private 경로와
+식별값은 argv 대신 다음 환경변수로만 받는다. manifest는 저장소 밖 절대경로의 1 MiB 이하
+regular file이며 symlink·중복 JSON key·예상 SHA 불일치를 거부한다. stdout은 상태/개수만,
+오류는 `KNOWLEDGE_SOURCE_BINDING_INVALID`만 출력한다.
+
+- `FAMILYCARE_PRIVATE_KNOWLEDGE_SOURCE_MANIFEST_PATH`
+- `FAMILYCARE_PRIVATE_KNOWLEDGE_SOURCE_MANIFEST_SHA256`
+- `FAMILYCARE_PRIVATE_KNOWLEDGE_HOUSEHOLD_ID`
+- `FAMILYCARE_DATABASE_URL`
+
+입력 schema `knowledge-source-bindings-v1`의 단일 구현은
+`insurance_reconciliation/source_bindings.py`의 `KnowledgeSourceManifest`다. 기존 package의
+불변 JSON/정규화 행/원문 alias와 private line 번호를 바꾸지 않는다.
+
+`canonical_match.py`는 검증된 문서 bytes/page에서 원래 이름의 유일한 native 가입 위치를
+확인하는 순수 proposal helper다. 금액을 동등성 근거로 쓰거나 package line을 IR 순번으로
+해석하지 않는다. 다른 행·계약·구성원, inherited evidence, 불명확한 source는 보류한다.
+실제 공통 담보 저장과 소비는 전체 페이지의 미처리 위치·현재 원장·사용자 연결·1:1 충돌을
+추가 검사한 뒤 연결해야 하며, 이 source binding 이력만으로 자동 확정하지 않는다.
+
 ## Package contract
 
 지원하는 첫 package schema는 `private-analysis-package.sol-v2`다. importer가 다음 파일을
