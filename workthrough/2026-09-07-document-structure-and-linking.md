@@ -80,17 +80,44 @@ runtime 소비를 남긴 상태이므로 #62/#63을 종료하거나 merge하지 
 
 ## Remaining work and review findings
 
-- 자동 source preparation/runtime 소비, provider 범위 처리·총량 한도, 부분 결과 publication은
-  아직 연결하지 않았다. 새 helper와 DB 검증을 앱의 전체 문서 처리 완료로 보고하지 않는다.
+- 아래 후속 변경에서 로컬 source preparation과 상태 소비를 연결했다. provider 범위 처리·
+  총량 한도와 부분 결과 publication은 아직 연결하지 않았다. 새 helper와 DB 검증을 앱의 전체 문서 처리 완료로 보고하지 않는다.
 - 기존 raw `private_knowledge_coverages.rider_id/MATCH`는 제품에서 생성하지 않는 snapshot
   비실행 경계다. 계약 수준 operational link도 개별 담보 동일성을 보장하지 않는다.
   다음 구현은 검증된 가입 행과 별도 담보 연결 이력을 사용하고 이름/금액만으로 합치지 않는다.
 - 새 snapshot에서 이전 current 계약 링크를 정리하지 않아 다시 연결할 때 unique 충돌할 수
   있는 경로를 정적으로 확인했다. 세대 전환 때 이력을 supersede하고 과거 결과는 보존해야 한다.
 - 같은 담보의 source refs, 다른 계약/가족 보존, 링크·원장 version 변경의 stale 감지는 미구현이다.
-- 기존 키 재사용과 보호된 runtime/자료 처리 범위는 현재 세션의 필수 입력 대기다.
-  실제 자료/보관소/DB를 탐색·변경하거나 외부 AI에 전송하지 않았다.
+- 기존 키 재사용·보호된 자료 처리·최소 외부 전송은 세션에서 승인받았다. API 잔액 제약에
+  따라 이 후속 구현도 합성 데이터와 외부 호출 0회로 진행했다.
 
-API 응답·생성 schema·서비스 시작 명령은 이 부분 변경에서 바꾸지 않았다. 문서 내용·실제
+위 `0026` 기준 증거에서는 API 응답·생성 schema·서비스 시작 명령을 바꾸지 않았다. 문서 내용·실제
 식별자·경로·암호·Drive ID를 공개 자료로 가져오지 않았으며 모든 검증은 처음부터 만든
 합성 값과 전용 DB를 사용했다. 마일스톤/실자료 전환/태그/릴리스/배포는 미완료다.
+
+## Local preparation runtime and status (2026-09-07)
+
+기준 `27d1d60` 이후 변경이다. `document_preparation.py`와 migration `0027`이 저장 추출의
+자동 준비를 Worker fair queue에 연결한다. provider/key와 private 원본 root 없이 동작한다.
+DB item lock과 준비 이력으로 동시 실행·재시작·재시도에 대응하고, terminal 준비 기록의
+삭제/재작성을 금지한다. 신규 배치 상태의 네 optional 필드를 canonical schema에서 생성해
+API와 Web이 소비한다. 가져오기 성공을 전체 분석 완료로 표현하지 않으며 로컬 준비 실패는
+별도 표시한다. polling 상한은 응답마다 초기화하지 않고 batch 전체에 적용한다.
+
+새 모듈 부재, Worker lane 미연결, API 상태 필드 부재, 최신 버전에서 과거 준비 상태 재사용,
+Web 준비 실패 표시/가져오기 후 polling 부재를 각각 RED로 확인했다. 현재 관련 결과는
+Web component 15 passed, Worker startup 31 passed, API batch unit 51 passed다.
+최종 전체 검증은 Web format/lint/typecheck·164 tests·production build 통과, Ruff format
+539 files/lint·mypy 225 sources 통과, Python default `1719 passed, 202 deselected,
+3 subtests passed`, 전용 합성 PostgreSQL `201 passed, 1446 deselected`다. 문서 50개·
+안전 732 paths·계약/OpenAPI/생성 타입·container/workflow 정적 검사·diff 검사도 통과했다.
+명령은 위 필수 검증 표와 동일하며 source `27d1d60` + 이 절의 관련 미커밋 변경에 연결된다.
+이전 source의 CI를 새 source의 image-build 증거로 사용하지 않는다.
+합성 전용 DB에만 `0027`을 적용했다. 승인 범위에서 운영 DB의 자료 수만 read-only 집계했고
+본문·식별자·경로를 출력하거나 저장하지 않았다. 첫 집계의 마지막 테이블 이름이 맞지 않아
+부분 결과로 끝났고 후속 수정 조회는 성공했다. 운영 schema/자료 변경·원본 열람·provider
+호출·배포는 수행하지 않았다. 조회 집계는 합성 수용/판독 품질 검증이 아니다.
+
+Chromium mock E2E는 초기 `14 passed, 1 failed`였다. 완료 문구를 구분한 변경에 맞춰
+합성 import 시나리오의 기대값과 내용 준비 상태를 갱신한 뒤 `15 passed`를 확인했다.
+후속 E2E 파일의 ESLint·Web typecheck도 통과했다. 실제 backend/Windows/mobile 검증은 아니다.

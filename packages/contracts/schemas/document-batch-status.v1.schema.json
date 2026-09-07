@@ -188,6 +188,52 @@
         },
         "state": {
           "$ref": "#/$defs/BatchItemState"
+        },
+        "structure_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StructurePreparationState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "structure_error_code": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StructurePreparationError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "structure_planned_chunks": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "structure_unprocessed_ranges": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -265,6 +311,25 @@
       "minLength": 64,
       "pattern": "^[a-f0-9]{64}$",
       "title": "SourceId",
+      "type": "string"
+    },
+    "StructurePreparationState": {
+      "enum": [
+        "PENDING",
+        "PREPARED",
+        "PARTIAL",
+        "FAILED",
+        "RETRYABLE_FAILED"
+      ],
+      "title": "StructurePreparationState",
+      "type": "string"
+    },
+    "StructurePreparationError": {
+      "enum": [
+        "STRUCTURE_SOURCE_INVALID",
+        "STRUCTURE_PREPARATION_RETRY"
+      ],
+      "title": "StructurePreparationError",
       "type": "string"
     }
   }

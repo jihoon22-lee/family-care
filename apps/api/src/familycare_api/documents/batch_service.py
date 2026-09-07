@@ -55,6 +55,10 @@ def _projection(batch: BatchRecord) -> dict[str, Any]:
                 "ocr_state": item.ocr_state,
                 "ocr_pages_processed": item.ocr_pages_processed,
                 "ocr_warning_codes": list(item.ocr_warning_codes),
+                "structure_state": item.structure_state,
+                "structure_error_code": item.structure_error_code,
+                "structure_planned_chunks": item.structure_planned_chunks,
+                "structure_unprocessed_ranges": item.structure_unprocessed_ranges,
             }
             for item in batch.items
         ],

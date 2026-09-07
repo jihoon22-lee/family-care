@@ -65,6 +65,10 @@ function batchItem(
     ocr_pages_processed: state === "succeeded" ? 1 : 0,
     ocr_state: state === "succeeded" ? "completed" : "pending",
     ocr_warning_codes: [],
+    structure_state: state === "succeeded" ? "PREPARED" : null,
+    structure_error_code: null,
+    structure_planned_chunks: state === "succeeded" ? 2 : null,
+    structure_unprocessed_ranges: state === "succeeded" ? 0 : null,
     source_id: source.source_id,
     state,
   };
@@ -231,9 +235,14 @@ test("imports a synthetic encrypted batch without exposing file secrets", async 
 
   await expect(passwordDialog).toBeHidden();
   await expect(
-    page.getByText("문서 처리가 끝났습니다. 보장 원장에서 확인할 수 있습니다."),
+    page.getByText(
+      "문서 가져오기가 끝났습니다. 가입 담보 반영 현황은 보장 원장에서 확인하세요.",
+    ),
   ).toBeVisible();
   await expect(page.getByText("완료", { exact: true })).toHaveCount(2);
+  await expect(
+    page.getByText("문서 내용 준비 완료", { exact: true }),
+  ).toHaveCount(2);
   await expect(page.getByText("비밀번호 필요", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "보장 원장 열기" }),

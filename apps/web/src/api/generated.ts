@@ -749,6 +749,12 @@ export interface BatchItemResponse {
     | "retryable_failed"
     | "running"
     | "succeeded";
+  structure_error_code?:
+    "STRUCTURE_PREPARATION_RETRY" | "STRUCTURE_SOURCE_INVALID" | null;
+  structure_planned_chunks?: number | null;
+  structure_state?:
+    "FAILED" | "PARTIAL" | "PENDING" | "PREPARED" | "RETRYABLE_FAILED" | null;
+  structure_unprocessed_ranges?: number | null;
 }
 
 export interface BatchResponse {

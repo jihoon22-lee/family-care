@@ -17,6 +17,8 @@ from familycare_api.documents.generated_batch_contracts import (
     BatchState,
     OcrState,
     OcrWarningCode,
+    StructurePreparationError,
+    StructurePreparationState,
 )
 from familycare_api.documents.import_sources import (
     MAX_SOURCE_BYTES,
@@ -82,6 +84,10 @@ class BatchItemResponse(BaseModel):
     state: BatchItemState
     error_code: BatchErrorCode | None
     attempts: int = Field(ge=0, le=20)
+    structure_state: StructurePreparationState | None = None
+    structure_error_code: StructurePreparationError | None = None
+    structure_planned_chunks: int | None = Field(default=None, ge=0)
+    structure_unprocessed_ranges: int | None = Field(default=None, ge=0)
     ocr_state: OcrState
     ocr_pages_processed: int = Field(ge=0, le=500)
     ocr_warning_codes: list[OcrWarningCode] = Field(

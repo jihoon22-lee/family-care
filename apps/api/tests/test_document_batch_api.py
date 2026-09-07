@@ -161,6 +161,10 @@ def _item(
         "ocr_state": ocr_state,
         "ocr_pages_processed": ocr_pages_processed,
         "ocr_warning_codes": list(ocr_warning_codes),
+        "structure_state": None,
+        "structure_error_code": None,
+        "structure_planned_chunks": None,
+        "structure_unprocessed_ranges": None,
     }
 
 
@@ -544,6 +548,10 @@ def test_status_projects_bounded_ocr_progress_without_ocr_payload(
             "ocr_state": "completed",
             "ocr_pages_processed": 3,
             "ocr_warning_codes": [],
+            "structure_state": None,
+            "structure_error_code": None,
+            "structure_planned_chunks": None,
+            "structure_unprocessed_ranges": None,
         },
         {
             "source_id": SOURCE_ID_B,
@@ -555,6 +563,10 @@ def test_status_projects_bounded_ocr_progress_without_ocr_payload(
             "ocr_state": "warning",
             "ocr_pages_processed": 2,
             "ocr_warning_codes": ["NO_TEXT_DETECTED"],
+            "structure_state": None,
+            "structure_error_code": None,
+            "structure_planned_chunks": None,
+            "structure_unprocessed_ranges": None,
         },
     ]
     serialized = response.text.lower()
@@ -614,6 +626,10 @@ def test_service_projection_allowlists_ocr_progress_metadata() -> None:
             "ocr_state": "warning",
             "ocr_pages_processed": 2,
             "ocr_warning_codes": ["NO_TEXT_DETECTED"],
+            "structure_state": None,
+            "structure_error_code": None,
+            "structure_planned_chunks": None,
+            "structure_unprocessed_ranges": None,
         }
     ]
     serialized = str(value).lower()

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 __all__ = [
     "BatchDocumentKind",
@@ -20,6 +20,8 @@ __all__ = [
     "OcrState",
     "OcrWarningCode",
     "SourceId",
+    "StructurePreparationError",
+    "StructurePreparationState",
 ]
 
 
@@ -102,6 +104,21 @@ OcrWarningCode = Literal[
 SourceId = str
 
 
+StructurePreparationError = Literal[
+    "STRUCTURE_PREPARATION_RETRY",
+    "STRUCTURE_SOURCE_INVALID",
+]
+
+
+StructurePreparationState = Literal[
+    "FAILED",
+    "PARTIAL",
+    "PENDING",
+    "PREPARED",
+    "RETRYABLE_FAILED",
+]
+
+
 class DocumentBatch(TypedDict):
     batch_id: BatchId
     family_member_id: FamilyMemberId
@@ -120,6 +137,10 @@ class DocumentBatchItem(TypedDict):
     ocr_warning_codes: list[OcrWarningCode]
     source_id: SourceId
     state: BatchItemState
+    structure_error_code: NotRequired[StructurePreparationError | None]
+    structure_planned_chunks: NotRequired[int | None]
+    structure_state: NotRequired[StructurePreparationState | None]
+    structure_unprocessed_ranges: NotRequired[int | None]
 
 
 class DocumentBatchRequest(TypedDict):

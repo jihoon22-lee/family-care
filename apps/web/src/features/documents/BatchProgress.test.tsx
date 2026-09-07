@@ -37,6 +37,28 @@ const BATCH: BatchResponse = {
 };
 
 describe("BatchProgress OCR projection", () => {
+  it("distinguishes a retained document from a preparation failure", () => {
+    const preparedBatch: BatchResponse = {
+      ...BATCH,
+      items: [
+        {
+          ...BATCH.items[1],
+          structure_state: "FAILED",
+          structure_error_code: "STRUCTURE_SOURCE_INVALID",
+          structure_planned_chunks: null,
+          structure_unprocessed_ranges: null,
+        },
+      ],
+    };
+    renderWithProviders(
+      <BatchProgress batch={preparedBatch} onCancel={vi.fn()} />,
+    );
+    expect(
+      screen.getByText("가져온 문서의 내용 준비에 실패했습니다."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/재업로드|자료 미제공/)).not.toBeInTheDocument();
+  });
+
   it("renders bounded OCR states and page progress as text only", () => {
     renderWithProviders(<BatchProgress batch={BATCH} onCancel={vi.fn()} />);
 

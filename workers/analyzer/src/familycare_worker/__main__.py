@@ -32,6 +32,7 @@ from familycare_worker.ai.recommender import (
 from familycare_worker.ai.schemas import openai_schema_registry
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
+from familycare_worker.document_preparation import DocumentPreparationRunner
 from familycare_worker.event_jobs import EventStructuringJobQueue
 from familycare_worker.health import (
     DatabaseProbe,
@@ -84,13 +85,17 @@ class FairJobRunner:
         documents: JobRunner | None = None,
         imports: JobRunner | None = None,
         recommendations: JobRunner | None = None,
+        preparations: JobRunner | None = None,
     ) -> None:
         self.events = events
         self.documents = documents
         self.imports = imports
         self.recommendations = recommendations
+        self.preparations = preparations
         self._runners = tuple(
-            runner for runner in (events, documents, imports, recommendations) if runner is not None
+            runner
+            for runner in (events, documents, imports, recommendations, preparations)
+            if runner is not None
         )
         self._first = 0
 
@@ -202,16 +207,19 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     )
     document_root = os.getenv("FAMILYCARE_DOCUMENT_ROOT")
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
+    preparation_runner = DocumentPreparationRunner(database_url)
     if not document_root:
         base_runner: JobRunner = FairJobRunner(
             events=event_runner,
             recommendations=recommendation_runner,
+            preparations=preparation_runner,
         )
     elif not work_root:
         LOGGER.error("document_runner_configuration_incomplete")
         base_runner = FairJobRunner(
             events=event_runner,
             recommendations=recommendation_runner,
+            preparations=preparation_runner,
         )
     else:
         queue = JobQueue(database_url)
@@ -228,6 +236,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             events=event_runner,
             documents=document_runner,
             recommendations=recommendation_runner,
+            preparations=preparation_runner,
         )
 
     private_values = {

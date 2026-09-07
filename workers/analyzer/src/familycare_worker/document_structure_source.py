@@ -23,6 +23,8 @@ def load_stored_structure(
     household_space_id: UUID,
     family_member_id: UUID,
     batch_item_id: UUID,
+    expected_extraction_id: UUID | None = None,
+    expected_ocr_layer: tuple[UUID | None] | None = None,
 ) -> DocumentStructure:
     source = connection.execute(
         """
@@ -64,6 +66,8 @@ def load_stored_structure(
     if source is None:
         raise DocumentStructureError
     extraction_id = source["extraction_id"]
+    if expected_extraction_id is not None and extraction_id != expected_extraction_id:
+        raise DocumentStructureError
     page_rows = connection.execute(
         "SELECT * FROM extraction_pages WHERE extraction_id = %s ORDER BY page_number",
         (extraction_id,),
@@ -151,6 +155,11 @@ def load_stored_structure(
         """,
         (extraction_id,),
     ).fetchone()
+    if (
+        expected_ocr_layer is not None
+        and (None if layer is None else layer["id"]) != expected_ocr_layer[0]
+    ):
+        raise DocumentStructureError
     ocr_pages: list[dict[str, Any]] = []
     ocr_revision = None
     if layer is not None:

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   cancelDocumentBatch,
@@ -26,6 +26,15 @@ const TERMINAL_STATES = new Set<BatchResponse["state"]>([
   "succeeded",
 ]);
 
+function preparationPending(batch: BatchResponse): boolean {
+  return batch.items.some(
+    (item) =>
+      item.state === "succeeded" &&
+      (item.structure_state === "PENDING" ||
+        item.structure_state === "RETRYABLE_FAILED"),
+  );
+}
+
 function safeErrorMessage(): string {
   return "문서 가져오기를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
@@ -42,6 +51,7 @@ function requestedMemberId(): string | undefined {
 }
 
 export function ImportPage() {
+  const pollAttempts = useRef({ batchId: "", count: 0 });
   const [members, setMembers] = useState<FamilyMemberResponse[]>([]);
   const [sources, setSources] = useState<ImportSourceResponse[]>([]);
   const [memberId, setMemberId] = useState(() => requestedMemberId() ?? "");
@@ -121,19 +131,26 @@ export function ImportPage() {
   );
 
   useEffect(() => {
-    if (!batch || TERMINAL_STATES.has(batch.state) || !hasActiveItems)
+    if (
+      !batch ||
+      ((TERMINAL_STATES.has(batch.state) || !hasActiveItems) &&
+        !preparationPending(batch))
+    )
       return undefined;
     const controller = new AbortController();
-    let attempts = 0;
+    if (pollAttempts.current.batchId !== batch.batch_id) {
+      pollAttempts.current = { batchId: batch.batch_id, count: 0 };
+    }
     let timer: number | undefined;
     const poll = async (): Promise<void> => {
-      if (controller.signal.aborted || attempts >= 300) return;
-      attempts += 1;
+      if (controller.signal.aborted || pollAttempts.current.count >= 300)
+        return;
+      pollAttempts.current.count += 1;
       try {
         const next = await getDocumentBatch(batch.batch_id, controller.signal);
         setError(undefined);
         setBatch(next);
-        if (!TERMINAL_STATES.has(next.state)) {
+        if (!TERMINAL_STATES.has(next.state) || preparationPending(next)) {
           timer = window.setTimeout(() => void poll(), 1000);
         }
       } catch (reason) {
@@ -295,7 +312,8 @@ export function ImportPage() {
           />
           {batch.state === "succeeded" ? (
             <p className="import-complete-link">
-              문서 처리가 끝났습니다. 보장 원장에서 확인할 수 있습니다.
+              문서 가져오기가 끝났습니다. 가입 담보 반영 현황은 보장 원장에서
+              확인하세요.
               <a
                 href={`/app/members/${encodeURIComponent(batch.family_member_id)}/ledger`}
               >

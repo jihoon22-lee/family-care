@@ -176,3 +176,20 @@ job이나 외부 호출을 만들지 않는다.
 5. OpenAI key, PDF password, archive key는 request·DB·log에 없다.
 6. provider 장애가 기존 판정과 Evidence 조회를 중단시키지 않는다.
 7. assistance는 verified decision과 calculation을 생성하거나 수정하지 않는다.
+
+## v0.5 stored-source preparation
+
+Worker는 파일·provider 접근 없이 성공한 batch item의 저장 추출을 발견하고, 최신 성공
+extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한다. `0027`의
+`document_structure_preparations`는 로컬 준비 상태를 provider chunk 성공이나 가입/약관
+지식 활성화와 분리한다. 한 transaction에서 item row를 `SKIP LOCKED`로 잡고 savepoint 안에서
+준비한다. 종료/취소로 connection이 닫히면 미커밋 작업은 롤백되며 완료 identity는 재사용한다.
+로컬 DB 처리 실패만 60초 뒤 최대 3회 시도하고 읽을 수 없는 저장 추출은 고정 오류로 남긴다.
+새 추출/OCR는 새 준비 identity를 만들고 기존 정상 generation·가입·청구 이력을 삭제하지 않는다.
+
+인증된 batch status에는 optional `structure_state`, `structure_error_code`,
+`structure_planned_chunks`, `structure_unprocessed_ranges`를 추가한다. `PREPARED`는 문서 내용의
+범위 준비 완료다. 구조화·가입 반영·약관 지식 완료를 뜻하지 않는다. 최신 원문 버전의 추출이
+없으면 이전 버전의 준비 상태를 최신 완료로 반환하지 않는다. Web은 가져오기 성공 후에도
+준비 대기를 최대 300번 조회하고, 처리 실패를 재업로드 요구로 바꾸지 않는다. 본문·파일 경로·
+추출 식별자는 이 상태 응답에 포함하지 않는다. 기존 provider 경로의 범위 소비 전환은 B02 후속이다.
