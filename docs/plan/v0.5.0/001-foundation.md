@@ -1,6 +1,6 @@
 # v0.5 B01: Local guidance foundation
 
-- 상태: in_progress
+- 상태: complete (B01 기반 수용; 전체 마일스톤 수용은 후속 WP)
 - 메인: [#59](https://github.com/jihoon22-lee/family-care/issues/59)
 - 요구사항: [#60](https://github.com/jihoon22-lee/family-care/issues/60), R01/R07/R09/R10/R18/R19/R20
 - 구현: [WP01 #61](https://github.com/jihoon22-lee/family-care/issues/61)
@@ -13,7 +13,9 @@
 2. complete — 상태 가정·가입/관련성·산식·통화·기록 없는 지급 횟수 회귀의 RED/GREEN을 확인했다.
 3. complete — API/영속 snapshot/최소 Web 소비자를 연결하고 기본 조회의 AI 예약/구조화 요청을 분리했다.
 4. complete — 합성 API/PostgreSQL round trip, 키 없는 조회, JSON 무결성, 0024→0025 기존 결과 보존을 확인했다.
-5. in_progress — 전체 필수 검사·브라우저 E2E·CI·리뷰 후 PR을 merge하고 실제 증거를 연결한다.
+5. complete — [PR #75](https://github.com/jihoon22-lee/family-care/pull/75), 최종 CI 7개 통과,
+   merge `b084fd9c62e3e617c4cbc15e57cf959d450349b5`. Web 162개·browser 15개·Python 1,670개·
+   PostgreSQL 188개와 [workthrough](../../../workthrough/2026-09-07-local-guidance-foundation.md).
 
 ## Boundaries
 

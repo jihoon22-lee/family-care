@@ -1,0 +1,42 @@
+# v0.5 B02: Document structure and enrollment linking
+
+- 상태: in_progress
+- 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59),
+  [#60](https://github.com/jihoon22-lee/family-care/issues/60)
+- 구현: [WP02 #62](https://github.com/jihoon22-lee/family-care/issues/62),
+  [WP03 #63](https://github.com/jihoon22-lee/family-care/issues/63)
+- 선행: B01 [PR #75](https://github.com/jihoon22-lee/family-care/pull/75),
+  merge `b084fd9c62e3e617c4cbc15e57cf959d450349b5`
+- 요구사항: R02/R03/R04/R10/R11/R13/R17/R18/R19/R20, S01/S02/S03/S04/S09/S11/S14
+
+## Tasks
+
+1. complete — 전체 block/table/cell/OCR 보존 IR, 명확한 레이아웃 관계,
+   페이지/행/문자 범위와 처리 누락 adapter를 통합했다. 관련 합성 62개 통과.
+2. in_progress — 버전별 IR/범위 상태 저장과 기존 DB 추출 재사용, 부분 계획·취소·재개·
+   stale lease·동시 claim의 PostgreSQL 7개 회귀를 통과했다. runtime 소비와 source 처리
+   상태 노출은 남아 있다. 원문 없음과 처리 실패를 구분한다.
+3. pending — 검증된 가입 행의 출처를 보존하는 원장 반영과 자동 component/판본 연결,
+   공통 담보 identity·중복 제거·사용자 교정 우선순위를 실제 소비 경로에 연결한다.
+4. pending — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
+   현재 키 재사용 확인이 대기 중이며 실제 자료 처리는 별도 승인 범위에서만 실행한다.
+5. pending — 전체 필수 검사·합성 PostgreSQL/문서 흐름·리뷰·CI 후 B02를 merge한다.
+
+## Local data contract
+
+`document_structure.py`는 로컬 전량 보존 adapter이고 외부 전달 DTO가 아니다.
+문서 bytes·extraction/OCR revision·node/row/cell 위치를 보존한다. 행은 쪼개지 않고
+반복 헤더/각주 문맥을 primary 가입 행과 별도로 참조한다. `ChunkPlan.complete`는 범위의
+계획 완료이며 구조화/원장/지식화 완료를 의미하지 않는다.
+
+원문에 없는 가입 사실·금액·상태를 만들지 않는다. 명확한 근거가 없는 구조 관계,
+읽을 수 없는 페이지, chunk 예산을 넘긴 범위는 unresolved로 남긴다. 새 처리 실패가
+기존 가입·교정·청구 snapshot을 삭제하거나 현재 상태를 변경하지 않는다.
+
+## Acceptance evidence
+
+IR 구현은 별도 worktree commit `e9c0cd1`(통합 `195bb36`)에서 시작했다. 새 모듈 부재
+RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22개와 기존 PDF 추출
+14개 합성 테스트가 통과했다. 이 증거는 순수 adapter 범위이며 DB/실제 import/외부 전달
+완료를 의미하지 않는다. 최신 결과와 남은 경계는
+[B02 workthrough](../../../workthrough/2026-09-07-document-structure-and-linking.md)에 연결한다.

@@ -97,7 +97,9 @@ operational 후보/청구 버튼 유실과 부분 실패 재시도 유실을 발
 해당 구성원 private 담보가 없거나 실패해도 기존 operational 답변을 숨기지 않는다.
 수정 후 Web 전체 162개(24파일)/포맷·린트·타입·빌드와 browser E2E 15개가 통과했다.
 혼합 답변의 320px 청구 버튼도 browser에서 확인했다. 변경되지 않은 Python/API/DB/계약은
-위 소스에 연결된 통과 증거를 유지한다. 최종 CI·merge는 후속 기록으로 연결한다.
+위 소스에 연결된 통과 증거를 유지한다. 최종 head `c2d4f58`의 CI
+[34086394897](https://github.com/jihoon22-lee/family-care/actions/runs/34086394897)에서
+7개 검사가 모두 통과했고 merge `b084fd9c62e3e617c4cbc15e57cf959d450349b5`로 반영됐다.
 
 실제 자료·외부 AI·Windows/모바일·운영 전환은
 미실행이다. 태그/이미지 공개/배포는 이 B01에서 수행하지 않았으며 전체 마일스톤 수용 후
