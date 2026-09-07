@@ -13,6 +13,11 @@ import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from familycare_api.common.coverage_identity import (
+    CanonicalCoverageIdentity,
+    CanonicalCoverageRef,
+    CoverageConflictField,
+)
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_reconciliation.canonical_match import (
     ProgramEnrollmentSource,
@@ -40,6 +45,27 @@ class CanonicalCoverageLink:
     field_value_conflict: bool
     proofs: tuple[dict[str, Any], ...]
     fingerprint: str
+    field_conflicts: tuple[CoverageConflictField, ...] = ()
+
+    def identity(self) -> CanonicalCoverageIdentity:
+        operational = CanonicalCoverageRef(
+            kind="OPERATIONAL_RIDER", contract_id=self.policy_contract_id, coverage_id=self.rider_id
+        )
+        return CanonicalCoverageIdentity(
+            ref=operational,
+            source_refs=(
+                CanonicalCoverageRef(
+                    kind="PRIVATE_KNOWLEDGE_COVERAGE",
+                    contract_id=self.knowledge_contract_id,
+                    coverage_id=self.knowledge_coverage_id,
+                ),
+                operational,
+            ),
+            authority="PROGRAM_VERIFIED_SOURCE_IDENTITY",
+            ledger_version=self.ledger_version,
+            verification_digest_sha256=self.fingerprint,
+            field_conflicts=self.field_conflicts,
+        )
 
 
 def _digest(value: object) -> str:
@@ -319,11 +345,8 @@ def _proposals(
             continue
         row = operational[match.rider_id]
         proof = tuple(json.loads(json.dumps(asdict(p), default=str)) for p in match.proofs)
-        conflict = (
-            coverage["insured_amount"] != row["insured_amount"]
-            or coverage["currency"] != row["currency"]
-            or coverage["display_name"] != row["display_name"]
-        )
+        fields: tuple[CoverageConflictField, ...] = ("insured_amount", "currency", "display_name")
+        field_conflicts = tuple(field for field in fields if coverage[field] != row[field])
         data = dict(
             knowledge_coverage_id=coverage["id"],
             knowledge_contract_id=coverage["knowledge_contract_id"],
@@ -332,7 +355,8 @@ def _proposals(
             policy_contract_id=match.policy_contract_id,
             rider_id=match.rider_id,
             ledger_version=row["ledger_version"],
-            field_value_conflict=conflict,
+            field_value_conflict=bool(field_conflicts),
+            field_conflicts=field_conflicts,
             proofs=proof,
         )
         fingerprint = _digest({"source_digest": coverage["source_record_digest_sha256"], **data})

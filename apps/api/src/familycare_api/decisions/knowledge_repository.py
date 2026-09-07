@@ -42,6 +42,10 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeStatusInterval,
 )
 from familycare_api.decisions.knowledge_engine import summarize_knowledge_results
+from familycare_api.insurance_reconciliation.canonical_repository import (
+    CanonicalLinkError,
+    CanonicalLinkRepository,
+)
 
 
 @dataclass(frozen=True)
@@ -411,15 +415,34 @@ class PostgresKnowledgeDecisionRepository:
                 reason_codes=tuple(dict.fromkeys(fatal)),
             )
 
+        identity_failures: tuple[str, ...] = ()
+        try:
+            with connection.transaction():
+                identities = {
+                    link.knowledge_coverage_id: link.identity()
+                    for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+                    if link.family_member_id == event.family_member_id
+                    and link.import_run_id == knowledge_run_id
+                }
+        except psycopg.Error, CanonicalLinkError:
+            identities = {}
+            identity_failures = ("CANONICAL_IDENTITY_UNAVAILABLE",)
         contract_ids = tuple(
             dict.fromkeys(cast(UUID, row["knowledge_contract_id"]) for row in benefit_rows)
         )
         coverage_ids = tuple(cast(UUID, row["knowledge_coverage_id"]) for row in benefit_rows)
         rider_ids = tuple(
-            cast(UUID, rider)
-            for row in benefit_rows
-            if row.get("operational_binding_decision") == "MATCH"
-            and (rider := row.get("rider_id")) is not None
+            dict.fromkeys(
+                [
+                    *(
+                        cast(UUID, row["rider_id"])
+                        for row in benefit_rows
+                        if row.get("operational_binding_decision") == "MATCH"
+                        and row.get("rider_id") is not None
+                    ),
+                    *(identity.ref.coverage_id for identity in identities.values()),
+                ]
+            )
         )
         interval_rows = connection.execute(
             """
@@ -514,7 +537,9 @@ class PostgresKnowledgeDecisionRepository:
         rules = self._rules(rule_rows)
         calculations, calculation_errors = self._calculations(calculation_rows)
         supporting_facts, receipt_currency, receipt_errors = self._receipt_facts(receipt_rows)
-        context_reasons = tuple(dict.fromkeys((*calculation_errors, *receipt_errors)))
+        context_reasons = tuple(
+            dict.fromkeys((*calculation_errors, *receipt_errors, *identity_failures))
+        )
         status_digest = self._status_digest(
             header,
             benefit_rows,
@@ -523,10 +548,14 @@ class PostgresKnowledgeDecisionRepository:
         coverages: list[KnowledgeCoverageContext] = []
         for row in benefit_rows:
             coverage_id = cast(UUID, row["knowledge_coverage_id"])
-            rider_id = cast(UUID | None, row.get("rider_id"))
+            identity = identities.get(coverage_id)
+            field_conflicts = identity.field_conflicts if identity else ()
+            rider_id = (
+                identity.ref.coverage_id if identity else cast(UUID | None, row.get("rider_id"))
+            )
             history_fact = None
             if (
-                row.get("operational_binding_decision") == "MATCH"
+                (row.get("operational_binding_decision") == "MATCH" or identity is not None)
                 and rider_id is not None
                 and history.get(rider_id, 0) > 0
             ):
@@ -549,8 +578,13 @@ class PostgresKnowledgeDecisionRepository:
                     contract_label=cast(str, row["contract_label"]),
                     coverage_label=cast(str, row["coverage_label"]),
                     benefit_type=cast(Any, row["benefit_type"]),
-                    insured_amount=_decimal(row.get("insured_amount")),
-                    currency=cast(str | None, row.get("currency")),
+                    insured_amount=None
+                    if "insured_amount" in field_conflicts
+                    else _decimal(row.get("insured_amount")),
+                    currency=None
+                    if "currency" in field_conflicts
+                    else cast(str | None, row.get("currency")),
+                    canonical_identity=identity,
                     contract_start=cast(date | None, row.get("contract_start")),
                     contract_end=cast(date | None, row.get("contract_end")),
                     disposition=cast(Any, row["disposition"]),

@@ -563,3 +563,60 @@ it("shows source-based automatic identity and lets the user reopen it", async ()
     expect(screen.queryByText("원본 근거로 자동 연결")).not.toBeInTheDocument(),
   );
 });
+
+it("shows the linked coverage and an amount difference without changing the source amount", async () => {
+  const identity = {
+    ref: {
+      kind: "OPERATIONAL_RIDER",
+      contract_id: POLICY_ID,
+      coverage_id: COVERAGE_ID,
+    },
+    source_refs: [
+      {
+        kind: "PRIVATE_KNOWLEDGE_COVERAGE",
+        contract_id: CONTRACT_ID,
+        coverage_id: COVERAGE_ID,
+      },
+      {
+        kind: "OPERATIONAL_RIDER",
+        contract_id: POLICY_ID,
+        coverage_id: COVERAGE_ID,
+      },
+    ],
+    authority: "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+    ledger_version: 2,
+    verification_digest_sha256: "a".repeat(64),
+    field_conflicts: ["insured_amount"],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const path = new URL(String(input), window.location.origin).pathname;
+      if (path.endsWith("/insurance-reconciliation"))
+        return jsonResponse(RECONCILIATION);
+      if (path.endsWith(`/contracts/${CONTRACT_ID}`))
+        return jsonResponse({
+          ...DETAIL,
+          coverages: [
+            {
+              ...DETAIL.coverages[0],
+              insured_amount: "317",
+              canonical_identity: identity,
+            },
+          ],
+        });
+      return jsonResponse({ error_code: "NOT_FOUND" }, 404);
+    }),
+  );
+  renderWithProviders(<PrivateInsuranceCatalog memberId={MEMBER_ID} />);
+  await userEvent.click(
+    await screen.findByRole("button", {
+      name: "Sample Complete Policy 상세 분석 보기",
+    }),
+  );
+  expect(await screen.findByText("앱 담보와 연결됨")).toBeInTheDocument();
+  expect(
+    screen.getByText("앱 원장과 가입금액이 다릅니다."),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/317/)).toBeInTheDocument();
+});

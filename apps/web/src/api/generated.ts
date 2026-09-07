@@ -954,6 +954,16 @@ export type CandidateStatus =
 
 export type CandidateVersionId = string;
 
+export interface CanonicalCoverageIdentity {
+  authority: "PROGRAM_VERIFIED_SOURCE_IDENTITY";
+  field_conflicts?: Array<"insured_amount" | "currency" | "display_name">;
+  ledger_version: number;
+  ref: CanonicalCoverageRef;
+  schema_version?: "1";
+  source_refs: Array<CanonicalCoverageRef>;
+  verification_digest_sha256: string;
+}
+
 export interface CanonicalCoverageRef {
   contract_id: string;
   coverage_id: string;
@@ -1451,6 +1461,7 @@ export interface FamilyMemberUpdateRequest {
 export interface GuidanceCandidate {
   assumptions?: Array<string>;
   benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  canonical_identity?: CanonicalCoverageIdentity | null;
   condition_result: "MATCH" | "UNKNOWN";
   conditions?: Array<GuidanceCondition>;
   contract_label: string;
@@ -1712,6 +1723,7 @@ export interface KnowledgeCoverageMappingResponse {
 
 export interface KnowledgeCoverageResponse {
   benefit_type: "FIXED" | "INDEMNITY" | "UNKNOWN" | "NOT_APPLICABLE";
+  canonical_identity?: CanonicalCoverageIdentity | null;
   component_classification:
     "BENEFIT_COVERAGE" | "NON_BENEFIT_CONTRACT_COMPONENT" | "UNKNOWN";
   component_role: "MAIN_CONTRACT" | "RIDER";

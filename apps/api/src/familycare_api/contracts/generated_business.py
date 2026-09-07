@@ -19,6 +19,8 @@ __all__ = [
     "CandidateScalar",
     "CandidateStatus",
     "CandidateVersionId",
+    "CanonicalCoverageIdentity",
+    "CanonicalCoverageRef",
     "DocumentVersionId",
     "Evidence",
     "EvidenceId",
@@ -247,6 +249,22 @@ class CandidateRejectionRequest(TypedDict):
     reason_code: CandidateRejectionReason
 
 
+class CanonicalCoverageIdentity(TypedDict):
+    authority: Literal["PROGRAM_VERIFIED_SOURCE_IDENTITY"]
+    field_conflicts: NotRequired[list[Literal["currency", "display_name", "insured_amount"]]]
+    ledger_version: int
+    ref: CanonicalCoverageRef
+    schema_version: NotRequired[Literal["1"]]
+    source_refs: list[CanonicalCoverageRef]
+    verification_digest_sha256: str
+
+
+class CanonicalCoverageRef(TypedDict):
+    contract_id: str
+    coverage_id: str
+    kind: Literal["OPERATIONAL_RIDER", "PRIVATE_KNOWLEDGE_COVERAGE"]
+
+
 class Evidence(TypedDict):
     bbox: list[float] | None
     content_sha256: str
@@ -331,6 +349,7 @@ class KnowledgeCoverageMappingResponse(TypedDict):
 
 class KnowledgeCoverageResponse(TypedDict):
     benefit_type: Literal["FIXED", "INDEMNITY", "NOT_APPLICABLE", "UNKNOWN"]
+    canonical_identity: NotRequired[CanonicalCoverageIdentity | None]
     component_classification: Literal[
         "BENEFIT_COVERAGE", "NON_BENEFIT_CONTRACT_COMPONENT", "UNKNOWN"
     ]

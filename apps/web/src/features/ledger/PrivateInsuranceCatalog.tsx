@@ -90,6 +90,17 @@ function ContractAnalysis({
                       ? "정액형"
                       : "보장 유형 확인 필요"}
                 </p>
+                {coverage.canonical_identity ? <p>앱 담보와 연결됨</p> : null}
+                {coverage.canonical_identity?.field_conflicts?.includes(
+                  "insured_amount",
+                ) ? (
+                  <p>앱 원장과 가입금액이 다릅니다.</p>
+                ) : null}
+                {coverage.canonical_identity?.field_conflicts?.includes(
+                  "currency",
+                ) ? (
+                  <p>앱 원장과 통화가 다릅니다.</p>
+                ) : null}
                 {coverage.insured_amount && coverage.currency ? (
                   <p>
                     가입금액{" "}

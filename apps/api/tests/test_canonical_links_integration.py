@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -370,3 +371,190 @@ def test_unrelated_evidence_cannot_replace_enrolled_source(canonical_database: A
         )
     assert repository.refresh(scope) == 0
     assert repository.read_current(scope) == ()
+
+
+def test_detailed_coverage_exposes_verified_identity_and_current_field_conflicts(
+    canonical_database: Any,
+) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from familycare_api.private_knowledge.query_repository import (
+        PostgresPrivateKnowledgeQueryRepository,
+    )
+
+    url, job, scope, coverage, rider = canonical_database
+    repository = CanonicalLinkRepository(url)
+    repository.refresh(scope)
+    query = PostgresPrivateKnowledgeQueryRepository(url)
+    detail = query.get_contract(scope, seed.CONTRACT_ID, section_limit=20, section_after=None)
+    assert detail is not None
+    identity = detail.coverages[0].canonical_identity
+    assert identity is not None and identity.ref.coverage_id == rider
+    assert identity.source_refs[0].coverage_id == coverage
+    assert identity.field_conflicts == ()
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE riders SET insured_amount=619,version=version+1 WHERE id=%s", (rider,)
+        )
+    stale = query.get_contract(scope, seed.CONTRACT_ID, section_limit=20, section_after=None)
+    assert stale.coverages[0].canonical_identity is None
+    repository.refresh(scope)
+    current = query.get_contract(scope, seed.CONTRACT_ID, section_limit=20, section_after=None)
+    assert current.coverages[0].canonical_identity.field_conflicts == ("insured_amount",)
+    assert current.coverages[0].insured_amount == 317
+
+
+def test_live_guidance_retains_canonical_identity_and_old_result_after_correction(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from datetime import date
+    from types import SimpleNamespace
+
+    from familycare_api.decisions.repository import DecisionRepository
+    from familycare_api.decisions.service import DecisionService
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from psycopg.rows import dict_row
+
+    from apps.api.tests.test_private_knowledge_decision_integration import (
+        ACTOR_ID,
+        _seed_private_publication,
+    )
+
+    url, job = request.getfixturevalue("native_database")
+    scope = HouseholdScope(job.household_space_id)
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Hospital Benefit sum assured: 10000 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job, name="Sample Hospital Benefit", amount=10000)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute("TRUNCATE medical_events,private_knowledge_import_runs CASCADE")
+        connection.execute("DELETE FROM app_users WHERE id=%s", (ACTOR_ID,))
+    try:
+        run, _ = _seed_private_publication(
+            url, SimpleNamespace(scope_a=scope, member_a=job.family_member_id), tmp_path
+        )
+        with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+            binding = connection.execute(
+                "SELECT id,source_alias_digest_sha256 FROM private_knowledge_document_bindings "
+                "WHERE import_run_id=%s AND source_alias='synthetic-certificate-source'",
+                (run,),
+            ).fetchone()
+            version = connection.execute(
+                "SELECT content_sha256,page_count FROM document_versions WHERE id=%s",
+                (job.document_version_id,),
+            ).fetchone()
+            evidence = connection.execute(
+                "SELECT id FROM evidence WHERE extraction_id=%s LIMIT 1", (job.extraction_id,)
+            ).fetchone()["id"]
+            digest = connection.execute(
+                "SELECT package_digest_sha256 FROM private_knowledge_import_runs WHERE id=%s",
+                (run,),
+            ).fetchone()["package_digest_sha256"]
+        manifest = KnowledgeSourceManifest.model_validate(
+            {
+                "schema_version": "knowledge-source-bindings-v1",
+                "import_run_id": run,
+                "package_digest_sha256": digest,
+                "entries": [
+                    {
+                        "document_binding_id": binding["id"],
+                        "source_alias_digest_sha256": binding["source_alias_digest_sha256"],
+                        "document_version_id": job.document_version_id,
+                        "evidence_id": evidence,
+                        **version,
+                        "document_kind": "policy",
+                        "expected_current_binding_id": None,
+                    }
+                ],
+            }
+        )
+        KnowledgeSourceBindingRepository(url).apply_manifest(scope, manifest)
+        canonical = CanonicalLinkRepository(url)
+        assert canonical.refresh(scope) == 1
+        service = DecisionService(scope, DecisionRepository(url))
+        event = service.create_medical_event(
+            family_member_id=job.family_member_id,
+            mode="post_treatment",
+            situation="Synthetic sample category phrase event.",
+            event_date=date(2025, 6, 15),
+            visit_date=date(2025, 6, 16),
+            facts={"MedicalEvent.classification": "sample_category"},
+            confirmation={"MedicalEvent.classification": "user"},
+        )
+        first = service.analyze_medical_event(event.id)
+        assert first.local_guidance is not None, first.source_failure_codes
+        candidate = first.local_guidance.candidates[0]
+        assert candidate.canonical_identity is not None
+        assert candidate.ref.kind == "OPERATIONAL_RIDER"
+        assert candidate.estimate.amount == "1"
+        assert len(first.local_guidance.candidates) == 1
+
+        def unavailable_identity(connection, scope):
+            connection.execute("SELECT synthetic_unavailable_identity_column")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(CanonicalLinkRepository, "read_in_transaction", unavailable_identity)
+            fallback = service.analyze_medical_event(event.id)
+        assert fallback.local_guidance.candidates[0].estimate.amount == "1"
+        assert fallback.local_guidance.candidates[0].canonical_identity is None
+        assert "CANONICAL_IDENTITY_UNAVAILABLE" in fallback.source_failure_codes
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute(
+                "UPDATE riders SET insured_amount=619,version=version+1 WHERE id=%s",
+                (candidate.ref.coverage_id,),
+            )
+        assert service.get_decision_result(event.id, event.version).stale
+        assert canonical.refresh(scope) == 1
+        second = service.analyze_medical_event(event.id)
+        assert second.local_guidance.candidates[0].estimate.kind == "FORMULA"
+        assert second.local_guidance.candidates[0].condition_result == "MATCH"
+        assert second.local_guidance.candidates[0].canonical_identity.field_conflicts == (
+            "insured_amount",
+        )
+        assert service.get_decision_result(event.id, event.version).run_id == second.run_id
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            old = connection.execute(
+                "SELECT local_guidance_json FROM decision_runs WHERE id=%s", (first.run_id,)
+            ).fetchone()[0]
+        assert old == first.local_guidance.model_dump(mode="json")
+    finally:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute("TRUNCATE medical_events,private_knowledge_import_runs CASCADE")
+            connection.execute("DELETE FROM app_users WHERE id=%s", (ACTOR_ID,))
+
+
+def test_identity_lookup_failure_does_not_hide_existing_catalog(
+    canonical_database: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+    from familycare_api.insurance_reconciliation.repository import InsuranceReconciliationRepository
+    from familycare_api.private_knowledge.query_repository import (
+        PostgresPrivateKnowledgeQueryRepository,
+    )
+
+    url, job, scope, coverage, rider = canonical_database
+
+    def broken(connection, scope):
+        connection.execute("SELECT synthetic_unavailable_identity_column")
+
+    monkeypatch.setattr(CanonicalLinkRepository, "read_in_transaction", broken)
+    result = PostgresPrivateKnowledgeQueryRepository(url).get_contract(
+        scope, seed.CONTRACT_ID, section_limit=20, section_after=None
+    )
+    assert result is not None and result.coverages[0].id == coverage
+    assert result.coverages[0].canonical_identity is None
+    summary = InsuranceReconciliationRepository(url).get_member(scope, job.family_member_id)
+    assert summary is not None and summary.summary.total_contracts == 1

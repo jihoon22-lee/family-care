@@ -1,5 +1,96 @@
 {
   "$defs": {
+    "CanonicalCoverageIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "authority": {
+          "const": "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+          "title": "Authority",
+          "type": "string"
+        },
+        "field_conflicts": {
+          "default": [],
+          "items": {
+            "enum": [
+              "insured_amount",
+              "currency",
+              "display_name"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Field Conflicts",
+          "type": "array"
+        },
+        "ledger_version": {
+          "minimum": 1,
+          "title": "Ledger Version",
+          "type": "integer"
+        },
+        "ref": {
+          "$ref": "#/$defs/CanonicalCoverageRef"
+        },
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/CanonicalCoverageRef"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "verification_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Verification Digest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "source_refs",
+        "authority",
+        "ledger_version",
+        "verification_digest_sha256"
+      ],
+      "title": "CanonicalCoverageIdentity",
+      "type": "object"
+    },
+    "CanonicalCoverageRef": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_id": {
+          "format": "uuid",
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "PRIVATE_KNOWLEDGE_COVERAGE",
+            "OPERATIONAL_RIDER"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "contract_id",
+        "coverage_id"
+      ],
+      "title": "CanonicalCoverageRef",
+      "type": "object"
+    },
     "KnowledgeContractListItemResponse": {
       "additionalProperties": false,
       "properties": {
@@ -350,6 +441,17 @@
           ],
           "title": "Benefit Type",
           "type": "string"
+        },
+        "canonical_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalCoverageIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "component_classification": {
           "enum": [

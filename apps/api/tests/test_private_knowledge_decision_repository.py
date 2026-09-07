@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -46,6 +47,9 @@ class _Connection:
     def __init__(self, rows: dict[str, list[dict[str, Any]]]) -> None:
         self.rows = rows
         self.calls: list[tuple[str, object]] = []
+
+    def transaction(self):
+        return nullcontext()
 
     def execute(self, query: str, parameters: object = None) -> _Cursor:
         self.calls.append((query, parameters))
@@ -466,3 +470,39 @@ def test_stored_unresolved_calculation_does_not_claim_detached_direct_evidence()
     assert calculation.certificate_amount_decision == "UNKNOWN"
     assert calculation.certificate_amount_evidence_state == "UNAVAILABLE"
     assert calculation.certificate_evidence == ()
+
+
+def test_verified_canonical_rider_loads_existing_claim_history(monkeypatch) -> None:
+    from familycare_api.insurance_reconciliation.canonical_repository import (
+        CanonicalCoverageLink,
+        CanonicalLinkRepository,
+    )
+
+    rows = _rows()
+    row = rows["private-knowledge:coverage-context"][0]
+    row["rider_id"] = None
+    row["operational_binding_decision"] = "UNKNOWN"
+    link = CanonicalCoverageLink(
+        knowledge_coverage_id=COVERAGE_ID,
+        knowledge_contract_id=CONTRACT_ID,
+        import_run_id=KNOWLEDGE_RUN_ID,
+        family_member_id=MEMBER_ID,
+        policy_contract_id=CONTRACT_ID,
+        rider_id=RIDER_ID,
+        ledger_version=1,
+        field_value_conflict=False,
+        proofs=(),
+        fingerprint="d" * 64,
+    )
+    monkeypatch.setattr(CanonicalLinkRepository, "read_in_transaction", lambda *args: (link,))
+    connection = _Connection(rows)
+    result = PostgresKnowledgeDecisionRepository().read_context(
+        connection, HouseholdScope(HOUSEHOLD_ID), _event()
+    )
+    assert result.context is not None
+    fact = result.context.coverages[0].claim_history_counted_occurrence
+    assert fact is not None and fact.value == 1
+    params = next(
+        params for sql, params in connection.calls if "private-knowledge:claim-history" in sql
+    )
+    assert params["riders"] == [RIDER_ID]

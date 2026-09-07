@@ -439,3 +439,37 @@ UTF-8 canonical digest와 불일치를 추가 RED로 확인하고 수정한 뒤 
 통과했다. 신규 320px 키보드 재검토에서 요청의 expected ID·scope 계약, 외부 요청 0회와
 Web Storage/IndexedDB 쓰기 0회를 확인했다. 실제 backend browser, 실제 자료/provider,
 Windows/mobile, 새 image build/CI와 protected 수용은 이 로컬 증거에 포함하지 않는다.
+
+
+## Canonical identity consumers and field-specific correction
+
+상세 담보와 로컬 안내가 공통 identity 계약을 소비한다. 새 common model은 운영 ref,
+원래 두 source ref, ledger version, 검증 digest와 필드 차이를 보존한다. 연결 fingerprint에
+필드별 차이를 포함하므로 이전 연결 이력은 보존하면서 background 갱신 후 최신 형식으로
+조회한다. 새 migration이나 기존 snapshot 수정은 필요하지 않다.
+
+원장과 다른 가입금액/통화는 해당 계산 입력에서 제외하고 원문 값은 상세 분석에 그대로
+남긴다. 관련 후보와 산식은 유지하고 이름 차이는 독립적인 계산을 막지 않는다. 기존 청구
+이력을 확인된 공통 Rider로 읽으며 없는 이력을 0회로 만들지 않는다. canonical 조회의 SQL
+실패는 savepoint로 복구하여 기존 catalog/대사/안내를 숨기지 않는다.
+
+common model 부재, 상세 DTO/결과의 identity 부재, 연결 Rider의 청구 이력 누락과 선택
+identity 조회 실패가 catalog를 숨기는 RED를 확인했다. Web의 연결/필드 차이 설명도
+표시 부재 RED 후 구현했다. 신규 순수 5개와 claim-history reader 회귀, 실제 합성
+publication→연결→상세→사건 분석→원장 교정→새 결과 및 과거 JSON 보존을 확인했다.
+통합 fixture 정리 실패는 보호된 전용 test DB의 정리 순서를 고치고 해당 합성 DB만 reset/
+전체 migration 후 재검증했다. 이 작업에서 실제 runtime/원문/provider에는 접근하지 않았다.
+
+사용자 최초 publication 재검증, 판본/component 연결과 보호된 수용은
+남아 있다. 로컬 안내는 공통 ref를 사용하고 기존 v2의 두 평가 경로 기록은 유지한다.
+운영 전용 담보까지 로컬 안내에 통합하는 작업은 B04 범위다.
+
+
+2026-09-07 23:08~23:20 KST, `3270db9` + 이 절의 consumer/계약/테스트/문서에서 기본 Python
+**1,977 passed / 301 deselected / 3 subtests**, 전체 합성 PostgreSQL **300 passed /
+1,695 deselected**가 통과했다. `ruff format --check .` 588개·`ruff check .`, `mypy` 245개,
+문서 50개·안전 781 paths·생성 계약·container/workflow 정적 검사와 diff 검사가 통과했다.
+Web 전체 format/lint/typecheck·**169 tests·build**, Chromium mock **17 tests**도 통과했다.
+마지막 문구는 필드 차이를 사용자 수정으로 단정하지 않도록 중립적으로 바꾸고 관련 Web
+17개와 typecheck/production build를 다시 통과했다. 실제 backend/browser·실자료·provider·
+Windows/mobile·image build는 로컬 결과에 포함하지 않는다. 기존 runtime·tag·배포 변경은 없다.

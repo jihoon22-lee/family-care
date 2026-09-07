@@ -132,6 +132,20 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           ? "입력한 사건과 가입 문서의 보장 조건이 관련됩니다."
           : "입력한 사건과 관련된 담보이며, 추가 사건 정보에 따라 적용 조건이 달라질 수 있습니다."}
       </p>
+      {candidate.estimate.kind === "FORMULA" &&
+      candidate.canonical_identity?.field_conflicts?.includes(
+        "insured_amount",
+      ) ? (
+        <p className={styles.cardCopy}>
+          가입 분석과 앱 원장의 금액이 달라 계산식만 안내합니다.
+        </p>
+      ) : null}
+      {candidate.estimate.kind === "FORMULA" &&
+      candidate.canonical_identity?.field_conflicts?.includes("currency") ? (
+        <p className={styles.cardCopy}>
+          가입 분석과 앱 원장의 통화가 달라 계산식만 안내합니다.
+        </p>
+      ) : null}
       <Estimate estimate={candidate.estimate} />
       {candidate.freshness === "STATUS_UNRESOLVED" ? (
         <p className={styles.cardCopy}>

@@ -13,6 +13,7 @@ from familycare_api.clauses.dsl import (
     RuleValidationError,
     validate_rule_document,
 )
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
@@ -30,7 +31,6 @@ from familycare_api.decisions.knowledge_engine import (
 )
 from familycare_api.decisions.knowledge_facts import normalize_private_event_facts
 from familycare_api.guidance.models import (
-    CanonicalCoverageRef,
     Freshness,
     GuidanceCandidate,
     GuidanceCondition,
@@ -152,7 +152,14 @@ class LocalGuidanceEngine:
         failures: list[str] = []
         for coverage in sorted(context.coverages, key=lambda item: str(item.knowledge_coverage_id)):
             coverage_facts = facts
-            if context.receipt_currency is None or context.receipt_currency != coverage.currency:
+            if (
+                context.receipt_currency is None
+                or context.receipt_currency != coverage.currency
+                or (
+                    coverage.canonical_identity is not None
+                    and "currency" in coverage.canonical_identity.field_conflicts
+                )
+            ):
                 coverage_facts = KnowledgeFactContext(
                     facts={
                         path: value
@@ -236,8 +243,13 @@ class LocalGuidanceEngine:
             return None, True
         # This copy is an event-time evaluator input only. The original current
         # status and its stored confirmation are never changed or upgraded.
+        field_conflicts = (
+            coverage.canonical_identity.field_conflicts if coverage.canonical_identity else ()
+        )
         effective_coverage = replace(
             coverage,
+            insured_amount=None if "insured_amount" in field_conflicts else coverage.insured_amount,
+            currency=None if "currency" in field_conflicts else coverage.currency,
             current_confirmed_status="active" if freshness == "CONFIRMED_AT_EVENT" else None,
             current_confirmation_decision="MATCH" if freshness == "CONFIRMED_AT_EVENT" else None,
         )
@@ -284,11 +296,14 @@ class LocalGuidanceEngine:
             + list(estimate.missing_inputs)
         )
         return GuidanceCandidate(
-            ref=CanonicalCoverageRef(
+            ref=coverage.canonical_identity.ref
+            if coverage.canonical_identity is not None
+            else CanonicalCoverageRef(
                 kind="PRIVATE_KNOWLEDGE_COVERAGE",
                 contract_id=coverage.knowledge_contract_id,
                 coverage_id=coverage.knowledge_coverage_id,
             ),
+            canonical_identity=coverage.canonical_identity,
             contract_label=coverage.contract_label,
             coverage_label=coverage.coverage_label,
             benefit_kind=coverage.benefit_type,
@@ -297,6 +312,7 @@ class LocalGuidanceEngine:
             condition_result=conditions,
             reason_codes=_unique(
                 ["DOCUMENTED_RELEVANT_COVERAGE"]
+                + (["OPERATIONAL_SOURCE_FIELD_CONFLICT"] if field_conflicts else [])
                 + [item.reason_code for item in required if item.result != "MATCH"]
             ),
             assumptions=tuple(assumptions),

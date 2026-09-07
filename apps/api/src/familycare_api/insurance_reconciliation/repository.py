@@ -282,7 +282,13 @@ class InsuranceReconciliationRepository:
                 ).fetchall()
                 if len(unreadable_rows) > _MAX_UNREADABLE_SOURCES:
                     raise ReconciliationRepositoryTooLarge
-                program_links = CanonicalLinkRepository.read_in_transaction(connection, scope)
+                try:
+                    with connection.transaction():
+                        program_links = CanonicalLinkRepository.read_in_transaction(
+                            connection, scope
+                        )
+                except psycopg.Error, CanonicalLinkError:
+                    program_links = ()
                 program_policies = {
                     item.knowledge_contract_id: item.policy_contract_id
                     for item in program_links
