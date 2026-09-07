@@ -150,3 +150,36 @@ fixture 후속 변경의 Ruff format/lint도 통과했다. 전체 DB suite를 �
 주장하지 않는다. 합성 테스트와 전용 합성 DB에만 `0028`을 적용했다. 실제 provider 호출은
 0회이며 보호된 원문·키·경로를 읽거나 출력하지 않았다. 실제 런타임 migration/전환·태그·배포는
 수행하지 않았다.
+
+## Durable analysis ranges (2026-09-07)
+
+기준 `b5926ac` 후속이다. `ai/policy_ranges.py`는 보관 전문을 4096자 primary 범위와
+문맥으로 나누고 32 primary/64 Evidence/16384자 요청에 묶는다. 페이지 단위 최소화를
+먼저 수행해 식별자의 범위 경계 누출을 막고, 긴 표 행·문맥·예산 초과를 누락으로 남긴다.
+`policy_range_structurer_v3`는 모든 primary 범위의 처리 여부와 후보 인용을 검사하며
+뒤쪽 특약만 있는 범위에 계약 header를 만들지 않는다. 알 수 없는 문서 역할에 AI가 동의해도
+가입 권위를 주지 않는다. Worker 출력 상한은 이 schema에도 8192 token이다.
+
+`0029_policy_ranges`와 `PolicyRangeRepository`는 원문 generation/문자 위치를 보존한
+최소화 입력과 범위별 결과를 저장한다. 완료 결과는 불변이며 실패한 범위를 넘겨 다음 범위를
+처리하고, 예산 보류·재시작 때 완료 범위를 반복하지 않는다. 변경된 구성원 최소화 목록,
+다른 구성원/시도 번호, 만료 lease는 기존 범위를 전송·저장할 수 없다. 모든 범위를 끝내도
+누락/미해결이 있으면 전체 성공으로 표시하지 않는다. 기존 legacy 후보 provenance의
+verifier revision도 실제 묶음 verifier에 맞췄다.
+
+모듈/runner 연결/출력 상한 부재와 잘못된 범위 뒤 전체 job 중단, 최소화 목록 변경 허용을
+RED로 확인했다. 관련 unit 85 passed, 신규 PostgreSQL 최종 10 passed다. 71개 범위의
+3개 요청 묶음 보존·재개, 예산 중단, 개별 실패 뒤 계속 처리, unknown 역할 거부,
+structurer 성공→verifier timeout→verifier만 재시도하는 실제 Worker 경로를 검사했다.
+합성 DB에서 빈 `0029` downgrade/upgrade도 실행했다. 2026-09-07 08:07–08:11 UTC,
+`b5926ac` + 이 절의 변경에서 전체 필수 검사를 직렬 실행했다. 문서 50개/안전 744 paths,
+Web format/lint/typecheck·164 tests·build, Ruff format 551개/lint, mypy 229개,
+Python default `1747 passed, 219 deselected, 3 subtests passed`, 계약/container/workflow 정적
+검사와 diff 검사가 통과했다. 전체 합성 PostgreSQL은 `218 passed, 1474 deselected`였다.
+후속 검토에서 unknown primary 역할의 계약 후보 저장 거부를 추가 RED로 확인하고
+저장 단계의 역할 검사로 보강했다. 해당 변경 후 대상 Ruff/mypy와 신규 DB suite 10개가
+통과했다. 후속 소스의 전체 DB suite를 재실행했다고 표현하지 않는다.
+
+기본 Worker 실행 전환은 범위 publication 구현과 함께 진행한다. 현재 선택 가능한 범위
+runner의 결과 저장을 기존 원장 반영 완료로 보고하지 않으며 B02는 계속 draft다. 운영
+schema/자료는 변경하지 않았고 실제 provider 호출·태그·배포는 수행하지 않았다.

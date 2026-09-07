@@ -138,7 +138,10 @@ class CandidatePipelineResult(BaseModel):
 def openai_schema_registry() -> dict[str, dict[str, object]]:
     """Return strict JSON Schemas used by the OpenAI adapter."""
 
+    from familycare_worker.ai.range_structurer import RANGE_STRUCTURER_SCHEMA_NAME, PolicyRangeBatch
+
     return {
+        RANGE_STRUCTURER_SCHEMA_NAME: PolicyRangeBatch.model_json_schema(),
         "policy_candidate_structurer_v1": StructurerCandidate.model_json_schema(),
         "policy_candidate_batch_structurer_v2": StructurerCandidateBatch.model_json_schema(),
         "policy_candidate_verifier_v1": VerifierDecision.model_json_schema(),

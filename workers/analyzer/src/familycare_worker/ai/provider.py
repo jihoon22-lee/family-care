@@ -8,7 +8,7 @@ import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
-from typing import Protocol, cast
+from typing import ClassVar, Protocol, cast
 from uuid import UUID
 
 import openai
@@ -80,6 +80,7 @@ class EvidenceSlice:
     text: str = field(repr=False)
     bbox: tuple[float, float, float, float] | None
     document_kind: str = "policy"
+    maximum_text_characters: ClassVar[int] = _MAX_EVIDENCE_TEXT
 
     def __post_init__(self) -> None:
         if (
@@ -91,7 +92,7 @@ class EvidenceSlice:
             or not isinstance(self.page, int)
             or not 1 <= self.page <= 500
             or not isinstance(self.text, str)
-            or not 1 <= len(self.text) <= _MAX_EVIDENCE_TEXT
+            or not 1 <= len(self.text) <= self.maximum_text_characters
             or self.document_kind not in {"policy", "terms"}
         ):
             raise ValueError("invalid Evidence slice")

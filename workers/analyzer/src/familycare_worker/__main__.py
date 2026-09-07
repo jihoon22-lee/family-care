@@ -187,6 +187,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             EVENT_STRUCTURER_SCHEMA_NAME: DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
             "policy_candidate_batch_structurer_v2": 8_192,
             "policy_candidate_batch_verifier_v2": 4_096,
+            "policy_range_structurer_v3": 8_192,
         },
         request_timeouts={
             EVENT_STRUCTURER_SCHEMA_NAME: EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS,

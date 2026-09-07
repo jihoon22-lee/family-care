@@ -302,7 +302,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 """
                 SELECT job.state, candidate.aggregate_id, candidate.status,
                        candidate.structuring_job_id, candidate.source_candidate_id,
-                       evidence.bounded_excerpt
+                       evidence.bounded_excerpt, candidate.verifier_version
                 FROM policy_structuring_jobs AS job
                 JOIN analysis_candidate_versions AS candidate
                   ON candidate.structuring_job_id = job.id
@@ -319,6 +319,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
             ).fetchone()
         assert len(structured) == 2
         assert all(row["state"] == "succeeded" for row in structured)
+        assert all(row["verifier_version"] == "policy-batch-verifier-v2" for row in structured)
         assert all(row["aggregate_id"] == structuring_job[5] for row in structured)
         assert all(row["status"] == "NEEDS_REVIEW" for row in structured)
         assert all(row["structuring_job_id"].int != 0 for row in structured)

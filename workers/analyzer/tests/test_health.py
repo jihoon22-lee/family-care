@@ -436,6 +436,7 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
         assert provider._output_token_limits["medical_event_structurer_v1"] == 2_000  # noqa: SLF001
         assert provider._output_token_limits["policy_candidate_batch_structurer_v2"] == 8_192  # noqa: SLF001
         assert provider._output_token_limits["policy_candidate_batch_verifier_v2"] == 4_096  # noqa: SLF001
+        assert provider._output_token_limits["policy_range_structurer_v3"] == 8_192  # noqa: SLF001
         assert policy_runner.request_budget is not None
         assert policy_runner.request_budget.per_document == 4
         assert policy_runner.request_budget.daily == 8

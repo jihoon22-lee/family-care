@@ -51,7 +51,7 @@ _ISSUE_CODES = frozenset(
     }
 )
 _GENERATOR_VERSION = "policy-structurer-v2"
-_VERIFIER_VERSION = "policy-verifier-v1"
+_VERIFIER_VERSION = "policy-batch-verifier-v2"
 
 
 class PolicyCandidatePersistenceError(RuntimeError):

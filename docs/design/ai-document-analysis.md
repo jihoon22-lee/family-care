@@ -111,10 +111,26 @@ publication하지 않고 재시도한다.
 바뀌어도 복구되지 않으므로 정책 변경 전에는 계속 대기한다. 출력은 구조화 8192 token,
 묶음 검증 4096 token으로 제한하며 초과/불완전 출력은 schema 실패로 다룬다.
 
-이 단계는 기존 bounded 입력의 비용 보호다. 전체 IR을 provider 범위로 나누는 scheduler와
-해당 범위의 완료 추적은 별도 구현 대상이며, 비용 보호를 전체 문서 분석 완료로 해석하지
-않는다. 원문 window 최소화 helper는 범위를 자르기 전 전체 source에서 식별자 구간을 찾지만
-아직 범위 scheduler에 연결되지 않았다.
+범위 경로는 `policy_ranges.py`와 `policy_range_repository.py`에서 별도로 제공한다. 기존
+240자 Evidence 경로는 유지하며 새 계획은 primary 범위 최대 4096자, 문맥 최대 4096자,
+묶음당 primary 32개/Evidence 64개/최소화 본문 합계 16384자로 제한한다. 표 행은 쪼개지
+않으며 넘친 행·문맥·문서 예산은 누락 범위로 저장한다. 페이지 전체에서 식별자 span을
+한 번 계산한 뒤 raw 문자 좌표로 window를 잘라 경계에 걸친 식별자도 가린다. 이 검사는
+모든 비정형 개인정보의 완전한 익명화를 보장하지 않는다. 문서·페이지 이미지는 보내지 않는다.
+
+`policy_range_structurer_v3`는 계약 header 없는 특약 범위와 후보 없는 범위를 허용하지만
+모든 primary 범위에 후보 연결/가입 사실 없음/미해결 중 하나를 명시해야 한다. supplied
+범위·Evidence 밖의 인용과 연결되지 않은 후보를 거부한다. 문서 역할은 content 분류이며
+약관·unknown·ambiguous 범위에 verifier가 동의해도 가입 권위를 부여하지 않는다.
+
+`0029_policy_ranges`는 문서 generation과 최소화된 입력, 개별 검증 결과를 별도로 보존한다.
+읽기/저장은 가정·구성원·문서/추출·현재 lease owner와 시도 번호를 검사한다. 완료 범위는
+재처리하지 않으며 한 범위의 잘못된 응답도 나머지 범위 처리를 막지 않는다. 일부 미해결이나
+누락이 있으면 전체 완료로 표시하지 않는다. 구성원 최소화 목록이 바뀌면 이전 입력을
+재전송하지 않는다. 기존 요청 예약/캐시로 verifier 재시도는 structurer 결과를 재사용한다.
+이 범위 Worker 경로는 합성 통합에서 연결했으며 기본 실행 설정은 아직 기존 publisher를
+사용한다. 범위 publication과 기본 실행 전환은 함께 연결해야 하며, 저장 결과만으로 기존
+가입 원장·사용자 교정·청구 이력을 변경하지 않는다.
 
 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 

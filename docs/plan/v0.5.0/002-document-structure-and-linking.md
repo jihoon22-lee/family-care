@@ -23,7 +23,8 @@
    기존 키 재사용·보호된 자료 처리·최소 전송은 세션에서 승인받았다. 낮은 API 잔액에
    맞춰 로컬 재사용을 우선하고 범위별 호출 예산을 구현한 뒤 제한적으로 실행한다.
    기존 정책 Worker에 묶음 검증·영속 요청 예약/캐시·문서 누적/UTC 일일 예산을 연결했다.
-   전체 IR 범위 scheduler와 해당 범위 publication 연결은 아직 남아 있다.
+   전체 IR 범위 저장/재개와 Worker 경로는 합성 통합에 연결했다. 해당 범위 publication과
+   기본 실행 설정 전환은 함께 연결할 후속 작업이다.
 5. pending — 전체 필수 검사·합성 PostgreSQL/문서 흐름·리뷰·CI 후 B02를 merge한다.
 
 ## Local data contract
