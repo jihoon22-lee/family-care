@@ -310,6 +310,8 @@ class CalculationRepository:
         candidate = _claim_candidate(row)
         if candidate.id is None:
             raise DecisionRepositoryUnavailable
+        if candidate.rider_type not in {"fixed", "indemnity"}:
+            return None
         locked = connection.execute(
             """
             SELECT candidate.id

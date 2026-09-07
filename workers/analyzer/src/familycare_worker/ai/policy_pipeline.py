@@ -298,6 +298,7 @@ def verify_structured_policy_batch(
     evidence: Sequence[EvidenceSlice],
     provider: AiProvider,
     verifier_model: str,
+    allow_unclassified_enrollment: bool = False,
 ) -> CandidatePipelineResult:
     """Resume a retained structurer stage without paying for it again."""
 
@@ -334,7 +335,12 @@ def verify_structured_policy_batch(
     results: list[PolicyCandidate] = []
     for source in candidates:
         verified = by_id[source.candidate_id]
-        issues = validate_candidate(candidate=source, verifier=verified, evidence=evidence)
+        issues = validate_candidate(
+            candidate=source,
+            verifier=verified,
+            evidence=evidence,
+            allow_unclassified_enrollment=allow_unclassified_enrollment,
+        )
         status = (
             "rejected"
             if verified.decision == "rejected"

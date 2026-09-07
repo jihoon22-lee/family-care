@@ -11,7 +11,7 @@ from uuid import UUID
 from familycare_api.common.evidence import EvidenceRef
 
 PolicyStatus = Literal["active", "inactive", "expired", "cancelled", "unknown"]
-BenefitType = Literal["fixed", "indemnity"]
+BenefitType = Literal["fixed", "indemnity", "unknown"]
 PartyRole = Literal[
     "policyholder",
     "primary_insured",

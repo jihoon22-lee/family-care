@@ -348,6 +348,30 @@ function getRequests(
 }
 
 describe("candidate review", () => {
+  it("keeps explicit non-enrollment out of the confirmation workflow", async () => {
+    createMockApi({
+      reviewItem: {
+        ...REVIEW_ITEM,
+        issues: [{ code: "NOT_ENROLLED", field_id: null }],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
+    await screen.findByText("Sample Enrolled Rider");
+    expect(
+      screen.queryByRole("button", { name: "후보 검토" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "검토 필요 항목 보기" }),
+    );
+    await user.click(screen.getByRole("button", { name: "후보 검토" }));
+    expect(
+      within(screen.getByRole("dialog")).getByText(
+        "원문에 미가입 또는 가입 예시로 표시되어 가입 담보로 등록하지 않습니다.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "확인" })).toBeDisabled();
+  });
   beforeEach(() => {
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => undefined);
     vi.spyOn(Storage.prototype, "removeItem").mockImplementation(

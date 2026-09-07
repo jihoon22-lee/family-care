@@ -9,6 +9,13 @@ const STATUS_LABEL = {
 } as const;
 
 function amount(rider: RiderResponse): string {
+  if (rider.benefit_type === "unknown") {
+    const value =
+      rider.insured_amount === null
+        ? "확인 필요"
+        : `${rider.insured_amount} ${rider.currency ?? ""}`.trim();
+    return `유형 미분류 · 가입금액 ${value}`;
+  }
   if (rider.benefit_type === "indemnity") return "실손형 · 영수증 기준 확인";
   if (!rider.insured_amount) return "가입금액 확인 필요";
   return `${rider.insured_amount} ${rider.currency ?? ""}`.trim();

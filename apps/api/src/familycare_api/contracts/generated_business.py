@@ -62,6 +62,7 @@ AggregateId = str
 BenefitType = Literal[
     "fixed",
     "indemnity",
+    "unknown",
 ]
 
 
@@ -79,6 +80,7 @@ CandidateIssueCode = Literal[
     "INVALID_UNIT",
     "LOW_CONFIDENCE",
     "MISSING_EVIDENCE",
+    "NOT_ENROLLED",
     "STALE_EVIDENCE",
     "TERMS_ONLY_RIDER",
     "UNSUPPORTED_DSL",

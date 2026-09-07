@@ -7,13 +7,13 @@ import json
 import re
 import unicodedata
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Literal
 from uuid import UUID, uuid5
 
 import psycopg
 
-from familycare_worker.document_structure import DocumentStructure, StructureNode
+from familycare_worker.document_structure import DocumentStructure, StructureNode, node_source_roles
 
 _TYPE_LABELS = {
     "insured": re.compile(r"^(?:피보험자(?: 성명)?|insured(?: name)?)$", re.IGNORECASE),
@@ -185,6 +185,44 @@ def associate_policy_sources(
                 )
         for node_id in page.node_ids:
             result[node_id] = association
+    effective_roles = node_source_roles(structure)
+    tables: dict[str, list[StructureNode]] = {}
+    for node in structure.nodes:
+        if node.table_id is not None:
+            tables.setdefault(node.table_id, []).append(node)
+    for node in sorted(structure.nodes, key=lambda item: item.page_number):
+        if (
+            roles[node.page_number] != "unknown"
+            or effective_roles[node.node_id] != "policy"
+            or node.continuation_of is None
+        ):
+            continue
+        parents = tables.get(node.continuation_of, ())
+        links = [result[parent.node_id] for parent in parents]
+        if not links or any(link.state != "RESOLVED" for link in links):
+            continue
+        first = links[0]
+        if any(link.contract_scope_id != first.contract_scope_id for link in links):
+            continue
+        own_insured = [
+            value for kind, value, _ in page_anchors[node.page_number] if kind == "insured"
+        ]
+        if any(names.get(value, set()) != {expected_member_id} for value in own_insured):
+            result[node.node_id] = SourceAssociation("AMBIGUOUS")
+            continue
+        own = result[node.node_id]
+        if contracts[node.page_number] and (
+            own.state != "RESOLVED" or own.contract_scope_id != first.contract_scope_id
+        ):
+            result[node.node_id] = SourceAssociation("AMBIGUOUS")
+            continue
+        result[node.node_id] = replace(
+            first,
+            anchor_refs=(
+                *first.anchor_refs,
+                AnchorRef(node.node_id, node.page_number, 0, len(node.text), "continuation"),
+            ),
+        )
     return result
 
 

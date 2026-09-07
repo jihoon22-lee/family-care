@@ -18,10 +18,11 @@ from familycare_worker.document_structure import (
     Role,
     StructureChunk,
     UnprocessedRange,
+    node_source_roles,
     plan_structure_chunks,
 )
 
-RANGE_ENVELOPE_REVISION = "policy-range-envelope-v1"
+RANGE_ENVELOPE_REVISION = "policy-range-envelope-v2"
 
 
 @dataclass(frozen=True, repr=False)
@@ -113,7 +114,7 @@ def build_policy_envelopes(
     nodes = {node.node_id: node for node in structure.nodes}
     page_sources: dict[int, SourceWindowMinimizer | None] = {}
     offsets: dict[str, int] = {}
-    roles = {page.page_number: page.role for page in structure.pages}
+    roles = node_source_roles(structure)
     for page in structure.pages:
         texts: list[str] = []
         offset = 0
@@ -141,12 +142,12 @@ def build_policy_envelopes(
             page=node.page_number,
             text=text,
             bbox=node.bbox,
-            document_kind="policy" if roles[node.page_number] == "policy" else "terms",
+            document_kind="policy" if roles[node.node_id] == "policy" else "terms",
             node_id=node_id,
             start=start,
             end=end,
             primary=primary,
-            source_role=roles[node.page_number],
+            source_role=roles[node.node_id],
         )
 
     envelopes: list[PolicyRangeEnvelope] = []

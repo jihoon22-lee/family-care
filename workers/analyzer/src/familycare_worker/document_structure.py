@@ -272,6 +272,39 @@ def _classify(nodes: Sequence[StructureNode]) -> tuple[Role, tuple[str, ...]]:
     return roles[0], ("COMPONENT_CONTENT_MARKERS",)
 
 
+def node_source_roles(structure: DocumentStructure) -> dict[str, Role]:
+    """Carry a known policy table's role through explicit earlier-table relations.
+
+    Page classification stays unchanged. Unknown surrounding blocks and explicit
+    terms/amendment/conflict pages do not gain enrollment-source authority.
+    """
+    pages = {page.page_number: page.role for page in structure.pages}
+    roles = {node.node_id: pages[node.page_number] for node in structure.nodes}
+    tables: dict[str, list[StructureNode]] = {}
+    for node in structure.nodes:
+        if node.table_id is not None:
+            tables.setdefault(node.table_id, []).append(node)
+    for node in sorted(structure.nodes, key=lambda item: item.page_number):
+        if (
+            roles[node.node_id] != "unknown"
+            or node.kind != "TABLE_ROW"
+            or node.continuation_of is None
+            or not node.schedulable
+            or "CONTEXT_REFERENCE_UNRESOLVED" in node.issue_codes
+        ):
+            continue
+        parents = tables.get(node.continuation_of, ())
+        if parents and all(
+            parent.page_number < node.page_number
+            and parent.schedulable
+            and roles[parent.node_id] == "policy"
+            and "CONTEXT_REFERENCE_UNRESOLVED" not in parent.issue_codes
+            for parent in parents
+        ):
+            roles[node.node_id] = "policy"
+    return roles
+
+
 def _source_identity(source: Mapping[str, object], document_version_id: UUID | None) -> UUID:
     identities = set()
     if document_version_id is not None:

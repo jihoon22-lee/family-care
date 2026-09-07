@@ -32,7 +32,14 @@
 
 ### Rider
 
-Rider는 원문 명칭과 정규화 key, 정액·실손 유형, 가입금액·통화, 납입·보장기간, 갱신 여부, current status, Evidence를 가진다. Evidence는 policy DocumentVersion, 1-based page와 optional bbox를 필수 lineage로 사용한다.
+Rider는 원문 명칭과 정규화 key, 정액·실손·미분류(`unknown`) 유형, 가입금액·통화, 납입·보장기간, 갱신 여부, current status, Evidence를 가진다. Evidence는 policy DocumentVersion, 1-based page와 optional bbox를 필수 lineage로 사용한다.
+
+가입 행이 확인되어도 정액/실손 분류 근거가 없으면 가입 사실과 원문 가입금액을 보존하고
+유형을 `unknown`으로 둔다. 미분류 담보는 실손 계산으로 보내지 않으며 계산 결과를 만들지
+않는다. 원장에는 ‘유형 미분류 · 가입금액’으로 표시한다. 명시적인 미가입/예시 항목은
+`NOT_ENROLLED` 검토 사유로 보존하고 사용자 확인만으로 가입 원장에 반영하지 않는다.
+`0032_unclassified_riders`는 담보와 청구 후보의 유형 제약을 확장하며 미분류 기록이 있으면
+downgrade를 거부해 기존 가입/청구 이력을 보존한다.
 
 ### Candidate review
 

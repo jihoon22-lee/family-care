@@ -162,6 +162,19 @@ ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/nod
 예상액으로 바꾸지 않는다. 다른 source row/document version의 담보 동등성·판본 연결은
 후속 canonical mapping에서 검증해야 하며 이름/금액만으로 합치지 않는다.
 
+연속표는 검증된 이전 가입 표와 연결된 unknown 페이지의 해당 행에만 역할/계약 근거를
+이어 준다. 페이지 전체나 일반 블록을 승격하지 않고, 명시적인 약관/변경/모호한 페이지와
+다른 계약번호·피보험자 충돌은 자동 연결하지 않는다. 요청 envelope revision은 v2다.
+`table_grounding.py`는 불변 generation의 실제 data row와 인용된 header/unit 문맥을 읽어
+정확한 담보명 열·가입금액 열·단위를 대조한다. 보험료 열, 병합/충돌 header, 빠진 문맥,
+header 자체는 가입 담보 근거가 아니다. 필요한 header/unit Evidence를 필드 인용에 더하고
+원래 provider 응답은 그대로 보존한다. 결과에는 `range-grounding-v2` 검증 revision을 남긴다.
+표 이름 열 또는 명시적인 가입 담보명/금액 행은 유형 근거가 없어도 `unknown`으로 보존한다.
+명시적 미가입/예시 행과 연결된 표 각주는 `NOT_ENROLLED`로 원장 반영을 막는다.
+첫 반영 전 교정한 필드는 교정값을 사용하고, 반영된 담보 교정은 기존 publication ID를
+유지한다. 표 행 ID는 같은 generation 안의 재시도 identity이며 다른 extraction의 담보
+동등성을 증명하지 않는다.
+
 과거 묶음 호환 경로는 성공한 private `policy` import만 별도 `policy_structuring_jobs` leased queue를 같은 transaction에서 생성한다. Worker는 각 provider 호출 직전에 lease를 갱신하고 호출을 120초로 제한한다. 검증된 candidate batch와 job 성공은 하나의 transaction으로 저장하며, 커밋 결과가 불명확하면 실패 상태를 덮어쓰지 않고 lease 복구에 맡긴다. 후보는 예약된 policy aggregate ID를 공유하지만 초기 page Evidence가 `NEEDS_REVIEW`이므로 자동 원장 projection을 만들지 않는다. 이 runtime wiring은 합성 provider와 PostgreSQL 18 경계까지 검증되었으며 실제 provider와 실제 보험자료 acceptance는 아직 수행하지 않았다.
 
 ## Coverage rule DSL

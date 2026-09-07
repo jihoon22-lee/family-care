@@ -28,6 +28,9 @@ def _retain_contract(
     rider: bool = False,
     second_rider: bool = False,
     separate_benefit_evidence: bool = False,
+    unenrolled: bool = False,
+    omit_benefit_type: bool = False,
+    review_rider: bool = False,
 ) -> None:
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(
@@ -40,7 +43,9 @@ def _retain_contract(
             (
                 "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
                 "피보험자: Family Member A\nSample Insurer Sample Plan\n"
-                "Sample Rider fixed sum assured: 317 KRW\n"
+                "Sample Rider fixed sum assured: 317 KRW"
+                + (" | 미가입" if unenrolled else "")
+                + "\n"
                 "Another Rider fixed sum assured: 619 KRW",
                 job.extraction_id,
             ),
@@ -133,6 +138,36 @@ def _retain_contract(
         )
         result = result.model_copy(
             update={"candidates": tuple(bind_benefit(c) for c in result.candidates)}
+        )
+    if omit_benefit_type:
+
+        def without_type(candidate: Any) -> Any:
+            return candidate.model_copy(
+                update={
+                    "fields": tuple(
+                        field for field in candidate.fields if field.field_id != "benefit_type"
+                    )
+                }
+            )
+
+        batch = batch.model_copy(
+            update={"candidates": tuple(without_type(c) for c in batch.candidates)}
+        )
+        result = result.model_copy(
+            update={"candidates": tuple(without_type(c) for c in result.candidates)}
+        )
+    if review_rider:
+        result = result.model_copy(
+            update={
+                "candidates": tuple(
+                    c.model_copy(
+                        update={"status": "NEEDS_REVIEW", "issue_codes": ("LOW_CONFIDENCE",)}
+                    )
+                    if c.candidate_kind == "rider"
+                    else c
+                    for c in result.candidates
+                ),
+            }
         )
     ranges.save(job, WORKER, work, batch, result)
 
@@ -434,8 +469,10 @@ def test_same_product_in_two_contracts_of_one_pdf_remains_separate(
     assert {policy.product_display for policy in policies} == {"Sample Plan"}
 
 
+@pytest.mark.parametrize("before_first_publication", [False, True])
 def test_name_correction_using_another_source_keeps_the_original_rider(
     enrollment_database: Any,
+    before_first_publication: bool,
 ) -> None:
     from familycare_api.common.scope import HouseholdScope
     from familycare_api.policies.candidate_models import CandidateCorrectionRequest
@@ -443,13 +480,17 @@ def test_name_correction_using_another_source_keeps_the_original_rider(
     from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 
     url, job = enrollment_database
-    _retain_contract(url, job, rider=True, separate_benefit_evidence=True)
-    assert RangeEnrollmentProjector(url).project_pending() == 2
+    _retain_contract(
+        url, job, rider=True, separate_benefit_evidence=True, review_rider=before_first_publication
+    )
+    assert RangeEnrollmentProjector(url).project_pending() == (1 if before_first_publication else 2)
     repository = CandidateRepository(url)
     scope = HouseholdScope(job.household_space_id)
     item = next(
         item
-        for item in repository.list_review_items(scope, status="AI_VERIFIED")
+        for item in repository.list_review_items(
+            scope, status="NEEDS_REVIEW" if before_first_publication else "AI_VERIFIED"
+        )
         if item.candidate_kind == "rider"
     )
     other_source = next(
@@ -470,7 +511,7 @@ def test_name_correction_using_another_source_keeps_the_original_rider(
     with psycopg.connect(_psycopg_url(url)) as connection:
         original = connection.execute(
             "SELECT id FROM riders WHERE household_space_id=%s", (job.household_space_id,)
-        ).fetchone()[0]
+        ).fetchone()
     repository.transition(
         scope,
         item.review_item_id,
@@ -479,10 +520,13 @@ def test_name_correction_using_another_source_keeps_the_original_rider(
         actor_id=actor,
     )
     with psycopg.connect(_psycopg_url(url)) as connection:
-        assert connection.execute(
+        rows = connection.execute(
             "SELECT id,display_name FROM riders WHERE household_space_id=%s",
             (job.household_space_id,),
-        ).fetchall() == [(original, "Corrected Sample Rider")]
+        ).fetchall()
+        assert len(rows) == 1 and rows[0][1] == "Corrected Sample Rider"
+        if original is not None:
+            assert rows[0][0] == original[0]
 
 
 def test_identical_header_replay_preserves_original_correction_ownership(
@@ -605,3 +649,217 @@ def test_candidate_database_failure_isolated_from_later_publication(
             (failed_id,),
         ).fetchone() == (0,)
     assert RangeEnrollmentProjector(url).project_pending() == 1
+
+
+@pytest.mark.parametrize("review_rider", [False, True])
+def test_generic_confirmation_cannot_turn_unenrolled_source_into_a_rider(
+    enrollment_database: Any,
+    review_rider: bool,
+) -> None:
+    from familycare_api.common.scope import HouseholdScope
+    from familycare_api.policies.candidate_errors import InvalidCandidateCorrection
+    from familycare_api.policies.candidate_repository import CandidateRepository
+    from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
+
+    url, job = enrollment_database
+    _retain_contract(url, job, rider=True, unenrolled=True, review_rider=review_rider)
+    assert RangeEnrollmentProjector(url).project_pending() == 1
+    repository = CandidateRepository(url)
+    scope = HouseholdScope(job.household_space_id)
+    rider = next(
+        item for item in repository.list_review_items(scope) if item.candidate_kind == "rider"
+    )
+    with pytest.raises(InvalidCandidateCorrection):
+        repository.transition(
+            scope,
+            rider.review_item_id,
+            expected_version=rider.expected_version,
+            status="USER_CONFIRMED",
+            actor_id=uuid4(),
+        )
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM riders WHERE household_space_id=%s", (job.household_space_id,)
+        ).fetchone() == (0,)
+
+
+def test_enrollment_without_classification_retains_its_document_amount(
+    enrollment_database: Any,
+) -> None:
+    from familycare_api.common.scope import HouseholdScope
+    from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
+    from familycare_api.policies.repository import PolicyLedgerRepository
+
+    url, job = enrollment_database
+    _retain_contract(url, job, rider=True, omit_benefit_type=True)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    repository = PolicyLedgerRepository(url)
+    scope = HouseholdScope(job.household_space_id)
+    policy = repository.list_policies(scope)[0]
+    rider = repository.list_policy_riders(scope, policy.id)[0]
+    assert rider.benefit_type == "unknown" and rider.insured_amount == 317
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy.exc import DBAPIError
+
+    config = Config(str(Path(__file__).resolve().parents[3] / "apps/api/alembic.ini"))
+    with pytest.raises(DBAPIError, match="unclassified enrollment and candidate history"):
+        command.downgrade(config, "0031_range_enrollment")
+    assert repository.list_policy_riders(scope, policy.id)[0] == rider
+
+
+def test_continued_table_amounts_reach_the_ledger_with_header_provenance(
+    enrollment_database: Any,
+) -> None:
+    from familycare_api.common.scope import HouseholdScope
+    from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
+    from familycare_api.policies.repository import PolicyLedgerRepository
+    from familycare_worker.ai.schemas import CandidateField
+    from psycopg.types.json import Jsonb
+
+    url, job = enrollment_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE family_members SET display_name='Family Member A' WHERE id=%s",
+            (job.family_member_id,),
+        )
+        connection.execute(
+            "DELETE FROM extraction_blocks WHERE page_id IN "
+            "(SELECT id FROM extraction_pages WHERE extraction_id=%s)",
+            (job.extraction_id,),
+        )
+        connection.execute(
+            "UPDATE document_versions SET page_count=2 WHERE id=%s", (job.document_version_id,)
+        )
+        page1 = connection.execute(
+            "SELECT id FROM extraction_pages WHERE extraction_id=%s", (job.extraction_id,)
+        ).fetchone()[0]
+        page2 = connection.execute(
+            "INSERT INTO extraction_pages(extraction_id,page_number,width_points,height_points,"
+            "non_whitespace_chars,alphanumeric_ratio,replacement_character_ratio,"
+            "maximum_repeated_character_run,classification) "
+            "SELECT extraction_id,2,width_points,height_points,non_whitespace_chars,"
+            "alphanumeric_ratio,"
+            "replacement_character_ratio,maximum_repeated_character_run,classification "
+            "FROM extraction_pages WHERE id=%s RETURNING id",
+            (page1,),
+        ).fetchone()[0]
+        for number, page in enumerate((page1, page2), start=1):
+            text = (
+                "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
+                "피보험자: Family Member A\nSample Insurer Sample Plan"
+                if number == 1
+                else "증권번호: synthetic-policy-001\n계속"
+            )
+            connection.execute(
+                "INSERT INTO extraction_blocks(page_id,text,bbox,reading_order) "
+                "VALUES (%s,%s,'[10,60,400,80]',0)",
+                (page, text),
+            )
+            metadata = {"header_rows": [0]}
+            if number == 2:
+                metadata["continuation_of"] = {"page_number": 1, "table_index": 0}
+            table = connection.execute(
+                "INSERT INTO extraction_tables(page_id,bbox,metadata_json) "
+                "VALUES (%s,'[10,100,310,140]',%s) RETURNING id",
+                (page, Jsonb(metadata)),
+            ).fetchone()[0]
+            rows = [
+                ["담보명", "가입금액(만원)", "보장구분"],
+                [
+                    "Sample Rider" if number == 1 else "Another Rider",
+                    "20" if number == 1 else "30",
+                    "정액",
+                ],
+            ]
+            for row_index, cells in enumerate(rows):
+                for column, value in enumerate(cells):
+                    connection.execute(
+                        "INSERT INTO extraction_cells(table_id,row_index,column_index,text,bbox) "
+                        "VALUES (%s,%s,%s,%s,%s)",
+                        (
+                            table,
+                            row_index,
+                            column,
+                            value,
+                            Jsonb(
+                                [
+                                    10 + column * 100,
+                                    100 + row_index * 20,
+                                    110 + column * 100,
+                                    120 + row_index * 20,
+                                ]
+                            ),
+                        ),
+                    )
+    ranges = PolicyRangeRepository(url)
+    work = ranges.next(job, WORKER, sensitive_terms=("Family Member A",))
+    batch, result = _one_contract(work)
+    candidates = list(batch.candidates)
+    verified = list(result.candidates)
+    dispositions = list(batch.ranges)
+    for name, amount in (("Sample Rider", 200000), ("Another Rider", 300000)):
+        row = next(item for item in work.envelope.evidence if item.primary and name in item.text)
+        assert row.source_role == "policy"
+        candidate = candidates[0].model_copy(
+            update={
+                "candidate_id": uuid4(),
+                "candidate_kind": "rider",
+                "fields": tuple(
+                    CandidateField(field_id=key, value=value, evidence_ids=(row.evidence_id,))
+                    for key, value in {
+                        "rider_name": name,
+                        "rider_key": name.lower().replace(" ", "-"),
+                        "benefit_type": "fixed",
+                        "sum_assured": amount,
+                        "currency": "KRW",
+                    }.items()
+                ),
+            }
+        )
+        candidates.append(candidate)
+        verified.append(
+            result.candidates[0].model_copy(
+                update={
+                    "candidate_id": candidate.candidate_id,
+                    "candidate_kind": "rider",
+                    "fields": candidate.fields,
+                }
+            )
+        )
+        index = work.envelope.primary_evidence_ids.index(row.evidence_id)
+        dispositions[index] = dispositions[index].model_copy(
+            update={
+                "outcome": "CANDIDATES",
+                "candidate_ids": (candidate.candidate_id,),
+            }
+        )
+    ranges.save(
+        job,
+        WORKER,
+        work,
+        batch.model_copy(update={"candidates": tuple(candidates), "ranges": tuple(dispositions)}),
+        result.model_copy(update={"candidates": tuple(verified)}),
+    )
+    assert RangeEnrollmentProjector(url).project_pending() == 3
+    scope = HouseholdScope(job.household_space_id)
+    repository = PolicyLedgerRepository(url)
+    policies = repository.list_policies(scope)
+    assert len(policies) == 1
+    assert {r.insured_amount for r in repository.list_policy_riders(scope, policies[0].id)} == {
+        200000,
+        300000,
+    }
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute(
+                "SELECT min(refs) FROM (SELECT count(*) refs FROM analysis_candidate_evidence "
+                "WHERE field_id='sum_assured' AND candidate_version_id IN "
+                "(SELECT id FROM analysis_candidate_versions WHERE structuring_job_id=%s) "
+                "GROUP BY candidate_version_id) counts",
+                (job.id,),
+            ).fetchone()[0]
+            >= 2
+        )

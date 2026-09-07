@@ -33,6 +33,7 @@ _ISSUE_CODES = {
     "MISSING_EVIDENCE",
     "CONFLICTING_EVIDENCE",
     "TERMS_ONLY_RIDER",
+    "NOT_ENROLLED",
     "UNSUPPORTED_STRUCTURE",
     "LOW_CONFIDENCE",
     "INVALID_UNIT",
@@ -935,7 +936,8 @@ class CandidateRepository:
             return False
         issues = version.get("issues") or []
         if any(
-            isinstance(issue, dict) and issue.get("code") == "TERMS_ONLY_RIDER" for issue in issues
+            isinstance(issue, dict) and issue.get("code") in {"TERMS_ONLY_RIDER", "NOT_ENROLLED"}
+            for issue in issues
         ):
             return False
         private_context = self._private_structuring_context(

@@ -19,6 +19,8 @@ const ISSUE_COPY = {
   INVALID_UNIT: "금액 또는 단위를 다시 확인해야 합니다.",
   LOW_CONFIDENCE: "후보 값과 근거의 일치 여부를 확인해 주세요.",
   MISSING_EVIDENCE: "판단을 뒷받침할 증권 또는 약관 근거가 필요합니다.",
+  NOT_ENROLLED:
+    "미가입 또는 예시로 표시된 항목은 가입 담보로 등록하지 않습니다.",
   STALE_EVIDENCE: "문서 판본이 바뀌어 최신 근거를 다시 연결해야 합니다.",
   TERMS_ONLY_RIDER: "약관에만 있는 담보는 실제 가입 담보로 보지 않습니다.",
   UNSUPPORTED_DSL:

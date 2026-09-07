@@ -115,6 +115,103 @@ def test_amount_cannot_be_borrowed_from_another_rider_row(separator: str) -> Non
     assert ground_range_candidate(wrong, (source,)).status == "NEEDS_REVIEW"
 
 
+@pytest.mark.parametrize("status", ["AI_VERIFIED", "NEEDS_REVIEW"])
+def test_explicitly_unenrolled_row_is_not_published_as_enrollment(status: str) -> None:
+    source = _evidence("Sample Rider | 미가입 | 정액 | 가입금액 20원")
+    candidate = _candidate(source, rider_name="Sample Rider", benefit_type="fixed", sum_assured=20)
+    candidate = candidate.model_copy(update={"status": status})
+    result = ground_range_candidate(candidate, (source,))
+    assert result.status == "NEEDS_REVIEW"
+    assert "NOT_ENROLLED" in result.issue_codes
+
+
+def test_unenrolled_neighbor_does_not_suppress_a_separate_enrolled_line() -> None:
+    source = _evidence(
+        "Sample Rider 정액 가입금액 20원\nAnother Rider | 미가입 | 정액 가입금액 30원"
+    )
+    candidate = _candidate(source, rider_name="Sample Rider", benefit_type="fixed", sum_assured=20)
+    assert ground_range_candidate(candidate, (source,)).status == "AI_VERIFIED"
+
+
+def test_unenrolled_marker_on_the_next_line_remains_bound_to_its_rider() -> None:
+    source = _evidence("Sample Rider 정액 가입금액 20원\n미가입")
+    candidate = _candidate(source, rider_name="Sample Rider", benefit_type="fixed", sum_assured=20)
+    assert ground_range_candidate(candidate, (source,)).status == "NEEDS_REVIEW"
+
+
+def test_unclassified_enrollment_retains_amount_without_inventing_a_type() -> None:
+    source = _evidence("Sample Rider 가입금액 20원")
+    candidate = _candidate(
+        source, rider_name="Sample Rider", rider_key="sample-rider", sum_assured=20
+    )
+    result = ground_range_candidate(candidate, (source,))
+    assert result.status == "AI_VERIFIED"
+    assert (
+        next(field.value for field in result.fields if field.field_id == "benefit_type")
+        == "unknown"
+    )
+
+
+def test_unguessed_classification_does_not_discard_proven_enrollment() -> None:
+    source = _evidence("Sample Rider 가입금액 20원")
+    candidate = _candidate(
+        source,
+        rider_name="Sample Rider",
+        rider_key="sample-rider",
+        sum_assured=20,
+        benefit_type="fixed",
+    )
+    result = ground_range_candidate(candidate, (source,))
+    assert result.status == "AI_VERIFIED"
+    assert (
+        next(field.value for field in result.fields if field.field_id == "benefit_type")
+        == "unknown"
+    )
+
+
+def test_unknown_type_cannot_turn_an_incidental_heading_into_a_rider() -> None:
+    source = _evidence("보험증권 가입금액\nSample Insurer Sample Plan")
+    candidate = _candidate(
+        source, rider_name="보험증권", rider_key="보험증권", benefit_type="unknown"
+    )
+    assert ground_range_candidate(candidate, (source,)).status == "NEEDS_REVIEW"
+
+
+def test_range_validation_allows_missing_classification_without_relaxing_legacy_batches() -> None:
+    from familycare_worker.ai.schemas import StructurerCandidate, VerifierDecision
+    from familycare_worker.ai.validator import validate_candidate
+
+    source = _evidence("Sample Rider 가입금액 20원")
+    candidate = _candidate(
+        source, rider_name="Sample Rider", rider_key="sample-rider", sum_assured=20
+    )
+    structured = StructurerCandidate(
+        schema_version="1",
+        candidate_id=candidate.candidate_id,
+        candidate_kind="rider",
+        fields=candidate.fields,
+    )
+    verifier = VerifierDecision(
+        schema_version="1",
+        candidate_id=candidate.candidate_id,
+        decision="approved",
+        issue_codes=(),
+        evidence_ids=(source.evidence_id,),
+    )
+    assert "UNSUPPORTED_STRUCTURE" in validate_candidate(
+        candidate=structured, verifier=verifier, evidence=(source,)
+    )
+    assert (
+        validate_candidate(
+            candidate=structured,
+            verifier=verifier,
+            evidence=(source,),
+            allow_unclassified_enrollment=True,
+        )
+        == ()
+    )
+
+
 @pytest.mark.parametrize(
     "text,values",
     [

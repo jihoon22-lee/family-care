@@ -265,18 +265,6 @@ class PolicyRangeRepository:
                     ),
                 }
             )
-        grounded = tuple(
-            ground_range_candidate(candidate, work.envelope.evidence)
-            for candidate in result.candidates
-        )
-        result = result.model_copy(
-            update={
-                "candidates": grounded,
-                "classification": "NEEDS_REVIEW"
-                if any(item.status != "AI_VERIFIED" for item in grounded)
-                else result.classification,
-            }
-        )
         review = result.classification != "SUCCESS" or any(
             item.outcome == "UNRESOLVED" for item in batch.ranges
         )
@@ -312,6 +300,43 @@ class PolicyRangeRepository:
     ) -> None:
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             _lock(connection, job, worker_id)
+            source = connection.execute(
+                "SELECT g.structure_json FROM document_policy_ranges r "
+                "JOIN document_structure_generations g ON g.id=r.generation_id "
+                "WHERE r.job_id=%s AND r.generation_id=%s AND r.envelope_id=%s "
+                "AND r.state='PENDING' AND r.envelope_json=%s AND g.household_space_id=%s "
+                "FOR UPDATE OF r",
+                (
+                    job.id,
+                    work.generation_id,
+                    work.envelope.envelope_id,
+                    Jsonb(work.envelope.to_provider_payload()),
+                    job.household_space_id,
+                ),
+            ).fetchone()
+            if source is None:
+                raise PolicyRangeConflict
+            if "result" in payload:
+                result = CandidatePipelineResult.model_validate_json(json.dumps(payload["result"]))
+                nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
+                grounded = tuple(
+                    ground_range_candidate(candidate, work.envelope.evidence, local_nodes=nodes)
+                    for candidate in result.candidates
+                )
+                result = result.model_copy(
+                    update={
+                        "candidates": grounded,
+                        "classification": "NEEDS_REVIEW"
+                        if any(item.status != "AI_VERIFIED" for item in grounded)
+                        else result.classification,
+                    }
+                )
+                payload = {
+                    **payload,
+                    "result": result.model_dump(mode="json"),
+                    "program_validation_version": "range-grounding-v2",
+                }
+                review = review or result.classification != "SUCCESS"
             row = connection.execute(
                 "UPDATE document_policy_ranges SET state = %s, result_json = %s "
                 "WHERE job_id = %s AND generation_id = %s AND envelope_id = %s "

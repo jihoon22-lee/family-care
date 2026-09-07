@@ -725,6 +725,36 @@ def _create_event(service: Any, member_id: UUID) -> Any:
     )
 
 
+def test_known_and_unclassified_riders_share_a_valid_persisted_decision(
+    database_url: str,
+    seed: DecisionSeed,
+) -> None:
+    from familycare_api.decisions.calculation_repository import CalculationRepository
+    from familycare_api.decisions.schemas import OperationalCandidateResponse
+
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "UPDATE riders SET benefit_type='unknown' WHERE id=%s", (seed.bad_rider_id,)
+        )
+    service = _service(database_url, seed.scope_a)
+    event = _create_event(service, seed.member_a)
+    result = service.analyze_medical_event(event.id)
+    assert {candidate.rider_type for candidate in result.candidates} == {"fixed", "unknown"}
+    unknown = next(
+        candidate for candidate in result.candidates if candidate.rider_type == "unknown"
+    )
+    wire = OperationalCandidateResponse.from_domain(unknown)
+    assert wire.benefit_kind == "UNKNOWN" and wire.calculation is None
+    stored = service.get_decision_result(event.id, result.event_version)
+    assert next(c for c in stored.candidates if c.id == unknown.id).rider_type == "unknown"
+    calculations = CalculationRepository(database_url).calculate_event(seed.scope_a, event.id)
+    assert all(value.get("candidate_id") != unknown.id for value in calculations)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM benefit_calculations WHERE claim_candidate_id=%s", (unknown.id,)
+        ).fetchone() == (0,)
+
+
 def test_decision_analysis_selects_insured_riders_and_persists_immutable_runs(
     database_url: str,
     seed: DecisionSeed,

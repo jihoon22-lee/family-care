@@ -110,6 +110,7 @@
         "MISSING_EVIDENCE",
         "CONFLICTING_EVIDENCE",
         "TERMS_ONLY_RIDER",
+        "NOT_ENROLLED",
         "UNSUPPORTED_STRUCTURE",
         "LOW_CONFIDENCE",
         "INVALID_UNIT",

@@ -212,7 +212,7 @@ def validate_candidate_field_value(field_id: PolicyCandidateFieldId, value: Any)
         "unknown",
     }:
         raise ValueError("invalid candidate value")
-    if field_id == "benefit_type" and value not in {"fixed", "indemnity"}:
+    if field_id == "benefit_type" and value not in {"fixed", "indemnity", "unknown"}:
         raise ValueError("invalid candidate value")
     if field_id in {"rider_id", "terms_edition_id", "clause_id"}:
         if not isinstance(value, str):

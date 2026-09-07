@@ -907,6 +907,7 @@ export type CandidateIssueCode =
   | "MISSING_EVIDENCE"
   | "CONFLICTING_EVIDENCE"
   | "TERMS_ONLY_RIDER"
+  | "NOT_ENROLLED"
   | "UNSUPPORTED_STRUCTURE"
   | "LOW_CONFIDENCE"
   | "INVALID_UNIT"
@@ -2325,6 +2326,7 @@ export interface ReviewIssue {
     | "INVALID_UNIT"
     | "LOW_CONFIDENCE"
     | "MISSING_EVIDENCE"
+    | "NOT_ENROLLED"
     | "STALE_EVIDENCE"
     | "TERMS_ONLY_RIDER"
     | "UNSUPPORTED_DSL"
@@ -2381,7 +2383,7 @@ export interface RiderClauseLinkResponse {
 }
 
 export interface RiderResponse {
-  benefit_type: "fixed" | "indemnity";
+  benefit_type: "fixed" | "indemnity" | "unknown";
   coverage_end_date: string | null;
   coverage_start_date: string | null;
   currency: string | null;

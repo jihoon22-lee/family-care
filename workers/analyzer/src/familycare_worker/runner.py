@@ -403,6 +403,7 @@ class PolicyStructuringJobRunner:
         result = (
             verify_structured_policy_batch(
                 candidates=batch.candidates,
+                allow_unclassified_enrollment=True,
                 structurer_request_id=request_id,
                 evidence=work.envelope.evidence,
                 provider=leased,

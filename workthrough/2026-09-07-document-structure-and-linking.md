@@ -249,3 +249,42 @@ Ruff format 562개·lint 및 mypy 234개 source가 통과했다. 기본 pytest�
 1 failed / 237 passed였으며, 테스트 source/job 필터 수정 후 전체 재실행에서 통과했다.
 전체 정적 검사 중 grounding iterator 타입 충돌도 수정 후 재실행으로 해소했다.
 새 이미지 빌드와 브라우저 검사는 로컬에서 재실행하지 않았으며 새 push의 CI에서 확인한다.
+
+## Continued tables and unclassified enrollment (2026-09-07)
+
+기준 `5ea3971` 이후 변경이다. 검증된 이전 가입 표에 이어지는 unknown 페이지의 data row만
+가입 역할/계약 근거를 이어받는다. 다른 계약/피보험자·명시적 약관/모호한 페이지는 거부한다.
+`table_grounding.py`는 불변 generation의 담보명·가입금액 열과 header/unit 문맥을 대조하고
+그 Evidence를 필드에 보존한다. 같은 이름의 다른 행에서 금액을 가져오거나 보험료 열·충돌
+header·빠진 문맥을 일반 텍스트로 우회하지 못한다. provider 원래 응답은 유지하며 검증 결과에
+`range-grounding-v2`, 요청에 envelope v2를 남긴다.
+
+가입 행이 확인되어도 분류 근거가 없으면 유형 `unknown`과 원문 가입금액을 저장한다.
+`0032`는 담보·청구 후보 유형을 확장하며 미분류 이력이 있으면 downgrade를 거부한다.
+API v2 후보는 UNKNOWN으로 표시하고 해당 담보를 실손 계산에 보내지 않는다. Web은 ‘유형
+미분류 · 가입금액’으로 표시한다. 미가입/예시 행은 AI 검토 상태와 무관하게 `NOT_ENROLLED`를
+남겨 일반 확인으로 가입시킬 수 없게 한다. 첫 publication 전 이름 교정은 원래 유효한 원문
+위치를 먼저 사용하며, 이미 반영된 담보는 기존 ID를 유지한다. 원래 이름을 원문에서 찾을 수
+없는 경우에만 사용자 교정의 근거 위치를 사용한다.
+
+연속표/열 근거 부재, 보험료 차용, header/행 이름 충돌, 누락 문맥, 미가입 각주, 같은 이름의
+다른 행 차용, 검토 상태의 미가입 확인 우회와 첫 반영 전 교정 실패를 RED로 확인했다.
+합성 PostgreSQL의 범위 원장·기존 결정·Worker 저장 경로 40개가 통과했다. Web 첫 전체 검사는
+새 issue 문구 누락의 TypeScript 오류로 실패했고 문구 추가/format 후 전체 166개 테스트와
+format/lint/typecheck/build가 통과했다. 이는 실제 backend/모바일 브라우저 수용이 아니다.
+
+다른 extraction/블록·표 표현의 담보 동등성, private/operational canonical 연결, component/
+약관 판본 연결과 보호된 자료 수용은 남아 있다. 전용 합성 DB에서만 작업했으며 실제 자료
+열람·외부 AI 호출·운영 DB 변경·태그/배포는 수행하지 않았다. 최종 소스 `5ea3971` + 이 절의 미커밋 변경에 대해 2026-09-07 19:48~19:57 KST에
+필수 검사를 직렬 실행했다. Web 166개·format/lint/typecheck/build, Ruff format 567개/lint,
+mypy 235 sources, 기본 pytest 1,810 passed / 245 integration deselected / 3 subtests passed,
+전체 PostgreSQL 244 passed / 1,537 deselected가 통과했다. 문서 50개·안전 760 paths·생성
+계약·container/workflow 정적 검사·diff 검사도 통과했다. 기본 pytest 첫 실행은 새 issue의
+계약 검사 enum 누락으로 1 failed / 1,809 passed였으며 checker 갱신 후 전체 재실행이
+통과했다. 빈 합성 `0032` downgrade/upgrade와 미분류 이력 존재 시 downgrade 거부를
+확인했다. 새 이미지 빌드는 다음 push의 CI에서 확인한다.
+
+Chromium mock E2E 최초 실행은 이전 약관 전용 후보의 확인 허용을 기대한 두 시나리오에서
+13 passed / 2 failed였다. 제외 항목(약관 전용·미가입) 확인 차단과 정상 가입 후보 확인 후
+Web Storage/IndexedDB 미기록을 분리한 뒤 16 passed를 확인했다. 변경한 E2E의 Prettier,
+ESLint와 Web typecheck도 통과했다. API/Worker 소스는 이 후속 E2E 변경으로 바뀌지 않았다.

@@ -9123,6 +9123,7 @@
               "INVALID_UNIT",
               "LOW_CONFIDENCE",
               "MISSING_EVIDENCE",
+              "NOT_ENROLLED",
               "STALE_EVIDENCE",
               "TERMS_ONLY_RIDER",
               "UNSUPPORTED_DSL",
@@ -9304,7 +9305,8 @@
           "benefit_type": {
             "enum": [
               "fixed",
-              "indemnity"
+              "indemnity",
+              "unknown"
             ],
             "title": "Benefit Type",
             "type": "string"

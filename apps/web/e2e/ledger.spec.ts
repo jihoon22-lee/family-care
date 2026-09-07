@@ -21,6 +21,7 @@ const BOUNDED_TERMS_EXCERPT =
 type JsonObject = Record<string, unknown>;
 
 interface SyntheticState {
+  issueCode: "TERMS_ONLY_RIDER" | "NOT_ENROLLED" | "LOW_CONFIDENCE";
   confirmBodies: JsonObject[];
   confirmed: boolean;
   externalRequests: string[];
@@ -118,37 +119,54 @@ function riderResponse(): JsonObject {
 }
 
 function reviewItem(state: SyntheticState): JsonObject {
+  const source =
+    state.issueCode === "TERMS_ONLY_RIDER"
+      ? termsEvidence()
+      : {
+          ...termsEvidence(),
+          document_label: "Sample Policy",
+          document_version_id: POLICY_DOCUMENT_ID,
+          evidence_id: POLICY_EVIDENCE_ID,
+          page: 2,
+          bounded_excerpt: "Synthetic enrolled rider source for review.",
+        };
   return {
     aggregate_id: POLICY_ID,
     candidate_kind: "rider",
     candidate_version_id: CANDIDATE_VERSION_ID,
-    evidence: [termsEvidence()],
+    evidence: [source],
     expected_version: state.confirmed ? 2 : 1,
     fields: [
       {
-        evidence_ids: [TERMS_EVIDENCE_ID],
+        evidence_ids: [source.evidence_id],
         field_id: "rider_name",
-        value: "Terms-only Rider",
+        value:
+          state.issueCode === "TERMS_ONLY_RIDER"
+            ? "Terms-only Rider"
+            : "Review Rider",
       },
       {
-        evidence_ids: [TERMS_EVIDENCE_ID],
+        evidence_ids: [source.evidence_id],
         field_id: "rider_key",
-        value: "terms-only-rider",
+        value:
+          state.issueCode === "TERMS_ONLY_RIDER"
+            ? "terms-only-rider"
+            : "review-rider",
       },
       {
-        evidence_ids: [TERMS_EVIDENCE_ID],
+        evidence_ids: [source.evidence_id],
         field_id: "benefit_type",
         value: "fixed",
       },
       {
-        evidence_ids: [TERMS_EVIDENCE_ID],
+        evidence_ids: [source.evidence_id],
         field_id: "rider_status",
         value: "active",
       },
     ],
     issues: state.confirmed
       ? []
-      : [{ code: "TERMS_ONLY_RIDER", field_id: "rider_name" }],
+      : [{ code: state.issueCode, field_id: "rider_name" }],
     review_item_id: REVIEW_ITEM_ID,
     status: state.confirmed ? "USER_CONFIRMED" : "NEEDS_REVIEW",
   };
@@ -238,8 +256,12 @@ async function installStorageWriteSpy(page: Page): Promise<void> {
   });
 }
 
-async function installSyntheticApi(page: Page): Promise<SyntheticState> {
+async function installSyntheticApi(
+  page: Page,
+  issueCode: SyntheticState["issueCode"],
+): Promise<SyntheticState> {
   const state: SyntheticState = {
+    issueCode,
     confirmBodies: [],
     confirmed: false,
     externalRequests: [],
@@ -360,9 +382,12 @@ async function openLedger(page: Page): Promise<void> {
   await expect(page.getByText("Sample Policy", { exact: true })).toBeVisible();
 }
 
-async function setupLedger(page: Page): Promise<SyntheticState> {
+async function setupLedger(
+  page: Page,
+  issueCode: SyntheticState["issueCode"] = "TERMS_ONLY_RIDER",
+): Promise<SyntheticState> {
   await installStorageWriteSpy(page);
-  const state = await installSyntheticApi(page);
+  const state = await installSyntheticApi(page, issueCode);
   await mockAuthenticatedSession(page);
   await openLedger(page);
   return state;
@@ -427,36 +452,29 @@ test.describe("synthetic policy ledger review", () => {
     await expectNoExternalRequests(state);
   });
 
-  test("confirms a review candidate without publishing a terms-only Rider", async ({
-    page,
-  }) => {
-    const state = await setupLedger(page);
-    await page.getByRole("button", { name: "검토 필요 항목 보기" }).click();
-    await page.getByRole("button", { name: "후보 검토" }).click();
-
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "확인" }).click();
-
-    await expect.poll(() => state.confirmBodies).toHaveLength(1);
-    expect(state.confirmBodies[0]).toEqual({ expected_version: 1 });
-    await expect(dialog).toBeHidden();
-    await expect(
-      page.getByRole("status", { name: /NEEDS_REVIEW|검토/ }),
-    ).toContainText("0");
-    await expect(
-      page.getByText("Synthetic Accident Rider", { exact: true }),
-    ).toHaveCount(1);
-    await expect(
-      page.getByText("Terms-only Rider", { exact: true }),
-    ).toHaveCount(0);
-    await expectNoExternalRequests(state);
-  });
+  for (const issue of ["TERMS_ONLY_RIDER", "NOT_ENROLLED"] as const) {
+    test(`blocks confirmation of an excluded enrollment: ${issue}`, async ({
+      page,
+    }) => {
+      const state = await setupLedger(page, issue);
+      await page.getByRole("button", { name: "검토 필요 항목 보기" }).click();
+      await page.getByRole("button", { name: "후보 검토" }).click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.getByRole("button", { name: "확인" })).toBeDisabled();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toBeHidden();
+      expect(state.confirmBodies).toHaveLength(0);
+      await expect(
+        page.getByText("Synthetic Accident Rider", { exact: true }),
+      ).toHaveCount(1);
+      await expectNoExternalRequests(state);
+    });
+  }
 
   test("does not write server state to Web Storage or IndexedDB", async ({
     page,
   }) => {
-    const state = await setupLedger(page);
+    const state = await setupLedger(page, "LOW_CONFIDENCE");
     await page.getByRole("button", { name: "검토 필요 항목 보기" }).click();
     await page.getByRole("button", { name: "후보 검토" }).click();
     await page

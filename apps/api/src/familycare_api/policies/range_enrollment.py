@@ -25,39 +25,76 @@ def _key(value: str) -> str:
 
 
 def _rider_identity(
-    connection: psycopg.Connection[dict[str, Any]], source: dict[str, Any], policy_id: UUID
+    connection: psycopg.Connection[dict[str, Any]],
+    source: dict[str, Any],
+    policy_id: UUID,
+    version: dict[str, Any],
 ) -> UUID | None:
     """Address the original enrollment mention, independent of later corrections."""
-    root_name = connection.execute(
-        "SELECT value FROM analysis_candidate_fields WHERE candidate_version_id=%s "
-        "AND field_id='rider_name'",
-        (source["candidate_version_id"],),
+    bound = connection.execute(
+        "SELECT rider_id FROM range_enrollment_publications WHERE source_candidate_version_id=%s "
+        "AND household_space_id=%s AND policy_contract_id=%s AND rider_id IS NOT NULL "
+        "ORDER BY created_at LIMIT 1",
+        (source["candidate_version_id"], source["household_space_id"], policy_id),
     ).fetchone()
-    if root_name is None or not isinstance(root_name["value"], str):
-        return None
-    root_evidence = connection.execute(
-        "SELECT evidence_id FROM analysis_candidate_evidence WHERE candidate_version_id=%s "
-        "AND field_id='rider_name'",
-        (source["candidate_version_id"],),
-    ).fetchall()
-    keys = {str(row["evidence_id"]) for row in root_evidence}
-    nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
-    pattern = (
-        r"(?<!\w)" + r"\s+".join(re.escape(word) for word in root_name["value"].split()) + r"(?!\w)"
-    )
-    mentions = set()
-    for ref in source["source_refs"]:
-        if ref["evidence_id"] not in keys or not ref["primary"] or ref["source_role"] != "policy":
+    if bound is not None:
+        return cast(UUID, bound["rider_id"])
+    candidate_ids = [source["candidate_version_id"]]
+    if version["status"] == "USER_CONFIRMED" and version["id"] not in candidate_ids:
+        candidate_ids.append(version["id"])
+    for candidate_id in candidate_ids:
+        root_name = connection.execute(
+            "SELECT value FROM analysis_candidate_fields WHERE candidate_version_id=%s "
+            "AND field_id='rider_name'",
+            (candidate_id,),
+        ).fetchone()
+        if root_name is None or not isinstance(root_name["value"], str):
             continue
-        node = nodes.get(ref["node_id"])
-        if node is None:
-            return None
-        text = node["text"][ref["start"] : ref["end"]]
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            mentions.add((ref["node_id"], ref["start"] + match.start(), ref["start"] + match.end()))
-    if len(mentions) != 1:
-        return None
-    return uuid5(policy_id, "enrollment-mention-v1:" + json.dumps(sorted(mentions)))
+        root_evidence = connection.execute(
+            "SELECT evidence_id FROM analysis_candidate_evidence WHERE candidate_version_id=%s "
+            "AND field_id='rider_name'",
+            (candidate_id,),
+        ).fetchall()
+        keys = {str(row["evidence_id"]) for row in root_evidence}
+        nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
+        table_rows = {
+            ref["node_id"]
+            for ref in source["source_refs"]
+            if ref["evidence_id"] in keys
+            and ref["primary"]
+            and ref["source_role"] == "policy"
+            and nodes.get(ref["node_id"], {}).get("kind") == "TABLE_ROW"
+            and nodes[ref["node_id"]].get("row_role") == "data"
+        }
+        if len(table_rows) == 1:
+            return uuid5(policy_id, "enrollment-table-row-v1:" + next(iter(table_rows)))
+        if table_rows:
+            continue
+        pattern = (
+            r"(?<!\w)"
+            + r"\s+".join(re.escape(word) for word in root_name["value"].split())
+            + r"(?!\w)"
+        )
+        mentions = set()
+        for ref in source["source_refs"]:
+            if (
+                ref["evidence_id"] not in keys
+                or not ref["primary"]
+                or ref["source_role"] != "policy"
+            ):
+                continue
+            node = nodes.get(ref["node_id"])
+            if node is None:
+                return None
+            text = node["text"][ref["start"] : ref["end"]]
+            for match in re.finditer(pattern, text, re.IGNORECASE):
+                mentions.add(
+                    (ref["node_id"], ref["start"] + match.start(), ref["start"] + match.end())
+                )
+        if len(mentions) != 1:
+            continue
+        return uuid5(policy_id, "enrollment-mention-v1:" + json.dumps(sorted(mentions)))
+    return None
 
 
 def _insured_evidence(
@@ -196,7 +233,7 @@ def project_range_candidate(
     policy_id = UUID(association["contract_scope_id"])
     rider_id = None
     if version["candidate_kind"] == "rider":
-        rider_id = _rider_identity(connection, source, policy_id)
+        rider_id = _rider_identity(connection, source, policy_id, version)
         if rider_id is None:
             return False
     elif version["candidate_kind"] != "policy_contract":
@@ -276,7 +313,7 @@ def project_range_candidate(
         if (
             not isinstance(name, str)
             or not 1 <= len(name) <= 200
-            or benefit not in {"fixed", "indemnity"}
+            or benefit not in {"fixed", "indemnity", "unknown"}
         ):
             return False
         amount = values.get("sum_assured")

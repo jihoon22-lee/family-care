@@ -1059,7 +1059,11 @@ class DecisionRepository:
                     (evaluation.id, evidence_id),
                 )
         for candidate in result.candidates:
-            if candidate.id is None or candidate.rider_type not in {"fixed", "indemnity"}:
+            if candidate.id is None or candidate.rider_type not in {
+                "fixed",
+                "indemnity",
+                "unknown",
+            }:
                 raise DecisionRepositoryUnavailable
             connection.execute(
                 """
