@@ -1,10 +1,193 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import {
   installStorageWriteSpy,
   mockAuthenticatedSession,
+  mockLocalGuidanceClaimApi,
   mockSyntheticEventApi,
 } from "./support/mockApi";
+
+async function expectMemoryOnlyResults(page: Page) {
+  expect(await page.evaluate(() => window.__familyCareStorageWrites)).toEqual({
+    indexedDB: 0,
+    localStorage: 0,
+    sessionStorage: 0,
+  });
+  const cached = await page.evaluate(async () => {
+    if (!("caches" in window)) return [];
+    if ("serviceWorker" in navigator) await navigator.serviceWorker.ready;
+    const urls: string[] = [];
+    for (const name of await caches.keys()) {
+      for (const request of await (await caches.open(name)).keys())
+        urls.push(request.url);
+    }
+    return urls;
+  });
+  expect(
+    cached.filter((url) =>
+      /\/api\/|\/documents\/|\/evidence\/|\/medical-events\/|\/results\/|\/claims\//.test(
+        url,
+      ),
+    ),
+  ).toEqual([]);
+}
+
+async function expectNarrowLayout(page: Page) {
+  const size = await page.evaluate(() => ({
+    width: innerWidth,
+    scroll: document.documentElement.scrollWidth,
+  }));
+  expect(size.scroll).toBeLessThanOrEqual(size.width);
+}
+
+test("opens planned subtotal and calculation disclosures with native Enter at 320px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await installStorageWriteSpy(page);
+  const mock = await mockLocalGuidanceClaimApi(page);
+  await mockAuthenticatedSession(page);
+  await page.goto(`/app/events/${mock.eventId}/result/1`);
+  const actual = page.getByRole("region", {
+    name: "현재 사건 기준 소계 · KRW",
+  });
+  const planned = page.getByRole("region", {
+    name: "예정 치료 가정 1 소계 · KRW",
+  });
+  await expect(actual.getByText("300원", { exact: true })).toBeVisible();
+  await expect(actual.getByText("부분 소계", { exact: true })).toBeVisible();
+  await expect(planned.getByText("600원", { exact: true })).toBeVisible();
+  await expect(planned).toContainText("입원 일수: 5일 가정");
+  await expect(planned).toContainText("공통 한도나 중복 지급 감액");
+  await expect(page.getByText("900원", { exact: true })).toHaveCount(0);
+  const totalDetails = planned.locator("details");
+  const totalSummary = planned.getByText("포함한 담보와 합산 전제", {
+    exact: true,
+  });
+  await expect(totalDetails).not.toHaveAttribute("open");
+  await totalSummary.focus();
+  await expect(totalSummary).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(totalDetails).toHaveAttribute("open", "");
+  await expect(
+    totalDetails.getByText(/Sample Planned Coverage 1/).first(),
+  ).toBeVisible();
+  const card = page.getByRole("article", { name: "Sample Planned Coverage 1" });
+  await expect(card.getByText("100원", { exact: true })).toBeVisible();
+  await expect(card.getByText("300원", { exact: true })).toBeVisible();
+  const traceSummary = card.getByText("계산 과정과 근거", { exact: true });
+  await traceSummary.focus();
+  await page.keyboard.press("Enter");
+  await expect(card.locator("details")).toHaveAttribute("open", "");
+  await expect(
+    card.getByText("5일 − 2일 = 3일", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    card.getByText("100원 × 3일 = 300원", { exact: false }),
+  ).toBeVisible();
+  await expect(card).not.toContainText(
+    /\/calculation|source_revision|[a-f]{64}/,
+  );
+  await expectNarrowLayout(page);
+  await expectMemoryOnlyResults(page);
+  expect(mock.state.analysisRequests).toBe(0);
+  expect(mock.state.structureRequests).toBe(0);
+  expect(mock.state.unexpectedAiRequests).toEqual([]);
+  expect(mock.state.forbiddenRequests).toEqual([]);
+});
+
+test("prepares a conditional formula claim from saved selectors and clears its snapshot on session expiry", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await installStorageWriteSpy(page);
+  const mock = await mockLocalGuidanceClaimApi(page, {
+    expireClaimUpdates: true,
+  });
+  await mockAuthenticatedSession(page);
+  await page.goto(`/app/events/${mock.eventId}/result/1`);
+  const card = page.getByRole("article", { name: "Sample Planned Coverage 1" });
+  await expect(
+    card.getByText("가입금액 × (입원 일수 − 2)", { exact: true }),
+  ).toBeVisible();
+  await expectMemoryOnlyResults(page);
+  const prepare = card.getByRole("button", {
+    name: "Sample Planned Coverage 1 청구 준비",
+  });
+  await prepare.focus();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/app/claims/${mock.claimId}$`));
+  const saved = page.getByRole("region", { name: "청구 준비 때 저장한 안내" });
+  await expect(saved).toBeVisible();
+  await expect(
+    saved.getByText("가입금액 × (입원 일수 − 2)", { exact: true }),
+  ).toBeVisible();
+  await expect(saved.getByText("300원", { exact: true })).toBeVisible();
+  await expect(saved.getByText("100원", { exact: true })).toBeVisible();
+  await expect(
+    saved.getByRole("region", { name: "등록된 비용" }),
+  ).toContainText("50,000원");
+  await expect(page.getByText("실제 지급액", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("아직 기록되지 않았습니다.", { exact: true }),
+  ).toBeVisible();
+  const savedTrace = saved.getByText("계산 과정과 근거", { exact: true });
+  await savedTrace.focus();
+  await page.keyboard.press("Enter");
+  await expect(
+    saved.getByText("100원 × 3일 = 300원", { exact: false }),
+  ).toBeVisible();
+  expect(mock.state.claimCreateBodies).toEqual([
+    {
+      guidance: {
+        run_id: mock.runId,
+        expected_event_version: 1,
+        coverage: mock.coverage,
+      },
+    },
+  ]);
+  expect(mock.state.claimReads).toBe(1);
+  expect(mock.state.analysisRequests).toBe(0);
+  expect(mock.state.structureRequests).toBe(0);
+  expect(mock.state.unexpectedAiRequests).toEqual([]);
+  expect(mock.state.forbiddenRequests).toEqual([]);
+  await expectNarrowLayout(page);
+  await expectMemoryOnlyResults(page);
+  await page.getByRole("button", { name: "기록 저장", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByLabel("사용자 이름", { exact: true })).toBeVisible();
+  await expect(saved).toHaveCount(0);
+  await expect(
+    page.getByText("Sample Planned Coverage 1", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByText("50,000원", { exact: true })).toHaveCount(0);
+  expect(mock.state.claimUpdates).toBe(1);
+  await expectMemoryOnlyResults(page);
+});
+
+test("retains stale local amounts while disabling claim creation at 320px", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await installStorageWriteSpy(page);
+  const mock = await mockLocalGuidanceClaimApi(page, { stale: true });
+  await mockAuthenticatedSession(page);
+  await page.goto(`/app/events/${mock.eventId}/result/1`);
+  await expect(
+    page.getByRole("button", { name: "Sample Planned Coverage 1 청구 준비" }),
+  ).toBeDisabled();
+  await expect(
+    page
+      .getByRole("region", { name: "예정 치료 가정 1 소계 · KRW" })
+      .getByText("600원", { exact: true }),
+  ).toBeVisible();
+  expect(mock.state.claimCreateBodies).toEqual([]);
+  expect(mock.state.analysisRequests).toBe(0);
+  expect(mock.state.structureRequests).toBe(0);
+  expect(mock.state.unexpectedAiRequests).toEqual([]);
+  await expectNarrowLayout(page);
+  await expectMemoryOnlyResults(page);
+});
 
 test("shows document-based local guidance at 320px without automatic AI requests", async ({
   page,
