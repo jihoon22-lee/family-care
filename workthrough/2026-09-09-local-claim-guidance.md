@@ -374,3 +374,60 @@ private/operational 청구·canonical 이력·동시 생성·저장 롤백·금�
 Python은 B04 checkout의 API/Worker/루트 PYTHONPATH와 공유된 잠금 버전 가상환경,
 `TMPDIR=/tmp`를 사용했다. Web·Python·다른 에이전트의 무거운 검사는 직렬이었다.
 전체 PostgreSQL·브라우저·API 시간/작업 공존·PR CI는 남은 검증이다.
+
+04:43~04:48 KST, `b3ee48f`(원 `5604571`, base `52298b5`)의 실제 API 시간 검증은
+기존 원문→300/400 fixture를 재사용했다. 키 없이 사실 필드가 빈 한국어 입원 문장으로
+POST 분석/GET 저장 결과 21쌍을 실행했고, 마지막 10쌍은 다른 합성 문서의 실제 Worker lease와
+작업/문서 행 잠금 transaction이 열린 상태에서 완료했다. 별도 worktree의 guarded 합성 PG에서
+`python -m pytest apps/api/tests/test_guidance_runtime_integration.py
+apps/api/tests/test_semantic_local_guidance_integration.py -m integration -q -s`는
+**2 passed**(47.41초)였다. 1계약/2담보/2조항/2판본이며 private import는 없다.
+
+| 측정 문맥 | 분석 POST p50 / p95 | 저장 결과 GET p50 / p95 |
+|---|---|---|
+| 최초 1쌍, DB 캐시를 비우지 않음 | 863.058 / 863.058ms | 634.783 / 634.783ms |
+| 유휴 후속 10쌍 | 818.239 / 878.760ms | 643.535 / 722.499ms |
+| 별도 Worker transaction 유지 중 10쌍 | 790.799 / 871.251ms | 612.880 / 643.199ms |
+
+42개 응답에서 실제 amount 300·해당 run의 동일 JSON·no-store·stale false를 확인했다.
+HTTP/provider 시도는 **0/0**, 외부 실행 가능 작업과 attempts 증가는 **0**, 로컬 검색의
+SUCCEEDED/attempts 0 bookkeeping만 **1개**였다. 최초 검증은 모든 작업 행이 증가하지 않아야
+한다는 과도한 assertion 때문에 실패했다. 실제 외부 예약/시도와 로컬 검색 기록을 나눈 뒤
+재실행했다. 최종 commit에는 semantic paused 예약도 검사하는 assertion을 추가했으며 이
+추가 조건은 root 전체 PG에서 다시 확인한다. Ruff lint/format/diff는 통과했다. 테스트 모듈을
+직접 mypy 대상으로 확대한 별도 시도는 기존 fixture import/type 오류로 실패했다. 필수 mypy
+범위인 application/Worker/scripts 318개 소스의 통과와 구분하며 테스트 체인을 임의 수정하지 않았다.
+
+이 결과는 소규모 ASGI+PostgreSQL과 무관 작업 행 잠금의 공존이다. 네트워크 gateway·CPU
+경합·OCR/import 처리량·전체/보호된 카탈로그·실제 기기 응답시간을 측정한 것은 아니며
+수치 차이를 성능 향상으로 해석하지 않는다. 해당 대표 규모 수용은 #70에서 별도 수행한다.
+
+07:10~07:12 KST, `363bff2`(원 `9894a0e`, base `52298b5`)는 opt-in 합성 mock과 브라우저
+회귀 3개를 추가했다. `PLAYWRIGHT_BASE_URL=http://127.0.0.1:4187 corepack pnpm --filter
+@familycare/web test:e2e e2e/event-result.spec.ts e2e/claims.spec.ts --project=chromium`는
+**9 passed**(5.2초)였다. 320px 화면에서 native Enter disclosure, 실제/예정 소계 구분,
+조건부 계산식 후보의 청구 selector→저장 화면, stale·세션·영구 저장 경계를 확인했다.
+typecheck·Vite/PWA build·소유 E2E 파일 Prettier/ESLint·diff·커밋 규칙도 통과했다.
+Node 24.18.0/pnpm 11.22.0, 잠금 의존성과 작업 전용 symlink를 사용했다. 최초 pnpm 실행은
+자동 설치의 `UNSAFE_MODULES_DIR` 검사에서 실행 전 실패했고 설치·변경은 없었다.
+`pnpm_config_verify_deps_before_run=false`로 기존 의존성을 사용한 뒤 통과했다. 기존에 비어 있던
+4187의 작업 전용 preview만 종료(SIGTERM/143)했고 symlink를 제거했다. mock UI 검증이며
+backend·실제 기기·실자료 검증이 아니다.
+
+07:15~07:19 KST 최종 claims 검토에서 복원 경로의 canonical 중복을 재현했다. 같은 담보의
+private 청구를 휴지통으로 옮긴 뒤 operational 청구를 만들면, private 복원 시 두 활성 청구가
+남을 수 있었다. `0ca6741`(원 `0a5fc5b`)의 전용 PG 테스트는 **2 failed / 1 passed**였다.
+초기 fresh DB migration 누락의 3개 setup 오류는 RED로 계산하지 않았다.
+
+root의 claims repository/helper 후속 수정은 복원이 생성과 같은 사건→청구 잠금 순서를
+사용하고 현재 검증된 alias의 활성 청구를 대조한다. 첫 행 잠금 수정만으로는 SERIALIZABLE
+생성의 이전 MVCC snapshot과 READ COMMITTED 복원 사이 경합이 남아 **1 failed / 2 passed**였다.
+복원도 SERIALIZABLE 충돌 검증에 참여시키고 충돌 시 전체 transaction을 거부했다.
+`python -m pytest apps/api/tests/test_guidance_claim_restore_integration.py
+apps/api/tests/test_guidance_claim_concurrency_integration.py
+apps/api/tests/test_claim_workflow_integration.py -m integration -q --tb=short`는
+**22 passed**(39.76초)였다. 두 요청이 실제 사건 잠금에 대기하는 동안을 관측했고, 해제 후
+활성 청구가 하나이며 이전 JSON/hash가 유지되는지 확인했다. `python -m mypy
+apps/api/src/familycare_api/claims`는 **11 source files passed**, 관련 Ruff lint/format 3개와
+diff도 통과했다. 검증은 `0ca6741` + 위 두 claims 소스의 미커밋 변경과 전용 합성 DB,
+destructive guard·B04 PYTHONPATH·TMPDIR에서 실행했다. 재import 이력 alias 보완은 진행 중이다.

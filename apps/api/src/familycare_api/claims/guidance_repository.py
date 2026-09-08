@@ -15,6 +15,26 @@ from familycare_api.guidance.models import LocalGuidanceResponse
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 
 
+def _existing_source_claim(
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    event_id: UUID,
+    family_member_id: UUID,
+    rider_ids: list[UUID],
+    private_ids: list[UUID],
+) -> UUID | None:
+    row = connection.execute(
+        """
+        SELECT id FROM claim_cases WHERE household_space_id=%s AND medical_event_id=%s
+          AND family_member_id=%s AND deleted_at IS NULL
+          AND (rider_id=ANY(%s) OR private_coverage_id=ANY(%s))
+        ORDER BY created_at,id LIMIT 1
+        """,
+        (scope.household_space_id, event_id, family_member_id, rider_ids, private_ids),
+    ).fetchone()
+    return UUID(str(row["id"])) if row is not None else None
+
+
 def existing_operational_claim(
     connection: psycopg.Connection[dict[str, Any]],
     scope: HouseholdScope,
@@ -28,16 +48,33 @@ def existing_operational_claim(
         for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
         if link.family_member_id == family_member_id and link.rider_id == rider_id
     ]
-    row = connection.execute(
-        """
-        SELECT id FROM claim_cases WHERE household_space_id=%s AND medical_event_id=%s
-          AND family_member_id=%s AND deleted_at IS NULL
-          AND (rider_id=%s OR private_coverage_id=ANY(%s))
-        ORDER BY created_at,id LIMIT 1
-        """,
-        (scope.household_space_id, event_id, family_member_id, rider_id, private_ids),
-    ).fetchone()
-    return UUID(str(row["id"])) if row is not None else None
+    return _existing_source_claim(
+        connection, scope, event_id, family_member_id, [rider_id], private_ids
+    )
+
+
+def existing_private_claim(
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    event_id: UUID,
+    family_member_id: UUID,
+    private_coverage_id: UUID,
+) -> UUID | None:
+    links = tuple(
+        link
+        for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+        if link.family_member_id == family_member_id
+    )
+    rider_ids = {
+        link.rider_id for link in links if link.knowledge_coverage_id == private_coverage_id
+    }
+    private_ids = {
+        private_coverage_id,
+        *(link.knowledge_coverage_id for link in links if link.rider_id in rider_ids),
+    }
+    return _existing_source_claim(
+        connection, scope, event_id, family_member_id, list(rider_ids), list(private_ids)
+    )
 
 
 def create_guidance_claim(

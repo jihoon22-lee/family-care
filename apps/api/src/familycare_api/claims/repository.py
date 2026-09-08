@@ -21,7 +21,10 @@ from familycare_api.claims.errors import (
     ClaimRepositoryUnavailable,
     InvalidClaimTransitionError,
 )
-from familycare_api.claims.guidance_repository import existing_operational_claim
+from familycare_api.claims.guidance_repository import (
+    existing_operational_claim,
+    existing_private_claim,
+)
 from familycare_api.claims.snapshot import build_claim_snapshot
 from familycare_api.claims.state_machine import (
     InvalidClaimTransition,
@@ -708,9 +711,28 @@ class ClaimRepository:
         new_value = "NULL" if restore else "clock_timestamp()"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                if restore:
+                    # Participate in creation's predicate conflict detection too:
+                    # a row lock alone does not refresh its earlier MVCC snapshot.
+                    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    selected = connection.execute(
+                        "SELECT medical_event_id FROM claim_cases WHERE id=%s "
+                        "AND household_space_id=%s AND deleted_at IS NOT NULL",
+                        (claim_id, scope.household_space_id),
+                    ).fetchone()
+                    if selected is None:
+                        raise ClaimNotFound
+                    # Match creation's lock order: event first, then claim/source.
+                    # Historical events may remain soft-deleted; locking must not
+                    # replace the original source or require fresh analysis.
+                    connection.execute(
+                        "SELECT id FROM medical_events WHERE id=%s "
+                        "AND household_space_id=%s FOR UPDATE",
+                        (selected["medical_event_id"], scope.household_space_id),
+                    ).fetchone()
                 row = connection.execute(
                     f"""
-                    SELECT id, version FROM claim_cases
+                    SELECT * FROM claim_cases
                     WHERE id = %s AND household_space_id = %s AND deleted_at {deleted}
                     FOR UPDATE
                     """,
@@ -720,6 +742,24 @@ class ClaimRepository:
                     raise ClaimNotFound
                 if int(row["version"]) != expected_version:
                     raise VersionConflict
+                if restore:
+                    assert selected is not None
+                    if row["medical_event_id"] != selected["medical_event_id"]:
+                        raise VersionConflict
+                    lookup = (
+                        existing_operational_claim
+                        if row["rider_id"] is not None
+                        else existing_private_claim
+                    )
+                    existing = lookup(
+                        connection,
+                        scope,
+                        row["medical_event_id"],
+                        row["family_member_id"],
+                        row["rider_id"] or row["private_coverage_id"],
+                    )
+                    if existing is not None:
+                        raise ClaimInvalid
                 updated = connection.execute(
                     f"""
                     UPDATE claim_cases
@@ -732,11 +772,15 @@ class ClaimRepository:
                 ).fetchone()
                 if updated is None:
                     raise VersionConflict
-        except ClaimNotFound, VersionConflict:
+        except ClaimNotFound, VersionConflict, ClaimInvalid:
             raise
-        except psycopg.errors.UniqueViolation:
+        except (
+            psycopg.errors.UniqueViolation,
+            psycopg.errors.SerializationFailure,
+            psycopg.errors.DeadlockDetected,
+        ):
             raise ClaimInvalid from None
-        except psycopg.Error:
+        except psycopg.Error, CanonicalLinkError:
             raise ClaimRepositoryUnavailable from None
 
     @staticmethod
