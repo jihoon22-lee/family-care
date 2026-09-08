@@ -1238,6 +1238,7 @@ export interface CoverageDecisionResponse {
   indemnity_summary: IndemnitySummaryResponse;
   knowledge_snapshot_version: KnowledgeSnapshotVersionResponse;
   local_guidance?: LocalGuidanceResponse | null;
+  local_guidance_stale?: boolean | null;
   medical_event_id: string;
   policy_snapshot_at: string;
   rule_set_version: string;
@@ -1481,17 +1482,19 @@ export interface GuidanceCandidate {
 }
 
 export interface GuidanceCondition {
-  evidence: Array<GuidanceEvidence>;
+  evidence: Array<GuidanceEvidence | GuidanceSemanticEvidence>;
   reason_code: string;
   result: "MATCH" | "NO_MATCH" | "UNKNOWN";
-  rule_id: string;
+  rule_id?: string | null;
+  semantic_node_id?: string | null;
+  semantic_publication_id?: string | null;
 }
 
 export interface GuidanceEstimate {
   amount?: string | null;
   assumptions?: Array<string>;
   currency?: string | null;
-  evidence?: Array<GuidanceEvidence>;
+  evidence?: Array<GuidanceEvidence | GuidanceSemanticEvidence>;
   formula?: string | null;
   kind: "POINT" | "RANGE" | "FORMULA" | "UNAVAILABLE";
   lower?: string | null;
@@ -1514,6 +1517,25 @@ export interface GuidanceQuestion {
   reason_code: string;
 }
 
+export interface GuidanceSemanticEvidence {
+  bbox: [number, number, number, number];
+  citation_id: string;
+  document_version_id: string;
+  end: number;
+  generation_id: string;
+  kind?: "SEMANTIC_CITATION";
+  manifest_sha256: string;
+  page_end: number;
+  page_start: number;
+  publication_id: string;
+  root_node_id: string;
+  source_layer: "native" | "ocr";
+  source_node_id: string;
+  source_sha256: string;
+  start: number;
+  terms_edition_id: string;
+}
+
 export interface GuidanceSupport {
   evaluated_coverages: number;
   failure_codes?: Array<string>;
@@ -1524,7 +1546,7 @@ export interface GuidanceSupport {
 export interface GuidanceVersions {
   assumption_policy?: "document-continuity-v1";
   catalog_import_run_id?: string | null;
-  engine?: "local-guidance-v1";
+  engine?: "local-guidance-v1" | "local-guidance-v2";
   rule_import_run_id?: string | null;
   status_digest?: string | null;
 }
@@ -1869,7 +1891,7 @@ export interface LocalGuidanceResponse {
     | "INPUT_UNRESOLVED"
     | "KNOWLEDGE_PENDING";
   review_state?: "NOT_REQUESTED";
-  schema_version?: "1";
+  schema_version?: "1" | "2";
   support: GuidanceSupport;
   versions: GuidanceVersions;
 }
@@ -2492,6 +2514,8 @@ export interface StructureAcceptedResponse {
 }
 
 export interface StructuredFactInput {
+  code_system?: string | null;
+  code_version?: string | null;
   field_id:
     | "event_date"
     | "visit_date"
@@ -2512,6 +2536,8 @@ export interface StructuredFactInput {
 }
 
 export interface StructuredFactResponse {
+  code_system?: string | null;
+  code_version?: string | null;
   confidence: "high" | "medium" | "low";
   evidence_ids: Array<string>;
   fact_id: string;

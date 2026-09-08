@@ -144,6 +144,8 @@ class VerifiedClauseSource:
     terms_edition_id: UUID
     input_digest: str
     region: ClauseSourceRegion
+    document_version_id: UUID
+    generation_id: UUID
 
 
 def read_verified_clause_source(
@@ -184,7 +186,13 @@ def read_verified_clause_source(
     ):
         return None
     return VerifiedClauseSource(
-        row["id"], clause_id, clause["terms_edition_id"], row["input_digest"], region
+        row["id"],
+        clause_id,
+        clause["terms_edition_id"],
+        row["input_digest"],
+        region,
+        source["document_version_id"],
+        source["generation_id"],
     )
 
 

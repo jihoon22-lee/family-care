@@ -42,11 +42,58 @@ class GuidanceQuestion(GuidanceModel):
     reason_code: Code
 
 
+class GuidanceSemanticEvidence(GuidanceModel):
+    kind: Literal["SEMANTIC_CITATION"] = "SEMANTIC_CITATION"
+    citation_id: UUID
+    publication_id: UUID
+    document_version_id: UUID
+    terms_edition_id: UUID
+    generation_id: UUID
+    root_node_id: Annotated[str, Field(min_length=1, max_length=128)]
+    source_node_id: Annotated[str, Field(min_length=1, max_length=128)]
+    page_start: int = Field(ge=1, le=500)
+    page_end: int = Field(ge=1, le=500)
+    start: int = Field(ge=0, le=262144)
+    end: int = Field(ge=1, le=262144)
+    source_layer: Literal["native", "ocr"]
+    bbox: tuple[float, float, float, float]
+    source_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    manifest_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+    @model_validator(mode="after")
+    def valid_address(self) -> Self:
+        import math
+
+        if (
+            self.end <= self.start
+            or self.page_start != self.page_end
+            or any(not math.isfinite(n) or not 0 <= n <= 100000 for n in self.bbox)
+            or self.bbox[0] > self.bbox[2]
+            or self.bbox[1] > self.bbox[3]
+        ):
+            raise ValueError("invalid semantic citation address")
+        return self
+
+
+GuidanceEvidenceRef = GuidanceEvidence | GuidanceSemanticEvidence
+
+
 class GuidanceCondition(GuidanceModel):
-    rule_id: UUID
+    rule_id: UUID | None = None
+    semantic_publication_id: UUID | None = None
+    semantic_node_id: Annotated[str, Field(min_length=1, max_length=128)] | None = None
     result: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
     reason_code: Code
-    evidence: tuple[GuidanceEvidence, ...] = Field(max_length=64)
+    evidence: tuple[GuidanceEvidenceRef, ...] = Field(max_length=64)
+
+    @model_validator(mode="after")
+    def actual_rule_identity(self) -> Self:
+        if self.rule_id is None:
+            if self.semantic_publication_id is None or self.semantic_node_id is None:
+                raise ValueError("semantic condition requires its actual source identity")
+        elif self.semantic_publication_id is not None or self.semantic_node_id is not None:
+            raise ValueError("condition source identity is ambiguous")
+        return self
 
 
 class GuidanceEstimate(GuidanceModel):
@@ -59,7 +106,7 @@ class GuidanceEstimate(GuidanceModel):
     missing_inputs: tuple[FactPath, ...] = Field(default=(), max_length=64)
     assumptions: tuple[Code, ...] = Field(default=(), max_length=32)
     reason_code: Code
-    evidence: tuple[GuidanceEvidence, ...] = Field(default=(), max_length=64)
+    evidence: tuple[GuidanceEvidenceRef, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def amount_requires_formula_and_evidence(self) -> Self:
@@ -110,7 +157,7 @@ class GuidanceCandidate(GuidanceModel):
 
 
 class GuidanceVersions(GuidanceModel):
-    engine: Literal["local-guidance-v1"] = "local-guidance-v1"
+    engine: Literal["local-guidance-v1", "local-guidance-v2"] = "local-guidance-v1"
     assumption_policy: Literal["document-continuity-v1"] = "document-continuity-v1"
     catalog_import_run_id: UUID | None = None
     rule_import_run_id: UUID | None = None
@@ -131,7 +178,7 @@ class GuidanceSupport(GuidanceModel):
 
 
 class LocalGuidanceResponse(GuidanceModel):
-    schema_version: Literal["1"] = "1"
+    schema_version: Literal["1", "2"] = "1"
     family_member_id: UUID
     medical_event_id: UUID
     event_version: int = Field(ge=1)

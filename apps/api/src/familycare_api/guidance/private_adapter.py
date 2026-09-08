@@ -41,7 +41,7 @@ def adapt_private_guidance(context: KnowledgeDecisionContext) -> GuidanceContext
         common = {
             item.name: getattr(coverage, item.name)
             for item in fields(GuidanceCoverageInput)
-            if item.name not in {"ref", "rules", "calculation"}
+            if item.name not in {"ref", "rules", "calculation", "knowledge_incomplete"}
         }
         rules = tuple(
             GuidanceRuleInput(

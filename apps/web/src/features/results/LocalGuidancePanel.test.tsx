@@ -151,6 +151,31 @@ function show(response: CoverageDecisionResponse) {
 }
 
 describe("local guidance result", () => {
+  it("shows semantic original citations as terms and preserves distinct source references", () => {
+    const value = candidate();
+    value.conditions = [];
+    value.estimate.evidence = [1, 2].map((number) => ({
+      kind: "SEMANTIC_CITATION",
+      citation_id: `synthetic-citation-${number}`,
+      publication_id: "synthetic-publication-001",
+      document_version_id: "synthetic-document-001",
+      terms_edition_id: "synthetic-edition-001",
+      generation_id: "synthetic-generation-001",
+      root_node_id: "synthetic-root-001",
+      source_node_id: "synthetic-node-001",
+      page_start: 3,
+      page_end: 3,
+      start: number * 10,
+      end: number * 10 + 5,
+      source_layer: "native",
+      bbox: [0, 0, 10, 10],
+      source_sha256: "a".repeat(64),
+      manifest_sha256: "b".repeat(64),
+    }));
+    show(result(guidance([value])));
+    expect(screen.getAllByText(/약관.*3/)).toHaveLength(2);
+    expect(screen.queryByText(/가입 문서.*3/)).not.toBeInTheDocument();
+  });
   it.each([true, false])(
     "preserves operational claim actions when private guidance has candidates: %s",
     async (hasPrivateCandidates) => {
@@ -322,6 +347,28 @@ describe("local guidance result", () => {
       expect(screen.queryByText("Legacy Coverage")).not.toBeInTheDocument();
     },
   );
+
+  it("keeps current source guidance readable when legacy freshness is unresolved", () => {
+    show({
+      ...result({ ...guidance(), schema_version: "2" }),
+      stale: true,
+      local_guidance_stale: false,
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+  });
+
+  it("warns when the sources of a saved guidance result have changed", () => {
+    show({
+      ...result({ ...guidance(), schema_version: "2" }),
+      stale: false,
+      local_guidance_stale: true,
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "다시 분석이 필요합니다",
+    );
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+  });
 
   it("keeps the stale-result warning and keyboard reanalysis action", async () => {
     const user = userEvent.setup();

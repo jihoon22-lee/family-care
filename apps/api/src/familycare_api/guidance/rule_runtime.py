@@ -1,5 +1,7 @@
 """Evaluate source-preserving rule inputs through the existing data-only DSL."""
 
+from dataclasses import replace
+
 from familycare_api.clauses.dsl import RuleValidationError, validate_rule_document
 from familycare_api.decisions.knowledge_domain import KnowledgeFactContext
 from familycare_api.decisions.knowledge_engine import _legacy_fact_context
@@ -9,11 +11,17 @@ from familycare_api.guidance.domain import (
     GuidanceRuleEvaluation,
     GuidanceRuleInput,
 )
+from familycare_api.guidance.event_facts import CodeScope, EventFactRead, scope_code_facts
 
 
 class GuidanceRuleRuntime:
     def _evaluate_rule(
-        self, facts: KnowledgeFactContext, coverage: GuidanceCoverageInput, rule: GuidanceRuleInput
+        self,
+        facts: KnowledgeFactContext,
+        coverage: GuidanceCoverageInput,
+        rule: GuidanceRuleInput,
+        *,
+        event_read: EventFactRead | None = None,
     ) -> tuple[GuidanceRuleEvaluation, bool]:
         keys = tuple(item.citation_key for item in rule.citations)
         if (
@@ -31,6 +39,21 @@ class GuidanceRuleRuntime:
                 or validated.result_reason_code != rule.result_reason_code
             ):
                 raise RuleValidationError("RULE_METADATA_MISMATCH")
+            if rule.classification_scopes or set(validated.referenced_fields) & {
+                "MedicalEvent.diagnosis_code",
+                "MedicalEvent.procedure_code",
+                "MedicalEvent.pathology_code",
+                "MedicalEvent.anatomical_site_code",
+            }:
+                if event_read is None:
+                    return self._unknown(rule, "EVENT_CODE_SCOPE_UNVERIFIED"), False
+                facts = scope_code_facts(
+                    replace(event_read, context=facts),
+                    tuple(
+                        CodeScope(s["field"], s["code_system"], s["code_version"])
+                        for s in rule.classification_scopes
+                    ),
+                ).context
             outcome = evaluate_expression(
                 validated.expression, _legacy_fact_context(facts, coverage)
             )

@@ -10,6 +10,7 @@ from familycare_api.decisions.router import get_decision_service, router
 from familycare_api.errors import install_error_handlers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 from apps.api.tests.test_decision_integration import (
     _create_event,
@@ -75,3 +76,42 @@ def test_operational_ledger_produces_local_guidance_without_private_import(
             == 0
         )
     assert not outbound
+
+
+@pytest.mark.parametrize("status_case", ["conflict", "unreviewed", "absent"])
+def test_event_status_uncertainty_is_distinct_from_no_status_record(
+    database_url, seed, status_case
+):
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        if status_case == "conflict":
+            connection.execute(
+                "INSERT INTO policy_status_snapshots(household_space_id,rider_id,status,"
+                "effective_at,evidence_id) SELECT household_space_id,rider_id,'inactive',"
+                "effective_at,evidence_id FROM policy_status_snapshots WHERE rider_id=%s",
+                (seed.good_rider_id,),
+            )
+        elif status_case == "unreviewed":
+            # The clause evidence remains usable, but this status source cannot establish status.
+            connection.execute(
+                "UPDATE policy_status_snapshots SET evidence_id=%s WHERE rider_id=%s",
+                (seed.bad_terms_evidence_id, seed.good_rider_id),
+            )
+            connection.execute(
+                "UPDATE evidence SET review_state='NEEDS_REVIEW' WHERE id=%s",
+                (seed.bad_terms_evidence_id,),
+            )
+        else:
+            connection.execute("DELETE FROM policy_status_snapshots")
+    service = _service(database_url, seed.scope_a)
+    event = _create_event(service, seed.member_a)
+    from familycare_api.guidance.engine import _event_status
+    from familycare_api.guidance.repository import read_operational_guidance
+
+    with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
+        context = read_operational_guidance(connection, seed.scope_a, event, service.repository)
+    coverage = next(
+        item for item in context.coverages if item.ref.coverage_id == seed.good_rider_id
+    )
+    assert _event_status(event, coverage) == (
+        "DOCUMENT_CONTINUITY" if status_case == "absent" else "STATUS_UNRESOLVED"
+    )

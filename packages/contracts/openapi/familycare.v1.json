@@ -2872,6 +2872,17 @@
               }
             ]
           },
+          "local_guidance_stale": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Guidance Stale"
+          },
           "medical_event_id": {
             "format": "uuid",
             "title": "Medical Event Id",
@@ -4142,7 +4153,14 @@
         "properties": {
           "evidence": {
             "items": {
-              "$ref": "#/components/schemas/GuidanceEvidence"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GuidanceEvidence"
+                },
+                {
+                  "$ref": "#/components/schemas/GuidanceSemanticEvidence"
+                }
+              ]
             },
             "maxItems": 64,
             "title": "Evidence",
@@ -4165,13 +4183,44 @@
             "type": "string"
           },
           "rule_id": {
-            "format": "uuid",
-            "title": "Rule Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          },
+          "semantic_node_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Node Id"
+          },
+          "semantic_publication_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Publication Id"
           }
         },
         "required": [
-          "rule_id",
           "result",
           "reason_code",
           "evidence"
@@ -4222,7 +4271,14 @@
           "evidence": {
             "default": [],
             "items": {
-              "$ref": "#/components/schemas/GuidanceEvidence"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/GuidanceEvidence"
+                },
+                {
+                  "$ref": "#/components/schemas/GuidanceSemanticEvidence"
+                }
+              ]
             },
             "maxItems": 64,
             "title": "Evidence",
@@ -4388,6 +4444,135 @@
         "title": "GuidanceQuestion",
         "type": "object"
       },
+      "GuidanceSemanticEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "citation_id": {
+            "format": "uuid",
+            "title": "Citation Id",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "end": {
+            "maximum": 262144.0,
+            "minimum": 1.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "generation_id": {
+            "format": "uuid",
+            "title": "Generation Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "SEMANTIC_CITATION",
+            "default": "SEMANTIC_CITATION",
+            "title": "Kind",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "page_end": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "publication_id": {
+            "format": "uuid",
+            "title": "Publication Id",
+            "type": "string"
+          },
+          "root_node_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Root Node Id",
+            "type": "string"
+          },
+          "source_layer": {
+            "enum": [
+              "native",
+              "ocr"
+            ],
+            "title": "Source Layer",
+            "type": "string"
+          },
+          "source_node_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Node Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          },
+          "start": {
+            "maximum": 262144.0,
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "citation_id",
+          "publication_id",
+          "document_version_id",
+          "terms_edition_id",
+          "generation_id",
+          "root_node_id",
+          "source_node_id",
+          "page_start",
+          "page_end",
+          "start",
+          "end",
+          "source_layer",
+          "bbox",
+          "source_sha256",
+          "manifest_sha256"
+        ],
+        "title": "GuidanceSemanticEvidence",
+        "type": "object"
+      },
       "GuidanceSupport": {
         "additionalProperties": false,
         "properties": {
@@ -4449,8 +4634,11 @@
             "title": "Catalog Import Run Id"
           },
           "engine": {
-            "const": "local-guidance-v1",
             "default": "local-guidance-v1",
+            "enum": [
+              "local-guidance-v1",
+              "local-guidance-v2"
+            ],
             "title": "Engine",
             "type": "string"
           },
@@ -6503,8 +6691,11 @@
             "type": "string"
           },
           "schema_version": {
-            "const": "1",
             "default": "1",
+            "enum": [
+              "1",
+              "2"
+            ],
             "title": "Schema Version",
             "type": "string"
           },
@@ -9675,6 +9866,34 @@
       "StructuredFactInput": {
         "additionalProperties": false,
         "properties": {
+          "code_system": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code System"
+          },
+          "code_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
           "field_id": {
             "enum": [
               "event_date",
@@ -9723,6 +9942,34 @@
       "StructuredFactResponse": {
         "additionalProperties": false,
         "properties": {
+          "code_system": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code System"
+          },
+          "code_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code Version"
+          },
           "confidence": {
             "enum": [
               "high",

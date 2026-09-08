@@ -159,6 +159,10 @@ class DecisionService:
                 changes["structured_facts"] = {
                     item.field_id: item.value for item in request.structured_facts
                 }
+                changes["code_scopes"] = {
+                    item.field_id: (item.code_system, item.code_version)
+                    for item in request.structured_facts
+                }
         if expected_version is None:
             raise DecisionInvalid
         if facts is not None:

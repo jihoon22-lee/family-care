@@ -32,9 +32,11 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeRuleEvaluation,
 )
 from familycare_api.decisions.structuring_schemas import (
+    CodeScopeLabel,
     FactFieldId,
     OptionalQuestionResponse,
     StructuredFactResponse,
+    is_valid_code_scope,
     is_valid_structured_fact_value,
 )
 from familycare_api.guidance.models import LocalGuidanceResponse
@@ -60,6 +62,14 @@ class FactInput(StrictModel):
 class StructuredFactInput(StrictModel):
     field_id: FactFieldId
     value: Annotated[str, Field(min_length=1, max_length=160)] | bool | None
+    code_system: CodeScopeLabel | None = None
+    code_version: CodeScopeLabel | None = None
+
+    @model_validator(mode="after")
+    def code_scope_matches_field(self) -> Self:
+        if not is_valid_code_scope(self.field_id, self.value, self.code_system, self.code_version):
+            raise ValueError("code scope requires a code field and both system and version")
+        return self
 
 
 class MedicalEventCreateRequest(StrictModel):
@@ -792,6 +802,7 @@ class CoverageDecisionResponse(StrictModel):
     source_failure_codes: list[ReasonCode] = Field(max_length=32)
     assistance: AnalysisAssistanceResponse
     local_guidance: LocalGuidanceResponse | None = None
+    local_guidance_stale: bool | None = None
 
     @model_validator(mode="after")
     def guidance_matches_event_version(self) -> Self:
@@ -882,6 +893,7 @@ class CoverageDecisionResponse(StrictModel):
                 source_failure_codes=list(value.source_failure_codes),
                 assistance=AnalysisAssistanceResponse.from_domain(value.assistance),
                 local_guidance=value.local_guidance,
+                local_guidance_stale=value.local_guidance_stale,
             )
         return cls.model_validate(value)
 

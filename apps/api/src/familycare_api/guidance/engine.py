@@ -24,19 +24,19 @@ from familycare_api.decisions.knowledge_engine import (
     _CalculationState,
     _legacy_fact_context,
 )
-from familycare_api.decisions.knowledge_facts import normalize_private_event_facts
 from familycare_api.guidance.domain import (
     GuidanceCitation,
     GuidanceContext,
     GuidanceCoverageInput,
     GuidanceRuleEvaluation,
 )
+from familycare_api.guidance.event_facts import EventFactRead, build_event_facts
 from familycare_api.guidance.models import (
     Freshness,
     GuidanceCandidate,
     GuidanceCondition,
     GuidanceEstimate,
-    GuidanceEvidence,
+    GuidanceEvidenceRef,
     GuidanceQuestion,
     GuidanceSupport,
     LocalGuidanceResponse,
@@ -85,7 +85,7 @@ def _formula(node: CompiledCalculation) -> str:
 def _evidence(
     citations: tuple[GuidanceCitation, ...],
     publication_id: UUID,
-) -> tuple[GuidanceEvidence, ...]:
+) -> tuple[GuidanceEvidenceRef, ...]:
     del publication_id
     return tuple(item.evidence for item in citations if item.lineage_valid)
 
@@ -136,7 +136,13 @@ class LocalGuidanceEngine:
             or context.family_member_id != event.family_member_id
         ):
             raise ValueError("guidance scope mismatch")
-        normalized = normalize_private_event_facts(event, context.normalizers)
+        event_read = build_event_facts(
+            event,
+            context.normalizers,
+            selected_subject_terms=context.selected_subject_terms,
+            other_subject_terms=context.other_subject_terms,
+        )
+        normalized = event_read.context
         facts = KnowledgeFactContext(
             facts={**context.supporting_facts, **normalized.facts},
             audit_conflicts=normalized.audit_conflicts,
@@ -165,7 +171,9 @@ class LocalGuidanceEngine:
                     audit_conflicts=facts.audit_conflicts,
                 )
             try:
-                candidate, supported = self._coverage(event, coverage_facts, coverage)
+                candidate, supported = self._coverage(
+                    event, coverage_facts, coverage, event_read=event_read
+                )
             except ValueError, ArithmeticError:
                 candidate, supported = None, False
                 failures.append("GUIDANCE_COVERAGE_FAILED")
@@ -186,12 +194,13 @@ class LocalGuidanceEngine:
         ):
             outcome = "INPUT_UNRESOLVED"
         return LocalGuidanceResponse(
+            schema_version="2",
             family_member_id=event.family_member_id,
             medical_event_id=event.id,
             event_version=event.version,
             event_date=event.event_date,
             outcome=outcome,
-            versions=context.versions,
+            versions=context.versions.model_copy(update={"engine": "local-guidance-v2"}),
             candidates=tuple(candidates),
             support=GuidanceSupport(
                 total_coverages=len(context.coverages),
@@ -206,6 +215,8 @@ class LocalGuidanceEngine:
         event: MedicalEvent,
         facts: KnowledgeFactContext,
         coverage: GuidanceCoverageInput,
+        *,
+        event_read: EventFactRead | None = None,
     ) -> tuple[GuidanceCandidate | None, bool]:
         if (
             coverage.disposition == "NOT_APPLICABLE"
@@ -246,7 +257,7 @@ class LocalGuidanceEngine:
             current_confirmation_decision="MATCH" if freshness == "CONFIRMED_AT_EVENT" else None,
         )
         outcomes = tuple(
-            self.rule_runtime._evaluate_rule(facts, effective_coverage, rule)
+            self.rule_runtime._evaluate_rule(facts, effective_coverage, rule, event_read=event_read)
             for rule in coverage.rules
         )
         evaluations = tuple(item[0] for item in outcomes)
@@ -260,7 +271,9 @@ class LocalGuidanceEngine:
         if any(item.result == "NO_MATCH" for item in required):
             return None, True
         conditions: Literal["MATCH", "UNKNOWN"] = (
-            "UNKNOWN" if any(item.result == "UNKNOWN" for item in required) else "MATCH"
+            "UNKNOWN"
+            if coverage.knowledge_incomplete or any(item.result == "UNKNOWN" for item in required)
+            else "MATCH"
         )
         assumptions = []
         if freshness == "DOCUMENT_CONTINUITY":
@@ -301,6 +314,7 @@ class LocalGuidanceEngine:
             reason_codes=_unique(
                 ["DOCUMENTED_RELEVANT_COVERAGE"]
                 + (["OPERATIONAL_SOURCE_FIELD_CONFLICT"] if field_conflicts else [])
+                + (["SEMANTIC_KNOWLEDGE_PARTIAL"] if coverage.knowledge_incomplete else [])
                 + [item.reason_code for item in required if item.result != "MATCH"]
             ),
             assumptions=tuple(assumptions),
@@ -311,12 +325,15 @@ class LocalGuidanceEngine:
                 for path in question_paths
                 if path.startswith(("MedicalEvent.", "Receipt.", "ClaimHistory."))
             ),
-        ), not any(failed for _, failed in outcomes)
+        ), not coverage.knowledge_incomplete and not any(failed for _, failed in outcomes)
 
     @staticmethod
     def _condition(value: GuidanceRuleEvaluation) -> GuidanceCondition:
+        semantic = value.source.source_kind == "SEMANTIC_NODE"
         return GuidanceCondition(
-            rule_id=value.rule_publication_id,
+            rule_id=None if semantic else value.rule_publication_id,
+            semantic_publication_id=value.rule_publication_id if semantic else None,
+            semantic_node_id=value.source.semantic_node_id if semantic else None,
             result=value.result,
             reason_code=value.reason_code,
             evidence=_evidence(value.citations, value.rule_publication_id),
@@ -372,6 +389,19 @@ class LocalGuidanceEngine:
             [*assumptions, *(["CONDITIONS_REMAIN"] if conditions == "UNKNOWN" else [])]
         )
         evidence = _evidence(publication.citations, publication.publication_id)
+        if (
+            publication.source_currency is not None
+            and publication.source_currency != coverage.currency
+        ):
+            return GuidanceEstimate(
+                kind="FORMULA",
+                currency=publication.source_currency,
+                formula=formula,
+                missing_inputs=("Rider.currency",),
+                assumptions=estimate_assumptions,
+                reason_code="CALCULATION_CURRENCY_MISMATCH",
+                evidence=evidence,
+            )
         if missing or coverage.currency is None:
             return GuidanceEstimate(
                 kind="FORMULA",

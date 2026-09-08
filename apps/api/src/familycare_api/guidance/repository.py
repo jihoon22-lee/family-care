@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import asdict, replace
 from datetime import date
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import UUID
@@ -17,6 +18,7 @@ from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import KnowledgeStatusInterval
+from familycare_api.guidance.amount_source import read_operational_amount_source
 from familycare_api.guidance.domain import (
     GuidanceCalculationInput,
     GuidanceCitation,
@@ -25,6 +27,7 @@ from familycare_api.guidance.domain import (
     GuidanceRuleInput,
 )
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
+from familycare_api.guidance.semantic_repository import SemanticGuidanceReader
 
 if TYPE_CHECKING:
     from familycare_api.decisions.repository import DecisionRepository
@@ -91,10 +94,56 @@ def _event_statuses(
     # This is the result of an event-date ledger selection, not a new stored status interval.
     intervals = (
         ()
-        if status == "unknown"
-        else (KnowledgeStatusInterval(at, at, "MATCH", status, "REVIEWED_STATUS_DOCUMENT"),)
+        if not rows
+        else (
+            KnowledgeStatusInterval(
+                at,
+                at,
+                "UNKNOWN" if status == "unknown" else "MATCH",
+                status,
+                "REVIEWED_STATUS_DOCUMENT",
+            ),
+        )
     )
     return intervals, rows
+
+
+def read_subject_guidance(
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    event: MedicalEvent,
+) -> GuidanceContext:
+    members = connection.execute(
+        "SELECT id,display_name,internal_alias,version FROM family_members "
+        "WHERE household_space_id=%s AND deleted_at IS NULL ORDER BY id",
+        (scope.household_space_id,),
+    ).fetchall()
+    selected_terms = tuple(
+        value
+        for member in members
+        if member["id"] == event.family_member_id
+        for key in ("display_name", "internal_alias")
+        if (value := member[key])
+    )
+    other_terms = tuple(
+        value
+        for member in members
+        if member["id"] != event.family_member_id
+        for key in ("display_name", "internal_alias")
+        if (value := member[key])
+    )
+    # Names stay in transient parser inputs; snapshots retain only their aggregate digest.
+    digest = hashlib.sha256(
+        json.dumps(members, sort_keys=True, default=str, separators=(",", ":")).encode()
+    ).hexdigest()
+    return GuidanceContext(
+        household_space_id=scope.household_space_id,
+        family_member_id=event.family_member_id,
+        coverages=(),
+        selected_subject_terms=selected_terms,
+        other_subject_terms=other_terms,
+        versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
+    )
 
 
 def read_operational_guidance(
@@ -107,7 +156,9 @@ def read_operational_guidance(
         connection, scope, event.family_member_id, event.event_date
     )
     coverages = []
-    versions: list[object] = []
+    subjects = read_subject_guidance(connection, scope, event)
+    versions: list[object] = [{"subject_scope": subjects.versions.status_digest}]
+    semantics = SemanticGuidanceReader(connection, scope, event, repository.database_url)
     for snapshot in snapshots:
         row = connection.execute(
             "SELECT p.product_display,p.source_evidence_id AS policy_evidence,"
@@ -209,6 +260,22 @@ def read_operational_guidance(
         intervals, status_rows = _event_statuses(
             connection, repository, scope, snapshot.policy_id, snapshot.rider_id, event.event_date
         )
+        amount_source = read_operational_amount_source(connection, scope, snapshot.rider_id)
+        semantic = semantics.for_rider(snapshot.policy_id, snapshot.rider_id)
+        semantic_kinds = {root.benefit_kind for root in semantic.roots} - {"UNKNOWN"}
+        benefit = (
+            "FIXED"
+            if snapshot.rider_type == "fixed"
+            else "INDEMNITY"
+            if snapshot.rider_type == "indemnity"
+            else next(iter(semantic_kinds))
+            if len(semantic_kinds) == 1
+            else "UNKNOWN"
+        )
+        for root in semantic.roots:
+            rules.extend(root.rules)
+            if root.calculation is not None and root.calculation.calculation_kind == benefit:
+                calculations.append(root.calculation)
         starts = [
             d for d in (snapshot.contract_start, snapshot.rider_coverage_start) if d is not None
         ]
@@ -222,13 +289,9 @@ def read_operational_guidance(
                 ),
                 contract_label=row["product_display"],
                 coverage_label=snapshot.rider_label or "담보",
-                benefit_type="FIXED"
-                if snapshot.rider_type == "fixed"
-                else "INDEMNITY"
-                if snapshot.rider_type == "indemnity"
-                else "UNKNOWN",
-                insured_amount=snapshot.insured_amount,
-                currency=snapshot.currency,
+                benefit_type=benefit,
+                insured_amount=amount_source.amount,
+                currency=amount_source.currency,
                 contract_start=max(starts) if starts else None,
                 contract_end=min(ends) if ends else None,
                 disposition="PUBLISHED",
@@ -251,27 +314,48 @@ def read_operational_guidance(
                 status_intervals=intervals,
                 rules=tuple(rules),
                 calculation=calculations[0] if len(calculations) == 1 else None,
-                certificate_amount_decision="MATCH" if enrolled else "UNKNOWN",
-                certificate_amount_evidence_state="DIRECT" if enrolled else "UNAVAILABLE",
+                knowledge_incomplete=any(not root.complete for root in semantic.roots),
+                certificate_amount_decision=amount_source.amount_decision,
+                certificate_amount_evidence_state=(
+                    "DIRECT" if amount_source.amount_decision == "MATCH" else "UNAVAILABLE"
+                ),
             )
         )
         versions.append(
             {
                 "ref": str(snapshot.rider_id),
                 "ledger": row,
+                "snapshot": asdict(snapshot),
+                "amount_source": amount_source.digest_sha256,
                 "status": status_rows,
-                "rules": [str(rule.id) for rule in selected],
+                "rules": [
+                    {
+                        "id": str(rule.id),
+                        "document": rule.rule_document,
+                        "evidence": [asdict(e) for e in rule.evidence],
+                        "event_status": selected.status_for(rule.id),
+                    }
+                    for rule in selected
+                ],
                 "evidence": sorted(str(item.evidence_id) for item in retained),
+                "semantic": semantic.versions,
             }
         )
     digest = hashlib.sha256(
-        json.dumps(versions, sort_keys=True, default=str, separators=(",", ":")).encode()
+        json.dumps(
+            versions,
+            sort_keys=True,
+            default=lambda item: dict(item) if isinstance(item, Mapping) else str(item),
+            separators=(",", ":"),
+        ).encode()
     ).hexdigest()
     return GuidanceContext(
         household_space_id=scope.household_space_id,
         family_member_id=event.family_member_id,
         coverages=tuple(coverages),
-        versions=GuidanceVersions(status_digest=digest),
+        selected_subject_terms=subjects.selected_subject_terms,
+        other_subject_terms=subjects.other_subject_terms,
+        versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
     )
 
 
@@ -295,5 +379,38 @@ def combine_guidance_contexts(
     }
     for coverage in operational.coverages:
         key = (coverage.ref.kind, coverage.ref.coverage_id)
-        preferred.setdefault(key, coverage)
-    return replace(private, coverages=tuple(preferred.values()))
+        previous = preferred.get(key)
+        if previous is None:
+            preferred[key] = coverage
+        elif (
+            (not previous.rules or previous.disposition == "BLOCKED")
+            and coverage.rules
+            and coverage.disposition == "PUBLISHED"
+            and "NO_MATCH"
+            not in (
+                previous.enrollment_decision,
+                previous.subject_binding_decision,
+                previous.document_identity_decision,
+                previous.edition_applicability_decision,
+                previous.section_mapping_decision,
+                previous.overall_mapping_decision,
+            )
+        ):
+            preferred[key] = replace(coverage, canonical_identity=previous.canonical_identity)
+    digest = hashlib.sha256(
+        json.dumps(
+            {
+                "private": private.versions.model_dump(mode="json"),
+                "operational": operational.versions.model_dump(mode="json"),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return replace(
+        private,
+        coverages=tuple(preferred.values()),
+        selected_subject_terms=operational.selected_subject_terms,
+        other_subject_terms=operational.other_subject_terms,
+        versions=private.versions.model_copy(update={"status_digest": digest}),
+    )

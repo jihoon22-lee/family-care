@@ -41,6 +41,27 @@ _NORMALIZED_CODE_FACT_FIELDS = frozenset(
     }
 )
 _NORMALIZED_CODE_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._:-]{0,63}$")
+CodeScopeLabel = Annotated[
+    str, Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+]
+
+
+def is_valid_code_scope(field_id: str, value: object, system: object, version: object) -> bool:
+    if system is None and version is None:
+        return True
+    return (
+        field_id in _NORMALIZED_CODE_FACT_FIELDS | {"condition_class"}
+        and isinstance(value, str)
+        and bool(value)
+        and all(
+            isinstance(item, str)
+            and len(item) <= 128
+            and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", item) is not None
+            for item in (system, version)
+        )
+    )
+
+
 FactSource = Literal["user", "ai", "system"]
 FactState = Literal["confirmed", "ambiguous", "missing", "conflict"]
 FactConfidence = Literal["high", "medium", "low"]
@@ -123,6 +144,8 @@ class StructuredFactResponse(StrictModel):
     state: FactState
     confidence: FactConfidence
     evidence_ids: Annotated[list[UUID], Field(max_length=8)]
+    code_system: CodeScopeLabel | None = None
+    code_version: CodeScopeLabel | None = None
 
 
 class OptionalQuestionResponse(StrictModel):

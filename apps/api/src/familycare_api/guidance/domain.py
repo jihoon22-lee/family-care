@@ -21,13 +21,13 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeFactNormalizer,
     KnowledgeStatusInterval,
 )
-from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
+from familycare_api.guidance.models import GuidanceEvidenceRef, GuidanceVersions
 
 
 @dataclass(frozen=True, slots=True, repr=False)
 class GuidanceCitation:
     citation_key: str
-    evidence: GuidanceEvidence
+    evidence: GuidanceEvidenceRef
     lineage_valid: bool = True
 
 
@@ -42,6 +42,7 @@ class GuidanceRuleInput:
     citations: tuple[GuidanceCitation, ...]
     source_kind: Literal["PRIVATE_RULE_PUBLICATION", "OPERATIONAL_RULE_VERSION", "SEMANTIC_NODE"]
     semantic_node_id: str | None = None
+    classification_scopes: tuple[Mapping[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -54,6 +55,7 @@ class GuidanceCalculationInput:
     citations: tuple[GuidanceCitation, ...]
     source_kind: Literal["PRIVATE_RULE_PUBLICATION", "OPERATIONAL_RULE_VERSION", "SEMANTIC_NODE"]
     semantic_node_id: str | None = None
+    source_currency: str | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -89,6 +91,7 @@ class GuidanceCoverageInput:
     certificate_amount_evidence_state: KnowledgeCertificateAmountEvidenceState = "UNAVAILABLE"
     claim_history_counted_occurrence: KnowledgeFact | None = None
     canonical_identity: CanonicalCoverageIdentity | None = None
+    knowledge_incomplete: bool = False
 
     def __post_init__(self) -> None:
         if (
@@ -111,6 +114,8 @@ class GuidanceContext:
     normalizers: tuple[KnowledgeFactNormalizer, ...] = ()
     supporting_facts: Mapping[str, KnowledgeFact] = field(default_factory=dict)
     receipt_currency: str | None = None
+    selected_subject_terms: tuple[str, ...] = ()
+    other_subject_terms: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.household_space_id.int or not self.family_member_id.int:

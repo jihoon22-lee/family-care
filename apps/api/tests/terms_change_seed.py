@@ -54,9 +54,10 @@ _POLICY_LINES = (
 )
 
 
-def retain_terms_change_policy(url: str, job: Any) -> PolicyRangeWork:
+def retain_terms_change_policy(url: str, job: Any, *, sample_amount: int = 317) -> PolicyRangeWork:
     """Retain a policy and two separate rider rows in one native range batch."""
-    _store_words(url, job, _words(list(_POLICY_LINES)))
+    lines = [line.replace("317", str(sample_amount)) for line in _POLICY_LINES]
+    _store_words(url, job, _words(lines))
     repository = PolicyRangeRepository(url)
     work = repository.next(job, WORKER, sensitive_terms=("Family Member A",))
     assert work is not None
@@ -80,7 +81,7 @@ def retain_terms_change_policy(url: str, job: Any) -> PolicyRangeWork:
             ),
         )
     ]
-    for name, amount in (("Sample Rider", 317), ("Another Rider", 619)):
+    for name, amount in (("Sample Rider", sample_amount), ("Another Rider", 619)):
         evidence = evidence_by_text[f"{name} sum assured: {amount} KRW"]
         rider_fields: tuple[tuple[PolicyCandidateFieldId, str | int], ...] = (
             ("rider_name", name),

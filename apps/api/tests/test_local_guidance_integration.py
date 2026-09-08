@@ -218,3 +218,60 @@ def test_upgrade_preserves_a_pre_guidance_result_without_recalculating_it(
     finally:
         if not upgraded:
             command.upgrade(config, "head")
+
+
+def test_private_source_fallback_preserves_other_family_member_scope(
+    database_url, tmp_path, monkeypatch
+):
+    from apps.api.tests import test_private_knowledge_decision_integration as fixtures
+    from apps.api.tests.private_knowledge_publication_fixtures import mutate_publication_jsonl
+
+    original_writer = fixtures.write_synthetic_rule_publication_package
+
+    def admission_package(path):
+        root = original_writer(path)
+
+        def admission_rule(row):
+            row["rule_document"]["input_field_paths"] = ["MedicalEvent.admission_days"]
+            row["rule_document"]["expression"] = {
+                "op": "range",
+                "field": "MedicalEvent.admission_days",
+                "value": {"min": 1, "max": 365},
+                "unit": "days",
+            }
+
+        mutate_publication_jsonl(root, "rule-publications.jsonl", admission_rule)
+        return root
+
+    monkeypatch.setattr(fixtures, "write_synthetic_rule_publication_package", admission_package)
+    seed = _seed(database_url)
+    _seed_private_publication(database_url, seed, tmp_path)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
+            "VALUES (%s,'Synthetic Sibling','synthetic-sibling')",
+            (seed.scope_a.household_space_id,),
+        )
+
+    def unavailable(*args, **kwargs):
+        raise ValueError("SYNTHETIC_OPERATIONAL_SOURCE_UNAVAILABLE")
+
+    monkeypatch.setattr(
+        "familycare_api.decisions.repository.read_operational_guidance", unavailable
+    )
+    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    for text, expected_count in (
+        ("Synthetic Sibling는 5일 입원했습니다.", 0),
+        ("5일 입원했습니다.", 1),
+    ):
+        event = service.create_medical_event(
+            family_member_id=seed.member_a,
+            mode="post_treatment",
+            situation=text,
+            event_date=date(2025, 6, 15),
+            facts={},
+        )
+        result = service.analyze_medical_event(event.id)
+        assert result.local_guidance is not None
+        assert len(result.local_guidance.candidates) == expected_count
+        assert "OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE" in result.source_failure_codes

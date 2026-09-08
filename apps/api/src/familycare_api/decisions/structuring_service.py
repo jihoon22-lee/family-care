@@ -31,6 +31,8 @@ class StructuredFact:
     state: FactState
     confidence: FactConfidence
     evidence_ids: tuple[UUID, ...] = ()
+    code_system: str | None = None
+    code_version: str | None = None
 
 
 @dataclass(frozen=True)

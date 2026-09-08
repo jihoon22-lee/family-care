@@ -24,6 +24,7 @@ from familycare_api.decisions.structuring_schemas import (
     FactState,
     StructuringErrorCode,
     StructuringJobState,
+    is_valid_code_scope,
     is_valid_structured_fact_value,
 )
 from familycare_api.decisions.structuring_service import (
@@ -255,6 +256,10 @@ def _facts(value: object) -> tuple[StructuredFact, ...]:
                 or not isinstance(raw_evidence, list)
                 or len(raw_evidence) > 8
                 or not is_valid_structured_fact_value(field_id, raw_value)
+                or not is_valid_code_scope(
+                    field_id, raw_value, raw.get("code_system"), raw.get("code_version")
+                )
+                or (raw.get("code_system") is not None and source != "user")
             ):
                 raise ValueError
             result.append(
@@ -266,6 +271,8 @@ def _facts(value: object) -> tuple[StructuredFact, ...]:
                     state=cast(FactState, state),
                     confidence=cast(FactConfidence, confidence),
                     evidence_ids=tuple(UUID(str(item)) for item in raw_evidence),
+                    code_system=cast(str | None, raw.get("code_system")),
+                    code_version=cast(str | None, raw.get("code_version")),
                 )
             )
     except KeyError, TypeError, ValueError:
@@ -331,6 +338,8 @@ def _merge_user_overrides(
     current_facts: object,
     current_questions: object,
     overrides: Mapping[FactFieldId, str | bool | None],
+    *,
+    code_scopes: Mapping[FactFieldId, tuple[str | None, str | None]] | None = None,
 ) -> tuple[dict[str, dict[str, object]], list[dict[str, str]], tuple[str, ...], bool]:
     """Create a user-owned projection while preserving the prior version as parent."""
 
@@ -344,6 +353,11 @@ def _merge_user_overrides(
             "state": fact.state,
             "confidence": fact.confidence,
             "evidence_ids": [str(item) for item in fact.evidence_ids],
+            **(
+                {"code_system": fact.code_system, "code_version": fact.code_version}
+                if fact.code_system is not None
+                else {}
+            ),
         }
         for fact in _facts(current_facts)
     }
@@ -358,6 +372,9 @@ def _merge_user_overrides(
             raise DecisionInvalid
         if not is_valid_structured_fact_value(field_id, value):
             raise DecisionInvalid
+        system, version = (code_scopes or {}).get(field_id, (None, None))
+        if not is_valid_code_scope(field_id, value, system, version):
+            raise DecisionInvalid
         previous = facts.get(field_id)
         if previous is not None and previous.get("value") != value:
             conflict = True
@@ -368,6 +385,7 @@ def _merge_user_overrides(
             "state": "missing" if value is None else "confirmed",
             "confidence": "high",
             "evidence_ids": [],
+            **({"code_system": system, "code_version": version} if system is not None else {}),
         }
         changed.append(field_id)
     changed_set = set(changed)

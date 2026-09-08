@@ -869,6 +869,7 @@ def validate_openapi() -> list[str]:
         "source_failure_codes",
         "assistance",
         "local_guidance",
+        "local_guidance_stale",
     }
     if set(decision_response.get("properties", {})) != expected_decision_fields:
         errors.append("coverage decision response fields drifted from v2")
