@@ -32,13 +32,15 @@ _ERROR_CODES = {
     "TERMS_STRUCTURING_INVALID",
     "TERMS_PROVIDER_RETRYABLE",
     "TERMS_PROVIDER_FAILED",
+    "TERMS_PROVIDER_INFLIGHT",
     "TERMS_LEASE_EXHAUSTED",
 }
+_MAINTENANCE_LIMIT = 32
 _CLEAR_LEASE = "lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,heartbeat_at=NULL"
 _DUE = """attempts<3 AND available_at<=clock_timestamp() AND (
     state IN ('queued','retryable_failed') OR
     (state='running' AND lease_expires_at<=clock_timestamp()) OR
-    (state='paused' AND (error_code='TERMS_PROVIDER_DAILY_BUDGET' OR
+    (state='paused' AND (error_code IN ('TERMS_PROVIDER_DAILY_BUDGET','TERMS_PROVIDER_INFLIGHT') OR
       (%s AND error_code IN ('TERMS_STRUCTURING_DISABLED','TERMS_PROVIDER_UNCONFIGURED')))))"""
 
 
@@ -274,6 +276,7 @@ class TermsSemanticJobQueue:
         self.database_url = psycopg_database_url(database_url)
 
     def _maintenance(self) -> None:
+        # Bound cleanup work per tick; cancelled/failed rows leave the next batch.
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             rows = connection.execute(
                 "SELECT id,household_space_id,terms_edition_id FROM terms_semantic_jobs "
@@ -283,7 +286,8 @@ class TermsSemanticJobQueue:
                 "OR privacy_digest IS DISTINCT FROM "
                 "terms_semantic_privacy_digest(household_space_id) "
                 "OR (state='running' AND attempts=3 AND lease_expires_at<=clock_timestamp())) "
-                "ORDER BY household_space_id,id"
+                "ORDER BY household_space_id,id LIMIT %s",
+                (_MAINTENANCE_LIMIT,),
             ).fetchall()
         for metadata in rows:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
@@ -516,7 +520,11 @@ class TermsSemanticJobQueue:
                         error_code,
                         int(pause),
                         daily,
-                        0 if pause else min(60, 5 * 2 ** (job.attempts - 1)),
+                        5
+                        if pause and error_code == "TERMS_PROVIDER_INFLIGHT"
+                        else 0
+                        if pause
+                        else min(60, 5 * 2 ** (job.attempts - 1)),
                         job.id,
                     ),
                 ).fetchone()

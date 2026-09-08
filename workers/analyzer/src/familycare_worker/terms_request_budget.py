@@ -42,6 +42,33 @@ _HEX = re.compile(r"[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
 
 
+_LEASE_SQL = (
+    "j.id=%s AND j.household_space_id=%s AND j.terms_edition_id=%s "
+    "AND j.document_version_id=%s AND j.state='running' AND j.lease_owner=%s "
+    "AND j.lease_token=%s AND j.attempts=%s AND j.input_digest=%s AND j.privacy_digest=%s "
+    "AND j.lease_expires_at>clock_timestamp()"
+)
+
+
+def _lease_values(job: TermsSemanticJobRecord, worker_id: str) -> tuple[object, ...]:
+    return (
+        job.id,
+        job.household_space_id,
+        job.terms_edition_id,
+        job.document_version_id,
+        worker_id,
+        job.lease_token,
+        job.attempts,
+        job.input_digest,
+        job.privacy_digest,
+    )
+
+
+class TermsRequestInFlight(ProviderUnavailableError):
+    def __init__(self) -> None:
+        ProviderBoundaryError.__init__(self, "TERMS_PROVIDER_INFLIGHT")
+
+
 class TermsBudgetExhausted(ProviderRateLimitError):
     def __init__(self, scope: Literal["document", "daily"]) -> None:
         if scope not in ("document", "daily"):
@@ -104,9 +131,18 @@ class TermsRequestBudget:
                     (document_id, job.household_space_id, fingerprint),
                 ).fetchone()
                 if cached is not None:
-                    return _response(
+                    response = _response(
                         ProviderResponse(cached["response_json"], cached["request_id"])
                     )
+                    if (
+                        connection.execute(
+                            "SELECT 1 FROM terms_semantic_jobs j WHERE " + _LEASE_SQL,
+                            _lease_values(job, worker_id),
+                        ).fetchone()
+                        is None
+                    ):
+                        raise ProviderUnavailableError
+                    return response
                 connection.execute(
                     "UPDATE policy_provider_requests SET state='FAILED' WHERE document_id=%s "
                     "AND fingerprint=%s AND state='RESERVED' AND expires_at<=clock_timestamp()",
@@ -126,7 +162,7 @@ class TermsRequestBudget:
                 ).fetchone()
                 assert counts is not None
                 if busy:
-                    error = ProviderUnavailableError()
+                    error = TermsRequestInFlight()
                 elif counts["document_requests"] >= self.per_document:
                     error = TermsBudgetExhausted("document")
                 elif counts["daily_requests"] >= self.daily:
@@ -134,11 +170,15 @@ class TermsRequestBudget:
                 else:
                     reservation = connection.execute(
                         "INSERT INTO policy_provider_requests(terms_job_id,document_id,fingerprint,"
-                        "state) VALUES(%s,%s,%s,'RESERVED') RETURNING id",
-                        (job.id, document_id, fingerprint),
+                        "state) SELECT j.id,%s,%s,'RESERVED' FROM terms_semantic_jobs j WHERE "
+                        + _LEASE_SQL
+                        + " RETURNING id",
+                        (document_id, fingerprint, *_lease_values(job, worker_id)),
                     ).fetchone()
-                    assert reservation is not None
-                    result = reservation["id"]
+                    if reservation is None:
+                        error = ProviderUnavailableError()
+                    else:
+                        result = reservation["id"]
             # Preserve expired reservations as FAILED even when the cap rejects retry.
             if error is not None:
                 raise error
@@ -162,6 +202,7 @@ class BudgetedTermsProvider:
     ) -> None:
         self.provider, self.budget, self.job, self.worker_id = provider, budget, job, worker_id
         self.exhausted_scope: Literal["document", "daily"] | None = None
+        self.waiting_for_request = False
 
     def complete(
         self,
@@ -172,6 +213,7 @@ class BudgetedTermsProvider:
         input_payload: Mapping[str, object],
     ) -> ProviderResponse:
         self.exhausted_scope = None
+        self.waiting_for_request = False
         if (
             not isinstance(model, str)
             or _IDENTIFIER.fullmatch(model) is None
@@ -208,6 +250,9 @@ class BudgetedTermsProvider:
         ).hexdigest()
         try:
             reserved = self.budget.reserve(self.job, self.worker_id, fingerprint)
+        except TermsRequestInFlight:
+            self.waiting_for_request = True
+            raise
         except TermsBudgetExhausted as error:
             self.exhausted_scope = error.scope
             raise

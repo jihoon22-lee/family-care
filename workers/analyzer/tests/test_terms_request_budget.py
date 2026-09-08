@@ -250,3 +250,101 @@ def test_failed_policy_reservation_consumes_the_same_terms_document_limit(terms_
         TermsRequestBudget(url, per_document=1).reserve(terms_job, "worker-a", "a" * 64)
     assert failure.value.scope == "document"
     assert counts(url) == {"FAILED": 1}
+
+
+@pytest.mark.parametrize("cached", [False, True])
+def test_lease_must_still_be_live_at_reservation_or_cache_return(
+    terms_context, monkeypatch, cached
+):
+    import time
+
+    from familycare_worker import terms_request_budget
+
+    url, _, _, _ = terms_context
+    job = TermsSemanticJobQueue(url).claim("worker-a")
+    budget = TermsRequestBudget(url)
+    fingerprint = "a" * 64
+    if cached:
+        reservation = budget.reserve(job, "worker-a", fingerprint)
+        budget.finish(reservation, ProviderResponse({"synthetic": True}, "synthetic-request"))
+    original_owned = terms_request_budget._owned
+
+    def slow_owned(connection, owned_job, worker_id):
+        result = original_owned(connection, owned_job, worker_id)
+        connection.execute(
+            "UPDATE terms_semantic_jobs SET lease_expires_at="
+            "clock_timestamp()+interval '50 milliseconds' WHERE id=%s",
+            (owned_job.id,),
+        )
+        time.sleep(0.1)
+        return result
+
+    monkeypatch.setattr(terms_request_budget, "_owned", slow_owned)
+    with pytest.raises(ProviderUnavailableError):
+        budget.reserve(job, "worker-a", fingerprint)
+    assert counts(url) == ({"SUCCEEDED": 1} if cached else {})
+
+
+def test_inflight_wait_preserves_retries_then_reuses_the_completed_request(terms_context):
+    from threading import Event
+
+    url, scope, edition, _ = terms_context
+    queue = TermsSemanticJobQueue(url)
+    first, other = queue.claim("worker-a"), queue.claim("worker-a")
+    queue.pause(other, "worker-a", "TERMS_PROVIDER_DOCUMENT_BUDGET")
+    started, release = Event(), Event()
+
+    class DelayedProvider(FakeProvider):
+        def complete(self, **kwargs):
+            started.set()
+            assert release.wait(5)
+            return super().complete(**kwargs)
+
+    raw = DelayedProvider()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        old_result = executor.submit(run, wrapper(url, first, raw), first)
+        try:
+            assert started.wait(5)
+            with psycopg.connect(_psycopg_url(url)) as connection:
+                connection.execute(
+                    "UPDATE terms_editions SET version=version+1 WHERE id=%s", (edition,)
+                )
+            plan = TermsSemanticRepository(url).source_plan(scope, edition)
+            primary_label = next(
+                r.label
+                for r in first.envelope.regions
+                if r.region_id in first.envelope.primary_region_ids
+            )
+            primary = next(
+                r.region_id for r in plan.snapshot.layout.regions if r.label == primary_label
+            )
+            request = TermsSemanticWorkRepository(url).enqueue(scope, edition, (primary,))
+            waiting = queue.claim("worker-a")
+            assert waiting.id == request.job_id
+            next_provider = wrapper(url, waiting)
+            with pytest.raises(ProviderUnavailableError):
+                run(next_provider, waiting)
+            assert next_provider.waiting_for_request
+            assert next_provider.exhausted_scope is None
+            queue.pause(waiting, "worker-a", "TERMS_PROVIDER_INFLIGHT")
+            paused = queue.get_job(waiting.id)
+            assert paused.attempts == 0 and paused.state == "paused"
+            assert queue.claim("worker-a") is None
+            assert counts(url) == {"RESERVED": 1}
+        finally:
+            release.set()
+            old_result.result(timeout=5)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE terms_semantic_jobs SET available_at=clock_timestamp() WHERE id=%s",
+            (waiting.id,),
+        )
+    resumed = queue.claim("worker-a")
+    assert resumed.id == waiting.id and resumed.attempts == 1
+    cached_provider = wrapper(url, resumed)
+    graph, _ = run(cached_provider, resumed)
+    queue.complete(resumed, "worker-a", graph)
+    assert not cached_provider.provider.calls
+    assert len(raw.calls) == 1 and counts(url) == {"SUCCEEDED": 1}
+    assert queue.get_job(first.id).state == "cancelled"
+    assert queue.get_job(resumed.id).state == "succeeded"
