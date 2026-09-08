@@ -5,7 +5,8 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
@@ -20,7 +21,10 @@ from familycare_api.claims.schemas import ClaimCaseResponse
 from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.repository import DecisionRepository
+from familycare_api.decisions.schemas import MedicalEventUpdateRequest
 from familycare_api.decisions.service import DecisionService
+from familycare_api.guidance.private_adapter import adapt_private_guidance
+from familycare_api.guidance.repository import read_operational_guidance
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 from familycare_api.insurance_reconciliation.source_bindings import (
     KnowledgeSourceBindingRepository,
@@ -216,11 +220,21 @@ def test_snapshot_insert_failure_rolls_back_claim_and_status_before_retry(
     _assert_persisted_counts(source, 1)
 
 
-def test_legacy_and_guidance_requests_reuse_private_claim_after_verified_alias_link(
+@dataclass(frozen=True, repr=False)
+class LinkedPrivateClaim:
+    saved: SavedGuidanceSource
+    service: DecisionService
+    original: ClaimCaseResponse
+    linked_run_id: UUID
+    operational_ref: CanonicalCoverageRef
+
+
+@pytest.fixture()
+def linked_private_claim(
     request: pytest.FixtureRequest,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+) -> Iterator[LinkedPrivateClaim]:
     # Reuse the real native enrollment + published private package fixture sequence
     # from test_canonical_links_integration; never fabricate a verified link row.
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -316,16 +330,151 @@ def test_legacy_and_guidance_requests_reuse_private_claim_after_verified_alias_l
         assert selected.canonical_identity is not None
         assert selected.ref.kind == "OPERATIONAL_RIDER"
         assert private.ref in selected.canonical_identity.source_refs
-        claims = ClaimRepository(url)
-        modern = claims.create_guidance_claim_case(
-            scope, event.id, run_id=linked.run_id, expected_event_version=1, coverage=selected.ref
-        )
-        legacy = claims.create_claim_case(scope, event.id, rider_id=selected.ref.coverage_id)
-        assert modern["id"] == legacy["id"] == original.id
-        assert modern["snapshot"]["snapshot_sha256"] == original.snapshot.snapshot_sha256
-        assert legacy["snapshot"]["snapshot_sha256"] == original.snapshot.snapshot_sha256
-        _assert_persisted_counts(saved, 1)
+        yield LinkedPrivateClaim(saved, service, original, linked.run_id, selected.ref)
     finally:
         with psycopg.connect(_psycopg_url(url)) as connection:
             connection.execute("TRUNCATE medical_events,private_knowledge_import_runs CASCADE")
             connection.execute("DELETE FROM app_users WHERE id=%s", (ACTOR_ID,))
+
+
+def test_legacy_and_guidance_requests_reuse_private_claim_after_verified_alias_link(
+    linked_private_claim: LinkedPrivateClaim,
+) -> None:
+    linked = linked_private_claim
+    saved = linked.saved
+    claims = ClaimRepository(saved.url)
+    modern = claims.create_guidance_claim_case(
+        saved.scope,
+        saved.event_id,
+        run_id=linked.linked_run_id,
+        expected_event_version=1,
+        coverage=linked.operational_ref,
+    )
+    legacy = claims.create_claim_case(
+        saved.scope,
+        saved.event_id,
+        rider_id=linked.operational_ref.coverage_id,
+    )
+    assert modern["id"] == legacy["id"] == linked.original.id
+    assert modern["snapshot"]["snapshot_sha256"] == linked.original.snapshot.snapshot_sha256
+    assert legacy["snapshot"]["snapshot_sha256"] == linked.original.snapshot.snapshot_sha256
+    _assert_persisted_counts(saved, 1)
+
+
+def test_private_payment_reaches_both_verified_alias_readers_with_event_and_family_scope(
+    linked_private_claim: LinkedPrivateClaim,
+) -> None:
+    linked = linked_private_claim
+    saved, service = linked.saved, linked.service
+    original_event = service.get_medical_event(saved.event_id)
+    with psycopg.connect(_psycopg_url(saved.url)) as connection:
+        other_member = connection.execute(
+            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
+            "VALUES (%s,'Synthetic Other Member','synthetic-other-member') RETURNING id",
+            (saved.scope.household_space_id,),
+        ).fetchone()[0]
+
+    def event_on(day: int, member: UUID = original_event.family_member_id):
+        return service.create_medical_event(
+            family_member_id=member,
+            mode="post_treatment",
+            situation="Synthetic sample category phrase follow-up.",
+            event_date=date(2025, 6, day),
+            facts={"MedicalEvent.classification": "sample_category"},
+            confirmation={"MedicalEvent.classification": "user"},
+        )
+
+    future = event_on(21)
+    earlier = event_on(19)
+    other_family = event_on(21, other_member)
+
+    def contexts(event):
+        with psycopg.connect(_psycopg_url(saved.url), row_factory=dict_row) as connection:
+            operational = read_operational_guidance(
+                connection, saved.scope, event, service.repository
+            )
+            private_read = service.repository.knowledge_repository.read_context(
+                connection,
+                saved.scope,
+                event,
+            )
+            return operational, (
+                adapt_private_guidance(private_read.context)
+                if private_read.context is not None
+                else None
+            )
+
+    def counts(event):
+        operational, private = contexts(event)
+        assert private is not None
+        operational_coverage = next(
+            c for c in operational.coverages if c.ref == linked.operational_ref
+        )
+        private_coverage = next(c for c in private.coverages if c.ref == saved.ref)
+        return {
+            name: None
+            if coverage.claim_history_counted_occurrence is None
+            else coverage.claim_history_counted_occurrence.value
+            for name, coverage in (
+                ("operational", operational_coverage),
+                ("private", private_coverage),
+            )
+        }
+
+    absent = {"operational": None, "private": None}
+    assert counts(future) == absent
+    before_contexts = contexts(future)
+    before_result = service.analyze_medical_event(future.id)
+    assert before_result.local_guidance is not None
+    assert service.get_decision_result(future.id, 1).local_guidance_stale is False
+    original_hash = linked.original.snapshot.snapshot_sha256
+    claims = ClaimRepository(saved.url)
+    submitted = claims.transition_claim(
+        saved.scope,
+        linked.original.id,
+        target_status="submitted",
+        expected_version=1,
+        occurred_at=datetime(2025, 6, 17, tzinfo=UTC),
+        metadata={},
+    )
+    assert counts(future) == absent
+    assert service.get_decision_result(future.id, 1).local_guidance_stale is False
+    paid = claims.transition_claim(
+        saved.scope,
+        linked.original.id,
+        target_status="paid",
+        expected_version=submitted["version"],
+        occurred_at=datetime(2025, 6, 20, tzinfo=UTC),
+        metadata={"amount": Decimal("0.5"), "currency": "KRW", "payment_date": date(2025, 6, 20)},
+    )
+    assert paid["snapshot"]["snapshot_sha256"] == original_hash
+    assert counts(future) == {"operational": 1, "private": 1}
+    assert counts(earlier) == absent
+    assert counts(original_event) == absent
+    for context in contexts(other_family):
+        assert context is None or all(
+            coverage.claim_history_counted_occurrence is None for coverage in context.coverages
+        )
+    after_contexts = contexts(future)
+    for before, after in zip(before_contexts, after_contexts, strict=True):
+        assert before is not None and after is not None
+        assert before.versions.status_digest != after.versions.status_digest
+    historical = service.get_decision_result(future.id, 1)
+    assert historical.local_guidance_stale is True
+    assert historical.local_guidance == before_result.local_guidance
+    # Date filtering alone must not satisfy the same-event exclusion assertion.
+    # A later event-date correction still cannot count this event's own payment.
+    corrected_current = service.update_medical_event(
+        saved.event_id,
+        MedicalEventUpdateRequest(expected_version=1, event_date=date(2025, 6, 25)),
+    )
+    assert counts(corrected_current) == absent
+    assert claims.get_claim_case(saved.scope, linked.original.id)["snapshot"][
+        "snapshot_sha256"
+    ] == (original_hash)
+    with psycopg.connect(_psycopg_url(saved.url)) as connection:
+        assert connection.execute(
+            "SELECT rider_id,private_coverage_id,counted_occurrence FROM claim_history "
+            "WHERE medical_event_id=%s",
+            (saved.event_id,),
+        ).fetchone() == (None, saved.ref.coverage_id, True)
