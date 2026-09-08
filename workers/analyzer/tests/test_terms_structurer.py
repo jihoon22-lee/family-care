@@ -515,3 +515,144 @@ def test_cache_fingerprint_tracks_instruction_text_independently_of_revision(mon
     )
     assert revision == terms_structurer.PROMPT_REVISION
     assert original != terms_structurer_fingerprint(envelope=envelope(), model="synthetic-model")
+
+
+def privacy_envelope(lines, *, label="Article 1"):
+    original = envelope().model_dump()
+    template = original["regions"][0]["citations"][0]
+    original["regions"][0]["label"] = label
+    original["regions"][0]["citations"] = []
+    for index, text in enumerate(lines):
+        citation = deepcopy(template)
+        citation.update(
+            citation_id=str(UUID(int=400 + index, version=4)),
+            node_id=f"synthetic-privacy-node-{index}",
+            text=text,
+            end=citation["start"] + len(text),
+        )
+        original["regions"][0]["citations"].append(citation)
+    return SemanticWorkEnvelope.model_validate(original)
+
+
+def test_private_names_contacts_and_labels_are_minimized_then_originals_restored(caplog):
+    text = (
+        "Admin A and Family Member B use Synthetic Relative B.\n"
+        "Email: admin-a@example.invalid; Phone: 010-0000-0000\n"
+        "Policy number: SYNTHETIC-POLICY-001\n"
+        "Address: Synthetic Sample Road 100\n"
+        "Date of birth: 2000-01-01\n"
+        "Insured amount: KRW 12345; payable admission days: 5"
+    )
+    original = privacy_envelope([text], label="Article 1 - Family Member B")
+    provider = FakeProvider()
+    graph, _ = structure_terms_region(
+        envelope=original,
+        provider=provider,
+        model="synthetic-model",
+        sensitive_terms=("Admin A", "Family Member B", "Synthetic Relative B"),
+    )
+    transmitted = json.dumps(provider.calls[0]["input_payload"])
+    for private_value in (
+        "Admin A",
+        "Family Member B",
+        "Synthetic Relative B",
+        "admin-a@example.invalid",
+        "010-0000-0000",
+        "SYNTHETIC-POLICY-001",
+        "Synthetic Sample Road 100",
+        "2000-01-01",
+    ):
+        assert private_value not in transmitted
+    assert "KRW 12345" in transmitted and "payable admission days: 5" in transmitted
+    assert graph.citations[0] == original.regions[0].citations[0]
+    assert graph.nodes[0].statement == text
+    assert not caplog.records
+
+
+def test_format_privacy_spans_are_resolved_before_splitting_citations():
+    original = privacy_envelope(
+        [
+            "Policyholder:",
+            "Admin A",
+            "Policy number:",
+            "SYNTHETIC-POLICY-001",
+            "Address:",
+            "Synthetic Sample Road 100",
+            "Date of birth:",
+            "2000-01-01",
+            "Email:",
+            "admin-a@example.invalid",
+            "Phone:",
+            "010-0000-0000",
+            "Insured amount: KRW 12345",
+            "The maximum is 5 payable days.",
+        ]
+    )
+    provider = FakeProvider()
+    structure_terms_region(envelope=original, provider=provider, model="synthetic-model")
+    transmitted = json.dumps(provider.calls[0]["input_payload"])
+    for private_value in (
+        "Admin A",
+        "SYNTHETIC-POLICY-001",
+        "Synthetic Sample Road 100",
+        "2000-01-01",
+        "admin-a@example.invalid",
+        "010-0000-0000",
+    ):
+        assert private_value not in transmitted
+    assert "KRW 12345" in transmitted and "The maximum is 5 payable days." in transmitted
+
+
+def test_privacy_minimization_never_clips_original_long_statements():
+    text = "Synthetic benefit context. " * 25 + "The maximum is 5 payable days."
+    provider = FakeProvider()
+    original = privacy_envelope([text])
+    graph, _ = structure_terms_region(envelope=original, provider=provider, model="synthetic-model")
+    assert provider.calls[0]["input_payload"]["regions"][0]["citations"][0]["text"] == text
+    assert graph.citations[0].text == text
+
+
+@pytest.mark.parametrize(
+    "terms",
+    [
+        tuple(f"Synthetic Member {i}" for i in range(17)),
+        ("Admin A", "Admin A"),
+        (" Admin A",),
+        ("A",),
+        (123,),
+        None,
+    ],
+)
+def test_invalid_privacy_terms_fail_before_provider_without_logging(terms, caplog):
+    provider = FakeProvider()
+    with pytest.raises(ProviderValidationError) as failure:
+        structure_terms_region(
+            envelope=envelope(), provider=provider, model="synthetic-model", sensitive_terms=terms
+        )
+    assert str(failure.value) == "TERMS_STRUCTURING_INVALID"
+    assert not provider.calls and not caplog.records
+
+
+def test_privacy_expansion_cannot_exceed_total_text_cap():
+    provider = FakeProvider()
+    original = privacy_envelope(["AB " * 500] * 3)
+    with pytest.raises(ProviderValidationError):
+        structure_terms_region(
+            envelope=original, provider=provider, model="synthetic-model", sensitive_terms=("AB",)
+        )
+    assert not provider.calls
+
+
+def test_cache_fingerprint_changes_with_actual_minimization_and_minimizer_revision(monkeypatch):
+    from familycare_worker.ai import terms_structurer
+
+    original = privacy_envelope(["Admin A - synthetic benefit context."])
+    plain = terms_structurer_fingerprint(envelope=original, model="synthetic-model")
+    private = terms_structurer_fingerprint(
+        envelope=original, model="synthetic-model", sensitive_terms=("Admin A",)
+    )
+    assert plain != private
+    monkeypatch.setattr(terms_structurer, "MINIMIZATION_REVISION", "synthetic-new-minimizer")
+    assert private != terms_structurer_fingerprint(
+        envelope=original, model="synthetic-model", sensitive_terms=("Admin A",)
+    )

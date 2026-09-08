@@ -9,13 +9,18 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 from pydantic import ValidationError
 
+from familycare_worker.ai.minimizer import (
+    MINIMIZATION_REVISION,
+    EvidenceMinimizationError,
+    SourceWindowMinimizer,
+)
 from familycare_worker.ai.provider import (
     AiProvider,
     ProviderConfigurationError,
@@ -94,7 +99,31 @@ def terms_structurer_schema() -> dict[str, Any]:
     return TermsSemanticKnowledge.model_json_schema()
 
 
-def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
+def _privacy_windows(
+    envelope: SemanticWorkEnvelope, sensitive_terms: Sequence[str]
+) -> dict[tuple[str, str], str]:
+    """Resolve label/value privacy spans across supplied source lines before slicing."""
+    if isinstance(sensitive_terms, str | bytes) or not isinstance(sensitive_terms, Sequence):
+        raise TermsStructuringInvalid
+    fragments: list[str] = []
+    windows: dict[tuple[str, str], tuple[int, int]] = {}
+    cursor = 0
+    for region in envelope.regions:
+        for key, value in [
+            (("label", region.region_id), region.label),
+            *((("citation", citation.citation_id), citation.text) for citation in region.citations),
+        ]:
+            windows[key] = cursor, cursor + len(value)
+            fragments.append(value)
+            cursor += len(value) + 1
+    try:
+        minimizer = SourceWindowMinimizer("\n".join(fragments), sensitive_terms=sensitive_terms)
+        return {key: minimizer.window(*bounds) for key, bounds in windows.items()}
+    except EvidenceMinimizationError, TypeError, ValueError, RecursionError:
+        raise TermsStructuringInvalid from None
+
+
+def _minimize(envelope: SemanticWorkEnvelope, sensitive_terms: Sequence[str]) -> _Minimized:
     try:
         if not isinstance(envelope, SemanticWorkEnvelope):
             raise TermsStructuringInvalid
@@ -125,6 +154,7 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
         )
     ):
         raise TermsStructuringInvalid
+    private_windows = _privacy_windows(original, sensitive_terms)
     source = {
         "source_id": "source-1",
         "document_version_id": str(uuid5(NAMESPACE_URL, "terms-provider/source-document/1")),
@@ -166,7 +196,7 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
     def redact(value: str) -> str:
         return pattern.sub(lambda match: identifiers[match[0]], value) if identifiers else value
 
-    regions = []
+    regions: list[dict[str, Any]] = []
     for region in original.regions:
         refs = []
         for citation in region.citations:
@@ -175,7 +205,7 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
                 citation_id=citation_aliases[citation.citation_id],
                 source_id=source["source_id"],
                 node_id=node_aliases[citation.node_id],
-                text=redact(citation.text),
+                text=redact(private_windows[("citation", citation.citation_id)]),
             )
             # Addresses remain literal original offsets; exact alias text is checked
             # against this request, then the original span is restored in full.
@@ -183,7 +213,7 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
         regions.append(
             {
                 "region_id": region_aliases[region.region_id],
-                "label": redact(region.label),
+                "label": redact(private_windows[("label", region.region_id)]),
                 "kind": region.kind,
                 "complete": region.complete,
                 "citations": refs,
@@ -194,6 +224,10 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
         "regions": regions,
         "primary_region_ids": [region_aliases[key] for key in primary],
     }
+    if sum(
+        len(c["text"]) for region in regions for c in region["citations"]
+    ) > _MAX_TEXT_CHARACTERS or any(len(region["label"]) > 512 for region in regions):
+        raise TermsStructuringInvalid
     _json(payload)
     return _Minimized(
         original,
@@ -203,10 +237,12 @@ def _minimize(envelope: SemanticWorkEnvelope) -> _Minimized:
     )
 
 
-def terms_structurer_fingerprint(*, envelope: SemanticWorkEnvelope, model: str) -> str:
+def terms_structurer_fingerprint(
+    *, envelope: SemanticWorkEnvelope, model: str, sensitive_terms: Sequence[str] = ()
+) -> str:
     """Bind cache reuse to the actual prompt/schema/content, independently of compiler."""
     _model(model)
-    payload = _minimize(envelope).payload
+    payload = _minimize(envelope, sensitive_terms).payload
     schema_digest = hashlib.sha256(
         _json(terms_structurer_schema(), bounded=False).encode()
     ).hexdigest()
@@ -216,6 +252,7 @@ def terms_structurer_fingerprint(*, envelope: SemanticWorkEnvelope, model: str) 
                 "model": model,
                 "prompt_revision": PROMPT_REVISION,
                 "instruction": _INSTRUCTION,
+                "minimization_revision": MINIMIZATION_REVISION,
                 "schema_sha256": schema_digest,
                 "payload": payload,
             },
@@ -339,11 +376,15 @@ def _hydrate(
 
 
 def structure_terms_region(
-    *, envelope: SemanticWorkEnvelope, provider: AiProvider, model: str
+    *,
+    envelope: SemanticWorkEnvelope,
+    provider: AiProvider,
+    model: str,
+    sensitive_terms: Sequence[str] = (),
 ) -> tuple[TermsSemanticKnowledge, str]:
     """Return a hydrated data-only proposal and bounded provider request identifier."""
     _model(model)
-    minimized = _minimize(envelope)
+    minimized = _minimize(envelope, sensitive_terms)
     try:
         response = provider.complete(
             model=model,
