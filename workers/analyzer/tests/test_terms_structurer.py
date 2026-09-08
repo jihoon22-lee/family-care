@@ -498,3 +498,20 @@ def test_missing_target_is_preserved_as_scoped_data_for_api_diagnostics():
     assert result.edges[0].from_node_id == result.nodes[0].node_id
     assert result.edges[0].to_node_id not in {n.node_id for n in result.nodes}
     assert result.edges[0].to_node_id.startswith("semantic-ai-")
+
+
+def test_cache_fingerprint_tracks_instruction_text_independently_of_revision(monkeypatch):
+    from familycare_api.terms_knowledge import core as compiler
+    from familycare_worker.ai import terms_structurer
+
+    original = terms_structurer_fingerprint(envelope=envelope(), model="synthetic-model")
+    monkeypatch.setattr(compiler, "COMPILER_REVISION", "synthetic-unrelated-compiler-revision")
+    assert original == terms_structurer_fingerprint(envelope=envelope(), model="synthetic-model")
+    revision = terms_structurer.PROMPT_REVISION
+    monkeypatch.setattr(
+        terms_structurer,
+        "_INSTRUCTION",
+        terms_structurer._INSTRUCTION + " Preserve every original reference witness.",
+    )
+    assert revision == terms_structurer.PROMPT_REVISION
+    assert original != terms_structurer_fingerprint(envelope=envelope(), model="synthetic-model")

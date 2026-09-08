@@ -215,6 +215,7 @@ def terms_structurer_fingerprint(*, envelope: SemanticWorkEnvelope, model: str) 
             {
                 "model": model,
                 "prompt_revision": PROMPT_REVISION,
+                "instruction": _INSTRUCTION,
                 "schema_sha256": schema_digest,
                 "payload": payload,
             },
