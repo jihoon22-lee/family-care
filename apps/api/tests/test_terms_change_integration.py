@@ -1,5 +1,6 @@
 """Retained synthetic amendments change event terms without rewriting enrollment."""
 
+import os
 from datetime import date
 from typing import Any
 from uuid import uuid4
@@ -30,8 +31,12 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
-def changes_database(enrollment_database: Any) -> Any:  # noqa: F811
-    url, job = enrollment_database
+def changes_database(request: pytest.FixtureRequest) -> Any:
+    # Root integration hooks validate this dedicated URL before fixture setup.
+    url = os.environ["FAMILYCARE_TEST_DATABASE_URL"]
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute("TRUNCATE household_spaces,documents CASCADE")
+    url, job = request.getfixturevalue("enrollment_database")
     try:
         yield url, job
     finally:

@@ -891,3 +891,62 @@ snapshot은 아직 연결 전이며 B02 완료로 표시하지 않는다. 실제
 
 위 신규 범위는 API 내부 처리와 DB 계약이다. HTTP/생성 계약은 유지되며 실제 자료·provider·
 운영 데이터 적용·태그·배포 및 조항별/판정·계산 소비의 남은 범위는 그대로 미완료다.
+
+`9eb528f` push 이후 [CI 34183177926](https://github.com/jihoon22-lee/family-care/actions/runs/34183177926)
+필수 **7/7** 성공을 확인했다. 저장소 안전·Web·Python·합성 PostgreSQL과 이미지 3개를
+포함한다. 이후 작업은 사건일 규칙 reader, 판정/계산의 불확실성 보존과 과거 선택 snapshot
+구현이며 아직 해당 소비 경계의 완료나 운영 수용으로 보고하지 않는다.
+
+## Event terms consumption and retained selections
+
+`0046_event_terms_snapshots`는 새 판정의 기본 판본 평가·변경 관계 ID와 담보/조항별 선택을
+불변 JSON으로 보존한다. 사건일·가정·구성원·계약·담보/조항·출처 범위를 DB에서 검증하고,
+과거 null을 새 선택으로 채우지 않는다. 사건/원장 교정 뒤에도 기존 선택을 그대로 읽는다.
+
+`decision-engine-v2`와 내부 `RulesForEvent`는 정확한 구성원/사건일을 전달하고 판본 불일치
+규칙을 평가에서 제외한다. 판본 불확실성은 사실/근거와 이유를 유지하며 다른 담보와 optional
+규칙 의미를 보존한다. 잘못된 선택이 섞인 담보는 metadata 전체를 폐기한다. 기본 판본의
+오래된 원본 근거도 결정적 불일치로 바꾸지 않는다. 계산은 보존된 선택과 규칙 게시 cutoff를
+독립적으로 확인하고 적용이 불확실한 단일 산식에는 금액 대신 명시적 보류 이유를 저장한다.
+
+신규 reader/codec 부재, 사건일·불확실성 소비, snapshot 유실, stale 원본 누락과 SQL null 상태
+허용을 합성 RED로 확인한 뒤 구현했다. 집중 순수 검사 **97개**와 기존 판정·계산·component
+소비자를 포함한 합성 PG **33개**가 통과했다. 빈 전용 합성 DB의 `0046 → 0045 → head` 전환,
+Ruff format **666 files**/lint와 변경 소비 모듈 mypy **31 sources**도 통과했다. 전체 검증은
+후속 결과로 기록한다. 테스트 fixture의 잘못된 컬럼/메서드/응답 키로 발생한 실패는 제품
+동작의 RED로 세지 않았다.
+
+HTTP schema는 변경하지 않았다. 조항별 이전/새 대상 검증, 변경 B 판본의 링크 확인/게시,
+여러 산식의 결과 구성과 보호된 자료 수용은 남아 있다. 합성 소비 테스트의 미리 게시된
+규칙을 원문 자동 컴파일이나 변경 판본의 게시 경로 수용으로 확대하지 않는다.
+
+후속 리뷰에서 데이터가 있는 0046 downgrade가 선택을 null로 지우는 경로를 실제 CLI RED로
+확인했다. 선택/규칙 참조가 있으면 DDL 전에 거부하도록 수정했다. 별도 연결이 규칙 v2를
+미리 쓰고 RR 판정 조회 후 commit하면 게시 시각 cutoff만으로는 보지 못한 v2가 계산에
+들어오는 RED도 재현했다. `source_rule_version_ids`를 run에 불변 저장하여 실제 읽은 버전과
+cutoff를 함께 확인하도록 수정한 뒤 두 PG 회귀가 통과했다. 분석 시작 뒤 새 게시 시각을
+만드는 처음의 동시성 사례는 기존 transaction timestamp cutoff로 이미 통과했으므로 RED로
+기록하지 않는다. 신규 합성 fixture는 실행 전후 전용 test DB를 정리해 다른 소비 테스트의
+남은 metadata job에 영향을 받지 않도록 했다.
+
+첫 전체 PG 실행은 **472 passed / 1 failed / 2,182 deselected** (456.85초)였다. 실패한
+`test_upgrade_preserves_a_pre_guidance_result_without_recalculating_it`은 새 nullable 컬럼도
+이전 행 JSON과 직접 비교했다. 기존 필드의 완전 일치와 새 선택/규칙 컬럼의 `NULL` 보존을
+각각 확인하도록 보완한 뒤 해당 migration 회귀 **1개**가 통과했다. 이 실패를 전체 성공으로
+보고하지 않으며 전체 DB 재검증 결과는 후속으로 기록한다.
+
+2026-09-08 KST, `9eb528f` 위 최종 0046/사건일 소비 변경과 과거 schema 비교 회귀 보완으로
+검증했다. Web/HTTP 계약 입력은 후속 내부 규칙 ID·downgrade 보강에서 변하지 않았다.
+
+- `corepack pnpm@11.22.0 web:check`: **172 tests + build**, exit 0.
+- `TMPDIR=/tmp uv run ruff format --check .` / `ruff check .`: **666 files**, lint exit 0.
+- `TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts`: **269 sources**, exit 0.
+- 기본 `uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **2,464 passed / 474 deselected / 3 subtests** (22.62초).
+- 전용 합성 DB guard를 사용한 전체 `uv run pytest -m integration apps/api/tests workers/analyzer/tests -q`:
+  **473 passed / 2,182 deselected** (477.17초). 신규 사건일 소비/저장 PG **20개**를 포함한다.
+- `check_contracts.py`, `check_containers.py`, `check_workflows.py`: exit 0.
+  container 검사는 정적 정책이며 새 로컬 이미지 빌드가 아니다.
+
+실제 자료·외부 provider·운영 schema/data·태그·배포는 실행하지 않았다. 조항별 양쪽 원문과
+변경 판본의 링크/게시 경계, 보호된 수용은 계속 진행하며 B02 완료로 확대하지 않는다.

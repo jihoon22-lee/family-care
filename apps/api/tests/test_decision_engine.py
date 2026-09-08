@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import cast
@@ -9,6 +10,11 @@ from uuid import UUID
 import pytest
 from familycare_api.clauses.dsl import RULE_SCHEMA_VERSION
 from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.clauses.terms_change_selection import (
+    SelectedTermsEdition,
+    TermsEventSelection,
+    TermsSelectionScope,
+)
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import (
@@ -25,6 +31,7 @@ from familycare_api.decisions.engine import (
     build_follow_up_questions,
     evaluate_event,
 )
+from familycare_api.decisions.terms import RulesForEvent
 
 SCOPE_ID = UUID("00000000-0000-0000-0000-000000000001")
 MEMBER_ID = UUID("00000000-0000-0000-0000-000000000002")
@@ -74,21 +81,27 @@ class FakePolicyReader:
 class FakeRuleReader:
     def __init__(
         self,
-        rules: Mapping[UUID, tuple[CoverageRuleVersion, ...]],
+        rules: Mapping[UUID, tuple[CoverageRuleVersion, ...] | RulesForEvent],
         *,
         failures: Iterable[UUID] = (),
     ) -> None:
         self.rules = dict(rules)
         self.failures = frozenset(failures)
-        self.calls: list[tuple[UUID, UUID]] = []
+        self.calls: list[tuple[UUID, UUID, UUID, date | None]] = []
 
     def executable_for_rider(
-        self, scope: HouseholdScope, rider_id: UUID
-    ) -> tuple[CoverageRuleVersion, ...]:
-        self.calls.append((scope.household_space_id, rider_id))
+        self,
+        scope: HouseholdScope,
+        rider_id: UUID,
+        *,
+        family_member_id: UUID,
+        event_date: date | None,
+    ) -> RulesForEvent:
+        self.calls.append((scope.household_space_id, rider_id, family_member_id, event_date))
         if rider_id in self.failures:
             raise RuntimeError("synthetic rule reader failure")
-        return self.rules.get(rider_id, ())
+        value = self.rules.get(rider_id, ())
+        return value if isinstance(value, RulesForEvent) else RulesForEvent(value)
 
 
 class FakeEvidenceRepository:
@@ -119,7 +132,7 @@ class FakeEvidenceRepository:
 
 def readers(
     snapshots: Iterable[PolicySnapshot],
-    rules: Mapping[UUID, tuple[CoverageRuleVersion, ...]],
+    rules: Mapping[UUID, tuple[CoverageRuleVersion, ...] | RulesForEvent],
     *,
     history: FakeHistoryReader | None = None,
     evidence: FakeEvidenceRepository | None = None,
@@ -319,7 +332,7 @@ def evaluation(
 
 def run(
     snapshots: Iterable[PolicySnapshot],
-    rules: Mapping[UUID, tuple[CoverageRuleVersion, ...]],
+    rules: Mapping[UUID, tuple[CoverageRuleVersion, ...] | RulesForEvent],
     *,
     medical_event: MedicalEvent | None = None,
     history: FakeHistoryReader | None = None,
@@ -676,3 +689,153 @@ def test_results_have_stable_order_and_versions_without_ai_or_amount() -> None:
     assert first.rule_set_version == second.rule_set_version
     assert first.stale is False and second.stale is False
     assert not hasattr(first.candidates[0], "amount")
+
+
+def _selection(rider_id=RIDER_A, event_date=date(2026, 8, 25)) -> TermsEventSelection:
+    return TermsEventSelection(
+        scope=TermsSelectionScope(SCOPE_ID, POLICY_ID, MEMBER_ID, rider_id),
+        event_date=event_date,
+        editions=(SelectedTermsEdition(UUID(int=201), "MATCH", (), ()),),
+        applied_relation_ids=(),
+        uncertain_relation_ids=(),
+    )
+
+
+def test_event_terms_reader_receives_exact_member_and_event_date() -> None:
+    medical_event = event(event_date=date(2025, 6, 30))
+    rule_reader = FakeRuleReader({RIDER_A: RulesForEvent((rule(),))})
+    evaluate_event(
+        SCOPE,
+        medical_event,
+        DecisionReaders(
+            FakePolicyReader((snapshot(RIDER_A),)),
+            rule_reader,
+            FakeEvidenceRepository({EVIDENCE_ID: evidence_ref()}),
+            FakeHistoryReader(),
+        ),
+    )
+    assert rule_reader.calls == [(SCOPE_ID, RIDER_A, MEMBER_ID, date(2025, 6, 30))]
+
+
+def test_no_match_terms_rule_is_excluded_instead_of_rejecting_enrollment() -> None:
+    selected = _selection()
+    terms = RulesForEvent(
+        (rule(value="disease"), rule(rule_id=RULE_B, candidate_id=CANDIDATE_B)),
+        (selected,),
+        ((RULE_A, "NO_MATCH"), (RULE_B, "MATCH")),
+    )
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert result.candidates[0].aggregate_result == "MATCH"
+    assert tuple(item.rule_version_id for item in result.evaluations) == (RULE_B,)
+    assert result.terms_selections == (selected,)
+    assert not result.stale
+
+
+def test_unknown_terms_rule_preserves_facts_evidence_and_only_holds_its_rider() -> None:
+    terms = RulesForEvent(
+        (rule(value="disease"), rule(rule_id=RULE_B, candidate_id=CANDIDATE_B)),
+        (_selection(),),
+        ((RULE_A, "UNKNOWN"), (RULE_B, "MATCH")),
+    )
+    result = run(
+        (snapshot(RIDER_A), snapshot(RIDER_B)),
+        {RIDER_A: terms, RIDER_B: (rule(rule_id=RULE_C, candidate_id=CANDIDATE_C),)},
+    )
+    candidates = {candidate.rider_id: candidate for candidate in result.candidates}
+    assert candidates[RIDER_A].aggregate_result == "UNKNOWN"
+    assert candidates[RIDER_B].aggregate_result == "MATCH"
+    uncertain = next(item for item in result.evaluations if item.rule_version_id == RULE_A)
+    assert (
+        uncertain.result == "UNKNOWN" and uncertain.reason_code == "TERMS_APPLICABILITY_UNRESOLVED"
+    )
+    assert uncertain.facts["MedicalEvent.classification"].value == "injury"
+    assert uncertain.fact_paths == ("MedicalEvent.classification",)
+    assert uncertain.evidence_ids == (EVIDENCE_ID,) and uncertain.evidence == (evidence_ref(),)
+    assert "TERMS_APPLICABILITY_UNRESOLVED" in candidates[RIDER_A].hold_reason_codes
+    assert not result.stale
+
+
+def test_optional_rule_with_unknown_terms_preserves_optional_aggregation() -> None:
+    terms = RulesForEvent(
+        (rule(required=False), rule(rule_id=RULE_B, candidate_id=CANDIDATE_B)),
+        (_selection(),),
+        ((RULE_A, "UNKNOWN"), (RULE_B, "MATCH")),
+    )
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert result.candidates[0].aggregate_result == "MATCH"
+    optional = next(item for item in result.evaluations if item.rule_version_id == RULE_A)
+    assert optional.required is False and optional.result == "UNKNOWN"
+
+
+def test_empty_event_terms_read_keeps_its_selection_snapshot() -> None:
+    selected = _selection()
+    result = run((snapshot(RIDER_A),), {RIDER_A: RulesForEvent((), (selected,), ())})
+    assert result.terms_selections == (selected,)
+    assert not result.evaluations
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert not result.stale
+
+
+@pytest.mark.parametrize(
+    "scope_change",
+    [
+        {"household_space_id": UUID(int=901)},
+        {"family_member_id": UUID(int=902)},
+        {"policy_contract_id": UUID(int=903)},
+        {"rider_id": RIDER_B},
+        {"rider_id": None},
+    ],
+)
+def test_foreign_event_terms_snapshot_cannot_control_a_rule_or_enter_history(scope_change) -> None:
+    selected = _selection()
+    foreign = replace(selected, scope=replace(selected.scope, **scope_change))
+    terms = RulesForEvent((rule(),), (foreign,), ((RULE_A, "NO_MATCH"),))
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert not result.terms_selections
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert result.evaluations[0].reason_code == "TERMS_APPLICABILITY_UNRESOLVED"
+    assert not result.stale
+
+
+def test_other_date_terms_snapshot_cannot_approve_current_event() -> None:
+    foreign = _selection(event_date=date(2026, 8, 24))
+    terms = RulesForEvent((rule(),), (foreign,), ((RULE_A, "MATCH"),))
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert not result.terms_selections
+    assert result.evaluations[0].result == "UNKNOWN"
+    assert result.evaluations[0].reason_code == "TERMS_APPLICABILITY_UNRESOLVED"
+    assert not result.stale
+
+
+def test_mixed_foreign_terms_metadata_discards_the_whole_read_for_that_rider() -> None:
+    valid = _selection()
+    foreign = replace(valid, scope=replace(valid.scope, household_space_id=UUID(int=999)))
+    terms = RulesForEvent((rule(),), (valid, foreign), ((RULE_A, "MATCH"),))
+    other = RulesForEvent(
+        (rule(rule_id=RULE_B, candidate_id=CANDIDATE_B),),
+        (_selection(RIDER_B),),
+        ((RULE_B, "MATCH"),),
+    )
+    result = run((snapshot(RIDER_A), snapshot(RIDER_B)), {RIDER_A: terms, RIDER_B: other})
+    assert result.terms_selections == other.terms_selections
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert result.candidates[1].aggregate_result == "MATCH"
+    assert not result.stale
+
+
+def test_unknown_calculation_terms_do_not_become_decision_evaluations() -> None:
+    terms = RulesForEvent(
+        (rule(), calculation_rule()), (_selection(),), ((RULE_A, "MATCH"), (RULE_B, "UNKNOWN"))
+    )
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert result.candidates[0].aggregate_result == "MATCH"
+    assert tuple(item.rule_version_id for item in result.evaluations) == (RULE_A,)
+    assert result.terms_selections == terms.terms_selections
+
+
+def test_foreign_terms_metadata_cannot_approve_an_optional_only_rule_set() -> None:
+    foreign = _selection(event_date=date(2026, 8, 24))
+    terms = RulesForEvent((rule(required=False),), (foreign,), ((RULE_A, "MATCH"),))
+    result = run((snapshot(RIDER_A),), {RIDER_A: terms})
+    assert result.candidates[0].aggregate_result == "UNKNOWN"
+    assert not result.terms_selections and not result.stale

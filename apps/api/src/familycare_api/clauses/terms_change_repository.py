@@ -22,6 +22,7 @@ from familycare_api.clauses.terms_change_selection import (
     TermsEventSelection,
     TermsSelectionError,
     TermsSelectionScope,
+    TermsStatus,
     select_terms_for_event,
 )
 from familycare_api.clauses.terms_change_source import ChangeMember, observe_terms_change
@@ -464,6 +465,20 @@ def read_event_terms(
             scope.family_member_id,
         ),
     ).fetchall()
+    base_assessments = connection.execute(
+        "SELECT id,terms_edition_id,status,selection_state FROM current_policy_terms_applicability "
+        "WHERE household_space_id=%s AND family_member_id=%s AND policy_contract_id=%s "
+        "ORDER BY id LIMIT 513",
+        (scope.household_space_id, scope.family_member_id, scope.policy_contract_id),
+    ).fetchall()
+    base_statuses: dict[UUID, set[TermsStatus]] = {}
+    for assessment in base_assessments:
+        base_statuses.setdefault(assessment["terms_edition_id"], set()).add(
+            assessment["status"]
+            if assessment["status"] != "MATCH"
+            or assessment["selection_state"] in ("AUTOMATIC", "USER_SELECTED")
+            else "UNKNOWN"
+        )
     relations = connection.execute(
         "SELECT a.*,a.input_context IS NOT DISTINCT FROM "
         "terms_change_input_context(a.source_component_id,a.household_space_id) AS source_current "
@@ -482,15 +497,26 @@ def read_event_terms(
             scope.rider_id,
         ),
     ).fetchall()
-    if len(editions) > 512 or len(relations) > 128:
+    if len(editions) > 512 or len(relations) > 128 or len(base_assessments) > 512:
         raise TermsSelectionError
-    return select_terms_for_event(
+
+    def base_edition(row: dict[str, Any]) -> BaseTermsEdition:
+        states = base_statuses.get(row["id"], set())
+        status: TermsStatus = "UNKNOWN"
+        if states == {"NO_MATCH"}:
+            status = "NO_MATCH"
+        elif row["applies"] and (not states or states == {"MATCH"}):
+            status = "MATCH"
+        return BaseTermsEdition(
+            row["id"],
+            status,
+            ("BASE_TERMS_SOURCE_UNRESOLVED",) if status == "UNKNOWN" else (),
+        )
+
+    selection = select_terms_for_event(
         scope,
         event_date,
-        tuple(
-            BaseTermsEdition(row["id"], "MATCH" if row["applies"] else "NO_MATCH")
-            for row in editions
-        ),
+        tuple(base_edition(row) for row in editions),
         tuple(
             TermsChangeRelation(
                 row["id"],
@@ -512,3 +538,4 @@ def read_event_terms(
             for row in relations
         ),
     )
+    return replace(selection, base_assessment_ids=tuple(row["id"] for row in base_assessments))

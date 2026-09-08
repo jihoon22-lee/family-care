@@ -9,6 +9,7 @@ from hashlib import sha256
 from uuid import UUID, uuid4
 
 from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.clauses.terms_change_selection import TermsEventSelection, TermsSelectionScope
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import (
@@ -27,7 +28,7 @@ from familycare_api.decisions.domain import (
 )
 from familycare_api.decisions.rule_runtime import RuleRuntimeError, evaluate_rule
 
-ENGINE_VERSION = "decision-engine-v1"
+ENGINE_VERSION = "decision-engine-v2"
 _APPROVED_EVIDENCE_STATES = frozenset({"AI_VERIFIED", "USER_CONFIRMED"})
 _INACTIVE_STATUSES = frozenset({"inactive", "expired", "cancelled"})
 _RULE_KIND_ORDER = {
@@ -111,6 +112,8 @@ class DeterministicCoverageDecisionEngine:
         candidates: list[ClaimCandidate] = []
         evaluations: list[RuleEvaluation] = []
         rule_version_ids: list[UUID] = []
+        terms_selections: list[TermsEventSelection] = []
+        source_rule_version_ids: set[UUID] = set()
 
         grouped = _group_snapshots(snapshots)
         for rider_id in sorted(grouped, key=str):
@@ -127,15 +130,20 @@ class DeterministicCoverageDecisionEngine:
                 stale = True
                 continue
             snapshot = rider_snapshots[0]
-            candidate, rider_evaluations, rider_rules, rider_stale = self._evaluate_snapshot(
-                scope,
-                event,
-                snapshot,
-                history,
+            candidate, rider_evaluations, rider_rules, rider_terms, rider_stale = (
+                self._evaluate_snapshot(
+                    scope,
+                    event,
+                    snapshot,
+                    history,
+                )
             )
             candidates.append(candidate)
             evaluations.extend(rider_evaluations)
             rule_version_ids.extend(item.id for item in rider_rules)
+            terms_selections.extend(rider_terms)
+            if rider_terms:
+                source_rule_version_ids.update(item.id for item in rider_rules)
             stale = stale or rider_stale
 
         return DecisionRunResult(
@@ -148,6 +156,8 @@ class DeterministicCoverageDecisionEngine:
             candidates=tuple(candidates),
             evaluations=tuple(evaluations),
             stale=stale,
+            terms_selections=tuple(terms_selections),
+            source_rule_version_ids=tuple(sorted(source_rule_version_ids, key=str)),
         )
 
     def _evaluate_snapshot(
@@ -160,23 +170,41 @@ class DeterministicCoverageDecisionEngine:
         ClaimCandidate,
         tuple[RuleEvaluation, ...],
         tuple[CoverageRuleVersion, ...],
+        tuple[TermsEventSelection, ...],
         bool,
     ]:
         try:
-            rules = tuple(
-                sorted(
-                    self.readers.rules.executable_for_rider(scope, snapshot.rider_id),
-                    key=_rule_order,
-                )
+            read = self.readers.rules.executable_for_rider(
+                scope,
+                snapshot.rider_id,
+                family_member_id=event.family_member_id,
+                event_date=event.event_date,
             )
         except Exception:
             return (
                 self._unknown_candidate(snapshot, reason_code="RULE_READER_UNAVAILABLE"),
                 (),
                 (),
+                (),
                 True,
             )
 
+        terms_valid = all(
+            _terms_selection_matches(selection, scope, event, snapshot)
+            for selection in read.terms_selections
+        )
+        # A mixed read cannot retain a seemingly valid subset as later calculation
+        # authority. Scope/date uncertainty is distinct from a failed reader.
+        rider_terms = read.terms_selections if terms_valid else ()
+        terms_status = {
+            rule.id: read.status_for(rule.id) if terms_valid else "UNKNOWN" for rule in read.rules
+        }
+        rules = tuple(
+            sorted(
+                (rule for rule in read.rules if terms_status[rule.id] != "NO_MATCH"),
+                key=_rule_order,
+            )
+        )
         rider_history = tuple(item for item in history if item.rider_id == snapshot.rider_id)
         context = _fact_context(event, snapshot, rider_history)
         precondition, precondition_reason, precondition_questions = _policy_precondition(
@@ -209,7 +237,13 @@ class DeterministicCoverageDecisionEngine:
                 evaluation,
             )
             evidence_invalid = evidence_invalid or not valid
-            if valid and precondition != "MATCH":
+            if terms_status[rule.id] == "UNKNOWN":
+                evaluation = replace(
+                    evaluation,
+                    result="UNKNOWN",
+                    reason_code="TERMS_APPLICABILITY_UNRESOLVED",
+                )
+            elif valid and precondition != "MATCH":
                 evaluation = replace(
                     evaluation,
                     result=precondition,
@@ -226,11 +260,18 @@ class DeterministicCoverageDecisionEngine:
             return (
                 self._unknown_candidate(
                     snapshot,
-                    reason_code=("NO_EXECUTABLE_DECISION_RULE" if rules else "NO_EXECUTABLE_RULE"),
+                    reason_code=(
+                        "TERMS_APPLICABILITY_UNRESOLVED"
+                        if not terms_valid
+                        else "NO_EXECUTABLE_DECISION_RULE"
+                        if rules
+                        else "NO_EXECUTABLE_RULE"
+                    ),
                     questions=precondition_questions,
                 ),
                 (),
                 rules,
+                rider_terms,
                 precondition != "MATCH",
             )
 
@@ -242,6 +283,8 @@ class DeterministicCoverageDecisionEngine:
         if effective_precondition == "NO_MATCH":
             aggregate = "NO_MATCH"
         elif effective_precondition == "UNKNOWN" and aggregate != "NO_MATCH":
+            aggregate = "UNKNOWN"
+        if not terms_valid and aggregate == "MATCH":
             aggregate = "UNKNOWN"
         questions = _unique_questions(
             (*precondition_questions, *build_follow_up_questions(rider_evaluations))
@@ -265,7 +308,7 @@ class DeterministicCoverageDecisionEngine:
             required_unknown_count=sum(item.result == "UNKNOWN" for item in required),
             required_no_match_count=sum(item.result == "NO_MATCH" for item in required),
         )
-        return candidate, tuple(rider_evaluations), rules, evidence_invalid
+        return candidate, tuple(rider_evaluations), rules, rider_terms, evidence_invalid
 
     def _validated_evidence(
         self,
@@ -332,6 +375,23 @@ def evaluate_event(
     """Evaluate one event using the default deterministic engine version."""
 
     return DeterministicCoverageDecisionEngine(readers).evaluate(scope, event)
+
+
+def _terms_selection_matches(
+    selection: TermsEventSelection,
+    scope: HouseholdScope,
+    event: MedicalEvent,
+    snapshot: PolicySnapshot,
+) -> bool:
+    selected = selection.scope
+    return (
+        isinstance(selected, TermsSelectionScope)
+        and selected.household_space_id == scope.household_space_id
+        and selected.family_member_id == event.family_member_id
+        and selected.policy_contract_id == snapshot.policy_id
+        and selected.rider_id == snapshot.rider_id
+        and selection.event_date == event.event_date
+    )
 
 
 def _fact_context(

@@ -71,6 +71,7 @@ class TermsEventSelection:
     applied_relation_ids: tuple[UUID, ...]
     uncertain_relation_ids: tuple[UUID, ...]
     scope_uncertainties: tuple[TermsScopeUncertainty, ...] = ()
+    base_assessment_ids: tuple[UUID, ...] = ()
 
 
 class TermsSelectionError(ValueError):

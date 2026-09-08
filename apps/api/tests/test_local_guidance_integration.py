@@ -203,13 +203,18 @@ def test_upgrade_preserves_a_pre_guidance_result_without_recalculating_it(
         assert historical.run_id == run_id
         assert historical.local_guidance is None
         assert historical.candidates == ()
+        assert historical.terms_selections == ()
+        assert historical.source_rule_version_ids == ()
         with psycopg.connect(_psycopg_url(database_url)) as connection:
             after = connection.execute(
-                "SELECT to_jsonb(run) - 'local_guidance_json' "
+                "SELECT to_jsonb(run) - ARRAY['local_guidance_json','terms_selections_json',"
+                "'source_rule_version_ids'], local_guidance_json IS NULL "
+                "AND terms_selections_json IS NULL AND source_rule_version_ids IS NULL "
                 "FROM decision_runs AS run WHERE id = %s",
                 (run_id,),
             ).fetchone()
-        assert after == before
+        assert after is not None and after[1] is True
+        assert (after[0],) == before
     finally:
         if not upgraded:
             command.upgrade(config, "head")

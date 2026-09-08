@@ -14,6 +14,12 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.clauses.terms_change_repository import read_event_terms
+from familycare_api.clauses.terms_change_selection import (
+    TermsEventSelection,
+    TermsSelectionScope,
+    TermsStatus,
+)
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.assistance import AnalysisAssistanceNotFound
@@ -51,6 +57,8 @@ from familycare_api.decisions.structuring_repository import _merge_user_override
 from familycare_api.decisions.structuring_repository import (
     _questions as _structured_question_records,
 )
+from familycare_api.decisions.terms import RulesForEvent
+from familycare_api.decisions.terms_snapshots import decode_selections, encode_selections
 from familycare_api.guidance.engine import LocalGuidanceEngine
 from familycare_api.guidance.models import LocalGuidanceResponse
 from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
@@ -587,10 +595,20 @@ class DecisionRepository:
         self,
         scope: HouseholdScope,
         rider_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]:
+        *,
+        family_member_id: UUID,
+        event_date: date | None,
+    ) -> RulesForEvent:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-                return self._rule_versions(connection, scope, rider_id)
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+                return self._rule_versions(
+                    connection,
+                    scope,
+                    rider_id,
+                    family_member_id=family_member_id,
+                    event_date=event_date,
+                )
         except psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
@@ -808,11 +826,37 @@ class DecisionRepository:
         connection: psycopg.Connection[dict[str, Any]],
         scope: HouseholdScope,
         rider_id: UUID,
-    ) -> tuple[CoverageRuleVersion, ...]:
+        *,
+        family_member_id: UUID | None = None,
+        event_date: date | None = None,
+    ) -> RulesForEvent:
+        selection_scope = None
+        if family_member_id is not None:
+            owner = connection.execute(
+                "SELECT r.policy_contract_id FROM riders r JOIN policy_contracts p "
+                "ON p.id=r.policy_contract_id AND p.household_space_id=r.household_space_id "
+                "AND p.deleted_at IS NULL JOIN family_members m ON m.id=%s "
+                "AND m.household_space_id=r.household_space_id AND m.deleted_at IS NULL "
+                "WHERE r.id=%s AND r.household_space_id=%s AND r.deleted_at IS NULL "
+                "AND EXISTS(SELECT 1 FROM policy_parties party WHERE party.policy_contract_id=p.id "
+                "AND party.household_space_id=p.household_space_id AND party.family_member_id=m.id "
+                "AND party.role IN ('primary_insured','additional_insured') "
+                "AND party.deleted_at IS NULL)",
+                (family_member_id, rider_id, scope.household_space_id),
+            ).fetchone()
+            if owner is None:
+                return RulesForEvent(())
+            selection_scope = TermsSelectionScope(
+                scope.household_space_id,
+                owner["policy_contract_id"],
+                family_member_id,
+                rider_id,
+            )
         rows = connection.execute(
             """
             SELECT
               version.id, version.coverage_rule_id, version.candidate_version_id,
+              clause.id AS clause_id, edition.id AS terms_edition_id,
               version.version_number, version.schema_version, version.rule_kind,
               version.required, version.input_field_paths, version.expression_json,
               version.result_reason_code, version.review_state, version.executable,
@@ -847,7 +891,8 @@ class DecisionRepository:
              AND terms_edition_allows_pages(clause.terms_edition_id,clause.household_space_id,
                clause.physical_page_start,clause.physical_page_end)
             JOIN terms_editions AS edition ON edition.id=clause.terms_edition_id
-             AND policy_terms_link_applicability(policy.id,edition.id,%(scope)s)
+             AND (%(member)s::uuid IS NOT NULL
+                  OR policy_terms_link_applicability(policy.id,edition.id,%(scope)s))
             LEFT JOIN coverage_rule_evidence AS linked
               ON linked.coverage_rule_version_id = version.id
             LEFT JOIN evidence
@@ -863,7 +908,7 @@ class DecisionRepository:
             ORDER BY version.rule_kind, rule.id, version.id,
                      evidence.physical_page NULLS LAST, evidence.id NULLS LAST
             """,
-            {"scope": scope.household_space_id, "rider": rider_id},
+            {"scope": scope.household_space_id, "rider": rider_id, "member": family_member_id},
         ).fetchall()
         grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
         for row in rows:
@@ -872,7 +917,37 @@ class DecisionRepository:
             evidence = _evidence(row)
             if evidence is not None:
                 grouped[version_id][1].append(evidence)
-        return tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
+        if selection_scope is None:
+            return RulesForEvent(
+                tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
+            )
+        selections: dict[UUID | None, TermsEventSelection] = {
+            None: read_event_terms(connection, selection_scope, event_date)
+        }
+        versions = []
+        judgments: list[tuple[UUID, TermsStatus]] = []
+        for row, retained_evidence in grouped.values():
+            clause_id = row["clause_id"]
+            if clause_id not in selections:
+                selections[clause_id] = read_event_terms(
+                    connection,
+                    replace(selection_scope, clause_id=clause_id),
+                    event_date,
+                )
+            status: TermsStatus = next(
+                (
+                    edition.status
+                    for edition in selections[clause_id].editions
+                    if edition.edition_id == row["terms_edition_id"]
+                ),
+                "UNKNOWN",
+            )
+            if status == "NO_MATCH":
+                continue
+            version = _coverage_rule(row, retained_evidence)
+            versions.append(version)
+            judgments.append((version.id, status))
+        return RulesForEvent(tuple(versions), tuple(selections.values()), tuple(judgments))
 
     def _rule_versions_by_ids(
         self,
@@ -997,10 +1072,11 @@ class DecisionRepository:
               knowledge_contract_count, knowledge_benefit_coverage_count,
               knowledge_published_coverage_count, knowledge_advisory_coverage_count,
               knowledge_blocked_coverage_count,
-              knowledge_not_applicable_coverage_count, local_guidance_json
+              knowledge_not_applicable_coverage_count, local_guidance_json, terms_selections_json,
+              source_rule_version_ids
             ) VALUES (
               %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+              %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """,
             (
@@ -1028,6 +1104,8 @@ class DecisionRepository:
                 Jsonb(result.local_guidance.model_dump(mode="json"))
                 if result.local_guidance is not None
                 else None,
+                Jsonb(encode_selections(result.terms_selections)),
+                list(result.source_rule_version_ids),
             ),
         )
         for evaluation in result.evaluations:
@@ -1200,6 +1278,8 @@ class DecisionRepository:
                 str, run.get("event_fact_schema_version", "medical-event-facts.v2")
             ),
             assistance=assistance,
+            terms_selections=decode_selections(run.get("terms_selections_json")),
+            source_rule_version_ids=tuple(run.get("source_rule_version_ids") or ()),
             local_guidance=(
                 LocalGuidanceResponse.model_validate(run["local_guidance_json"])
                 if run.get("local_guidance_json") is not None
@@ -1232,9 +1312,20 @@ class _ConnectionReaders:
         )
 
     def executable_for_rider(
-        self, scope: HouseholdScope, rider_id: UUID
-    ) -> tuple[CoverageRuleVersion, ...]:
-        return self.repository._rule_versions(self.connection, scope, rider_id)
+        self,
+        scope: HouseholdScope,
+        rider_id: UUID,
+        *,
+        family_member_id: UUID,
+        event_date: date | None,
+    ) -> RulesForEvent:
+        return self.repository._rule_versions(
+            self.connection,
+            scope,
+            rider_id,
+            family_member_id=family_member_id,
+            event_date=event_date,
+        )
 
     def get_many(
         self, scope: HouseholdScope, evidence_ids: tuple[UUID, ...]
