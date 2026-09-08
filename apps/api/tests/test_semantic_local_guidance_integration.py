@@ -47,26 +47,7 @@ from apps.api.tests.test_terms_source_verification import DAILY, FOOTNOTE, LIMIT
 pytestmark = pytest.mark.integration
 
 
-def test_native_enrollment_and_original_semantic_clause_calculate_without_private_import(
-    changes_database,
-    monkeypatch,
-):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    outbound = []
-
-    def reject_http(*args, **kwargs) -> NoReturn:
-        outbound.append(1)
-        raise AssertionError("default guidance attempted external HTTP")
-
-    monkeypatch.setattr(httpx2.HTTPTransport, "handle_request", reject_http)
-    monkeypatch.setattr(httpx2.AsyncHTTPTransport, "handle_async_request", reject_http)
-    url, job = changes_database
-    with psycopg.connect(_psycopg_url(url)) as connection:
-        connection.execute(
-            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
-            "VALUES (%s,'Synthetic Sibling','synthetic-sibling')",
-            (job.household_space_id,),
-        )
+def _published_semantic_sources(url, job):
     body = "\n".join(
         (
             DAILY,
@@ -110,6 +91,30 @@ def test_native_enrollment_and_original_semantic_clause_calculate_without_privat
     for link in links:
         RiderClauseLinkRepository(url).confirm(scope, link, expected_version=1)
     assert TermsSemanticProjector(url).project_pending() == 2
+    return sources, links, scope
+
+
+def test_native_enrollment_and_original_semantic_clause_calculate_without_private_import(
+    changes_database,
+    monkeypatch,
+):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    outbound = []
+
+    def reject_http(*args, **kwargs) -> NoReturn:
+        outbound.append(1)
+        raise AssertionError("default guidance attempted external HTTP")
+
+    monkeypatch.setattr(httpx2.HTTPTransport, "handle_request", reject_http)
+    monkeypatch.setattr(httpx2.AsyncHTTPTransport, "handle_async_request", reject_http)
+    url, job = changes_database
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
+            "VALUES (%s,'Synthetic Sibling','synthetic-sibling')",
+            (job.household_space_id,),
+        )
+    sources, links, scope = _published_semantic_sources(url, job)
     service = _service(url, scope)
     other_event = service.create_medical_event(
         family_member_id=job.family_member_id,
