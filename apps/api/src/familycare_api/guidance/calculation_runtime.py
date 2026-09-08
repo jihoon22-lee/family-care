@@ -29,7 +29,7 @@ from uuid import UUID
 
 from familycare_api.clauses.dsl import CompiledCalculation
 
-CALCULATION_RUNTIME_REVISION = "guidance-calculation-v1"
+CALCULATION_RUNTIME_REVISION = "guidance-calculation-v2"
 MAX_CALCULATION_NODES = 256
 MAX_CALCULATION_STEPS = 256
 MAX_CALCULATION_DEPTH = 16
@@ -47,6 +47,7 @@ _ROUNDING = {
     "down": ROUND_DOWN,
 }
 _OPERATIONS = frozenset({"add", "subtract", "multiply", "min", "max", "round"})
+_SCENARIO_FIELD = "MedicalEvent.admission_days"
 _CURRENCY = re.compile(r"[A-Z]{3}")
 _SHA = re.compile(r"[0-9a-f]{64}")
 type CalculationUnit = Literal["MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "UNKNOWN"]
@@ -321,14 +322,47 @@ def _result_unit(
     return inferred, currency if inferred == "MONEY" else None
 
 
+def _scenario_accepted(
+    field: str,
+    item: CalculationInput,
+    accepted: Mapping[str, CalculationInput],
+) -> bool:
+    if (
+        field != _SCENARIO_FIELD
+        or item.provenance != "SCENARIO_ASSUMPTION"
+        or item.stale
+        or item.unit != "DAYS"
+        or item.currency is not None
+        or item.value is None
+        or not item.value.is_finite()
+        or not 0 <= item.value <= 36500
+        or item.value != item.value.to_integral_value()
+        or not item.source_refs
+        or len(set(item.source_refs)) != 1
+    ):
+        return False
+    ref = item.source_refs[0]
+    return (
+        ref.source_kind == "EVENT_SCENARIO"
+        and isinstance(ref.source_id, UUID)
+        and ref.source_id.int != 0
+        and type(ref.version) is int
+        and ref.version > 0
+        and ref.digest_sha256 is not None
+        and accepted.get(field) == item
+    )
+
+
 class _Runtime:
     def __init__(
         self,
         inputs: Mapping[str, CalculationInput],
         source: CalculationSource,
         hints: Mapping[str, CalculationUnitHint],
+        scenarios: Mapping[str, CalculationInput],
     ) -> None:
         self.inputs, self.source, self.hints = inputs, source, hints
+        self.scenarios = scenarios
         self.steps: list[CalculationStep] = []
         self.missing: list[str] = []
         self.addends: list[CompletedAddend] = []
@@ -353,13 +387,14 @@ class _Runtime:
         hint = self.hints.get(path)
         if isinstance(value, str):
             item = self.inputs.get(value)
+            scenario = item is not None and _scenario_accepted(value, item, self.scenarios)
             reasons = []
             if item is None or item.value is None:
                 reasons.append("CALCULATION_INPUT_MISSING")
             if item is not None:
                 if item.stale:
                     reasons.append("CALCULATION_INPUT_STALE")
-                if item.provenance not in _TRUSTED:
+                if item.provenance not in _TRUSTED and not scenario:
                     reasons.append("CALCULATION_INPUT_UNTRUSTED")
                 if not item.source_refs:
                     reasons.append("CALCULATION_INPUT_SOURCE_MISSING")
@@ -406,7 +441,9 @@ class _Runtime:
                 None if item is None else item.provenance,
                 () if item is None else item.source_refs,
                 status,
-                tuple(reasons),
+                (*reasons, "CALCULATION_SCENARIO_ASSUMPTION")
+                if scenario and status == "AVAILABLE"
+                else tuple(reasons),
                 stale=False if item is None else item.stale,
             )
         if not isinstance(value, Decimal):
@@ -521,15 +558,21 @@ def evaluate_calculation(
     *,
     source: CalculationSource,
     unit_hints: Mapping[str, CalculationUnitHint] | None = None,
+    scenario_inputs: Mapping[str, CalculationInput] | None = None,
 ) -> CalculationEvaluation:
     """Evaluate one expression; field missing_paths and operand AST paths stay distinct.
 
     NUMBER is a dimensionless numeric value, not money. An original-source root
     hint may establish a daily or fixed amount basis, but cannot override unknown
     input units, known dimensional conflicts, mixed currencies or input trust.
+
+    scenario_inputs explicitly opts one exact admission-days assumption into this
+    call only. The caller validates the event's scope/current version; the runtime
+    requires its actual EVENT_SCENARIO UUID/version/digest and retains assumption
+    provenance. This permission neither supplies absent inputs nor changes trust.
     """
     _require(isinstance(source, CalculationSource), "CALCULATION_SOURCE_INVALID")
-    runtime = _Runtime({}, source, {})
+    runtime = _Runtime({}, source, {}, {})
     status: EvaluationStatus = "FAILED"
     value = None
     unit: CalculationUnit = "UNKNOWN"
@@ -540,6 +583,16 @@ def evaluate_calculation(
             raise _Failure("CALCULATION_TREE_INVALID")
         if unit_hints is not None and not isinstance(unit_hints, Mapping):
             raise _Failure("CALCULATION_UNIT_HINT_INVALID")
+        if scenario_inputs is not None and not isinstance(scenario_inputs, Mapping):
+            raise _Failure("CALCULATION_SCENARIO_INPUT_INVALID")
+        if scenario_inputs is not None and len(scenario_inputs) > MAX_CALCULATION_NODES:
+            raise _Failure("CALCULATION_LIMIT_EXCEEDED")
+        scenarios = {} if scenario_inputs is None else dict(scenario_inputs)
+        if any(
+            not isinstance(key, str) or not isinstance(item, CalculationInput)
+            for key, item in scenarios.items()
+        ):
+            raise _Failure("CALCULATION_SCENARIO_INPUT_INVALID")
         hints = {} if unit_hints is None else dict(unit_hints)
         if len(inputs) > MAX_CALCULATION_NODES or len(hints) > MAX_CALCULATION_NODES:
             raise _Failure("CALCULATION_LIMIT_EXCEEDED")
@@ -556,7 +609,7 @@ def evaluate_calculation(
             raise _Failure("CALCULATION_UNIT_HINT_INVALID")
         if any(not set(item.source_refs) <= set(source.source_refs) for item in hints.values()):
             raise _Failure("CALCULATION_UNIT_HINT_SOURCE_MISMATCH")
-        runtime = _Runtime(dict(inputs), source, hints)
+        runtime = _Runtime(dict(inputs), source, hints, scenarios)
         context = Context(prec=DECIMAL_PRECISION, Emin=-60, Emax=60)
         for signal in context.traps:
             context.traps[signal] = True

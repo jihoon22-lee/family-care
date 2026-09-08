@@ -318,7 +318,7 @@ def test_source_revision_digest_and_real_refs_survive_success_and_failure():
     result = evaluate_calculation(node, {}, source=changed)
     assert result.source == changed and result.source.publication_id != SOURCE.publication_id
     assert result.source.source_refs == (REF,)
-    assert result.runtime_revision == "guidance-calculation-v1"
+    assert result.runtime_revision == "guidance-calculation-v2"
 
 
 @pytest.mark.parametrize("fault", ["currency", "stale", "ai", "unknown_unit"])
@@ -391,3 +391,149 @@ def test_unit_hint_must_reference_the_supplied_calculation_source_version():
     )
     assert result.status == "FAILED" and result.amount is None
     assert result.reason_codes == ("CALCULATION_UNIT_HINT_SOURCE_MISMATCH",)
+
+
+SCENARIO_FIELD = "MedicalEvent.admission_days"
+SCENARIO_REF = CalculationSourceRef(
+    "EVENT_SCENARIO", UUID(int=30, version=4), version=7, digest_sha256="c" * 64
+)
+
+
+def scenario_day():
+    return CalculationInput(Decimal(5), "DAYS", None, "SCENARIO_ASSUMPTION", (SCENARIO_REF,), False)
+
+
+def test_scenario_arithmetic_requires_explicit_exact_opt_in_on_every_call():
+    assumption = scenario_day()
+    inputs = {"Rider.insured_amount": field("100"), SCENARIO_FIELD: assumption}
+    before = evaluate_calculation(daily(), inputs, source=SOURCE, unit_hints=daily_hints())
+    assert before.amount is None and "CALCULATION_INPUT_UNTRUSTED" in before.reason_codes
+    opted_in = evaluate_calculation(
+        daily(),
+        inputs,
+        source=SOURCE,
+        unit_hints=daily_hints(),
+        scenario_inputs={SCENARIO_FIELD: assumption},
+    )
+    assert opted_in.status == "COMPLETE" and opted_in.amount == 300
+    operand = opted_in.steps[0].operands[0]
+    assert operand.provenance == "SCENARIO_ASSUMPTION" and operand.source_refs == (SCENARIO_REF,)
+    assert "CALCULATION_SCENARIO_ASSUMPTION" in opted_in.reason_codes
+    assert assumption.provenance == "SCENARIO_ASSUMPTION" and not assumption.stale
+    after = evaluate_calculation(daily(), inputs, source=SOURCE, unit_hints=daily_hints())
+    assert after == before
+
+
+@pytest.mark.parametrize(
+    "mismatch",
+    ["value", "unit", "currency", "provenance", "ref", "version", "digest", "stale", "field"],
+)
+def test_scenario_acceptance_does_not_apply_to_a_different_input(mismatch):
+    assumption = scenario_day()
+    changes = {
+        "value": {"value": Decimal(6)},
+        "unit": {"unit": "COUNT"},
+        "currency": {"unit": "MONEY", "currency": "USD"},
+        "provenance": {"provenance": "USER_CONFIRMED"},
+        "ref": {"source_refs": (replace(SCENARIO_REF, source_id=UUID(int=31, version=4)),)},
+        "version": {"source_refs": (replace(SCENARIO_REF, version=8),)},
+        "digest": {"source_refs": (replace(SCENARIO_REF, digest_sha256="d" * 64),)},
+        "stale": {"stale": True},
+        "field": {},
+    }
+    accepted = replace(assumption, **changes[mismatch])
+    result = evaluate_calculation(
+        daily(),
+        {"Rider.insured_amount": field("100"), SCENARIO_FIELD: assumption},
+        source=SOURCE,
+        unit_hints=daily_hints(),
+        scenario_inputs={
+            "MedicalEvent.admission" if mismatch == "field" else SCENARIO_FIELD: accepted
+        },
+    )
+    assert result.amount is None and SCENARIO_FIELD in result.missing_paths
+    assert result.steps[0].operands[0].provenance == "SCENARIO_ASSUMPTION"
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "kind",
+        "string_id",
+        "no_version",
+        "string_version",
+        "no_digest",
+        "mixed_versions",
+        "no_refs",
+        "stale",
+        "ai",
+    ],
+)
+def test_matching_opt_in_cannot_make_invalid_scenario_source_or_stale_input_usable(fault):
+    assumption = scenario_day()
+    changes = {
+        "kind": {"source_refs": (replace(SCENARIO_REF, source_kind="EVENT_FACT"),)},
+        "string_id": {"source_refs": (replace(SCENARIO_REF, source_id="synthetic-event-key"),)},
+        "no_version": {"source_refs": (replace(SCENARIO_REF, version=None),)},
+        "string_version": {"source_refs": (replace(SCENARIO_REF, version="7"),)},
+        "no_digest": {"source_refs": (replace(SCENARIO_REF, digest_sha256=None),)},
+        "mixed_versions": {"source_refs": (SCENARIO_REF, replace(SCENARIO_REF, version=8))},
+        "no_refs": {"source_refs": ()},
+        "stale": {"stale": True},
+        "ai": {"provenance": "AI_SUGGESTED"},
+    }
+    assumption = replace(assumption, **changes[fault])
+    result = evaluate_calculation(
+        daily(),
+        {"Rider.insured_amount": field("100"), SCENARIO_FIELD: assumption},
+        source=SOURCE,
+        unit_hints=daily_hints(),
+        scenario_inputs={SCENARIO_FIELD: assumption},
+    )
+    assert result.amount is None and SCENARIO_FIELD in result.missing_paths
+    assert "CALCULATION_INPUT_UNTRUSTED" in result.reason_codes
+
+
+@pytest.mark.parametrize(
+    "path,unit,currency",
+    [
+        ("Rider.insured_amount", "MONEY", "KRW"),
+        ("Receipt.covered_amount", "MONEY", "KRW"),
+        ("ClaimHistory.counted_occurrence", "COUNT", None),
+    ],
+)
+def test_scenario_permission_does_not_extend_to_amounts_receipts_or_claim_counts(
+    path, unit, currency
+):
+    assumption = replace(scenario_day(), unit=unit, currency=currency)
+    node = validate_calculation(formula("multiply", {"field": path}, literal("2")))
+    result = evaluate_calculation(
+        node, {path: assumption}, source=SOURCE, scenario_inputs={path: assumption}
+    )
+    assert result.value is result.amount is None and path in result.missing_paths
+
+
+@pytest.mark.parametrize(
+    "value", [None, Decimal("NaN"), Decimal("-1"), Decimal("5.5"), Decimal("36501")]
+)
+def test_scenario_admission_days_must_be_a_valid_explicit_day_count(value):
+    assumption = replace(scenario_day(), value=value)
+    result = evaluate_calculation(
+        daily(),
+        {"Rider.insured_amount": field("100"), SCENARIO_FIELD: assumption},
+        source=SOURCE,
+        unit_hints=daily_hints(),
+        scenario_inputs={SCENARIO_FIELD: assumption},
+    )
+    assert result.amount is None
+
+
+def test_scenario_opt_in_never_supplies_an_absent_input_value():
+    result = evaluate_calculation(
+        daily(),
+        {"Rider.insured_amount": field("100")},
+        source=SOURCE,
+        unit_hints=daily_hints(),
+        scenario_inputs={SCENARIO_FIELD: scenario_day()},
+    )
+    assert result.amount is None and SCENARIO_FIELD in result.missing_paths
