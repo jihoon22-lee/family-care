@@ -52,5 +52,9 @@ The OCR contract is deliberately separate from native extraction. Run
 Detailed terms candidates use `schemas/terms-semantic-knowledge.v1.schema.json` as their
 canonical contract. Run `TMPDIR=/tmp uv run python scripts/generate_terms_semantic_contract.py`
 to regenerate the strict API/Worker consumers; `check_contracts.py` detects drift.
+The same schema defines bounded `SemanticWorkEnvelope`/`SemanticWorkRegion` inputs for
+asynchronous candidate work, including source identity, whole supplied regions, primary scope,
+and the complete expected-region manifest. These internal fields are not a provider payload;
+the Worker must minimize identifiers and text before an authorized external call.
 A valid candidate or citation does not confer rule authority: source identity, exact original
 spans, field meaning and dependency relations require independent validation before compilation.

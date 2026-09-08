@@ -298,6 +298,41 @@ class SemanticSource(SemanticContract):
     )
 
 
+class SemanticWorkEnvelope(SemanticContract):
+    expected_region_ids: Annotated[
+        list[
+            Annotated[
+                str,
+                Field(min_length=1, max_length=128, pattern="^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
+            ]
+        ],
+        Field(min_length=1, max_length=4096),
+    ]
+    input_digest: Annotated[str, Field(min_length=1, max_length=64, pattern="^[0-9a-f]{64}$")]
+    primary_region_ids: Annotated[
+        list[
+            Annotated[
+                str,
+                Field(min_length=1, max_length=128, pattern="^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
+            ]
+        ],
+        Field(min_length=1, max_length=8),
+    ]
+    regions: Annotated[list[SemanticWorkRegion], Field(min_length=1, max_length=16)]
+    schema_revision: Literal["terms-semantic-work-v1"]
+    source: SemanticSource
+
+
+class SemanticWorkRegion(SemanticContract):
+    citations: Annotated[list[SemanticCitation], Field(min_length=1, max_length=128)]
+    complete: bool
+    kind: Literal["article", "appendix", "footnote", "unresolved"]
+    label: Annotated[str, Field(min_length=1, max_length=512)]
+    region_id: Annotated[
+        str, Field(min_length=1, max_length=128, pattern="^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    ]
+
+
 class TermsSemanticKnowledge(SemanticContract):
     citations: Annotated[list[SemanticCitation], Field(min_length=1, max_length=1024)]
     edges: Annotated[list[SemanticEdge], Field(min_length=0, max_length=1024)]
@@ -339,4 +374,6 @@ SemanticNode.model_rebuild()
 SemanticProcessing.model_rebuild()
 SemanticRatioCalculation.model_rebuild()
 SemanticSource.model_rebuild()
+SemanticWorkEnvelope.model_rebuild()
+SemanticWorkRegion.model_rebuild()
 TermsSemanticKnowledge.model_rebuild()

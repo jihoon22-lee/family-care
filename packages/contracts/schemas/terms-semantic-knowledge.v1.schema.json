@@ -785,6 +785,107 @@
         "structure_identity_sha256"
       ],
       "type": "object"
+    },
+    "SemanticWorkEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "input_digest": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "primary_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/SemanticWorkRegion"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema_revision": {
+          "const": "terms-semantic-work-v1",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SemanticSource"
+        }
+      },
+      "required": [
+        "schema_revision",
+        "source",
+        "primary_region_ids",
+        "regions",
+        "expected_region_ids",
+        "input_digest"
+      ],
+      "type": "object"
+    },
+    "SemanticWorkRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SemanticCitation"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "article",
+            "appendix",
+            "footnote",
+            "unresolved"
+          ],
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "region_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "region_id",
+        "kind",
+        "label",
+        "complete",
+        "citations"
+      ],
+      "type": "object"
     }
   },
   "$id": "https://familycare.local/contracts/terms-semantic-knowledge.v1.schema.json",

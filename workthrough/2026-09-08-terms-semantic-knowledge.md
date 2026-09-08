@@ -50,6 +50,20 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
 전체 필수 검사, 비동기 source range/후보 경로, 원래/새 원문 각주 변경의 통합 변경 영향,
 현재 질의/legacy adapter와 과거 snapshot 보존의 수용을 이어서 수행한다.
 
+### Incremental source processing
+
+- 기반 head `805ad9c`의 [CI 34224618429](https://github.com/jihoon22-lee/family-care/actions/runs/34224618429)는
+  7개 required checks가 통과했다. PostgreSQL job은 12분 49초였다. 아래 후속 변경의 CI 증거를
+  대신하지 않는다.
+- `fa12034`는 원문 영역 전체를 로컬 후보 계획으로 만들고 Article별로 bounded closure를
+  나눈다. 별표/각주의 공유 identity와 새 source proof를 구별하고 누락·순환·미지원·한도 초과는
+  명시적인 미해결 결과로 보존한다. 독립 작업의 최소 RED 후 pure 13개(0.37초), 관련 Ruff와
+  module mypy가 통과했다.
+- 같은 중립 schema에 `SemanticWorkEnvelope`/`SemanticWorkRegion`을 추가하고 소비자를 생성했다.
+  이는 내부 입력 계약이며 provider 전송이나 Worker 실행 완료를 뜻하지 않는다.
+  2026-09-08 21:47 KST, `fa12034` + 해당 schema/생성 소비자/README 변경으로
+  `TMPDIR=/tmp uv run python scripts/check_contracts.py`가 통과했다.
+
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.
 B02의 보호된 수용과 전체 기존 자료 cutover는 #62/#63/#69의 열린 범위로 유지한다.
