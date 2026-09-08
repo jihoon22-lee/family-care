@@ -307,3 +307,30 @@ extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한�
 없으면 이전 버전의 준비 상태를 최신 완료로 반환하지 않는다. Web은 가져오기 성공 후에도
 준비 대기를 최대 300번 조회하고, 처리 실패를 재업로드 요구로 바꾸지 않는다. 본문·파일 경로·
 추출 식별자는 이 상태 응답에 포함하지 않는다. 기존 provider 경로의 범위 소비 전환은 B02 후속이다.
+
+## v0.5 bounded terms proposals
+
+`FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의
+선택 구조화를 함께 켠다. 기본값은 false이며 API background consumer에는 기존
+`FAMILYCARE_ENABLE_RANGE_ENROLLMENT=true`도 필요하다. 원문 로컬 compilation과 저장된
+Worker 후보의 API 재검증·반영은 terms 설정이나 key 없이 계속된다. HTTP 조회는 작업을
+예약하거나 provider를 호출하지 않는다.
+
+API는 완전한 Article과 필요한 정의/별표/각주 참조를 같은 source revision의 envelope에
+넣는다. 16구역·16,384자·전송 JSON 128KiB를 넘거나 참조를 유일하게 찾지 못하면 원문을
+자르지 않고 미지원 범위를 기록한다. Worker는 전체 가정의 활성 이름/별칭을 적용해 최소화하고,
+내부 식별자를 일시 별칭으로 바꾼다. provider 출력은 8,192 token과 JSON 128KiB로 제한한다.
+원문 주소는 복원 후에만 후보로 저장하며 API가 원문 의미·인용·관계를 다시 검증한다.
+
+작업은 180초 lease와 별도 lease token을 사용하며 최대 3회의 실행 실패를 허용한다.
+key 미설정·기능 비활성, 공유 일일/문서 예산 초과 및 동일 요청 진행 대기는 실패 재시도를
+소모하지 않는다. 일일 예산은 다음 UTC 날짜에, 진행 대기는 짧은 지연 후 재개한다.
+문서 누적 예산 초과는 자동으로 다음 날 재시작하지 않는다. 증권 구조화와 같은 예약 장부와
+global 잠금을 쓰므로 기본 문서당 4회·하루 8회 한도를 두 경로가 공유하며 실패 예약도 센다.
+캐시는 실제 model·instruction·schema·최소화 payload에 묶인 검증된 최소화 응답만 보존하고
+새 source envelope마다 인용을 다시 복원한다. DB transaction을 네트워크 호출 중 유지하지 않는다.
+
+완료 후보와 작업 성공은 한 transaction에 저장한다. API는 source/privacy revision을 다시
+확인해 PUBLISHED/STALE/REJECTED receipt를 남긴다. 의미 검증/compiler revision 변경 시
+기존 후보를 재검증하므로 provider를 다시 호출할 필요가 없다. 이러한 성공은 해당 구역의
+지식화이며 전체 상품·실제 문서 판독 품질·Rider 가입 사실을 자동으로 확정하지 않는다.

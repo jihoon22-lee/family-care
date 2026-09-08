@@ -30,6 +30,7 @@ from familycare_worker.ai.recommender import (
     recommender_schema,
 )
 from familycare_worker.ai.schemas import openai_schema_registry
+from familycare_worker.ai.terms_structurer import TERMS_STRUCTURER_SCHEMA_NAME
 from familycare_worker.archive.keys import MasterKey
 from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.document_metadata_repository import DocumentMetadataRunner
@@ -64,6 +65,9 @@ from familycare_worker.runner import (
     PolicyStructuringJobRunner,
     RecommendationJobRunner,
 )
+from familycare_worker.terms_request_budget import TermsRequestBudget
+from familycare_worker.terms_semantic_jobs import TermsSemanticJobQueue
+from familycare_worker.terms_semantic_runner import TermsSemanticRunner
 
 LOGGER = logging.getLogger("familycare.worker")
 
@@ -90,6 +94,7 @@ class FairJobRunner:
         recommendations: JobRunner | None = None,
         preparations: JobRunner | None = None,
         metadata: JobRunner | None = None,
+        terms: JobRunner | None = None,
     ) -> None:
         self.events = events
         self.documents = documents
@@ -97,9 +102,18 @@ class FairJobRunner:
         self.recommendations = recommendations
         self.preparations = preparations
         self.metadata = metadata
+        self.terms = terms
         self._runners = tuple(
             runner
-            for runner in (events, documents, imports, recommendations, preparations, metadata)
+            for runner in (
+                events,
+                documents,
+                imports,
+                recommendations,
+                preparations,
+                metadata,
+                terms,
+            )
             if runner is not None
         )
         self._first = 0
@@ -188,6 +202,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             **openai_schema_registry(),
         },
         output_token_limits={
+            TERMS_STRUCTURER_SCHEMA_NAME: 8_192,
             EVENT_STRUCTURER_SCHEMA_NAME: DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
             "policy_candidate_batch_structurer_v2": 8_192,
             "policy_candidate_batch_verifier_v2": 4_096,
@@ -217,12 +232,21 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
     work_root = os.getenv("FAMILYCARE_WORK_ROOT")
     preparation_runner = DocumentPreparationRunner(database_url)
     metadata_runner = DocumentMetadataRunner(database_url)
+    terms_runner = TermsSemanticRunner(
+        queue=TermsSemanticJobQueue(database_url),
+        provider=provider,
+        request_budget=TermsRequestBudget(database_url),
+        enabled=os.getenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING") == "true",
+        model=os.getenv("FAMILYCARE_AI_STRUCTURER_MODEL", DEFAULT_STRUCTURER_MODEL),
+        stop_requested=stop_event.is_set,
+    )
     if not document_root:
         base_runner: JobRunner = FairJobRunner(
             events=event_runner,
             recommendations=recommendation_runner,
             preparations=preparation_runner,
             metadata=metadata_runner,
+            terms=terms_runner,
         )
     elif not work_root:
         LOGGER.error("document_runner_configuration_incomplete")
@@ -231,6 +255,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             recommendations=recommendation_runner,
             preparations=preparation_runner,
             metadata=metadata_runner,
+            terms=terms_runner,
         )
     else:
         queue = JobQueue(database_url)
@@ -249,6 +274,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             recommendations=recommendation_runner,
             preparations=preparation_runner,
             metadata=metadata_runner,
+            terms=terms_runner,
         )
 
     private_values = {

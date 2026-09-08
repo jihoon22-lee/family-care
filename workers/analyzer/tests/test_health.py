@@ -471,3 +471,56 @@ def test_console_entrypoint_reads_process_arguments(
 
     captured = capsys.readouterr()
     assert captured.out == '{"service": "analyzer", "status": "ready", "version": "0.4.0"}\n'
+
+
+def test_fair_runner_rotates_terms_with_event_work():
+    calls = []
+
+    class Lane:
+        def __init__(self, name):
+            self.name = name
+
+        def run_once(self, worker_id):
+            calls.append(self.name)
+            return True
+
+    runner = FairJobRunner(events=Lane("events"), terms=Lane("terms"))
+    for _ in range(4):
+        assert runner.run_once("synthetic-worker")
+    assert calls == ["events", "terms", "events", "terms"]
+
+
+def test_terms_schema_is_registered_for_bounded_provider_output():
+    from familycare_worker.ai.schemas import openai_schema_registry
+    from familycare_worker.ai.terms_structurer import (
+        TERMS_STRUCTURER_SCHEMA_NAME,
+        terms_structurer_schema,
+    )
+
+    assert openai_schema_registry()[TERMS_STRUCTURER_SCHEMA_NAME] == terms_structurer_schema()
+
+
+def test_environment_terms_runner_defaults_to_no_calls_and_uses_bounded_schema(monkeypatch):
+    from familycare_worker.ai.terms_structurer import TERMS_STRUCTURER_SCHEMA_NAME
+    from familycare_worker.terms_semantic_runner import TermsSemanticRunner
+
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    for name in (
+        "FAMILYCARE_DOCUMENT_ROOT",
+        "FAMILYCARE_WORK_ROOT",
+        "FAMILYCARE_IMPORT_ROOT",
+        "FAMILYCARE_ARCHIVE_ROOT",
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+        "FAMILYCARE_SECRET_SOCKET",
+        "FAMILYCARE_ENABLE_TERMS_STRUCTURING",
+        "OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    runner = _runner_from_environment(Event())
+    assert isinstance(runner, FairJobRunner)
+    terms = [lane for lane in runner._runners if isinstance(lane, TermsSemanticRunner)]
+    assert len(terms) == 1 and not terms[0].enabled and not terms[0].configured()
+    assert terms[0].provider._output_token_limits[TERMS_STRUCTURER_SCHEMA_NAME] == 8192
+    monkeypatch.setenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING", "true")
+    enabled = _runner_from_environment(Event())
+    assert enabled.terms.enabled and not enabled.terms.configured()

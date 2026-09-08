@@ -286,3 +286,124 @@ def test_new_meaning_proof_reuses_retained_candidate_without_a_worker_request(
     after = TermsSemanticRepository(url).current(scope, edition)[0]
     assert before.candidate_id == after.candidate_id
     assert before.publication_id != after.publication_id
+
+
+class SyntheticFormulaProvider:
+    """Return a wholly synthetic proposal using only the request's alias addresses."""
+
+    def __init__(self, plan):
+        from familycare_api.terms_knowledge.local_candidates import propose_local_candidates
+
+        self.plan = plan
+        self.graph = propose_local_candidates(plan.snapshot).graphs[0]
+        self.calls = 0
+
+    def complete(self, **kwargs):
+        from copy import deepcopy
+
+        from familycare_worker.ai.provider import ProviderResponse
+
+        self.calls += 1
+        payload = kwargs["input_payload"]
+        graph = deepcopy(self.graph)
+        by_label = {r["label"]: r["region_id"] for r in payload["regions"]}
+        regions = {
+            r.region_id: by_label[r.label]
+            for r in self.plan.snapshot.layout.regions
+            if r.label in by_label
+        }
+        alias_citations = {
+            (c["page_number"], c["start"], c["end"], c["text"]): c
+            for r in payload["regions"]
+            for c in r["citations"]
+        }
+        citations = {
+            c["citation_id"]: alias_citations[(c["page_number"], c["start"], c["end"], c["text"])]
+            for c in graph["citations"]
+        }
+        for node in graph["nodes"]:
+            node["source_id"] = payload["source"]["source_id"]
+            node["region_ids"] = [regions[key] for key in node["region_ids"]]
+            node["citation_ids"] = [citations[key]["citation_id"] for key in node["citation_ids"]]
+        graph["sources"] = [payload["source"]]
+        graph["citations"] = list(citations.values())
+        graph["processing"] = {
+            "expected_region_ids": list(by_label.values()),
+            "consumed_region_ids": list(by_label.values()),
+            "unresolved_region_ids": [],
+        }
+        return ProviderResponse(graph, "synthetic-formula-request")
+
+
+def test_source_to_budgeted_worker_to_api_replay_calculates_without_further_calls(semantic_context):
+    from familycare_api.terms_knowledge.repository import TermsSemanticRepository
+    from familycare_worker.terms_request_budget import TermsRequestBudget
+    from familycare_worker.terms_semantic_jobs import TermsSemanticJobQueue
+    from familycare_worker.terms_semantic_runner import TermsSemanticRunner
+
+    from apps.api.tests.test_terms_semantic_core import amount
+
+    url, scope, edition = semantic_context
+    repository = TermsSemanticRepository(url)
+    plan = repository.source_plan(scope, edition)
+    primary = next(r.region_id for r in plan.snapshot.layout.regions if r.label == "Article 1")
+    work = TermsSemanticWorkRepository(url)
+    request = work.enqueue(scope, edition, (primary,))
+    provider = SyntheticFormulaProvider(plan)
+    queue = TermsSemanticJobQueue(url)
+    runner = TermsSemanticRunner(
+        queue=queue,
+        provider=provider,
+        request_budget=TermsRequestBudget(url),
+        enabled=True,
+        configured=lambda: True,
+        model="synthetic-terms-model",
+    )
+    assert runner.run_once("synthetic-worker")
+    assert queue.get_job(request.job_id).state == "succeeded"
+    assert provider.calls == 1
+    assert repository.current(scope, edition) == ()
+    assert work.project_pending() == 1
+    assert not runner.run_once("synthetic-worker")
+    assert work.project_pending() == 0
+    for _ in range(2):
+        roots = repository.current_root_page(scope, edition)
+        assert len(roots) == 1 and amount(roots[0].latest.root) == 300
+    assert provider.calls == 1
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM policy_provider_requests WHERE state='SUCCEEDED'"
+            ).fetchone()[0]
+            == 1
+        )
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_real_queue_pauses_without_key_or_opt_in_before_reserving(semantic_context, enabled):
+    from familycare_api.terms_knowledge.repository import TermsSemanticRepository
+    from familycare_worker.terms_request_budget import TermsRequestBudget
+    from familycare_worker.terms_semantic_jobs import TermsSemanticJobQueue
+    from familycare_worker.terms_semantic_runner import TermsSemanticRunner
+
+    url, scope, edition = semantic_context
+    plan = TermsSemanticRepository(url).source_plan(scope, edition)
+    primary = next(r.region_id for r in plan.snapshot.layout.regions if r.label == "Article 1")
+    request = TermsSemanticWorkRepository(url).enqueue(scope, edition, (primary,))
+    provider = SyntheticFormulaProvider(plan)
+    queue = TermsSemanticJobQueue(url)
+    runner = TermsSemanticRunner(
+        queue=queue,
+        provider=provider,
+        request_budget=TermsRequestBudget(url),
+        enabled=enabled,
+        configured=lambda: not enabled,
+    )
+    assert runner.run_once("synthetic-worker")
+    assert not runner.run_once("synthetic-worker")
+    job = queue.get_job(request.job_id)
+    assert job.state == "paused" and job.attempts == 0 and not provider.calls
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute("SELECT count(*) FROM policy_provider_requests").fetchone()[0] == 0
+        )

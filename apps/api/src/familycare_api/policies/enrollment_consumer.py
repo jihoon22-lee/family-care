@@ -18,6 +18,7 @@ from familycare_api.insurance_documents.metadata_publication import DocumentMeta
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 from familycare_api.terms_knowledge.projector import TermsSemanticProjector
+from familycare_api.terms_knowledge.work_repository import TermsSemanticWorkRepository
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
     sources = ClauseSourceProjector(projector.database_url)
     changes = TermsChangeProjector(projector.database_url)
     semantic = TermsSemanticProjector(projector.database_url)
+    semantic_work = TermsSemanticWorkRepository(projector.database_url)
     next_canonical_refresh = 0.0
     while not stop.is_set():
         try:
@@ -70,6 +72,20 @@ async def _consume(projector: RangeEnrollmentProjector, stop: Event) -> None:
                 )
             except Exception:
                 LOGGER.warning("terms_semantic_projection_unavailable")
+        if not stop.is_set():
+            try:
+                await asyncio.to_thread(
+                    semantic_work.project_pending, limit=5, stop_requested=stop.is_set
+                )
+            except Exception:
+                LOGGER.warning("terms_semantic_inbox_unavailable")
+        if not stop.is_set() and os.getenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING") == "true":
+            try:
+                await asyncio.to_thread(
+                    semantic_work.prepare_pending, limit=5, stop_requested=stop.is_set
+                )
+            except Exception:
+                LOGGER.warning("terms_semantic_work_preparation_unavailable")
         if not stop.is_set():
             try:
                 await asyncio.to_thread(

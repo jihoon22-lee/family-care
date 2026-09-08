@@ -2,8 +2,9 @@
 
 [WP04 #64](https://github.com/jihoon22-lee/family-care/issues/64)의 약관 원문→의미 지식→기존
 DSL 경로를 구현 중이다. B02 기반은 PR #76 merge `bc727928a0030332452fb7b3bf639beba6b9e60e`다.
-원문 검증/저장과 로컬 영역 처리, Worker 입력 경계 및 legacy adapter를 구현했다.
-Worker 작업 큐 연결·현재 안내 소비자 인계·전체 수용은 남았다.
+원문 검증/저장과 로컬 영역 처리, Worker 입력·작업 큐·공유 예산·API inbox 및 legacy adapter를
+구현했다. B04의 실제 Rider 연결에는 원문 manifest·계산·분류 판본을 인계한다.
+전체 필수 검증과 CI·보호된 수용은 별도 추적한다.
 
 ## Changes
 
@@ -116,7 +117,7 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   요청 예약 표는 policy 또는 terms job 중 하나만 소유하도록 확장해 두 경로의 문서/일일
   소비량을 공유한다. API 작업 준비는 알려진 로컬 규칙을 다시 예약하지 않고, 미지원 원문
   문맥은 별도 기록한다. primary와 필요한 원문 참조만 bounded envelope로 만든다.
-  Worker claim/budget/소비자 연결은 다음 구현 범위다.
+  Worker claim/budget/소비자 연결 결과는 아래 후속 검증에 기록한다.
 - 2026-09-08 22:48 KST, `1176a77` + 0054/work_repository/전용 테스트에서
   `pytest apps/api/tests/test_terms_semantic_work.py workers/analyzer/tests/test_policy_request_budget.py
   -m integration -q` **12 passed** (7.13초), 관련 Ruff/mypy와 빈 합성 DB의 0053
@@ -137,6 +138,25 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   destructive-test guard 설정으로 **28 passed** (39.61초). 동시 inbox/direct publication,
   원문 변경·privacy 변경·변조 인용·새 의미 revision의 기존 후보 재사용을 포함한다.
   관련 Ruff와 두 repository의 mypy도 통과했다. provider 예약은 0건이다.
+
+- Worker queue/budget의 독립 합성 PostgreSQL 검사는 `0a77801`에 반영된 코드에서
+  **32 passed** (45.02초, Worker 전용 DB 0055), 관련 Ruff/mypy가 통과했다.
+  lease 만료 직전 예약/캐시 반환과 진행 중인 동일 요청 대기를 RED로 재현한 뒤 수정했다.
+  최종 예약은 lease CAS를 확인하며 진행 대기는 재시도를 소모하지 않고 캐시 완료 후 재개한다.
+- `0a77801` + 실행기/API consumer/entrypoint/관련 테스트 변경에서
+  `pytest workers/analyzer/tests/test_terms_semantic_runner.py workers/analyzer/tests/test_health.py
+  apps/api/tests/test_enrollment_consumer.py -q` **58 passed** (3.70초), mypy 3개 모듈 통과.
+  feature opt-in, 키 미설정, 분리된 예산 대기, 실패 시 후보 반영 금지와 fair queue를 포함한다.
+  최초 새 runner 모듈 부재, 소비자 2개·registry/fair lane 2개·inflight 1개 RED를 확인했다.
+- 2026-09-08 23:26 KST, `d75f8ba` 직전 42cb1dc 계열 + 실행기/API 테스트 변경에서
+  `pytest apps/api/tests/test_terms_semantic_work.py -m integration
+  -k 'source_to_budgeted or real_queue_pauses' -q` **3 passed** (5.66초).
+  원문→최소화된 합성 provider 1회→후보→API 재검증→300 계산과 반복 조회 무호출,
+  실제 queue의 기능/키 미설정 시 0예약·0재시도 소모를 확인했다.
+  이는 실제 provider나 실제 보험 자료의 판독 품질 검증이 아니다.
+- 0054→0055 upgrade와 `.env.example`을 사용한
+  `docker compose --env-file .env.example -f infra/compose/compose.yaml config --quiet`가 통과했다.
+  Compose 변경은 API/Worker의 기본 false인 terms opt-in 전달이며 runtime은 변경하지 않았다.
 
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.
