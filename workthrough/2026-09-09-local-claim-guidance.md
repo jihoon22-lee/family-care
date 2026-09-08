@@ -484,3 +484,17 @@ apps/api/tests/test_local_guidance_integration.py apps/api/tests/test_metadata_n
 GET **709.116 / 882.858ms**였다. 42개 API 응답, HTTP/provider 호출 0/0·새 외부 AI 작업 0과
 로컬 bookkeeping 1을 다시 확인했다. 소규모 ASGI/PG·작업 행 잠금 공존이라는 측정 범위와
 DB 캐시·전체 자료·CPU/OCR·실기기 미검증 경계는 앞선 측정과 같다.
+
+08:04 KST `8adc4e1`을 [PR #79](https://github.com/jihoon22-lee/family-care/pull/79)로 게시했다.
+첫 [CI 34288938448](https://github.com/jihoon22-lee/family-care/actions/runs/34288938448)의 저장소
+안전 검사는 Gitleaks `generic-api-key`가 `GuidanceSubtotalComponent`의 Python 속성 전달식을
+키 문자열로 오인해 실패했다. 커밋 `52298b5`의 `guidance/models.py:440`에는 비밀값이나
+문자열 자격증명이 없음을 원 코드와 대조했다. 공개 이력을 수정하지 않았다.
+
+`.gitleaks.toml`의 오탐 판정은 그 소스 파일 한 곳과 속성 전달식 한 행의 완전 일치로 제한한다.
+CI와 같은 공식 Gitleaks **8.24.3** binary를 release checksum으로 검증한 뒤 실행했다.
+`gitleaks git --redact --log-opts=origin/main..HEAD --config .gitleaks.toml`은 최초 **31 commits /
+1 finding(exit 1)**에서 조정 후 **31 commits / 0 findings(exit 0)**였다. 저장소 밖의 합성
+대조군에 대해 같은 상대경로/코드 식은 0건, 같은 위치를 새로 만든 문자열 값으로 바꾸면
+1건을 탐지했다. 다른 절대경로의 동일 코드 식도 계속 탐지해 경로 제한을 확인했다. 실제
+비밀값을 대조군이나 예외값으로 사용하지 않았으며 나머지 기본 규칙은 유지한다.
