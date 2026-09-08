@@ -431,3 +431,32 @@ apps/api/tests/test_claim_workflow_integration.py -m integration -q --tb=short`�
 apps/api/src/familycare_api/claims`는 **11 source files passed**, 관련 Ruff lint/format 3개와
 diff도 통과했다. 검증은 `0ca6741` + 위 두 claims 소스의 미커밋 변경과 전용 합성 DB,
 destructive guard·B04 PYTHONPATH·TMPDIR에서 실행했다. 재import 이력 alias 보완은 진행 중이다.
+
+07:21~07:35 KST 후속 변경 `0f5a7fc`(원 `6a4b5d2`)와 root 소비자 변경은 새 import가 새
+private 담보 UUID를 부여해도 과거 청구/지급의 **검증되었고 다시 검증 가능한 원문 연결**을
+유지한다. 해당 구성원의 청구·이력에서 참조한 과거 run만 최대 32개/참조 10,000개로 조회한다.
+과거 run마다 현재의 원문·동일 물리 위치·당사자·원장·교정/반대 근거를 다시 대조한다.
+단순 이름/source key나 저장된 연결 행만으로 동일성을 승인하지 않는다. 과거 link·청구 JSON을
+수정하거나 과거 자료를 현재 후보의 공개 source_refs에 추가하지 않는다.
+
+helper의 실제 두 번째 package apply→원문 manifest→규칙 publication→canonical refresh
+fixture에서 최초 모듈 부재 RED 후 신규 **8 passed**(27.49초), 기존 canonical **26 passed**였다.
+초기 status confirmation 누락, 이후 제약에 어긋나는 fixture 변형은 setup/fixture 오류로
+보존했다. 최종 누락 대조군은 실제 두 번째 package에 다른 이름을 넣어 import하는 방식이다.
+helper mypy 2개/Ruff 3개/format/diff가 통과했다.
+
+root 소비자 테스트는 helper 통합만 된 `0f5a7fc`에서 **4 failed**(14.77초)로 기존 청구 미재사용,
+이전 지급 횟수 누락, 복원 중복을 확인했다. source 오류 격리도 별도로 **1 failed**(4.48초)였다.
+청구 생성/복원과 두 이력 reader에 재검증된 alias를 연결한 뒤
+`python -m pytest apps/api/tests/test_guidance_claim_reimport_integration.py -m integration
+-q --tb=short`는 **5 passed**(21.20초)였다. import 전 실제 수동 지급 기록, 현대/legacy 진입점,
+복원 거부와 같은 사건/지급일 이전 제외를 검증했다. 원래 private 참조와 JSON/hash는 그대로다.
+alias SQL 조회 실패는 savepoint에서 격리하고 이력 횟수를 UNKNOWN으로 남긴다. 나머지 후보와
+금액은 유지하며 `CLAIM_HISTORY_ALIAS_UNAVAILABLE`을 support와 source 실패에 표시한다.
+
+같은 root 소비자 변경에서 claims/guidance/history/canonical 관련 mypy **40 source files**,
+전체 mypy **319 source files**, 전체 Ruff lint 및 format **787 files**가 통과했다.
+`python -m pytest apps/api/tests workers/analyzer/tests scripts/tests -q --tb=short` 재실행은
+**3398 passed / 644 deselected / 3 subtests passed**(32.61초)였다. 이 시점의 644개 integration은
+다음 전체 PG 실행 대상이다. 별도 읽기 전용 재검토에서도 두 발견 사항의 수정 경로를 확인했으며
+새 구체적 회귀를 찾지 못했다. 해당 재검토는 동적 검증으로 계산하지 않았다.

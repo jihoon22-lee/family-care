@@ -42,6 +42,7 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeStatusInterval,
 )
 from familycare_api.decisions.knowledge_engine import summarize_knowledge_results
+from familycare_api.insurance_reconciliation import claim_aliases
 from familycare_api.insurance_reconciliation.canonical_repository import (
     CanonicalLinkError,
     CanonicalLinkRepository,
@@ -418,13 +419,15 @@ class PostgresKnowledgeDecisionRepository:
         identity_failures: tuple[str, ...] = ()
         try:
             with connection.transaction():
+                current_links = CanonicalLinkRepository.read_in_transaction(connection, scope)
                 identities = {
                     link.knowledge_coverage_id: link.identity()
-                    for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+                    for link in current_links
                     if link.family_member_id == event.family_member_id
                     and link.import_run_id == knowledge_run_id
                 }
         except psycopg.Error, CanonicalLinkError:
+            current_links = ()
             identities = {}
             identity_failures = ("CANONICAL_IDENTITY_UNAVAILABLE",)
         contract_ids = tuple(
@@ -444,6 +447,23 @@ class PostgresKnowledgeDecisionRepository:
                 ]
             )
         )
+        history_failures: tuple[str, ...] = ()
+        try:
+            with connection.transaction():
+                history_aliases = claim_aliases.read_claim_coverage_aliases(
+                    connection,
+                    scope,
+                    family_member_id=event.family_member_id,
+                    rider_ids=rider_ids,
+                    current_links=current_links,
+                )
+        except psycopg.Error, CanonicalLinkError:
+            history_aliases = ()
+            history_failures = ("CLAIM_HISTORY_ALIAS_UNAVAILABLE",)
+        history_coverage_ids = {
+            *coverage_ids,
+            *(link.knowledge_coverage_id for link in history_aliases),
+        }
         interval_rows = connection.execute(
             """
             /* private-knowledge:status-intervals */
@@ -484,7 +504,7 @@ class PostgresKnowledgeDecisionRepository:
                 "household": scope.household_space_id,
                 "member": event.family_member_id,
                 "riders": list(rider_ids),
-                "coverages": list(coverage_ids),
+                "coverages": list(history_coverage_ids),
                 "event": event.id,
                 "event_date": event.event_date,
             },
@@ -549,13 +569,17 @@ class PostgresKnowledgeDecisionRepository:
         calculations, calculation_errors = self._calculations(calculation_rows)
         supporting_facts, receipt_currency, receipt_errors = self._receipt_facts(receipt_rows)
         context_reasons = tuple(
-            dict.fromkeys((*calculation_errors, *receipt_errors, *identity_failures))
+            dict.fromkeys(
+                (*calculation_errors, *receipt_errors, *identity_failures, *history_failures)
+            )
         )
         status_digest = self._status_digest(
             header,
             benefit_rows,
             interval_rows,
         )
+        if history_failures:
+            status_digest = _digest({"status": status_digest, "history_failures": history_failures})
         coverages: list[KnowledgeCoverageContext] = []
         for row in benefit_rows:
             coverage_id = cast(UUID, row["knowledge_coverage_id"])
@@ -565,12 +589,19 @@ class PostgresKnowledgeDecisionRepository:
                 identity.ref.coverage_id if identity else cast(UUID | None, row.get("rider_id"))
             )
             history_fact = None
-            count = private_history.get(coverage_id, 0)
+            private_ids = {coverage_id}
+            count = 0
             if (
                 row.get("operational_binding_decision") == "MATCH" or identity is not None
             ) and rider_id is not None:
+                private_ids.update(
+                    link.knowledge_coverage_id
+                    for link in history_aliases
+                    if link.rider_id == rider_id
+                )
                 count += history.get(rider_id, 0)
-            if count > 0:
+            count += sum(private_history.get(private_id, 0) for private_id in private_ids)
+            if count > 0 and not history_failures:
                 history_fact = KnowledgeFact(
                     value=count,
                     provenance="DERIVED_CONFIRMED",

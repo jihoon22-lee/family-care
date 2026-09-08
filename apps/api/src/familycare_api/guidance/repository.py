@@ -29,7 +29,11 @@ from familycare_api.guidance.domain import (
 )
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
 from familycare_api.guidance.semantic_repository import SemanticGuidanceReader
-from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
+from familycare_api.insurance_reconciliation import claim_aliases
+from familycare_api.insurance_reconciliation.canonical_repository import (
+    CanonicalLinkError,
+    CanonicalLinkRepository,
+)
 
 if TYPE_CHECKING:
     from familycare_api.decisions.repository import DecisionRepository
@@ -172,6 +176,20 @@ def read_operational_guidance(
         for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
         if link.family_member_id == event.family_member_id
     )
+    history_failures: tuple[str, ...] = ()
+    try:
+        with connection.transaction():
+            history_aliases = claim_aliases.read_claim_coverage_aliases(
+                connection,
+                scope,
+                family_member_id=event.family_member_id,
+                rider_ids=tuple(snapshot.rider_id for snapshot in snapshots),
+                current_links=links,
+            )
+    except psycopg.Error, CanonicalLinkError:
+        history_aliases = ()
+        history_failures = ("CLAIM_HISTORY_ALIAS_UNAVAILABLE",)
+    versions.append({"claim_history_alias_failures": history_failures})
     for snapshot in snapshots:
         history = connection.execute(
             """
@@ -188,12 +206,12 @@ def read_operational_guidance(
                 snapshot.rider_id,
                 [
                     link.knowledge_coverage_id
-                    for link in links
+                    for link in history_aliases
                     if link.rider_id == snapshot.rider_id
                 ],
             ),
         ).fetchone()
-        history_count = int(history["count"]) if history else 0
+        history_count = int(history["count"]) if history and not history_failures else 0
         row = connection.execute(
             "SELECT p.product_display,p.source_evidence_id AS policy_evidence,"
             "p.version AS policy_version,"
@@ -402,6 +420,7 @@ def read_operational_guidance(
         selected_subject_terms=subjects.selected_subject_terms,
         other_subject_terms=subjects.other_subject_terms,
         expenses=subjects.expenses,
+        failure_codes=history_failures,
         versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
     )
 
@@ -446,5 +465,6 @@ def combine_guidance_contexts(
         selected_subject_terms=operational.selected_subject_terms,
         other_subject_terms=operational.other_subject_terms,
         expenses=operational.expenses,
+        failure_codes=tuple(dict.fromkeys((*operational.failure_codes, *private.failure_codes))),
         versions=private.versions.model_copy(update={"status_digest": digest}),
     )

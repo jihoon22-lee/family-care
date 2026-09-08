@@ -12,6 +12,7 @@ from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.repository import DecisionRepository, _medical_event
 from familycare_api.guidance.models import LocalGuidanceResponse
+from familycare_api.insurance_reconciliation import claim_aliases
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 
 
@@ -43,9 +44,16 @@ def existing_operational_claim(
     rider_id: UUID,
 ) -> UUID | None:
     """Reuse a private source only after replaying its current identity proof."""
+    links = CanonicalLinkRepository.read_in_transaction(connection, scope)
     private_ids = [
         link.knowledge_coverage_id
-        for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+        for link in claim_aliases.read_claim_coverage_aliases(
+            connection,
+            scope,
+            family_member_id=family_member_id,
+            rider_ids=(rider_id,),
+            current_links=links,
+        )
         if link.family_member_id == family_member_id and link.rider_id == rider_id
     ]
     return _existing_source_claim(
@@ -65,12 +73,32 @@ def existing_private_claim(
         for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
         if link.family_member_id == family_member_id
     )
-    rider_ids = {
+    proposed_riders = {
         link.rider_id for link in links if link.knowledge_coverage_id == private_coverage_id
+    }
+    # Retained mappings are lookup hints only. The reader below must replay the
+    # superseded source before one can identify an operational replacement.
+    proposed_riders.update(
+        row["rider_id"]
+        for row in connection.execute(
+            "SELECT DISTINCT rider_id FROM private_knowledge_canonical_links "
+            "WHERE household_space_id=%s AND family_member_id=%s AND knowledge_coverage_id=%s",
+            (scope.household_space_id, family_member_id, private_coverage_id),
+        ).fetchall()
+    )
+    aliases = claim_aliases.read_claim_coverage_aliases(
+        connection,
+        scope,
+        family_member_id=family_member_id,
+        rider_ids=tuple(proposed_riders),
+        current_links=links,
+    )
+    rider_ids = {
+        link.rider_id for link in aliases if link.knowledge_coverage_id == private_coverage_id
     }
     private_ids = {
         private_coverage_id,
-        *(link.knowledge_coverage_id for link in links if link.rider_id in rider_ids),
+        *(link.knowledge_coverage_id for link in aliases if link.rider_id in rider_ids),
     }
     return _existing_source_claim(
         connection, scope, event_id, family_member_id, list(rider_ids), list(private_ids)
@@ -111,7 +139,6 @@ def create_guidance_claim(
     candidates = tuple(item for item in guidance.candidates if item.ref == coverage)
     if len(candidates) != 1:
         raise ClaimInvalid
-    selected = candidates[0]
     policy_id = rider_id = private_contract_id = private_coverage_id = None
     insurer_key = insurer_display = None
     if coverage.kind == "OPERATIONAL_RIDER":
@@ -152,22 +179,14 @@ def create_guidance_claim(
             raise ClaimInvalid
         private_contract_id, private_coverage_id = coverage.contract_id, coverage.coverage_id
         insurer_display = identity["insurer_display"]
-    refs = selected.canonical_identity.source_refs if selected.canonical_identity else (coverage,)
-    existing = connection.execute(
-        """
-        SELECT id FROM claim_cases WHERE household_space_id=%s AND medical_event_id=%s
-          AND deleted_at IS NULL AND (rider_id=ANY(%s) OR private_coverage_id=ANY(%s))
-        ORDER BY created_at,id LIMIT 1
-        """,
-        (
-            scope.household_space_id,
-            event_id,
-            [ref.coverage_id for ref in refs if ref.kind == "OPERATIONAL_RIDER"],
-            [ref.coverage_id for ref in refs if ref.kind == "PRIVATE_KNOWLEDGE_COVERAGE"],
-        ),
-    ).fetchone()
+    lookup = (
+        existing_operational_claim
+        if coverage.kind == "OPERATIONAL_RIDER"
+        else existing_private_claim
+    )
+    existing = lookup(connection, scope, event_id, event.family_member_id, coverage.coverage_id)
     if existing is not None:
-        return UUID(str(existing["id"]))
+        return existing
     snapshot = build_guidance_claim_snapshot(guidance, coverage, run_id=run_id)
     claim_id = uuid4()
     connection.execute(

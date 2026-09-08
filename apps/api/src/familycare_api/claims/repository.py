@@ -110,7 +110,7 @@ class ClaimRepository:
                     raise ClaimInvalid from None
             except ValueError:
                 raise ClaimInvalid from None
-            except psycopg.Error:
+            except psycopg.Error, CanonicalLinkError:
                 raise ClaimRepositoryUnavailable from None
         raise ClaimInvalid  # pragma: no cover
 

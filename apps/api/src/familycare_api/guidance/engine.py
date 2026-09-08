@@ -125,7 +125,7 @@ class LocalGuidanceEngine:
         candidates: list[GuidanceCandidate] = []
         unsupported = 0
         expense_error = expense_failure(context.expenses, event)
-        failures: list[str] = [expense_error] if expense_error else []
+        failures = [*context.failure_codes, *([expense_error] if expense_error else [])]
         groups: dict[CanonicalCoverageRef, list[GuidanceCoverageInput]] = {}
         for source_coverage in sorted(
             context.coverages, key=lambda item: (item.ref.kind, str(item.ref.coverage_id))

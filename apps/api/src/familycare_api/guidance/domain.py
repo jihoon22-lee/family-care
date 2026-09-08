@@ -142,6 +142,7 @@ class GuidanceContext:
     expenses: ExpenseRead | None = None
     selected_subject_terms: tuple[str, ...] = ()
     other_subject_terms: tuple[str, ...] = ()
+    failure_codes: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.household_space_id.int or not self.family_member_id.int:
