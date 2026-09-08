@@ -650,7 +650,7 @@
             "$ref": "#/$defs/FieldPath"
           },
           "maxItems": 16,
-          "minItems": 1,
+          "minItems": 0,
           "type": "array"
         },
         "expression": {
@@ -713,7 +713,7 @@
             "$ref": "#/$defs/FieldPath"
           },
           "maxItems": 16,
-          "minItems": 1,
+          "minItems": 0,
           "type": "array"
         },
         "result_reason_code": {

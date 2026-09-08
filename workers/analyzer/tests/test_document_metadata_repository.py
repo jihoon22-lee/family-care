@@ -57,11 +57,11 @@ def metadata_database(request: pytest.FixtureRequest) -> Any:
     return request.getfixturevalue("structure_database")
 
 
-def _source(job: Any, *, text: str | None = None) -> Any:
+def _source(job: Any, *, text: str | None = None, content_sha256: str = "a" * 64) -> Any:
     return build_document_structure(
         {
             "document_version_id": str(job.document_version_id),
-            "content_sha256": "a" * 64,
+            "content_sha256": content_sha256,
             "pages": [
                 {
                     "page_number": 1,
@@ -83,9 +83,11 @@ def _source(job: Any, *, text: str | None = None) -> Any:
     )
 
 
-def _seed(database: Any, *, text: str | None = None) -> tuple[str, Any, Any]:
+def _seed(
+    database: Any, *, text: str | None = None, content_sha256: str = "a" * 64
+) -> tuple[str, Any, Any]:
     url, job = database
-    source = _source(job, text=text)
+    source = _source(job, text=text, content_sha256=content_sha256)
     generation = _prepare(
         DocumentStructureRepository(url),
         job,

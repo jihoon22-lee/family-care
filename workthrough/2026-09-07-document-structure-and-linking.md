@@ -1144,3 +1144,22 @@ API 전용 proof는 별도 worktree에서 RED 후 기존 v6 회귀와 함께 검
 통과했다. 이후 양쪽 raw source/정수/범위 조건을 맞추고 text-only legacy 호출 회귀를 추가해
 위 전체 검사를 실행했다. 실제 추출의 현재 소스 읽기 전용 집계와 최종 CI는 진행 중이며
 실제 판본 신원·가입 적용 수용과 운영 전환을 완료한 것으로 표현하지 않는다.
+
+
+### B02 code integration and acceptance handoff
+
+최종 소스 `2deb5d6d214cd5c0c09aad257155e07182fab4d1`의
+[CI 34217390376](https://github.com/jihoon22-lee/family-care/actions/runs/34217390376)는
+필수 7/7을 통과했다. 기본 Python **2,588 passed / 519 deselected / 3 subtests**
+(33.28초), 전체 합성 PG **519 passed / 2588 deselected** (728.88초), Web/build와
+컨테이너 3개가 포함된다. 2026-09-08 19:58 KST경 같은 소스의 로컬 `web:check`는
+**172 tests**와 build (42.52초), Chromium mock E2E는 **17 passed** (17.1초)였다.
+[PR #76](https://github.com/jihoon22-lee/family-care/pull/76)은 20:06:56 KST에
+merge `bc727928a0030332452fb7b3bf639beba6b9e60e`로 통합했다.
+
+현재 소스의 보관 추출 대사는 읽기 전용으로 완료했지만 약관/보험사·상품·판본 신원 수용은
+남았다. 이용 가이드 표시 설명 구별만으로 국소 예시와 다음 조항의 범위가 해결되지는
+않았다. #62/#63은 열린 상태이며 원문 계층과 지식 경로는 #64/B03, 기존 자료·공통 출처
+연결 및 전체 운영 cutover는 #69/B07에서 계속한다. 관련 이슈와 마일스톤에 같은 상태를
+게시하고 재조회했다. 보호된 진단의 원문·식별자·수치는 공개 기록에 넣지 않았다. 추가 AI
+호출·운영 쓰기·태그·배포는 수행하지 않았으며 실제 기기·전체 실제 자료 수용은 미완료다.

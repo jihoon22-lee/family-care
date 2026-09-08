@@ -262,7 +262,7 @@ class CoverageRuleVersionResponse(BaseModel):
     schema_version: Literal["coverage-rule-v1"]
     rule_kind: str = Field(min_length=1, max_length=48)
     required: bool
-    input_field_paths: tuple[str, ...] = Field(min_length=1, max_length=16)
+    input_field_paths: tuple[str, ...] = Field(max_length=16)
     result_reason_code: str = Field(min_length=1, max_length=64)
     review_state: Literal["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"]
     executable: bool

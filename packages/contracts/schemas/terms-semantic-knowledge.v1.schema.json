@@ -1,0 +1,977 @@
+{
+  "$defs": {
+    "SemanticCitation": {
+      "additionalProperties": false,
+      "properties": {
+        "bbox": {
+          "items": {
+            "maximum": 100000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "type": "array"
+        },
+        "citation_id": {
+          "maxLength": 36,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "end": {
+          "maximum": 262144,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "page_number": {
+          "maximum": 500,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "source_layer": {
+          "enum": [
+            "native",
+            "ocr"
+          ],
+          "type": "string"
+        },
+        "start": {
+          "maximum": 262144,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "maxLength": 8192,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "citation_id",
+        "source_id",
+        "node_id",
+        "page_number",
+        "start",
+        "end",
+        "text",
+        "source_layer",
+        "bbox"
+      ],
+      "type": "object"
+    },
+    "SemanticClassification": {
+      "additionalProperties": false,
+      "properties": {
+        "code_system": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "code_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "codes": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "field": {
+          "enum": [
+            "MedicalEvent.classification",
+            "MedicalEvent.diagnosis_code",
+            "MedicalEvent.procedure_code"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "const": "classification",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "field",
+        "code_system",
+        "code_version",
+        "codes"
+      ],
+      "type": "object"
+    },
+    "SemanticCodeDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "code_system": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "code_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "codes": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9._:-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "effect": {
+          "const": "classification_codes",
+          "type": "string"
+        },
+        "field": {
+          "enum": [
+            "MedicalEvent.classification",
+            "MedicalEvent.diagnosis_code",
+            "MedicalEvent.procedure_code"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "const": "definition",
+          "type": "string"
+        },
+        "meaning": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "term": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "field",
+        "code_system",
+        "code_version",
+        "codes",
+        "effect",
+        "term",
+        "meaning"
+      ],
+      "type": "object"
+    },
+    "SemanticCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "MedicalEvent.admission",
+            "MedicalEvent.performed",
+            "MedicalEvent.diagnosis_confirmed",
+            "MedicalEvent.admission_days",
+            "PolicyContract.contract_start",
+            "ClaimHistory.counted_occurrence"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "const": "condition",
+          "type": "string"
+        },
+        "operator": {
+          "description": "count_before retains the existing DSL meaning: known prior occurrence count is at least the threshold. count_below means strictly fewer prior occurrences and compiles to tri-state NOT(count_before); missing history remains UNKNOWN.",
+          "enum": [
+            "equals",
+            "days_since",
+            "count_before",
+            "range",
+            "count_below"
+          ],
+          "type": "string"
+        },
+        "rule_kind": {
+          "enum": [
+            "eligibility",
+            "exclusion",
+            "temporal",
+            "frequency"
+          ],
+          "type": "string"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "enum": [
+                "days",
+                "occurrences"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "items": {
+                "maximum": 100000,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "rule_kind",
+        "field",
+        "operator",
+        "value",
+        "unit"
+      ],
+      "type": "object"
+    },
+    "SemanticDailyCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "const": "insured_amount_per_payable_day",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "calculation",
+          "type": "string"
+        },
+        "mode": {
+          "const": "daily",
+          "type": "string"
+        },
+        "rounding": {
+          "enum": [
+            "half_up",
+            "half_even",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mode",
+        "basis",
+        "currency",
+        "rounding"
+      ],
+      "type": "object"
+    },
+    "SemanticDeductible": {
+      "additionalProperties": false,
+      "description": "Fixed monetary deduction from gross benefit. Apply a zero floor before the monetary cap and final rounding; it is not an admission-day deduction.",
+      "properties": {
+        "amount": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "deductible",
+          "type": "string"
+        },
+        "stage": {
+          "const": "before_amount_cap_and_rounding",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "amount",
+        "currency",
+        "stage"
+      ],
+      "type": "object"
+    },
+    "SemanticDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "const": "explanation_only",
+          "type": "string"
+        },
+        "kind": {
+          "const": "definition",
+          "type": "string"
+        },
+        "meaning": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "term": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "term",
+        "meaning",
+        "effect"
+      ],
+      "type": "object"
+    },
+    "SemanticEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "from_node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "DEPENDS_ON",
+            "OVERRIDES"
+          ],
+          "type": "string"
+        },
+        "to_node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_node_id",
+        "to_node_id",
+        "relation"
+      ],
+      "type": "object"
+    },
+    "SemanticFixedCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "calculation",
+          "type": "string"
+        },
+        "mode": {
+          "const": "fixed",
+          "type": "string"
+        },
+        "rounding": {
+          "enum": [
+            "half_up",
+            "half_even",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mode",
+        "amount",
+        "currency",
+        "rounding"
+      ],
+      "type": "object"
+    },
+    "SemanticFootnote": {
+      "additionalProperties": false,
+      "properties": {
+        "days": {
+          "maximum": 36500,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "effect": {
+          "const": "initial_excluded_days",
+          "type": "string"
+        },
+        "kind": {
+          "const": "footnote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "effect",
+        "days"
+      ],
+      "type": "object"
+    },
+    "SemanticInformation": {
+      "additionalProperties": false,
+      "properties": {
+        "effect": {
+          "enum": [
+            "explanation_only",
+            "unsupported_condition",
+            "unsupported_calculation"
+          ],
+          "type": "string"
+        },
+        "kind": {
+          "const": "information",
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "effect",
+        "reason_code"
+      ],
+      "type": "object"
+    },
+    "SemanticLimit": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "anyOf": [
+            {
+              "maxLength": 3,
+              "minLength": 1,
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "const": "limit",
+          "type": "string"
+        },
+        "measure": {
+          "enum": [
+            "payable_days",
+            "maximum_amount"
+          ],
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "days",
+            "amount"
+          ],
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "measure",
+        "value",
+        "unit",
+        "currency"
+      ],
+      "type": "object"
+    },
+    "SemanticNode": {
+      "additionalProperties": false,
+      "properties": {
+        "citation_ids": {
+          "items": {
+            "maxLength": 36,
+            "minLength": 1,
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SemanticDailyCalculation"
+            },
+            {
+              "$ref": "#/$defs/SemanticFixedCalculation"
+            },
+            {
+              "$ref": "#/$defs/SemanticRatioCalculation"
+            },
+            {
+              "$ref": "#/$defs/SemanticClassification"
+            },
+            {
+              "$ref": "#/$defs/SemanticCondition"
+            },
+            {
+              "$ref": "#/$defs/SemanticFootnote"
+            },
+            {
+              "$ref": "#/$defs/SemanticLimit"
+            },
+            {
+              "$ref": "#/$defs/SemanticDefinition"
+            },
+            {
+              "$ref": "#/$defs/SemanticInformation"
+            },
+            {
+              "$ref": "#/$defs/SemanticCodeDefinition"
+            },
+            {
+              "$ref": "#/$defs/SemanticDeductible"
+            }
+          ]
+        },
+        "region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "source_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "statement": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "node_id",
+        "source_id",
+        "region_ids",
+        "statement",
+        "citation_ids",
+        "payload"
+      ],
+      "type": "object"
+    },
+    "SemanticProcessing": {
+      "additionalProperties": false,
+      "properties": {
+        "consumed_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 0,
+          "type": "array"
+        },
+        "expected_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 0,
+          "type": "array"
+        },
+        "unresolved_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 0,
+          "type": "array"
+        }
+      },
+      "required": [
+        "expected_region_ids",
+        "consumed_region_ids",
+        "unresolved_region_ids"
+      ],
+      "type": "object"
+    },
+    "SemanticRatioCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "const": "insured_amount",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "calculation",
+          "type": "string"
+        },
+        "mode": {
+          "const": "insured_ratio",
+          "type": "string"
+        },
+        "ratio": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        },
+        "rounding": {
+          "enum": [
+            "half_up",
+            "half_even",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mode",
+        "basis",
+        "ratio",
+        "currency",
+        "rounding"
+      ],
+      "type": "object"
+    },
+    "SemanticSource": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "document_version_id": {
+          "maxLength": 36,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "generation_id": {
+          "maxLength": 36,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        },
+        "structure_identity_sha256": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "terms_edition_id": {
+          "anyOf": [
+            {
+              "maxLength": 36,
+              "minLength": 1,
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "document_version_id",
+        "terms_edition_id",
+        "generation_id",
+        "content_sha256",
+        "structure_identity_sha256"
+      ],
+      "type": "object"
+    },
+    "SemanticWorkEnvelope": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 4096,
+          "minItems": 1,
+          "type": "array"
+        },
+        "input_digest": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "primary_region_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "type": "string"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "type": "array"
+        },
+        "regions": {
+          "items": {
+            "$ref": "#/$defs/SemanticWorkRegion"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        "schema_revision": {
+          "const": "terms-semantic-work-v1",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/SemanticSource"
+        }
+      },
+      "required": [
+        "schema_revision",
+        "source",
+        "primary_region_ids",
+        "regions",
+        "expected_region_ids",
+        "input_digest"
+      ],
+      "type": "object"
+    },
+    "SemanticWorkRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "citations": {
+          "items": {
+            "$ref": "#/$defs/SemanticCitation"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "article",
+            "appendix",
+            "footnote",
+            "unresolved"
+          ],
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
+        "region_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "region_id",
+        "kind",
+        "label",
+        "complete",
+        "citations"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://familycare.local/contracts/terms-semantic-knowledge.v1.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Untrusted semantic candidates. Source grounding and publication authority are independently verified; processing completion is separate from usability.",
+  "properties": {
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/SemanticCitation"
+      },
+      "maxItems": 1024,
+      "minItems": 1,
+      "type": "array"
+    },
+    "edges": {
+      "items": {
+        "$ref": "#/$defs/SemanticEdge"
+      },
+      "maxItems": 1024,
+      "minItems": 0,
+      "type": "array"
+    },
+    "model_revision": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/SemanticNode"
+      },
+      "maxItems": 256,
+      "minItems": 1,
+      "type": "array"
+    },
+    "processing": {
+      "$ref": "#/$defs/SemanticProcessing"
+    },
+    "prompt_revision": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "roots": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "type": "array"
+    },
+    "schema_revision": {
+      "const": "terms-semantic-v1",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/SemanticSource"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "schema_revision",
+    "prompt_revision",
+    "model_revision",
+    "sources",
+    "citations",
+    "nodes",
+    "edges",
+    "roots",
+    "processing"
+  ],
+  "title": "TermsSemanticKnowledge",
+  "type": "object"
+}

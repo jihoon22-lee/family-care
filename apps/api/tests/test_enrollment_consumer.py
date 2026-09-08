@@ -9,6 +9,8 @@ from familycare_api.clauses.terms_change_repository import TermsChangeProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.main import create_app
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
+from familycare_api.terms_knowledge.projector import TermsSemanticProjector
+from familycare_api.terms_knowledge.work_repository import TermsSemanticWorkRepository
 from fastapi.testclient import TestClient
 from pytest import LogCaptureFixture, MonkeyPatch, fixture
 
@@ -23,6 +25,49 @@ def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsChangeProjector, "refresh_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsSemanticProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsSemanticWorkRepository, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsSemanticWorkRepository, "prepare_pending", lambda *args, **kwargs: 0)
+
+
+def test_worker_results_are_published_locally_while_new_ai_work_is_disabled(monkeypatch):
+    called = Event()
+    prepared = []
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.delenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING", raising=False)
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        TermsSemanticWorkRepository, "project_pending", lambda *a, **kw: called.set() or 0
+    )
+    monkeypatch.setattr(
+        TermsSemanticWorkRepository, "prepare_pending", lambda *a, **kw: prepared.append(1) or 0
+    )
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert not prepared
+
+
+def test_opted_in_terms_work_is_prepared_after_local_projection(monkeypatch):
+    called = Event()
+    order = []
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *a, **kw: 0)
+    monkeypatch.setattr(
+        TermsSemanticProjector, "project_pending", lambda *a, **kw: order.append("local") or 0
+    )
+
+    def prepare(*args, **kwargs):
+        order.append("prepare")
+        called.set()
+        return 0
+
+    monkeypatch.setattr(TermsSemanticWorkRepository, "prepare_pending", prepare)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert order[:2] == ["local", "prepare"]
 
 
 def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPatch) -> None:
@@ -201,3 +246,29 @@ def test_enabled_api_replays_clause_sources_before_assessing_changes(
     with TestClient(create_app()):
         assert called.wait(timeout=1)
     assert order[:2] == ["sources", "changes"]
+
+
+def test_enabled_api_compiles_semantic_sources_after_source_projection(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    called = Event()
+    order: list[str] = []
+
+    def sources(self: object, **kwargs: object) -> int:
+        order.append("sources")
+        return 0
+
+    def knowledge(self: object, **kwargs: object) -> int:
+        order.append("knowledge")
+        assert callable(kwargs["stop_requested"])
+        called.set()
+        return 0
+
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", sources)
+    monkeypatch.setattr(TermsSemanticProjector, "project_pending", knowledge)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert order[:2] == ["sources", "knowledge"]

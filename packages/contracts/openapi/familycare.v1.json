@@ -2986,7 +2986,6 @@
               "type": "string"
             },
             "maxItems": 16,
-            "minItems": 1,
             "title": "Input Field Paths",
             "type": "array"
           },
