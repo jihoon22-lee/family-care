@@ -25,6 +25,32 @@ DSL 경로를 구현 중이다. B02 기반은 PR #76 merge `bc727928a0030332452f
   일치는 계속 검사한다. 검토 화면은 이 경우 ‘추가 입력 없음’을 표시한다. neutral snapshot
   계약과 OpenAPI를 재생성했으며 새 외부 HTTP endpoint는 아직 등록하지 않았다.
 
+## Final local verification
+
+2026-09-08 23:34~23:52 KST, source `5d5d95fd09bc533dfbe36951ee1f1dc53e49d76a`,
+미커밋 변경 없이 WSL에서 직렬 실행했다. 전체 PostgreSQL은 소유한 전용 합성 DB,
+`FAMILYCARE_TEST_DATABASE_URL`과 `FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB=true`를 사용했다.
+Python 명령에는 `TMPDIR=/tmp`를 적용했다. 아래 기록 이후 변경은 이 검증 기록 문서뿐이다.
+
+- `python3 scripts/check_documentation.py`: 50 files 통과.
+- `python3 scripts/check_repository_safety.py`: 922 paths 통과.
+- `corepack pnpm web:check`: format/lint/types, unit **173 passed**, production build 통과.
+- `corepack pnpm --filter @familycare/web test:e2e`: Chromium mock **17 passed** (16.8초).
+- `uv run ruff format --check .`, `uv run ruff check .`: 727 files format과 lint 통과.
+- `uv run mypy apps/api/src workers/analyzer/src scripts`: 293 source files 통과.
+- `uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **2,855 passed / 596 deselected / 3 subtests** (26.59초).
+- `uv run pytest -m integration apps/api/tests workers/analyzer/tests -q`:
+  **595 passed / 2,573 deselected** (791.51초). 기본 suite의 제외 수에는 scripts의 guard용
+  sentinel 1개가 포함되며, 이 명령이 선택한 API/Worker DB 통합은 595개다.
+- `uv run python scripts/check_contracts.py`, `check_containers.py`, `check_workflows.py` 통과.
+- `uv run python scripts/check_git_conventions.py --range bc727928a0030332452fb7b3bf639beba6b9e60e..HEAD`:
+  branch와 22개 commit 제목 통과. `git diff --check` 통과.
+- 전체 DB suite 이후 빈 작업 상태에서 0055→0054→head migration 왕복 통과.
+
+현재 GitHub CI 결과는 PR #78에서 확인한다. 이 로컬 증거는 실제 이미지 build·운영 배포,
+외부 provider·실제 문서 판독·Windows/실제 모바일 PWA 검증을 의미하지 않는다.
+
 ## Verification to date
 
 2026-09-08 21:03~21:08 KST, 소스 `a303fa5`에 위 DSL·원문 의미/검증·0052/repository·
@@ -148,7 +174,7 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   apps/api/tests/test_enrollment_consumer.py -q` **58 passed** (3.70초), mypy 3개 모듈 통과.
   feature opt-in, 키 미설정, 분리된 예산 대기, 실패 시 후보 반영 금지와 fair queue를 포함한다.
   최초 새 runner 모듈 부재, 소비자 2개·registry/fair lane 2개·inflight 1개 RED를 확인했다.
-- 2026-09-08 23:26 KST, `d75f8ba` 직전 42cb1dc 계열 + 실행기/API 테스트 변경에서
+- 2026-09-08 23:26 KST, `1e62215` + 실행기/API 테스트 변경에서
   `pytest apps/api/tests/test_terms_semantic_work.py -m integration
   -k 'source_to_budgeted or real_queue_pauses' -q` **3 passed** (5.66초).
   원문→최소화된 합성 provider 1회→후보→API 재검증→300 계산과 반복 조회 무호출,
