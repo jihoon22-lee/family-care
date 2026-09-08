@@ -294,3 +294,62 @@ private 청구가 남은 downgrade 거부와 기존 스냅샷 보존 assertion �
 `-k 'not storage and not upgrade and not fallback'` 재실행도 **1 passed / 3 deselected**
 (3.15초)였다. 최초 `-k default`는 선택된 테스트가 없어 결과 없음이다. 관련 Ruff lint와
 format **19 files**가 통과했고 문서 **50 files**, 저장소 안전 **977 paths**, diff도 통과했다.
+
+04:15~04:25 KST 후속 변경 `93589eb`와 `f4bc51c`는 canonical 출처별 평가와 청구 화면을
+연결했다. 같은 담보의 private 규칙이 무관하더라도 operational 원문의 지급 경우를 가리지
+않는다. 각 원문의 계약금액·현재성·조건·산식은 해당 경우에 남고, 충돌하는 출처의 금액을
+서로 상속하거나 합산하지 않는다. source 선택 revision도 입력 digest에 포함한다. 별도
+worktree에서 실제 관련/무관 두 context의 RED 후 관련 순수 테스트 **108 passed**(0.88초),
+Ruff 6개 파일·mypy 5개 파일을 통과했다. 이 검증은 PG 연결 전체 검증을 대신하지 않는다.
+
+결과 화면은 선택된 안내 run·사건 버전·담보 참조로 청구를 시작한다. 청구 화면은 저장된
+가입금액·경우·시나리오·조건·trace·비용을 보여주고 수동 실수령 이력과 구분한다. private
+청구의 null operational ID와 보험사 표시, stale 안내·로그아웃·늦은 응답을 처리했다.
+별도 worktree의 실제 변경에서 청구 시작/페이지/저장 상세/source metadata RED 후
+`LocalGuidancePanel`, `result-page`, `claims` 관련 **65 passed**(5.54초), TypeScript·ESLint·
+Prettier·Vite/PWA build가 2026-09-08 19:23 UTC에 통과했다. root 통합 이후 전체 Web와
+브라우저 검증, 합계의 API/저장/UI 통합은 후속 검증한다.
+
+04:28~04:36 KST, `f39fe80`(원 `e4cd523`)과 root의 subtotal DTO/엔진/생성 계약 변경에서
+정액 소계를 연결했다. 실제 사건과 정확히 같은 예정 치료 가정은 각각의 문맥으로 묶는다.
+동일 가정의 전체 값·출처·원문 범위와 사건 버전/trace를 대조하며 예정 일수를 실제 사실로
+승격하지 않는다. 출처 중복, 같은 계약의 여러 담보, 서로 다른 지급 경우, 실손, 통화,
+미완성 계산은 명시적인 제외 사유를 남긴다. 합산은 독립 지급/공통 한도 없음의 미확인
+전제를 포함 항목별로 보존하며 가능한 항목만 있으면 부분 소계로 표시한다. 시나리오 확장은
+32개 문맥·1,000개 후보 선택·2,048개 원시 기록으로 제한하고 초과 시 실제 사건 소계와
+개별 후보를 유지한다. 합산 오류도 개별 결과를 지우지 않는다.
+
+- 예정 입원 두 계약의 typed 응답은 0개 소계 vs 기대 600 RED 후, helper 통합으로 통과했다.
+  `python -m pytest apps/api/tests/test_guidance_subtotal_response.py
+  apps/api/tests/test_guidance_subtotals.py apps/api/tests/test_guidance_scenarios.py
+  apps/api/tests/test_guidance_local_event_engine.py
+  apps/api/tests/test_guidance_context_combination.py -q --tb=short`: **94 passed**(1.12초).
+  실제 300/부분 300/예정 600 직렬화와 합산 실패 격리를 포함한다. helper 원 worktree의
+  해당 helper/시나리오/경우 검증은 별도로 **67 passed**(0.91초)였다.
+- `python -m mypy apps/api/src/familycare_api/guidance`: **26 source files passed**.
+  관련 Ruff lint/format 및 `python scripts/check_contracts.py`도 통과했다.
+- `341d153`(원 `e07b786`)의 소계 UI는 금액·전제·포함 담보·누락 사유를 표시한다.
+  별도 worktree에서 소계/Panel **39 passed**(신규 11), TypeScript·ESLint·Prettier·Vite/PWA
+  build가 19:34:51 UTC에 통과했다. 기본 HTML disclosure의 Enter 동작과 좁은 브라우저의
+  청구 연결은 이후 Playwright 검증으로 확인한다.
+
+같은 소스와 미커밋 범위, WSL·Python 3.14·외부 AI 없는 순수 context/엔진에서
+`python scripts/run_claim_guidance_benchmark.py --engine local --repetitions 20`을 실행했다.
+고정 dev 10개/holdout 10개에서 재현율은 각각 **9/9, 10/10**, 주요 정밀도 **6/6, 7/7**,
+조건부 정밀도 **3/3, 3/3**, 불필요 보류 **0/10, 0/10**, 무관 사건 오추천 **0/3, 0/3**이었다.
+400회 context 생성/엔진 시간은 p50 **0.612ms**, p95 **1.205ms**였다. 원문·자연어·DB·HTTP·
+전체 카탈로그·실제 자료의 정확도나 응답시간을 뜻하지 않는다.
+
+비교 실행 `--engine legacy --repetitions 20`은 새 목표에 대해 exit 1이었다. dev/holdout
+재현율 **8/9, 9/10**, 주요 정밀도 **0/0(null), 1/1**, 조건부 정밀도 **3/8, 2/8**,
+불필요 보류 **1/10, 1/10**, 무관 사건 오추천 **0/3, 0/3**이다. 400회 p50 **0.226ms**,
+p95 **0.314ms**였다. 고정 정답/분모는 수정하지 않았으며 역사적 결과의 호환성을 바꾸지 않았다.
+
+04:36~04:37 KST, `f39fe80` + 같은 root API/계약 변경에서
+`python -m pytest apps/api/tests/test_local_guidance_integration.py
+apps/api/tests/test_semantic_local_guidance_integration.py
+apps/api/tests/test_guidance_claim_concurrency_integration.py
+apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_guidance_amount_source.py
+-m integration -q --tb=short`는 **26 passed / 20 deselected**(49.47초)였다. 전용 합성 DB와
+destructive guard를 사용했다. source별 경우와 새 소계 필드를 포함한 원문→300/400·이전 300,
+private/operational 청구·canonical 이력·동시 생성·저장 롤백·금액 출처를 재검증했다.

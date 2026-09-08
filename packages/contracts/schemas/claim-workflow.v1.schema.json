@@ -2536,6 +2536,11 @@
     "ClaimGuidanceGuidanceCondition": {
       "additionalProperties": false,
       "properties": {
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
         "rule_id": {
           "anyOf": [
             {
@@ -3219,6 +3224,45 @@
           "minLength": 1,
           "title": "Case Key",
           "type": "string"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "contract_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceGuidanceContractAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "enum": [
+                "CONFIRMED_AT_EVENT",
+                "DOCUMENT_CONTINUITY",
+                "STATUS_UNRESOLVED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness"
         },
         "benefit_kind": {
           "enum": [

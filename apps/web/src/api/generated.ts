@@ -1566,6 +1566,7 @@ export interface GuidanceClaimSelection {
 export interface GuidanceCondition {
   evidence: Array<GuidanceEvidence | GuidanceSemanticEvidence>;
   reason_code: string;
+  required?: boolean;
   result: "MATCH" | "NO_MATCH" | "UNKNOWN";
   rule_id?: string | null;
   semantic_node_id?: string | null;
@@ -1647,6 +1648,20 @@ export interface GuidanceExpenses {
   unassigned_line_ids: Array<string>;
 }
 
+export interface GuidanceFixedSubtotal {
+  amount: string;
+  basis: "ASSUMED_COMBINATION";
+  conditional: true;
+  currency: string;
+  hypotheses?: Array<GuidanceHypothesis>;
+  items: Array<GuidanceSubtotalItem>;
+  partial: boolean;
+  revision: "fixed-subtotals-v1" | "fixed-subtotals-v2";
+  scenario_key?: string | null;
+  scoped_assumptions: Array<GuidanceSubtotalAssumption>;
+  subtotal_key: string;
+}
+
 export interface GuidanceHypothesis {
   field_path: string;
   provenance?: "SCENARIO_ASSUMPTION";
@@ -1661,11 +1676,15 @@ export interface GuidancePayoutCase {
   case_key: string;
   condition_result: "MATCH" | "UNKNOWN";
   conditions?: Array<GuidanceCondition>;
+  contract_amount?: GuidanceContractAmount | null;
   estimate: GuidanceEstimate;
+  freshness?:
+    "CONFIRMED_AT_EVENT" | "DOCUMENT_CONTINUITY" | "STATUS_UNRESOLVED" | null;
   questions?: Array<GuidanceQuestion>;
   reason_codes: Array<string>;
   relevance?: Array<GuidanceRelevance>;
   scenarios?: Array<GuidanceScenario>;
+  source_ref?: CanonicalCoverageRef | null;
 }
 
 export interface GuidancePrivateCertificate {
@@ -1726,6 +1745,42 @@ export interface GuidanceSourceReference {
   source_id: string;
   source_kind: string;
   version?: number | string | null;
+}
+
+export interface GuidanceSubtotalAssumption {
+  applies_to: Array<GuidanceSubtotalComponent>;
+  code: string;
+}
+
+export interface GuidanceSubtotalComponent {
+  case_key?: string | null;
+  ref: CanonicalCoverageRef;
+  scenario_key?: string | null;
+}
+
+export interface GuidanceSubtotalItem {
+  amount: string;
+  case_key?: string | null;
+  ref: CanonicalCoverageRef;
+  scenario_key?: string | null;
+  trace_reference: GuidanceSubtotalTraceReference;
+}
+
+export interface GuidanceSubtotalOmission {
+  benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  case_key?: string | null;
+  currency: string | null;
+  reason_code: string;
+  ref: CanonicalCoverageRef;
+  scenario_key?: string | null;
+}
+
+export interface GuidanceSubtotalTraceReference {
+  formula_digest_sha256: string;
+  publication_id: string;
+  runtime_revision: string;
+  source_digest_sha256: string;
+  source_revision: string;
 }
 
 export interface GuidanceSupport {
@@ -2077,6 +2132,7 @@ export interface LocalGuidanceResponse {
   event_version: number;
   expenses?: GuidanceExpenses | null;
   family_member_id: string;
+  fixed_subtotals?: Array<GuidanceFixedSubtotal>;
   medical_event_id: string;
   outcome:
     | "CANDIDATES"
@@ -2085,6 +2141,7 @@ export interface LocalGuidanceResponse {
     | "KNOWLEDGE_PENDING";
   review_state?: "NOT_REQUESTED";
   schema_version?: "1" | "2";
+  subtotal_omissions?: Array<GuidanceSubtotalOmission>;
   support: GuidanceSupport;
   versions: GuidanceVersions;
 }

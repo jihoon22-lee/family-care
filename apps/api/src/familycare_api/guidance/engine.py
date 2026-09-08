@@ -237,7 +237,7 @@ class LocalGuidanceEngine:
             for path, item in event_read.context.facts.items()
         ):
             outcome = "INPUT_UNRESOLVED"
-        return LocalGuidanceResponse(
+        response = LocalGuidanceResponse(
             schema_version="2",
             family_member_id=event.family_member_id,
             medical_event_id=event.id,
@@ -254,6 +254,35 @@ class LocalGuidanceEngine:
                 failure_codes=_unique(failures),
             ),
         )
+        from familycare_api.guidance.models import GuidanceFixedSubtotal, GuidanceSubtotalOmission
+        from familycare_api.guidance.subtotals import fixed_subtotal_projection
+
+        try:
+            totals = fixed_subtotal_projection(response)
+            return response.model_copy(
+                update={
+                    "fixed_subtotals": tuple(
+                        GuidanceFixedSubtotal.model_validate(item)
+                        for item in totals["fixed_subtotals"]
+                    ),
+                    "subtotal_omissions": tuple(
+                        GuidanceSubtotalOmission.model_validate(item)
+                        for item in totals["subtotal_omissions"]
+                    ),
+                }
+            )
+        except ValueError, ArithmeticError:
+            return response.model_copy(
+                update={
+                    "support": response.support.model_copy(
+                        update={
+                            "failure_codes": _unique(
+                                [*response.support.failure_codes, "GUIDANCE_SUBTOTAL_FAILED"]
+                            )
+                        }
+                    )
+                }
+            )
 
     def _coverage(
         self,
@@ -436,6 +465,7 @@ class LocalGuidanceEngine:
     def _condition(value: GuidanceRuleEvaluation) -> GuidanceCondition:
         semantic = value.source.source_kind == "SEMANTIC_NODE"
         return GuidanceCondition(
+            required=value.required,
             rule_id=None if semantic else value.rule_publication_id,
             semantic_publication_id=value.rule_publication_id if semantic else None,
             semantic_node_id=value.source.semantic_node_id if semantic else None,

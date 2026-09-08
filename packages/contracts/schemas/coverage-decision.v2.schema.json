@@ -1086,6 +1086,11 @@
           "title": "Reason Code",
           "type": "string"
         },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
         "result": {
           "enum": [
             "MATCH",
@@ -1682,6 +1687,102 @@
       "title": "GuidanceExpenses",
       "type": "object"
     },
+    "GuidanceFixedSubtotal": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "maxLength": 80,
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "basis": {
+          "const": "ASSUMED_COMBINATION",
+          "title": "Basis",
+          "type": "string"
+        },
+        "conditional": {
+          "const": true,
+          "title": "Conditional",
+          "type": "boolean"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "hypotheses": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceHypothesis"
+          },
+          "maxItems": 32,
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/GuidanceSubtotalItem"
+          },
+          "maxItems": 1000,
+          "minItems": 2,
+          "title": "Items",
+          "type": "array"
+        },
+        "partial": {
+          "title": "Partial",
+          "type": "boolean"
+        },
+        "revision": {
+          "enum": [
+            "fixed-subtotals-v1",
+            "fixed-subtotals-v2"
+          ],
+          "title": "Revision",
+          "type": "string"
+        },
+        "scenario_key": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario Key"
+        },
+        "scoped_assumptions": {
+          "items": {
+            "$ref": "#/$defs/GuidanceSubtotalAssumption"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "title": "Scoped Assumptions",
+          "type": "array"
+        },
+        "subtotal_key": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Subtotal Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "subtotal_key",
+        "currency",
+        "amount",
+        "basis",
+        "conditional",
+        "partial",
+        "items",
+        "scoped_assumptions"
+      ],
+      "title": "GuidanceFixedSubtotal",
+      "type": "object"
+    },
     "GuidanceHypothesis": {
       "additionalProperties": false,
       "properties": {
@@ -1786,8 +1887,36 @@
           "title": "Conditions",
           "type": "array"
         },
+        "contract_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidanceContractAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "estimate": {
           "$ref": "#/$defs/GuidanceEstimate"
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "enum": [
+                "CONFIRMED_AT_EVENT",
+                "DOCUMENT_CONTINUITY",
+                "STATUS_UNRESOLVED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness"
         },
         "questions": {
           "default": [],
@@ -1827,6 +1956,17 @@
           "maxItems": 32,
           "title": "Scenarios",
           "type": "array"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CanonicalCoverageRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -2231,6 +2371,236 @@
         "source_id"
       ],
       "title": "GuidanceSourceReference",
+      "type": "object"
+    },
+    "GuidanceSubtotalAssumption": {
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": {
+          "items": {
+            "$ref": "#/$defs/GuidanceSubtotalComponent"
+          },
+          "maxItems": 1000,
+          "minItems": 1,
+          "title": "Applies To",
+          "type": "array"
+        },
+        "code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "applies_to"
+      ],
+      "title": "GuidanceSubtotalAssumption",
+      "type": "object"
+    },
+    "GuidanceSubtotalComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "case_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Case Key"
+        },
+        "ref": {
+          "$ref": "#/$defs/CanonicalCoverageRef"
+        },
+        "scenario_key": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario Key"
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "title": "GuidanceSubtotalComponent",
+      "type": "object"
+    },
+    "GuidanceSubtotalItem": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "maxLength": 80,
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Amount",
+          "type": "string"
+        },
+        "case_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Case Key"
+        },
+        "ref": {
+          "$ref": "#/$defs/CanonicalCoverageRef"
+        },
+        "scenario_key": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario Key"
+        },
+        "trace_reference": {
+          "$ref": "#/$defs/GuidanceSubtotalTraceReference"
+        }
+      },
+      "required": [
+        "ref",
+        "amount",
+        "trace_reference"
+      ],
+      "title": "GuidanceSubtotalItem",
+      "type": "object"
+    },
+    "GuidanceSubtotalOmission": {
+      "additionalProperties": false,
+      "properties": {
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "case_key": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Case Key"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Currency"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/CanonicalCoverageRef"
+        },
+        "scenario_key": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scenario Key"
+        }
+      },
+      "required": [
+        "ref",
+        "currency",
+        "benefit_kind",
+        "reason_code"
+      ],
+      "title": "GuidanceSubtotalOmission",
+      "type": "object"
+    },
+    "GuidanceSubtotalTraceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "formula_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Formula Digest Sha256",
+          "type": "string"
+        },
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "runtime_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Revision",
+          "type": "string"
+        },
+        "source_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Digest Sha256",
+          "type": "string"
+        },
+        "source_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "publication_id",
+        "source_revision",
+        "source_digest_sha256",
+        "formula_digest_sha256",
+        "runtime_revision"
+      ],
+      "title": "GuidanceSubtotalTraceReference",
       "type": "object"
     },
     "GuidanceSupport": {
@@ -2795,6 +3165,15 @@
           "title": "Family Member Id",
           "type": "string"
         },
+        "fixed_subtotals": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceFixedSubtotal"
+          },
+          "maxItems": 1000,
+          "title": "Fixed Subtotals",
+          "type": "array"
+        },
         "medical_event_id": {
           "format": "uuid",
           "title": "Medical Event Id",
@@ -2824,6 +3203,15 @@
           ],
           "title": "Schema Version",
           "type": "string"
+        },
+        "subtotal_omissions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceSubtotalOmission"
+          },
+          "maxItems": 2000,
+          "title": "Subtotal Omissions",
+          "type": "array"
         },
         "support": {
           "$ref": "#/$defs/GuidanceSupport"

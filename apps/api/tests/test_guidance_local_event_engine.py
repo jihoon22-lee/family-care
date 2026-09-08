@@ -22,6 +22,19 @@ def context():
     )
 
 
+def test_planned_guidance_retains_optional_relevance_separate_from_required_conditions():
+    event = replace(_event(), facts={}, situation="5일 입원 예정입니다.")
+    candidate = (
+        LocalGuidanceEngine().evaluate(HouseholdScope(HOUSEHOLD_ID), event, context()).candidates[0]
+    )
+    assert candidate.condition_result == "UNKNOWN"
+    assert any(
+        not condition.required and condition.result == "UNKNOWN"
+        for condition in candidate.conditions
+    )
+    assert any(condition.required for condition in candidate.conditions)
+
+
 @pytest.mark.parametrize("scope_case", ["matching", "missing", "wrong_version", "wrong_code"])
 def test_local_admission_computes_while_code_scope_remains_an_independent_condition(scope_case):
     event = replace(_event(), facts={}, situation="5일 입원했습니다.")

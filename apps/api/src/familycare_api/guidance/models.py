@@ -107,6 +107,7 @@ class GuidanceRelevance(GuidanceModel):
 
 
 class GuidanceCondition(GuidanceModel):
+    required: bool = True
     rule_id: UUID | None = None
     semantic_publication_id: UUID | None = None
     semantic_node_id: Annotated[str, Field(min_length=1, max_length=128)] | None = None
@@ -393,6 +394,76 @@ class GuidanceExpenses(GuidanceModel):
     reason_codes: tuple[Code, ...] = Field(max_length=32)
 
 
+class GuidanceSubtotalComponent(GuidanceModel):
+    ref: CanonicalCoverageRef
+    case_key: Annotated[str, Field(min_length=1, max_length=256)] | None = None
+    scenario_key: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+
+
+class GuidanceSubtotalTraceReference(GuidanceModel):
+    publication_id: UUID
+    source_revision: Annotated[str, Field(min_length=1, max_length=128)]
+    source_digest_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    formula_digest_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    runtime_revision: Annotated[str, Field(min_length=1, max_length=128)]
+
+
+class GuidanceSubtotalItem(GuidanceSubtotalComponent):
+    amount: Money
+    trace_reference: GuidanceSubtotalTraceReference
+
+
+class GuidanceSubtotalAssumption(GuidanceModel):
+    code: Code
+    applies_to: tuple[GuidanceSubtotalComponent, ...] = Field(min_length=1, max_length=1000)
+
+
+class GuidanceFixedSubtotal(GuidanceModel):
+    revision: Literal["fixed-subtotals-v1", "fixed-subtotals-v2"]
+    subtotal_key: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    currency: Currency
+    amount: Money
+    basis: Literal["ASSUMED_COMBINATION"]
+    conditional: Literal[True]
+    partial: bool
+    scenario_key: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
+    hypotheses: tuple[GuidanceHypothesis, ...] = Field(default=(), max_length=32)
+    items: tuple[GuidanceSubtotalItem, ...] = Field(min_length=2, max_length=1000)
+    scoped_assumptions: tuple[GuidanceSubtotalAssumption, ...] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def consistent_combination(self) -> Self:
+        if (self.scenario_key is None) != (not self.hypotheses):
+            raise ValueError("scenario subtotal requires explicit hypotheses")
+        scopes = {
+            GuidanceSubtotalComponent(
+                ref=item.ref, case_key=item.case_key, scenario_key=item.scenario_key
+            )
+            for item in self.items
+        }
+        if len(scopes) != len(self.items) or any(
+            item.scenario_key != self.scenario_key for item in self.items
+        ):
+            raise ValueError("subtotal items require unique compatible contexts")
+        if any(set(assumption.applies_to) - scopes for assumption in self.scoped_assumptions):
+            raise ValueError("subtotal assumptions must reference included items")
+        required = {"INDEPENDENT_FIXED_PAYMENTS_ASSUMED"}
+        if self.scenario_key is not None:
+            required.add("PLANNED_CARE_ASSUMED")
+        if any(
+            not any(a.code == code and set(a.applies_to) == scopes for a in self.scoped_assumptions)
+            for code in required
+        ):
+            raise ValueError("subtotal must retain its scoped combination assumptions")
+        return self
+
+
+class GuidanceSubtotalOmission(GuidanceSubtotalComponent):
+    currency: Currency | None
+    benefit_kind: Literal["FIXED", "INDEMNITY", "UNKNOWN"]
+    reason_code: Code
+
+
 class LocalGuidanceResponse(GuidanceModel):
     schema_version: Literal["1", "2"] = "1"
     family_member_id: UUID
@@ -404,6 +475,8 @@ class LocalGuidanceResponse(GuidanceModel):
     candidates: tuple[GuidanceCandidate, ...] = Field(max_length=1000)
     support: GuidanceSupport
     expenses: GuidanceExpenses | None = None
+    fixed_subtotals: tuple[GuidanceFixedSubtotal, ...] = Field(default=(), max_length=1000)
+    subtotal_omissions: tuple[GuidanceSubtotalOmission, ...] = Field(default=(), max_length=2000)
     review_state: Literal["NOT_REQUESTED"] = "NOT_REQUESTED"
 
     @model_validator(mode="after")
