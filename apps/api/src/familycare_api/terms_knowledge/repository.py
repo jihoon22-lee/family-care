@@ -30,6 +30,8 @@ from familycare_api.terms_knowledge.source_verification import (
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+MAX_ROOT_PAGE_REPLAY_BYTES = 32 * 1024 * 1024
+
 
 class SemanticSourceChanged(ValueError):
     def __init__(self) -> None:
@@ -56,6 +58,14 @@ class SemanticPublication:
 class CurrentSemanticRoot:
     publication_id: UUID
     root: CompiledSemanticRoot
+
+
+@dataclass(frozen=True, slots=True, repr=False)
+class SemanticRootView:
+    root_node_id: str
+    latest: CurrentSemanticRoot | None
+    last_usable: CurrentSemanticRoot | None
+    reason_codes: tuple[str, ...] = ()
 
 
 def _outcome(result: CompilationResult) -> str:
@@ -150,6 +160,12 @@ class TermsSemanticRepository:
             _lock_source(connection, scope, edition_id)
             return _plan(connection, scope, edition_id)
 
+    def current_root_page(
+        self, scope: HouseholdScope, edition_id: UUID, *, after: str | None = None, limit: int = 32
+    ) -> tuple[SemanticRootView, ...]:
+        with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+            return read_semantic_root_page(connection, scope, edition_id, after=after, limit=limit)
+
     def publish_candidate(
         self,
         scope: HouseholdScope,
@@ -201,7 +217,7 @@ class TermsSemanticRepository:
                 "verifier_revision,compiler_revision,proof_sha256,outcome,"
                 "processing_complete,result_json) "
                 "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT(candidate_id,verifier_revision,compiler_revision) "
+                "ON CONFLICT(candidate_id,verifier_revision,compiler_revision,proof_sha256) "
                 "DO NOTHING RETURNING id",
                 (
                     candidate["id"],
@@ -218,8 +234,9 @@ class TermsSemanticRepository:
             if publication is None:
                 publication = connection.execute(
                     "SELECT id,result_json,proof_sha256 FROM terms_semantic_publications "
-                    "WHERE candidate_id=%s AND verifier_revision=%s AND compiler_revision=%s",
-                    (candidate["id"], VERIFIER_REVISION, COMPILER_REVISION),
+                    "WHERE candidate_id=%s AND verifier_revision=%s AND compiler_revision=%s "
+                    "AND proof_sha256=%s",
+                    (candidate["id"], VERIFIER_REVISION, COMPILER_REVISION, verified.proof_sha256),
                 ).fetchone()
                 assert publication is not None
                 if (
@@ -353,3 +370,135 @@ class TermsSemanticRepository:
                         result.append(CurrentSemanticRoot(row["id"], root))
                         break
             return tuple(result)
+
+
+def read_semantic_root_page(
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    edition_id: UUID,
+    *,
+    after: str | None = None,
+    limit: int = 32,
+) -> tuple[SemanticRootView, ...]:
+    """Read inside the caller's snapshot; page roots independently of attempt count.
+
+    Current partial explanation and the same-source last usable result are distinct.
+    Neither a semantic root nor an edition establishes an enrolled Rider binding.
+    Unreplayable audit keys retain an empty view so pagination can advance safely.
+    """
+    if (
+        type(limit) is not int
+        or not 1 <= limit <= 32
+        or (
+            after is not None
+            and (
+                not isinstance(after, str)
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", after) is None
+            )
+        )
+    ):
+        raise ValueError("TERMS_SEMANTIC_ROOT_REQUEST_INVALID")
+    _lock_source(connection, scope, edition_id)
+    plan = _plan(connection, scope, edition_id)
+    parameters = (
+        scope.household_space_id,
+        edition_id,
+        Jsonb(plan.input_context),
+        plan.input_digest,
+        VERIFIER_REVISION,
+        COMPILER_REVISION,
+    )
+    join = (
+        "FROM terms_semantic_root_publications r "
+        "JOIN terms_semantic_publications p ON p.id=r.publication_id "
+        "JOIN terms_semantic_candidates c ON c.id=p.candidate_id "
+        "WHERE p.household_space_id=%s AND p.terms_edition_id=%s "
+        "AND c.input_context=%s AND c.input_digest=%s "
+        "AND p.verifier_revision=%s AND p.compiler_revision=%s "
+    )
+    keys = connection.execute(
+        "SELECT DISTINCT r.root_node_id "
+        + join
+        + "AND r.root_node_id>%s ORDER BY r.root_node_id LIMIT %s",
+        (*parameters, after or "", limit),
+    ).fetchall()
+    cache: dict[UUID, CompilationResult | None] = {}
+    replayed_bytes = 0
+    limited: set[str] = set()
+
+    def replay(row: dict[str, Any], root_id: str) -> CurrentSemanticRoot | None:
+        nonlocal replayed_bytes
+        if row["id"] not in cache:
+            if replayed_bytes + row["replay_bytes"] > MAX_ROOT_PAGE_REPLAY_BYTES:
+                limited.add(root_id)
+                return None
+            replayed_bytes += row["replay_bytes"]
+            full = connection.execute(
+                "SELECT p.*,c.graph_json FROM terms_semantic_publications p "
+                "JOIN terms_semantic_candidates c ON c.id=p.candidate_id "
+                "WHERE p.id=%s AND p.household_space_id=%s AND p.terms_edition_id=%s",
+                (row["id"], scope.household_space_id, edition_id),
+            ).fetchone()
+            cache[row["id"]] = None
+            if full is None:
+                return None
+            try:
+                verified = verify_and_compile(full["graph_json"], sources={"terms": plan.snapshot})
+            except SemanticKnowledgeError:
+                return None
+            if full["proof_sha256"] == verified.proof_sha256 and full["result_json"] == json.loads(
+                json.dumps(asdict(verified.compilation))
+            ):
+                cache[row["id"]] = verified.compilation
+        compilation = cache[row["id"]]
+        if compilation is None:
+            return None
+        root = next((root for root in compilation.roots if root.root_node_id == root_id), None)
+        return CurrentSemanticRoot(row["id"], root) if root is not None else None
+
+    result = []
+    for key in keys:
+        root_id = key["root_node_id"]
+        latest = None
+        usable = None
+        for require_usable in (False, True):
+            qualifier = (
+                "AND r.executable AND r.root_json->'diagnostics'='[]'::jsonb "
+                if require_usable
+                else ""
+            )
+            rows = connection.execute(
+                "SELECT p.id,p.created_at,octet_length(c.graph_json::text) "
+                "+octet_length(p.result_json::text) AS replay_bytes "
+                + join
+                + "AND r.root_node_id=%s "
+                + qualifier
+                + "ORDER BY p.created_at DESC,p.id DESC LIMIT 8",
+                (*parameters, root_id),
+            ).fetchall()
+            for row in rows:
+                item = replay(row, root_id)
+                if item is None:
+                    continue
+                if require_usable:
+                    if item.root.executable and not item.root.diagnostics:
+                        usable = item
+                        break
+                else:
+                    latest = item
+                    break
+        if latest is None:
+            latest = usable
+        result.append(
+            SemanticRootView(
+                root_id,
+                latest,
+                usable,
+                ("SEMANTIC_READ_BUDGET_EXCEEDED",)
+                if root_id in limited
+                else ("SEMANTIC_PUBLICATION_UNREPLAYABLE",)
+                if latest is None
+                else (),
+            )
+        )
+    return tuple(result)

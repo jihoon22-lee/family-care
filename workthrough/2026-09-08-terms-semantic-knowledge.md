@@ -2,7 +2,8 @@
 
 [WP04 #64](https://github.com/jihoon22-lee/family-care/issues/64)의 약관 원문→의미 지식→기존
 DSL 경로를 구현 중이다. B02 기반은 PR #76 merge `bc727928a0030332452fb7b3bf639beba6b9e60e`다.
-현재 기록은 compiler와 원문 검증/저장 기반이며 Worker·현재 질의 adapter·전체 수용 완료는 남았다.
+원문 검증/저장과 로컬 영역 처리, Worker 입력 경계 및 legacy adapter를 구현했다.
+Worker 작업 큐 연결·현재 안내 소비자 인계·전체 수용은 남았다.
 
 ## Changes
 
@@ -63,6 +64,40 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   이는 내부 입력 계약이며 provider 전송이나 Worker 실행 완료를 뜻하지 않는다.
   2026-09-08 21:47 KST, `fa12034` + 해당 schema/생성 소비자/README 변경으로
   `TMPDIR=/tmp uv run python scripts/check_contracts.py`가 통과했다.
+- `0053`은 전체 원문 manifest, graph별 불변 처리 기록, 완료와 실패/재시도 시간을 저장한다.
+  중단·동시 실행은 이미 저장한 결과를 재사용하고, 원문 변경과 의미 검증기 revision 변경은
+  새 처리로 구분한다. 동일 후보도 새 source proof를 추가할 수 있으며 기존 proof는 보존한다.
+  원문 머리말이 미지원이면 계산 성공과 별개로 전체 상태는 PARTIAL이다. 완료 조회는 처리
+  기록이 가리키는 publication/proof/root를 다시 검사한다. 실패 문서는 60초간 대기하므로
+  뒤의 문서를 막지 않고, 원문이 바뀌면 과거 실패의 대기를 적용하지 않는다.
+- 원래 호출자의 transaction에서 읽는 root 페이지는 현재 부분 설명과 마지막 정상 계산을
+  함께 제공한다. 불완전한 audit key도 cursor를 유지한다. JSON은 건별로 읽고 페이지의
+  누적 replay를 32MiB로 제한하며, 한도 부족을 명시해 조용히 완료로 취급하지 않는다.
+- legacy adapter (`1ee3fea`, `18d1cf8`)는 기존 section/review/fact/clause와 실제 scoped ID를
+  불변 JSON으로 보존한다. 가짜 원문 span·새 USER_CONFIRMED·실행 규칙을 만들지 않는다.
+  누락/불일치 참조와 재처리 필요를 유지하고 전체 보존 JSON은 16MiB로 제한한다.
+  독립 작업에서 RED 후 전용 **31개**와 Ruff/module mypy가 통과했다.
+- Worker 경계 (`f51f0aa`, `56b1f6f`)는 제한된 원문만 alias로 전달하고, 응답의 원문 주소·인용·
+  구역 처리를 검사한 뒤 현재 원문 ID로 복원한다. 다른 Article의 모델 node ID 충돌을 막으며
+  전송하지 않은 구역은 미해결로 남긴다. cache key는 실제 prompt·schema·model·전송 내용을
+  포함한다. 독립 작업의 RED 후 합성 **40개**, 관련 Ruff/module mypy가 통과했다.
+  실제 provider 호출이나 작업 큐 연결의 증거는 아니다.
+
+2026-09-08 21:48~22:15 KST의 후속 검증:
+
+- `18d1cf8` + 당시 projector/0053/repository/소비자 변경의 기본 Python은
+  **2,760 passed / 543 deselected / 3 subtests** (24.44초)였다. 이후 Worker 경계와
+  재시도/읽기 예산 보완이 추가되었으므로 이를 최종 전체 suite 결과로 사용하지 않는다.
+- `56b1f6f` + 위 0053/projector/repository/소비자 및 합성 fixture 변경에서
+  `pytest apps/api/tests/test_terms_semantic_projector.py apps/api/tests/test_terms_knowledge_repository.py
+  -m integration -q`는 **26 passed** (44.33초). 65개 실제 합성 Article의 원문부터 66개
+  graph(미지원 머리말 포함) 저장과 모든 65개 계산의 페이지 조회, 의미 revision 재검증,
+  scope/취소/재개/동시성/불변성, 위조 처리 기록, 프로세스 간 실패 대기와 읽기 한도를 포함한다.
+  초기 미지원 머리말의 완료 기대와 두 번째 합성 문서의 ID/hash fixture 오류는 수정했다.
+- 소비자 연결은 RED 1개 후 **10 passed** (2.83초), 완료와 실행 가능성 분리는 RED 2개 후
+  `test_terms_processing_accounting.py` **3 passed** (0.54초)였다. 페이지·재시도 검토 지적은
+  별도 RED 후 관련 PostgreSQL **3 passed** (5.08초), 위 26개 전체에 포함했다.
+- 0053의 빈 합성 DB downgrade/upgrade가 통과했다. 운영 migration은 실행하지 않았다.
 
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.

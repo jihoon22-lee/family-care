@@ -50,13 +50,18 @@ def semantic_database(request: pytest.FixtureRequest) -> Any:
             FIXED,
         ]
     )
-    url, job, _ = _seed(database, text=text)
+    return seed_semantic_source(database, text)
+
+
+def seed_semantic_source(database, text, *, content_sha256="a" * 64):
+    url, job, _ = _seed(database, text=text, content_sha256=content_sha256)
     assert DocumentMetadataRunner(url).run_once("synthetic-worker")
     assert DocumentMetadataProjector(url).project_pending() == 1
     assert ComponentTermsProjector(url).project_pending() == 1
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         edition = connection.execute(
-            "SELECT id FROM terms_editions WHERE household_space_id=%s", (job.household_space_id,)
+            "SELECT id FROM terms_editions WHERE household_space_id=%s AND document_version_id=%s",
+            (job.household_space_id, job.document_version_id),
         ).fetchone()["id"]
     return url, HouseholdScope(job.household_space_id), edition
 
@@ -155,6 +160,84 @@ def test_partial_failure_preserves_last_good_and_unrelated_rule(semantic_databas
     history = repository.current(scope, edition)
     assert [r.publication_id for r in history] == [later.publication_id, first.publication_id]
     assert amount(history[1].compilation.roots[0]) == 300
+
+
+def test_current_root_page_retains_partial_explanation_and_last_good(semantic_database):
+    url, scope, edition = semantic_database
+    repository = TermsSemanticRepository(url)
+    plan = repository.source_plan(scope, edition)
+    graph = candidate_from_plan(plan)
+    first = repository.publish_candidate(
+        scope, edition, graph, expected_input_digest=plan.input_digest
+    )
+    broken = deepcopy(graph)
+    next(n for n in broken["nodes"] if n["node_id"] == "exclusion")["payload"]["days"] = 1
+    last = repository.publish_candidate(
+        scope, edition, broken, expected_input_digest=plan.input_digest
+    )
+    page = repository.current_root_page(scope, edition, limit=1)
+    assert len(page) == 1 and page[0].root_node_id == "daily"
+    assert page[0].latest.publication_id == last.publication_id
+    assert page[0].latest.root.calculation is None
+    assert page[0].latest.root.explanations
+    assert page[0].last_usable.publication_id == first.publication_id
+    assert amount(page[0].last_usable.root) == 300
+    next_page = repository.current_root_page(scope, edition, after=page[-1].root_node_id, limit=1)
+    assert [item.root_node_id for item in next_page] == ["unrelated"]
+    assert next_page[0].latest == next_page[0].last_usable
+    assert repository.current_root_page(scope, edition, after="unrelated") == ()
+
+
+def test_root_page_is_bound_to_callers_repeatable_read_snapshot(semantic_database):
+    from familycare_api.terms_knowledge.repository import read_semantic_root_page
+
+    url, scope, edition = semantic_database
+    repository = TermsSemanticRepository(url)
+    plan = repository.source_plan(scope, edition)
+    graph = candidate_from_plan(plan)
+    first = repository.publish_candidate(
+        scope, edition, graph, expected_input_digest=plan.input_digest
+    )
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+        assert (
+            read_semantic_root_page(connection, scope, edition)[0].latest.publication_id
+            == first.publication_id
+        )
+        broken = deepcopy(graph)
+        next(n for n in broken["nodes"] if n["node_id"] == "exclusion")["payload"]["days"] = 1
+        last = repository.publish_candidate(
+            scope, edition, broken, expected_input_digest=plan.input_digest
+        )
+        assert (
+            read_semantic_root_page(connection, scope, edition)[0].latest.publication_id
+            == first.publication_id
+        )
+    assert (
+        repository.current_root_page(scope, edition)[0].latest.publication_id == last.publication_id
+    )
+
+
+def test_root_page_reports_aggregate_replay_budget_without_losing_its_cursor(
+    semantic_database, monkeypatch
+):
+    from familycare_api.terms_knowledge import repository as repository_module
+
+    url, scope, edition = semantic_database
+    repository = TermsSemanticRepository(url)
+    plan = repository.source_plan(scope, edition)
+    repository.publish_candidate(
+        scope, edition, candidate_from_plan(plan), expected_input_digest=plan.input_digest
+    )
+    monkeypatch.setattr(repository_module, "MAX_ROOT_PAGE_REPLAY_BYTES", 1, raising=False)
+    page = repository.current_root_page(scope, edition, limit=1)
+    assert page[0].latest is None and page[0].last_usable is None
+    assert page[0].reason_codes == ("SEMANTIC_READ_BUDGET_EXCEEDED",)
+    monkeypatch.setattr(repository_module, "MAX_ROOT_PAGE_REPLAY_BYTES", 32 * 1024 * 1024)
+    assert (
+        repository.current_root_page(scope, edition, after=page[0].root_node_id)[0].latest
+        is not None
+    )
 
 
 def test_parallel_identical_candidates_publish_once(semantic_database):
@@ -277,6 +360,9 @@ def test_audit_rows_cannot_override_replayed_outcomes_or_block_good_history(
     next(n for n in graph["nodes"] if n["node_id"] == "exclusion")["payload"]["days"] = 1
     verified = verify_and_compile(graph, sources={"terms": plan.snapshot})
     stored_graph = {} if malformed else graph
+    stored_result = asdict(verified.compilation)
+    if malformed:
+        stored_result["roots"][0]["root_node_id"] = "aaa-unreplayable"
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         candidate = connection.execute(
             "INSERT INTO terms_semantic_candidates(household_space_id,terms_edition_id,"
@@ -292,12 +378,12 @@ def test_audit_rows_cannot_override_replayed_outcomes_or_block_good_history(
                 Jsonb(stored_graph),
             ),
         ).fetchone()["id"]
-        connection.execute(
+        audit_publication = connection.execute(
             "INSERT INTO terms_semantic_publications(candidate_id,household_space_id,"
             "terms_edition_id,"
             "verifier_revision,compiler_revision,proof_sha256,outcome,"
             "processing_complete,result_json) "
-            "VALUES(%s,%s,%s,%s,%s,%s,'VERIFIED',true,%s)",
+            "VALUES(%s,%s,%s,%s,%s,%s,'VERIFIED',true,%s) RETURNING id",
             (
                 candidate,
                 scope.household_space_id,
@@ -305,12 +391,30 @@ def test_audit_rows_cannot_override_replayed_outcomes_or_block_good_history(
                 verified.verifier_revision,
                 verified.compilation.compiler_revision,
                 verified.proof_sha256,
-                Jsonb(asdict(verified.compilation)),
+                Jsonb(stored_result),
             ),
-        )
+        ).fetchone()["id"]
+        if malformed:
+            root = stored_result["roots"][0]
+            connection.execute(
+                "INSERT INTO terms_semantic_root_publications(publication_id,root_node_id,"
+                "semantic_sha256,manifest_sha256,executable,root_json) VALUES(%s,%s,%s,%s,%s,%s)",
+                (
+                    audit_publication,
+                    root["root_node_id"],
+                    root["semantic_sha256"],
+                    root["manifest_sha256"],
+                    bool(root["rules"] or root["calculation"]),
+                    Jsonb(root),
+                ),
+            )
     current = repository.current(scope, edition)
     if malformed:
         assert current == (first,)
+        page = repository.current_root_page(scope, edition, limit=1)
+        assert len(page) == 1 and page[0].root_node_id == "aaa-unreplayable"
+        assert page[0].latest is None and page[0].last_usable is None
+        assert repository.current_root_page(scope, edition, after=page[-1].root_node_id)
     else:
         assert current[0].outcome == "PARTIAL"
         assert current[0].compilation.roots[0].calculation is None
