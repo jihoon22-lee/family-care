@@ -1,10 +1,18 @@
 import { useId } from "react";
 import type {
+  CanonicalCoverageRef,
   GuidanceCandidate,
-  GuidanceEstimate,
+  GuidanceEvidence,
+  GuidanceSemanticEvidence,
   LocalGuidanceResponse,
 } from "../../api/generated";
+import {
+  CandidateAmounts,
+  ContractAmount,
+  Expenses,
+} from "./LocalGuidanceDetails";
 import { pageLabel } from "./resultPresentation";
+import { LocalGuidanceSubtotals } from "./LocalGuidanceSubtotals";
 import styles from "./Results.module.css";
 import panelStyles from "./LocalGuidancePanel.module.css";
 
@@ -33,66 +41,34 @@ const inputLabels: Record<string, string> = {
   "Rider.insured_amount": "가입금액",
 };
 
-function inputLabel(path: string): string {
+export function guidanceInputLabel(path: string): string {
   return inputLabels[path] ?? "추가 사건 정보";
 }
 
 function questionCopy(path: string): string {
-  const label = inputLabel(path);
+  const label = guidanceInputLabel(path);
   const lastCharacter = label.charCodeAt(label.length - 1);
   const particle = (lastCharacter - 0xac00) % 28 === 0 ? "를" : "을";
   return `${label}${particle} 알려주세요.`;
 }
 
-function money(amount: string, currency: string | null | undefined): string {
-  const [integer, fraction] = amount.split(".");
-  const formatted =
-    integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",") +
-    (fraction ? `.${fraction}` : "");
-  return currency === "KRW"
-    ? `${formatted}원`
-    : `${formatted}${currency ? ` ${currency}` : ""}`;
+function evidenceKey(item: GuidanceEvidence | GuidanceSemanticEvidence) {
+  const source =
+    "citation_id" in item
+      ? `${item.publication_id}:${item.citation_id}`
+      : item.evidence_id;
+  return `${item.kind}:${source}:${item.page_start}:${item.page_end}`;
 }
 
-function Estimate({ estimate }: { estimate: GuidanceEstimate }) {
-  let amount: string | null = null;
-  if (estimate.kind === "POINT" && estimate.amount != null) {
-    amount = money(estimate.amount, estimate.currency);
-  } else if (
-    estimate.kind === "RANGE" &&
-    estimate.lower != null &&
-    estimate.upper != null
-  ) {
-    amount = `${money(estimate.lower, estimate.currency)} ~ ${money(estimate.upper, estimate.currency)}`;
-  }
-  return (
-    <div className={panelStyles.estimate}>
-      <strong>
-        {estimate.kind === "FORMULA" ? "예상 금액 계산식" : "예상 금액"}
-      </strong>
-      {amount ? <p className={styles.subtotalAmount}>{amount}</p> : null}
-      {estimate.formula ? (
-        <p className={panelStyles.formula}>{estimate.formula}</p>
-      ) : null}
-      {estimate.kind === "UNAVAILABLE" || (!amount && !estimate.formula) ? (
-        <p className={styles.cardCopy}>예상 금액을 계산할 자료가 부족합니다.</p>
-      ) : null}
-      {estimate.assumptions?.includes("CONDITIONS_REMAIN") ? (
-        <p className={styles.cardCopy}>
-          남은 조건이 충족되는 경우의 예상입니다.
-        </p>
-      ) : null}
-      {estimate.missing_inputs?.length ? (
-        <p className={styles.cardCopy}>
-          계산에 필요한 정보:{" "}
-          {[...new Set(estimate.missing_inputs.map(inputLabel))].join(", ")}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
+function Candidate({
+  candidate,
+  onStartClaim,
+  claimStartDisabled,
+}: {
+  candidate: GuidanceCandidate;
+  onStartClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStartDisabled?: boolean;
+}) {
   const titleId = useId();
   const evidence = [
     ...new Map(
@@ -101,10 +77,7 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           (condition) => condition.evidence,
         ),
         ...(candidate.estimate.evidence ?? []),
-      ].map((item) => [
-        `${item.kind}:${item.evidence_id}:${item.page_start}:${item.page_end}`,
-        item,
-      ]),
+      ].map((item) => [evidenceKey(item), item]),
     ).values(),
   ];
   return (
@@ -146,7 +119,10 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           가입 분석과 앱 원장의 통화가 달라 계산식만 안내합니다.
         </p>
       ) : null}
-      <Estimate estimate={candidate.estimate} />
+      {candidate.contract_amount ? (
+        <ContractAmount value={candidate.contract_amount} />
+      ) : null}
+      <CandidateAmounts candidate={candidate} inputLabel={guidanceInputLabel} />
       {candidate.freshness === "STATUS_UNRESOLVED" ? (
         <p className={styles.cardCopy}>
           사건일의 계약 상태에 따라 이 후보가 달라질 수 있습니다.
@@ -168,15 +144,24 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           <strong>근거 페이지</strong>
           <ul>
             {evidence.map((item) => (
-              <li
-                key={`${item.kind}:${item.evidence_id}:${item.page_start}:${item.page_end}`}
-              >
-                {item.kind === "TERMS_SECTION" ? "약관" : "가입 문서"}{" "}
+              <li key={evidenceKey(item)}>
+                {item.kind === "OPERATIONAL_EVIDENCE" ? "가입 문서" : "약관"}{" "}
                 {pageLabel(item.page_start, item.page_end)}
               </li>
             ))}
           </ul>
         </div>
+      ) : null}
+      {onStartClaim ? (
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={claimStartDisabled}
+          aria-label={`${candidate.coverage_label} 청구 준비`}
+          onClick={() => onStartClaim(candidate.ref)}
+        >
+          청구 준비
+        </button>
       ) : null}
     </article>
   );
@@ -186,10 +171,14 @@ export function LocalGuidancePanel({
   guidance,
   onRetry,
   showEmpty = true,
+  onStartClaim,
+  claimStartDisabled = false,
 }: {
   guidance: LocalGuidanceResponse;
   onRetry: () => void;
   showEmpty?: boolean;
+  onStartClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStartDisabled?: boolean;
 }) {
   const id = useId();
   const questions = [
@@ -224,6 +213,10 @@ export function LocalGuidancePanel({
       {showEmpty && guidance.candidates.length === 0 ? (
         <p className={styles.emptyGroup}>{emptyCopy[guidance.outcome]}</p>
       ) : null}
+      <LocalGuidanceSubtotals
+        guidance={guidance}
+        inputLabel={guidanceInputLabel}
+      />
       {(["PRIMARY", "CONDITIONAL"] as const).map((group) => {
         const candidates = guidance.candidates.filter(
           (candidate) => candidate.group === group,
@@ -246,12 +239,15 @@ export function LocalGuidancePanel({
                 <Candidate
                   key={`${candidate.ref.kind}:${candidate.ref.contract_id}:${candidate.ref.coverage_id}`}
                   candidate={candidate}
+                  onStartClaim={onStartClaim}
+                  claimStartDisabled={claimStartDisabled}
                 />
               ))}
             </div>
           </section>
         ) : null;
       })}
+      {guidance.expenses ? <Expenses expenses={guidance.expenses} /> : null}
       {questions.length ? (
         <section className={styles.group} aria-labelledby={`${id}-questions`}>
           <div className={styles.groupHeading}>

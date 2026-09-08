@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   deleteClaimCase,
@@ -12,6 +12,14 @@ import {
 import type { ClaimChecklistItemResponse } from "../../api/generated";
 import { ApiError } from "../../api/errors";
 import { useQueryCache, useResource } from "../../api/query-cache";
+import { authStore } from "../identity/authStore";
+import {
+  CandidateAmounts,
+  ContractAmount,
+  Expenses,
+  money,
+} from "../results/LocalGuidanceDetails";
+import { guidanceInputLabel } from "../results/LocalGuidancePanel";
 import {
   ClaimOutcomeForm,
   type ClaimOutcomeMetadata,
@@ -46,6 +54,8 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
     getClaimCase(claimId, signal),
   );
   const [claim, setClaim] = useState<ClaimCase>();
+  const generation = useRef(0);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyChecklist, setBusyChecklist] = useState<string>();
   const [mutationError, setMutationError] = useState<string>();
@@ -58,13 +68,36 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
   const [reasonCode, setReasonCode] = useState("");
 
   useEffect(() => {
-    if (!resource.data) return;
+    generation.current += 1;
+    return () => {
+      generation.current += 1;
+    };
+  }, [claimId]);
+
+  useEffect(
+    () =>
+      authStore.registerCacheClearer(() => {
+        generation.current += 1;
+        setClaim(undefined);
+        setReceiptNumber("");
+        setClaimedAmount("");
+        setCurrency("");
+        setReasonCode("");
+        setOutcomeTarget(undefined);
+        setOutcomeResetKey((value) => value + 1);
+        setSessionExpired(true);
+      }),
+    [],
+  );
+
+  useEffect(() => {
+    if (!resource.data || sessionExpired) return;
     setClaim(resource.data);
     setReceiptNumber(resource.data.receipt_number ?? "");
     setClaimedAmount(resource.data.claimed_amount ?? "");
     setCurrency(resource.data.currency ?? "KRW");
     setReasonCode(resource.data.outcome_reason_code ?? "");
-  }, [resource.data]);
+  }, [resource.data, sessionExpired]);
 
   function clearSensitiveDrafts(): void {
     setReceiptNumber("");
@@ -79,8 +112,10 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
     error: ApiError | undefined,
   ): Promise<void> {
     if (error?.code !== "VERSION_CONFLICT") return;
+    const current = generation.current;
     try {
-      setClaim(await getClaimCase(claimId));
+      const next = await getClaimCase(claimId);
+      if (current === generation.current) setClaim(next);
     } catch (refreshError) {
       if (
         refreshError instanceof ApiError &&
@@ -94,14 +129,17 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
   async function applyMutation(
     operation: () => Promise<ClaimCase>,
   ): Promise<boolean> {
+    const current = generation.current;
     setBusy(true);
     setMutationError(undefined);
     try {
       const next = await operation();
+      if (current !== generation.current) return false;
       setClaim(next);
       cache.invalidate("claims:list");
       return true;
     } catch (error) {
+      if (current !== generation.current) return false;
       const apiError = error instanceof ApiError ? error : undefined;
       setMutationError(safeErrorMessage(apiError));
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
@@ -110,7 +148,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       await refreshAfterVersionConflict(apiError);
       return false;
     } finally {
-      setBusy(false);
+      if (current === generation.current) setBusy(false);
     }
   }
 
@@ -162,6 +200,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
     item: ClaimChecklistItemResponse,
   ): Promise<void> {
     if (!claim) return;
+    const current = generation.current;
     setBusyChecklist(item.id);
     setMutationError(undefined);
     try {
@@ -170,9 +209,11 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
         prepared: !item.prepared,
         note_code: item.note_code,
       });
+      if (current !== generation.current) return;
       setClaim(next);
       cache.invalidate("claims:list");
     } catch (error) {
+      if (current !== generation.current) return;
       const apiError = error instanceof ApiError ? error : undefined;
       setMutationError(safeErrorMessage(apiError));
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
@@ -180,18 +221,21 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       }
       await refreshAfterVersionConflict(apiError);
     } finally {
-      setBusyChecklist(undefined);
+      if (current === generation.current) setBusyChecklist(undefined);
     }
   }
 
   async function archiveClaim(): Promise<void> {
     if (!claim) return;
+    const current = generation.current;
     setBusy(true);
     setMutationError(undefined);
     try {
       await deleteClaimCase(claim.id, claim.version);
+      if (current !== generation.current) return;
       window.location.assign("/app/claims");
     } catch (error) {
+      if (current !== generation.current) return;
       const apiError = error instanceof ApiError ? error : undefined;
       setMutationError(safeErrorMessage(apiError));
       if (apiError?.code === "AUTHENTICATION_REQUIRED") {
@@ -202,6 +246,15 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
     }
   }
 
+  if (sessionExpired) {
+    return (
+      <main className="claim-page">
+        <p className="claim-error" role="alert">
+          로그인이 필요합니다. 다시 로그인한 뒤 청구 기록을 열어 주세요.
+        </p>
+      </main>
+    );
+  }
   if (resource.loading && !claim) {
     return (
       <main className="claim-page">
@@ -227,6 +280,7 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       </main>
     );
   }
+  const savedGuidance = claim.snapshot.local_guidance;
 
   return (
     <main className="claim-page" id="main-content" tabIndex={-1}>
@@ -235,10 +289,17 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
           ← 청구 기록
         </a>
         <p className="claim-kicker">Claim case</p>
-        <h1>{claim.insurer_key}</h1>
+        <h1>
+          {claim.insurer_display ??
+            claim.insurer_key ??
+            "보험사 정보 확인 필요"}
+        </h1>
         <p>
-          보험 계약 <code>{claim.policy_contract_id}</code> ·{" "}
-          {STATUS_LABELS[claim.status]}
+          {savedGuidance?.candidate.contract_label ??
+            (claim.policy_contract_id
+              ? `보험 계약 ${claim.policy_contract_id}`
+              : "청구 준비 기록")}{" "}
+          · {STATUS_LABELS[claim.status]}
         </p>
       </header>
 
@@ -283,6 +344,16 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
           <p className="claim-kicker">Manual record</p>
           <h2 id="claim-metadata-title">접수·금액 기록</h2>
         </div>
+        <dl className="claim-summary-grid">
+          <div>
+            <dt>실제 지급액</dt>
+            <dd>
+              {claim.paid_amount === null
+                ? "아직 기록되지 않았습니다."
+                : money(claim.paid_amount, claim.currency)}
+            </dd>
+          </div>
+        </dl>
         <div className="claim-form-grid">
           <label>
             보험사 접수 번호
@@ -381,6 +452,38 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
           이후 재분석이 진행되어도 이 스냅샷은 접수 당시 근거로 보존됩니다.
         </p>
       </section>
+
+      {savedGuidance ? (
+        <section className="claim-card" aria-labelledby="claim-guidance-title">
+          <h2 id="claim-guidance-title">청구 준비 때 저장한 안내</h2>
+          <h3>{savedGuidance.candidate.coverage_label}</h3>
+          <p>
+            {savedGuidance.candidate.contract_label} · 사건 버전{" "}
+            {savedGuidance.event_version}
+            {savedGuidance.event_date ? ` · ${savedGuidance.event_date}` : ""}
+          </p>
+          <p className="claim-boundary-note">
+            준비 당시의 조건과 가정을 보존한 안내입니다. 이후 분석과 별도로
+            유지되며 실제 지급액은 접수·금액 기록에서 확인합니다.
+          </p>
+          {savedGuidance.candidate.freshness === "DOCUMENT_CONTINUITY" ? (
+            <p>문서에 기록된 계약이 사건일까지 유지된 것으로 가정했습니다.</p>
+          ) : null}
+          {savedGuidance.candidate.freshness === "STATUS_UNRESOLVED" ? (
+            <p>사건일의 계약 상태에 따라 달라질 수 있는 안내입니다.</p>
+          ) : null}
+          {savedGuidance.candidate.contract_amount ? (
+            <ContractAmount value={savedGuidance.candidate.contract_amount} />
+          ) : null}
+          <CandidateAmounts
+            candidate={savedGuidance.candidate}
+            inputLabel={guidanceInputLabel}
+          />
+          {savedGuidance.expenses ? (
+            <Expenses expenses={savedGuidance.expenses} />
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="claim-card" aria-labelledby="claim-history-title">
         <div className="claim-section-heading">

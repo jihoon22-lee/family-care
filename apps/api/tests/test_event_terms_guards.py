@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 from copy import deepcopy
+from dataclasses import replace
 from datetime import date
 from typing import Any
 from uuid import uuid4
@@ -33,13 +34,27 @@ pytestmark = pytest.mark.integration
 
 
 def test_downgrade_cannot_remove_existing_selection_history(
-    changes_database: Any, legacy_metadata_v4: None
+    changes_database: Any,
+    legacy_metadata_v4: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     url, job = changes_database
     _sources(url, job)
     # Exercise the original decision-snapshot guard without newer amendment
     # history stopping the downgrade at an earlier migration.
     repository = DecisionRepository(url)
+    persist = repository._persist_result
+
+    def persist_legacy(connection, selected_scope, result):
+        # Author the pre-v2 synthetic snapshot at INSERT time. Existing history
+        # is never rewritten and the newer guidance downgrade guard stays intact.
+        persist(
+            connection,
+            selected_scope,
+            replace(result, local_guidance=None, local_guidance_stale=None),
+        )
+
+    monkeypatch.setattr(repository, "_persist_result", persist_legacy)
     scope = HouseholdScope(job.household_space_id)
     event = repository.create_medical_event(
         scope,
@@ -50,7 +65,9 @@ def test_downgrade_cannot_remove_existing_selection_history(
         visit_date=None,
         facts={},
     )
-    result = repository.analyze_medical_event(scope, event.id)
+    repository.analyze_medical_event(scope, event.id)
+    result = repository.get_decision_result(scope, event.id, event.version)
+    assert result.local_guidance is None and result.terms_selections
     environment = {**os.environ, "FAMILYCARE_DATABASE_URL": url, "TMPDIR": "/tmp"}
     command = [sys.executable, "-m", "alembic", "-c", "apps/api/alembic.ini"]
     try:

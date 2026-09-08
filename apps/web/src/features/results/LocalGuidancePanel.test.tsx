@@ -135,22 +135,158 @@ function result(
   };
 }
 
-function show(response: CoverageDecisionResponse) {
+function show(response: CoverageDecisionResponse, claimStarting = false) {
   const onReanalyze = vi.fn();
   const onOpenEvidence = vi.fn();
   const onStartClaim = vi.fn();
+  const onStartGuidanceClaim = vi.fn();
   render(
     <ActionFirstResult
       result={response}
       onReanalyze={onReanalyze}
       onOpenEvidence={onOpenEvidence}
       onStartClaim={onStartClaim}
+      onStartGuidanceClaim={onStartGuidanceClaim}
+      claimStarting={claimStarting}
     />,
   );
-  return { onReanalyze, onOpenEvidence, onStartClaim };
+  return { onReanalyze, onOpenEvidence, onStartClaim, onStartGuidanceClaim };
 }
 
+describe("local candidate claim preparation", () => {
+  it("retains each source case's contract amount and event-time assumption", () => {
+    const value = candidate("Sample Source Cases", {
+      kind: "UNAVAILABLE",
+      reason_code: "MULTIPLE_PAYOUT_CASES",
+    });
+    value.freshness = "STATUS_UNRESOLVED";
+    value.contract_amount = null;
+    value.cases = [
+      {
+        case_key: "synthetic-source-a",
+        benefit_kind: "FIXED",
+        condition_result: "UNKNOWN",
+        reason_codes: [],
+        freshness: "DOCUMENT_CONTINUITY",
+        contract_amount: {
+          amount: "100",
+          currency: "KRW",
+          amount_authority: "PROGRAM_VERIFIED",
+          currency_authority: "PROGRAM_VERIFIED",
+        },
+        estimate: {
+          kind: "POINT",
+          amount: "300",
+          currency: "KRW",
+          reason_code: "SOURCE_A",
+        },
+      },
+      {
+        case_key: "synthetic-source-b",
+        benefit_kind: "FIXED",
+        condition_result: "UNKNOWN",
+        reason_codes: [],
+        freshness: "CONFIRMED_AT_EVENT",
+        contract_amount: {
+          amount: "200",
+          currency: "KRW",
+          amount_authority: "USER_CONFIRMED",
+          currency_authority: "USER_CONFIRMED",
+        },
+        estimate: {
+          kind: "POINT",
+          amount: "400",
+          currency: "KRW",
+          reason_code: "SOURCE_B",
+        },
+      },
+    ];
+    show(result(guidance([value])));
+    const first = within(screen.getByRole("region", { name: "원문 조건 1" }));
+    const second = within(screen.getByRole("region", { name: "원문 조건 2" }));
+    expect(first.getByText("100원")).toBeInTheDocument();
+    expect(first.getByText("300원")).toBeInTheDocument();
+    expect(first.getByText(/계약 유지 가정/)).toBeInTheDocument();
+    expect(second.getByText("200원")).toBeInTheDocument();
+    expect(second.getByText("400원")).toBeInTheDocument();
+    expect(second.getByText(/사건일의 계약 상태가 확인/)).toBeInTheDocument();
+    expect(first.queryByText("200원")).not.toBeInTheDocument();
+  });
+
+  it("allows a conditional formula candidate without confirming payment", async () => {
+    const value = candidate("Sample Conditional", {
+      kind: "FORMULA",
+      formula: "가입금액 × 입원 일수",
+      reason_code: "MISSING_DAYS",
+    });
+    value.group = "CONDITIONAL";
+    value.condition_result = "UNKNOWN";
+    const handlers = show(result(guidance([value])));
+    const button = screen.getByRole("button", {
+      name: "Sample Conditional 청구 준비",
+    });
+    button.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(handlers.onStartGuidanceClaim).toHaveBeenCalledWith(value.ref);
+    expect(handlers.onStartClaim).not.toHaveBeenCalled();
+    expect(screen.getByText("가입금액 × 입원 일수")).toBeInTheDocument();
+  });
+
+  it.each(["stale", "pending"])(
+    "disables preparation while %s and keeps the candidate visible",
+    async (state) => {
+      const value = result(guidance());
+      value.local_guidance_stale = state === "stale";
+      const handlers = show(value, state === "pending");
+      const button = screen.getByRole("button", {
+        name: "Sample Coverage A 청구 준비",
+      });
+      expect(button).toBeDisabled();
+      await userEvent.setup().click(button);
+      expect(handlers.onStartGuidanceClaim).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("heading", { name: "Sample Coverage A" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("keeps a current local claim action independent of stale legacy results", () => {
+    const value = result(guidance());
+    value.stale = true;
+    value.local_guidance_stale = false;
+    show(value);
+    expect(
+      screen.getByRole("button", { name: "Sample Coverage A 청구 준비" }),
+    ).toBeEnabled();
+  });
+});
+
 describe("local guidance result", () => {
+  it("shows semantic original citations as terms and preserves distinct source references", () => {
+    const value = candidate();
+    value.conditions = [];
+    value.estimate.evidence = [1, 2].map((number) => ({
+      kind: "SEMANTIC_CITATION",
+      citation_id: `synthetic-citation-${number}`,
+      publication_id: "synthetic-publication-001",
+      document_version_id: "synthetic-document-001",
+      terms_edition_id: "synthetic-edition-001",
+      generation_id: "synthetic-generation-001",
+      root_node_id: "synthetic-root-001",
+      source_node_id: "synthetic-node-001",
+      page_start: 3,
+      page_end: 3,
+      start: number * 10,
+      end: number * 10 + 5,
+      source_layer: "native",
+      bbox: [0, 0, 10, 10],
+      source_sha256: "a".repeat(64),
+      manifest_sha256: "b".repeat(64),
+    }));
+    show(result(guidance([value])));
+    expect(screen.getAllByText(/약관.*3/)).toHaveLength(2);
+    expect(screen.queryByText(/가입 문서.*3/)).not.toBeInTheDocument();
+  });
   it.each([true, false])(
     "preserves operational claim actions when private guidance has candidates: %s",
     async (hasPrivateCandidates) => {
@@ -241,7 +377,10 @@ describe("local guidance result", () => {
       screen.queryByText(/현재 바로 시작할 청구 검토 대상이 없습니다/),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /청구|근거/ }),
+      screen.getByRole("button", { name: "Sample Coverage A 청구 준비" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /청구 검토|근거/ }),
     ).not.toBeInTheDocument();
     expect(onOpenEvidence).not.toHaveBeenCalled();
   });
@@ -323,6 +462,28 @@ describe("local guidance result", () => {
     },
   );
 
+  it("keeps current source guidance readable when legacy freshness is unresolved", () => {
+    show({
+      ...result({ ...guidance(), schema_version: "2" }),
+      stale: true,
+      local_guidance_stale: false,
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+  });
+
+  it("warns when the sources of a saved guidance result have changed", () => {
+    show({
+      ...result({ ...guidance(), schema_version: "2" }),
+      stale: false,
+      local_guidance_stale: true,
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "다시 분석이 필요합니다",
+    );
+    expect(screen.getByText("120,000원")).toBeInTheDocument();
+  });
+
   it("keeps the stale-result warning and keyboard reanalysis action", async () => {
     const user = userEvent.setup();
     const { onReanalyze } = show({ ...result(guidance()), stale: true });
@@ -395,4 +556,365 @@ it("explains a numeric source conflict while preserving the candidate and formul
   ).toBeInTheDocument();
   expect(screen.getByText("가입금액 × 1")).toBeInTheDocument();
   expect(screen.queryByText("Legacy Coverage")).not.toBeInTheDocument();
+});
+
+function trace(): NonNullable<GuidanceEstimate["trace"]> {
+  return {
+    publication_id: "synthetic-trace-publication",
+    source_revision: "synthetic-v1",
+    source_digest_sha256: "a".repeat(64),
+    formula_digest_sha256: "b".repeat(64),
+    runtime_revision: "synthetic-runtime-v1",
+    status: "COMPLETE",
+    value: "3",
+    unit: "DAYS",
+    currency: null,
+    steps: [
+      {
+        step_number: 1,
+        expression_path: "/calculation",
+        operation: "subtract",
+        operands: [
+          {
+            expression_path: "/calculation/args/0",
+            kind: "FIELD",
+            field_path: "MedicalEvent.admission_days",
+            value: "5",
+            unit: "DAYS",
+            provenance: "DERIVED_CONFIRMED",
+            status: "AVAILABLE",
+          },
+          {
+            expression_path: "/calculation/args/1",
+            kind: "LITERAL",
+            value: "2",
+            unit: "DAYS",
+            status: "AVAILABLE",
+          },
+        ],
+        value: "3",
+        unit: "DAYS",
+        status: "AVAILABLE",
+      },
+    ],
+  };
+}
+
+function point(amount: string): GuidanceEstimate {
+  return {
+    kind: "POINT",
+    amount,
+    currency: "KRW",
+    formula: "가입금액 × 지급 비율",
+    reason_code: "DOCUMENT_BASED_ESTIMATE",
+  };
+}
+
+describe("source-preserving guidance details", () => {
+  it("separates certificate 100 from expected payout 300 and labels authority", () => {
+    const value = candidate("Sample Detail", point("300"));
+    value.contract_amount = {
+      amount: "100",
+      currency: "KRW",
+      amount_authority: "PROGRAM_VERIFIED",
+      currency_authority: "USER_CONFIRMED",
+    };
+    show(result(guidance([value])));
+    expect(screen.getByText("100원")).toBeInTheDocument();
+    expect(screen.getByText("300원")).toBeInTheDocument();
+    expect(screen.getByText(/계약에 기록된 가입금액/)).toBeInTheDocument();
+    expect(screen.getByText(/원문 대조/)).toBeInTheDocument();
+  });
+
+  it("labels 40000 as calculated portion separately from registered 50000 costs", () => {
+    const value = candidate("Sample Partial", {
+      kind: "FORMULA",
+      currency: "KRW",
+      formula: "보장대상 비용 × 0.8",
+      partial_amount: "40000",
+      basis: "CONFIRMED_COST_SUBSET",
+      reason_code: "PARTIAL_COSTS",
+      trace: trace(),
+    });
+    const response = guidance([value]);
+    const empty = {
+      line_ids: [],
+      known_line_ids: [],
+      unknown_amount_line_ids: [],
+      known_cost: null,
+      total_cost: null,
+      source_refs: [],
+    };
+    response.expenses = {
+      event_id: response.medical_event_id,
+      event_version: 1,
+      status: "AVAILABLE",
+      reader_revision: "synthetic-v1",
+      digest_sha256: "a".repeat(64),
+      unassigned_line_ids: [],
+      reason_codes: [],
+      currencies: [
+        {
+          currency: "KRW",
+          covered: {
+            ...empty,
+            line_ids: ["synthetic-line"],
+            known_line_ids: ["synthetic-line"],
+            known_cost: "50000",
+            total_cost: "50000",
+          },
+          excluded: empty,
+          coverage_review: empty,
+          unconfirmed: empty,
+        },
+      ],
+    };
+    show(result(response));
+    expect(screen.getByText("40,000원")).toBeInTheDocument();
+    expect(screen.getByText("50,000원")).toBeInTheDocument();
+    expect(screen.getByText(/계산된 부분/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "등록된 비용" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/금액이 등록되지 않았습니다/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("keeps planned 300 separate from the base formula and actual care", () => {
+    const value = candidate("Sample Planned", {
+      kind: "FORMULA",
+      currency: "KRW",
+      formula: "가입금액 × 입원 일수",
+      reason_code: "MISSING_DAYS",
+    });
+    value.scenarios = [
+      {
+        scenario_key: "a".repeat(64),
+        kind: "PLANNED_CARE",
+        hypotheses: [
+          {
+            field_path: "MedicalEvent.admission_days",
+            value: 5,
+            spans: [{ start: 0, end: 5 }],
+            source_refs: [
+              {
+                source_kind: "EVENT_SCENARIO",
+                source_id: "synthetic-event",
+                version: 1,
+                digest_sha256: "a".repeat(64),
+              },
+            ],
+          },
+        ],
+        estimate: {
+          ...point("300"),
+          basis: "USER_SCENARIO",
+          assumptions: ["PLANNED_CARE_ASSUMED"],
+        },
+      },
+    ];
+    show(result(guidance([value])));
+    expect(screen.getByText("300원")).toBeInTheDocument();
+    expect(screen.getByText("가입금액 × 입원 일수")).toBeInTheDocument();
+    expect(screen.getByText(/예정된 치료를 가정/)).toBeInTheDocument();
+    expect(screen.getByText(/실제로 치료받았다는 확인/)).toBeInTheDocument();
+  });
+
+  it("shows source cases 100 and 200 without a fabricated combined 300", () => {
+    const value = candidate("Sample Cases", {
+      kind: "UNAVAILABLE",
+      reason_code: "MULTIPLE_PAYOUT_CASES",
+    });
+    value.cases = ["100", "200"].map((amount, index) => ({
+      case_key: `synthetic-case-${index}`,
+      benefit_kind: "FIXED",
+      condition_result: "UNKNOWN",
+      reason_codes: ["SOURCE_CASE"],
+      estimate: point(amount),
+    }));
+    value.case_relation = "UNRESOLVED";
+    show(result(guidance([value])));
+    expect(screen.getByText("100원")).toBeInTheDocument();
+    expect(screen.getByText("200원")).toBeInTheDocument();
+    expect(screen.queryByText("300원")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("예상 금액을 계산할 자료가 부족합니다."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("explains source-alternative ranges without promising a minimum", () => {
+    show(
+      result(
+        guidance([
+          candidate("Sample Range", {
+            kind: "RANGE",
+            currency: "KRW",
+            lower: "100",
+            upper: "200",
+            formula: "원문 조건별 금액",
+            basis: "SOURCE_ALTERNATIVES",
+            reason_code: "SOURCE_CASE_RANGE",
+          }),
+        ]),
+      ),
+    );
+    expect(screen.getByText(/나열된 원문 조건 중 하나/)).toBeInTheDocument();
+    expect(screen.getByText(/최소 수령액을 보장/)).toBeInTheDocument();
+  });
+
+  it("opens a closed accessible arithmetic trace without displaying source IDs or AST paths", async () => {
+    const value = candidate("Sample Trace", {
+      ...point("300"),
+      trace: trace(),
+    });
+    show(result(guidance([value])));
+    const summary = screen.getByText("계산 과정과 근거");
+    const details = summary.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    await userEvent.setup().click(summary);
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByText(/5일 − 2일 = 3일/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        /synthetic-trace-publication|\/calculation|MedicalEvent/,
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows one source case only once", () => {
+    const value = candidate("Sample Single Case", point("100"));
+    value.cases = [
+      {
+        case_key: "synthetic-single-case",
+        benefit_kind: "FIXED",
+        condition_result: "MATCH",
+        reason_codes: [],
+        estimate: point("100"),
+      },
+    ];
+    show(result(guidance([value])));
+    expect(screen.getAllByText("100원")).toHaveLength(1);
+    expect(screen.getAllByText("가입금액 × 지급 비율")).toHaveLength(1);
+  });
+
+  it("keeps currencies and all cost buckets separate, including a known zero", () => {
+    const response = guidance();
+    const empty = {
+      line_ids: [],
+      known_line_ids: [],
+      unknown_amount_line_ids: [],
+      known_cost: null,
+      total_cost: null,
+      source_refs: [],
+    };
+    response.expenses = {
+      event_id: response.medical_event_id,
+      event_version: 1,
+      status: "PARTIAL",
+      reader_revision: "synthetic-v1",
+      digest_sha256: "a".repeat(64),
+      unassigned_line_ids: ["synthetic-no-currency"],
+      reason_codes: [],
+      currencies: [
+        {
+          currency: "KRW",
+          covered: { ...empty, known_cost: "50000", total_cost: "50000" },
+          excluded: { ...empty, known_cost: "0", total_cost: "0" },
+          coverage_review: {
+            ...empty,
+            unknown_amount_line_ids: ["synthetic-unknown"],
+            known_cost: "12000",
+          },
+          unconfirmed: empty,
+        },
+        {
+          currency: "USD",
+          covered: { ...empty, known_cost: "500", total_cost: "500" },
+          excluded: empty,
+          coverage_review: empty,
+          unconfirmed: { ...empty, known_cost: "80", total_cost: "80" },
+        },
+      ],
+    };
+    show(result(response));
+    const costs = within(screen.getByRole("region", { name: "등록된 비용" }));
+    expect(costs.getByText("0원")).toBeInTheDocument();
+    expect(costs.getByText("50,000원")).toBeInTheDocument();
+    expect(costs.getByText("500 USD")).toBeInTheDocument();
+    expect(costs.getByText("80 USD")).toBeInTheDocument();
+    expect(costs.getByText(/금액이 있는 항목만 12,000원/)).toBeInTheDocument();
+    expect(
+      costs.getByText(/통화가 확인되지 않은 비용 1건/),
+    ).toBeInTheDocument();
+    expect(costs.queryByText(/62,000|50,500|580 USD/)).not.toBeInTheDocument();
+  });
+
+  it("keeps every arithmetic operand and its rounding and unconfirmed input visible", async () => {
+    const detail = trace();
+    detail.status = "PARTIAL";
+    detail.steps = [
+      {
+        step_number: 1,
+        expression_path: "/calculation",
+        operation: "round",
+        operands: [
+          {
+            expression_path: "/calculation/args/0",
+            kind: "FIELD",
+            field_path: "Receipt.covered_amount",
+            value: "123.45",
+            unit: "MONEY",
+            currency: "USD",
+            provenance: "USER_CONFIRMED",
+            status: "AVAILABLE",
+          },
+          {
+            expression_path: "/calculation/args/1",
+            kind: "LITERAL",
+            value: "0",
+            unit: "NUMBER",
+            status: "AVAILABLE",
+          },
+          {
+            expression_path: "/calculation/args/2",
+            kind: "FIELD",
+            field_path: "ClaimHistory.counted_occurrence",
+            value: null,
+            supplied_value: "1",
+            unit: "COUNT",
+            provenance: "AI_STRUCTURED",
+            stale: true,
+            status: "UNAVAILABLE",
+          },
+        ],
+        value: null,
+        unit: "MONEY",
+        currency: "USD",
+        status: "UNAVAILABLE",
+        rounding_rule: "half_up",
+      },
+    ];
+    const value = candidate("Sample Unfinished Trace", {
+      kind: "FORMULA",
+      formula: "원문 계산식",
+      reason_code: "MISSING",
+      trace: detail,
+    });
+    show(result(guidance([value])));
+    const user = userEvent.setup();
+    const summary = screen.getByText("계산 과정과 근거");
+    summary.focus();
+    expect(summary).toHaveFocus();
+    await user.click(summary);
+    expect(summary.closest("details")).toHaveAttribute("open");
+    expect(
+      screen.getByText(/자리수 조정 \(123.45 USD, 0, 미산정\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/중간값은 올리는 반올림/)).toBeInTheDocument();
+    expect(screen.getByText(/AI 정리 · 확인 전/)).toHaveTextContent(
+      "입력값(1회)은 계산에 사용하지 않음",
+    );
+    expect(screen.getByText(/전체 지급 예상액이 아닙니다/)).toBeInTheDocument();
+  });
 });

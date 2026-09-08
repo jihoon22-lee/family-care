@@ -4,8 +4,15 @@ import type {
   AuthSessionResponse,
   AuthUserResponse,
   BenefitCalculationsResponse,
+  ClaimCaseResponse,
+  ClaimCreateRequest,
   CoverageDecisionResponse,
   EvidenceDetailResponse,
+  GuidanceCalculationTrace,
+  GuidanceCandidate,
+  GuidanceFixedSubtotal,
+  GuidanceHypothesis,
+  GuidanceSubtotalItem,
   MedicalEventResponse,
   ReceiptLineCreateRequest,
   ReceiptLineResponse,
@@ -827,3 +834,375 @@ export const SYNTHETIC_EVENT_IDS = {
   event: EVENT_ID,
   member: MEMBER_ID,
 };
+
+/** Display fixtures only: this mock does not evaluate coverage or create real claims. */
+export async function mockLocalGuidanceClaimApi(
+  page: Page,
+  options: { stale?: boolean; expireClaimUpdates?: boolean } = {},
+) {
+  const state = Object.assign(
+    await mockSyntheticEventApi(page, { result: "local" }),
+    {
+      claimCreateBodies: [] as ClaimCreateRequest[],
+      claimReads: 0,
+      claimUpdates: 0,
+      unexpectedAiRequests: [] as string[],
+    },
+  );
+  const id = (number: number) =>
+    `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
+  const scenarioKey = "d".repeat(64);
+  const hypotheses: GuidanceHypothesis[] = [
+    {
+      field_path: "MedicalEvent.admission",
+      value: true,
+      spans: [{ start: 0, end: 5 }],
+      source_refs: [
+        {
+          source_kind: "EVENT_SCENARIO",
+          source_id: EVENT_ID,
+          version: 1,
+          digest_sha256: scenarioKey,
+        },
+      ],
+    },
+    {
+      field_path: "MedicalEvent.admission_days",
+      value: 5,
+      spans: [{ start: 0, end: 5 }],
+      source_refs: [
+        {
+          source_kind: "EVENT_SCENARIO",
+          source_id: EVENT_ID,
+          version: 1,
+          digest_sha256: scenarioKey,
+        },
+      ],
+    },
+  ];
+  const trace = (number: number): GuidanceCalculationTrace => ({
+    publication_id: id(1600 + number),
+    source_revision: "synthetic-source-v1",
+    source_digest_sha256: "a".repeat(64),
+    formula_digest_sha256: "b".repeat(64),
+    runtime_revision: "synthetic-runtime-v1",
+    status: "COMPLETE",
+    value: "300",
+    unit: "MONEY",
+    currency: "KRW",
+    steps: [
+      {
+        step_number: 1,
+        expression_path: "/calculation/args/1",
+        operation: "subtract",
+        operands: [
+          {
+            expression_path: "/calculation/args/1/args/0",
+            kind: "FIELD",
+            field_path: "MedicalEvent.admission_days",
+            value: "5",
+            unit: "DAYS",
+            provenance: "SCENARIO_ASSUMPTION",
+            status: "AVAILABLE",
+            source_refs: hypotheses[1]!.source_refs,
+          },
+          {
+            expression_path: "/calculation/args/1/args/1",
+            kind: "LITERAL",
+            value: "2",
+            unit: "DAYS",
+            status: "AVAILABLE",
+          },
+        ],
+        value: "3",
+        unit: "DAYS",
+        status: "AVAILABLE",
+      },
+      {
+        step_number: 2,
+        expression_path: "/calculation",
+        operation: "multiply",
+        operands: [
+          {
+            expression_path: "/calculation/args/0",
+            kind: "FIELD",
+            field_path: "Rider.insured_amount",
+            value: "100",
+            unit: "MONEY",
+            currency: "KRW",
+            provenance: "PROGRAM_VERIFIED",
+            status: "AVAILABLE",
+          },
+          {
+            expression_path: "/calculation/args/1",
+            kind: "CHILD",
+            child_path: "/calculation/args/1",
+            value: "3",
+            unit: "DAYS",
+            status: "AVAILABLE",
+          },
+        ],
+        value: "300",
+        unit: "MONEY",
+        currency: "KRW",
+        status: "AVAILABLE",
+      },
+    ],
+  });
+  const candidates: GuidanceCandidate[] = [1, 2, 3, 4].map((number) => {
+    const planned = number > 2;
+    const amount = number === 2 ? "200" : "100";
+    return {
+      ref: {
+        kind: "OPERATIONAL_RIDER",
+        contract_id: id(1300 + number),
+        coverage_id: id(1400 + number),
+      },
+      contract_label: `Sample Local Policy ${number}`,
+      coverage_label: planned
+        ? `Sample Planned Coverage ${number - 2}`
+        : `Sample Fixed Coverage ${number}`,
+      benefit_kind: "FIXED",
+      group: planned ? "CONDITIONAL" : "PRIMARY",
+      condition_result: planned ? "UNKNOWN" : "MATCH",
+      freshness: "DOCUMENT_CONTINUITY",
+      reason_codes: ["DOCUMENTED_RELEVANT_COVERAGE"],
+      assumptions: ["DOCUMENT_CONTINUITY_ASSUMED"],
+      contract_amount: {
+        amount,
+        currency: "KRW",
+        amount_authority: "PROGRAM_VERIFIED",
+        currency_authority: "PROGRAM_VERIFIED",
+      },
+      estimate: planned
+        ? {
+            kind: "FORMULA",
+            formula: "가입금액 × (입원 일수 − 2)",
+            currency: "KRW",
+            reason_code: "MISSING_DAYS",
+            missing_inputs: ["MedicalEvent.admission_days"],
+          }
+        : {
+            kind: "POINT",
+            amount,
+            currency: "KRW",
+            formula: "가입금액 × 1",
+            reason_code: "DOCUMENT_BASED_ESTIMATE",
+          },
+      scenarios: planned
+        ? [
+            {
+              scenario_key: scenarioKey,
+              kind: "PLANNED_CARE",
+              hypotheses,
+              estimate: {
+                kind: "POINT",
+                amount: "300",
+                currency: "KRW",
+                formula: "100 × (5 − 2)",
+                basis: "USER_SCENARIO",
+                assumptions: ["PLANNED_CARE_ASSUMED"],
+                reason_code: "PLANNED_CARE_ESTIMATE",
+                trace: trace(number),
+              },
+            },
+          ]
+        : [],
+    };
+  });
+  const items = (planned: boolean): GuidanceSubtotalItem[] =>
+    candidates
+      .slice(planned ? 2 : 0, planned ? 4 : 2)
+      .map((candidate, index) => ({
+        ref: candidate.ref,
+        case_key: null,
+        scenario_key: planned ? scenarioKey : null,
+        amount: planned ? "300" : index === 0 ? "100" : "200",
+        trace_reference: {
+          publication_id: id(1700 + index),
+          source_revision: "synthetic-source-v1",
+          source_digest_sha256: "a".repeat(64),
+          formula_digest_sha256: "b".repeat(64),
+          runtime_revision: "synthetic-runtime-v1",
+        },
+      }));
+  const totals: GuidanceFixedSubtotal[] = [false, true].map((planned) => {
+    const included = items(planned);
+    return {
+      revision: "fixed-subtotals-v2",
+      subtotal_key: (planned ? "e" : "f").repeat(64),
+      currency: "KRW",
+      amount: planned ? "600" : "300",
+      basis: "ASSUMED_COMBINATION",
+      conditional: true,
+      partial: !planned,
+      scenario_key: planned ? scenarioKey : null,
+      hypotheses: planned ? hypotheses : [],
+      items: included,
+      scoped_assumptions: [
+        { code: "INDEPENDENT_FIXED_PAYMENTS_ASSUMED", applies_to: included },
+        { code: "DOCUMENT_CONTINUITY_ASSUMED", applies_to: included },
+        ...(planned
+          ? [{ code: "PLANNED_CARE_ASSUMED", applies_to: included }]
+          : []),
+      ],
+    };
+  });
+  const emptyCosts = {
+    line_ids: [],
+    known_line_ids: [],
+    unknown_amount_line_ids: [],
+    known_cost: null,
+    total_cost: null,
+    source_refs: [],
+  };
+  const response: CoverageDecisionResponse = {
+    ...resultResponse(1, "complete"),
+    candidates: [],
+    evaluations: [],
+    stale: options.stale ?? false,
+    local_guidance_stale: options.stale ?? false,
+    local_guidance: {
+      schema_version: "2",
+      medical_event_id: EVENT_ID,
+      family_member_id: MEMBER_ID,
+      event_version: 1,
+      event_date: "2026-08-25",
+      outcome: "CANDIDATES",
+      candidates,
+      versions: { engine: "local-guidance-v2" },
+      support: {
+        total_coverages: 4,
+        evaluated_coverages: 4,
+        unsupported_coverages: 0,
+      },
+      fixed_subtotals: totals,
+      subtotal_omissions: candidates.slice(2).map((candidate) => ({
+        ref: candidate.ref,
+        currency: "KRW",
+        benefit_kind: "FIXED",
+        reason_code: "EVENT_CONDITIONS_UNRESOLVED",
+      })),
+      expenses: {
+        event_id: EVENT_ID,
+        event_version: 1,
+        status: "AVAILABLE",
+        reader_revision: "synthetic-expenses-v1",
+        digest_sha256: "a".repeat(64),
+        unassigned_line_ids: [],
+        reason_codes: [],
+        currencies: [
+          {
+            currency: "KRW",
+            covered: {
+              ...emptyCosts,
+              known_cost: "50000",
+              total_cost: "50000",
+            },
+            excluded: emptyCosts,
+            coverage_review: emptyCosts,
+            unconfirmed: emptyCosts,
+          },
+        ],
+      },
+    },
+  };
+  const selected = candidates[2]!;
+  const savedClaim: ClaimCaseResponse = {
+    id: id(1501),
+    medical_event_id: EVENT_ID,
+    family_member_id: MEMBER_ID,
+    policy_contract_id: selected.ref.contract_id,
+    rider_id: selected.ref.coverage_id,
+    insurer_key: "synthetic-insurer",
+    insurer_display: "Sample Local Insurer",
+    status: "preparing",
+    version: 1,
+    allowed_transitions: ["submitted"],
+    checklist: [],
+    claimed_amount: null,
+    currency: null,
+    paid_amount: null,
+    deleted: false,
+    outcome_reason_code: null,
+    receipt_number: null,
+    submitted_at: null,
+    status_events: [],
+    schema_version: "1",
+    snapshot: {
+      snapshot_sha256: "c".repeat(64),
+      snapshot_version: 2,
+      calculation: { calculation_ids: [], statuses: [], versions: [] },
+      candidate: { aggregate_results: [], candidate_ids: [], rider_ids: [] },
+      evidence: { content_sha256: [], evidence_ids: [] },
+      policy: {
+        captured_at: "2026-08-25T09:00:00Z",
+        policy_contract_id: selected.ref.contract_id,
+        rider_ids: [],
+        status_codes: [],
+      },
+      rules: { evaluator_versions: [], reason_codes: [], rule_version_ids: [] },
+      local_guidance: {
+        candidate: structuredClone(selected),
+        expenses: structuredClone(response.local_guidance!.expenses!),
+        medical_event_id: EVENT_ID,
+        family_member_id: MEMBER_ID,
+        run_id: RESULT_ID,
+        event_version: 1,
+        event_date: "2026-08-25",
+        versions: { engine: "local-guidance-v2" },
+      },
+    },
+  };
+
+  await page.route("**/api/v1/**", async (route) => {
+    const request = route.request();
+    const path = new URL(request.url()).pathname;
+    const method = request.method();
+    if (/\/(?:structure|ai-review|assistance)(?:\/|$)/.test(path))
+      state.unexpectedAiRequests.push(path);
+    if (
+      method === "GET" &&
+      path === `/api/v1/medical-events/${EVENT_ID}/results/1`
+    ) {
+      await fulfillJson(route, response);
+      return;
+    }
+    if (
+      method === "POST" &&
+      path === `/api/v1/medical-events/${EVENT_ID}/claims`
+    ) {
+      state.claimCreateBodies.push(requestBody(route) as ClaimCreateRequest);
+      state.forbiddenRequests.push(...forbiddenFieldsInBody(route));
+      await fulfillJson(route, savedClaim, 201);
+      return;
+    }
+    if (method === "GET" && path === `/api/v1/claims/${savedClaim.id}`) {
+      state.claimReads += 1;
+      await fulfillJson(route, savedClaim);
+      return;
+    }
+    if (method === "PATCH" && path === `/api/v1/claims/${savedClaim.id}`) {
+      state.claimUpdates += 1;
+      await fulfillJson(
+        route,
+        options.expireClaimUpdates
+          ? {
+              error_code: "AUTHENTICATION_REQUIRED",
+              message: "Synthetic expired session",
+            }
+          : savedClaim,
+        options.expireClaimUpdates ? 401 : 200,
+      );
+      return;
+    }
+    await route.fallback();
+  });
+  return {
+    state,
+    eventId: EVENT_ID,
+    runId: RESULT_ID,
+    claimId: savedClaim.id,
+    coverage: selected.ref,
+  };
+}

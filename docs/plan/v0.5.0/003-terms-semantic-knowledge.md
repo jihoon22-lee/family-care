@@ -1,6 +1,6 @@
 # v0.5 B03: Detailed terms knowledge and compilation
 
-- 상태: in_progress
+- 상태: completed (코드·합성 수용); 보호된 자료/운영 전환은 #69 인계
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP04 #64](https://github.com/jihoon22-lee/family-care/issues/64)
 - 코드 기반: [B02 PR #76](https://github.com/jihoon22-lee/family-care/pull/76), merge `bc727928a0030332452fb7b3bf639beba6b9e60e`
@@ -12,14 +12,15 @@
 2. completed — 원문 구역의 전체 처리 계획, 조항 계층·국소 예시/각주 범위와 이어지는 구역을 연결한다. Worker 후보의 인용뿐 아니라 필드 의미·숫자/단위·구역/참조 관계를 API가 독립 검증한다. 짧은 발췌나 모델의 완료 선언을 전량 지식화 증거로 사용하지 않는다.
 3. completed — 후보/검증/compiled root의 불변 저장과 현재 조회, 실제 원문 재대조, root별 부분 성공·실패/재시도·동시성과 마지막 정상 결과 보존을 연결한다. legacy 지식을 새 사용자 확인으로 가장하지 않는 adapter를 제공한다.
 4. completed — 공유 정의/별표의 변경 영향을 의존 root에 전파하고 의미 재사용과 새 source proof를 구분한다. 사용자 교정·기존 계약/담보·청구 snapshot을 유지하며 로컬 질의/계산 reader에 인계한다.
-5. in_progress — 같은 합성 문서로 주규칙→별표/각주→compiler→저장/조회→로컬 계산을 검증한다. 전체 필수 검사·통합/브라우저 경계·CI와 보호된 수용 결과를 구분해 기록하고 B03을 통합한다.
+5. completed — 같은 합성 문서로 주규칙→별표/각주→compiler→저장/조회→로컬 계산을 검증한다. 전체 필수 검사·통합/브라우저 경계·CI와 보호된 수용 결과를 구분해 기록하고 B03을 통합한다.
 
 ## B02 acceptance handoff
 
 현재 코드에는 로컬 영역 처리·0053 재개 계획, 현재 root 페이지·legacy adapter, Worker의
 최소화·0054 작업/공유 예산·API inbox와 실행기 연결이 있다. 0055는 같은 요청의 진행 대기를
 실행 실패 횟수와 분리한다. 합성 원문→예산 있는 Worker→API 원문 재검증→300 계산과
-키/기능 미설정 시 예약 0건을 확인했다. 전체 필수 검사·최신 CI·보호된 수용은 다음 검증 범위다.
+키/기능 미설정 시 예약 0건을 확인했다. 전체 필수 검사와 source `4ad8a91`의 CI 7/7 후 PR #78을 merge
+`3f4a47cc2d1b4e649d202850020b94882dc4adfe`로 통합했다. 실제 자료/운영 수용은 #69에서 계속한다.
 
 B04에는 current root의 source manifest·분류 판본·단위/통화·산식·미지원 진단을 인계한다.
 Rider 가입/사건일 연결은 B04에서 실제 출처로 수행한다. semantic citation ID를 legacy Evidence나

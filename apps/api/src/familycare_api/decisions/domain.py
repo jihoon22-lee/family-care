@@ -369,6 +369,7 @@ class DecisionRunResult:
     event_fact_schema_version: str = "medical-event-facts.v2"
     assistance: AnalysisAssistance | None = None
     local_guidance: LocalGuidanceResponse | None = None
+    local_guidance_stale: bool | None = None
     terms_selections: tuple[TermsEventSelection, ...] = ()
     source_rule_version_ids: tuple[UUID, ...] = ()
 

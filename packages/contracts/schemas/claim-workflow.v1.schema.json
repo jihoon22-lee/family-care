@@ -177,7 +177,10 @@
           "$ref": "#/$defs/CurrencyCode"
         }
       },
-      "required": ["amount", "currency"],
+      "required": [
+        "amount",
+        "currency"
+      ],
       "title": "Money",
       "type": "object"
     },
@@ -206,17 +209,28 @@
       "type": "string"
     },
     "ClaimOutcome": {
-      "enum": ["paid", "partially_paid", "denied"],
+      "enum": [
+        "paid",
+        "partially_paid",
+        "denied"
+      ],
       "title": "ClaimOutcome",
       "type": "string"
     },
     "RiderType": {
-      "enum": ["fixed", "indemnity"],
+      "enum": [
+        "fixed",
+        "indemnity"
+      ],
       "title": "RiderType",
       "type": "string"
     },
     "TriState": {
-      "enum": ["MATCH", "NO_MATCH", "UNKNOWN"],
+      "enum": [
+        "MATCH",
+        "NO_MATCH",
+        "UNKNOWN"
+      ],
       "title": "TriState",
       "type": "string"
     },
@@ -237,16 +251,23 @@
           "$ref": "#/$defs/Uuid"
         },
         "rider_id": {
-          "$ref": "#/$defs/Uuid"
+          "$ref": "#/$defs/UuidOrNull"
         },
         "policy_contract_id": {
-          "$ref": "#/$defs/Uuid"
+          "$ref": "#/$defs/UuidOrNull"
         },
         "insurer_key": {
-          "maxLength": 160,
-          "minLength": 1,
-          "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "status": {
           "$ref": "#/$defs/ClaimStatus"
@@ -299,6 +320,24 @@
           "maxItems": 6,
           "uniqueItems": true,
           "type": "array"
+        },
+        "private_contract_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "private_coverage_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "insurer_display": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
@@ -321,7 +360,66 @@
         "allowed_transitions"
       ],
       "title": "ClaimCase",
-      "type": "object"
+      "type": "object",
+      "anyOf": [
+        {
+          "properties": {
+            "policy_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "rider_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_contract_id": {
+              "type": "null"
+            },
+            "private_coverage_id": {
+              "type": "null"
+            },
+            "insurer_key": {
+              "maxLength": 160,
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,159}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "policy_contract_id",
+            "rider_id"
+          ]
+        },
+        {
+          "properties": {
+            "policy_contract_id": {
+              "type": "null"
+            },
+            "rider_id": {
+              "type": "null"
+            },
+            "private_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_coverage_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "insurer_key": {
+              "type": "null"
+            },
+            "insurer_display": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            }
+          },
+          "required": [
+            "policy_contract_id",
+            "rider_id",
+            "private_contract_id",
+            "private_coverage_id",
+            "insurer_display"
+          ]
+        }
+      ]
     },
     "CandidateSnapshotItem": {
       "additionalProperties": false,
@@ -440,22 +538,39 @@
           },
           "maxItems": 256,
           "type": "array"
+        },
+        "local_guidance": {
+          "$ref": "#/$defs/ClaimGuidanceSnapshot"
         }
       },
       "required": [
         "schema_version",
-        "run_id",
-        "medical_event_id",
-        "event_version",
-        "engine_version",
-        "rule_set_version",
-        "policy_snapshot_at",
-        "stale",
         "candidates",
         "evaluations"
       ],
       "title": "CandidateSnapshot",
-      "type": "object"
+      "type": "object",
+      "anyOf": [
+        {
+          "required": [
+            "schema_version",
+            "run_id",
+            "medical_event_id",
+            "event_version",
+            "engine_version",
+            "rule_set_version",
+            "policy_snapshot_at",
+            "stale",
+            "candidates",
+            "evaluations"
+          ]
+        },
+        {
+          "required": [
+            "local_guidance"
+          ]
+        }
+      ]
     },
     "FieldPath": {
       "maxLength": 160,
@@ -474,7 +589,10 @@
           "$ref": "#/$defs/ReasonCode"
         }
       },
-      "required": ["field_path", "reason_code"],
+      "required": [
+        "field_path",
+        "reason_code"
+      ],
       "title": "QuestionSnapshot",
       "type": "object"
     },
@@ -572,12 +690,20 @@
           "$ref": "#/$defs/FieldPath"
         },
         "unit": {
-          "enum": ["date", "days", "occurrences", "amount", "currency"],
+          "enum": [
+            "date",
+            "days",
+            "occurrences",
+            "amount",
+            "currency"
+          ],
           "type": "string"
         },
         "value": {}
       },
-      "required": ["op"],
+      "required": [
+        "op"
+      ],
       "title": "RuleExpression",
       "type": "object"
     },
@@ -590,7 +716,9 @@
               "$ref": "#/$defs/FieldPath"
             }
           },
-          "required": ["field"],
+          "required": [
+            "field"
+          ],
           "type": "object"
         },
         {
@@ -598,7 +726,9 @@
           "properties": {
             "value": {}
           },
-          "required": ["value"],
+          "required": [
+            "value"
+          ],
           "type": "object"
         },
         {
@@ -626,7 +756,10 @@
           "$ref": "#/$defs/VersionString"
         }
       },
-      "required": ["op", "args"],
+      "required": [
+        "op",
+        "args"
+      ],
       "title": "RuleCalculation",
       "type": "object"
     },
@@ -720,7 +853,11 @@
           "$ref": "#/$defs/ReasonCode"
         },
         "review_state": {
-          "enum": ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"],
+          "enum": [
+            "AI_VERIFIED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED"
+          ],
           "type": "string"
         },
         "executable": {
@@ -784,7 +921,10 @@
           "type": "array"
         }
       },
-      "required": ["schema_version", "versions"],
+      "required": [
+        "schema_version",
+        "versions"
+      ],
       "title": "RuleSnapshot",
       "type": "object"
     },
@@ -856,7 +996,12 @@
           "type": "array"
         }
       },
-      "required": ["policy_id", "rider_id", "effective_status", "evidence_ids"],
+      "required": [
+        "policy_id",
+        "rider_id",
+        "effective_status",
+        "evidence_ids"
+      ],
       "title": "PolicySnapshotItem",
       "type": "object"
     },
@@ -875,7 +1020,10 @@
           "type": "array"
         }
       },
-      "required": ["schema_version", "snapshots"],
+      "required": [
+        "schema_version",
+        "snapshots"
+      ],
       "title": "PolicySnapshot",
       "type": "object"
     },
@@ -909,7 +1057,11 @@
           "type": "integer"
         },
         "review_state": {
-          "enum": ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"],
+          "enum": [
+            "AI_VERIFIED",
+            "NEEDS_REVIEW",
+            "USER_CONFIRMED"
+          ],
           "type": "string"
         }
       },
@@ -939,7 +1091,10 @@
           "type": "array"
         }
       },
-      "required": ["schema_version", "evidence"],
+      "required": [
+        "schema_version",
+        "evidence"
+      ],
       "title": "EvidenceSnapshot",
       "type": "object"
     },
@@ -956,7 +1111,11 @@
           "$ref": "#/$defs/RiderType"
         },
         "status": {
-          "enum": ["computed", "partial", "unknown"],
+          "enum": [
+            "computed",
+            "partial",
+            "unknown"
+          ],
           "type": "string"
         },
         "applied_rate": {
@@ -1074,7 +1233,10 @@
           "type": "array"
         }
       },
-      "required": ["schema_version", "calculations"],
+      "required": [
+        "schema_version",
+        "calculations"
+      ],
       "title": "CalculationSnapshot",
       "type": "object"
     },
@@ -1290,7 +1452,10 @@
         {
           "properties": {
             "outcome": {
-              "enum": ["paid", "partially_paid"]
+              "enum": [
+                "paid",
+                "partially_paid"
+              ]
             },
             "counted_occurrence": {
               "const": true
@@ -1305,6 +1470,18 @@
             },
             "currency": {
               "$ref": "#/$defs/CurrencyCode"
+            },
+            "policy_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "rider_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_contract_id": {
+              "type": "null"
+            },
+            "private_coverage_id": {
+              "type": "null"
             }
           },
           "required": [
@@ -1312,7 +1489,56 @@
             "counted_occurrence",
             "payment_date",
             "amount",
-            "currency"
+            "currency",
+            "policy_contract_id",
+            "rider_id"
+          ]
+        },
+        {
+          "properties": {
+            "outcome": {
+              "enum": [
+                "paid",
+                "partially_paid"
+              ]
+            },
+            "counted_occurrence": {
+              "const": true
+            },
+            "payment_date": {
+              "format": "date",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+              "type": "string"
+            },
+            "amount": {
+              "$ref": "#/$defs/DecimalString"
+            },
+            "currency": {
+              "$ref": "#/$defs/CurrencyCode"
+            },
+            "policy_contract_id": {
+              "type": "null"
+            },
+            "rider_id": {
+              "type": "null"
+            },
+            "private_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_coverage_id": {
+              "$ref": "#/$defs/Uuid"
+            }
+          },
+          "required": [
+            "outcome",
+            "counted_occurrence",
+            "payment_date",
+            "amount",
+            "currency",
+            "policy_contract_id",
+            "rider_id",
+            "private_contract_id",
+            "private_coverage_id"
           ]
         },
         {
@@ -1331,6 +1557,18 @@
             },
             "currency": {
               "type": "null"
+            },
+            "policy_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "rider_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_contract_id": {
+              "type": "null"
+            },
+            "private_coverage_id": {
+              "type": "null"
             }
           },
           "required": [
@@ -1338,7 +1576,51 @@
             "counted_occurrence",
             "payment_date",
             "amount",
-            "currency"
+            "currency",
+            "policy_contract_id",
+            "rider_id"
+          ]
+        },
+        {
+          "properties": {
+            "outcome": {
+              "const": "denied"
+            },
+            "counted_occurrence": {
+              "const": false
+            },
+            "payment_date": {
+              "type": "null"
+            },
+            "amount": {
+              "type": "null"
+            },
+            "currency": {
+              "type": "null"
+            },
+            "policy_contract_id": {
+              "type": "null"
+            },
+            "rider_id": {
+              "type": "null"
+            },
+            "private_contract_id": {
+              "$ref": "#/$defs/Uuid"
+            },
+            "private_coverage_id": {
+              "$ref": "#/$defs/Uuid"
+            }
+          },
+          "required": [
+            "outcome",
+            "counted_occurrence",
+            "payment_date",
+            "amount",
+            "currency",
+            "policy_contract_id",
+            "rider_id",
+            "private_contract_id",
+            "private_coverage_id"
           ]
         }
       ],
@@ -1353,10 +1635,10 @@
           "$ref": "#/$defs/Uuid"
         },
         "policy_contract_id": {
-          "$ref": "#/$defs/Uuid"
+          "$ref": "#/$defs/UuidOrNull"
         },
         "rider_id": {
-          "$ref": "#/$defs/Uuid"
+          "$ref": "#/$defs/UuidOrNull"
         },
         "outcome": {
           "$ref": "#/$defs/ClaimOutcome"
@@ -1378,6 +1660,12 @@
         },
         "created_at": {
           "$ref": "#/$defs/DateTime"
+        },
+        "private_contract_id": {
+          "$ref": "#/$defs/UuidOrNull"
+        },
+        "private_coverage_id": {
+          "$ref": "#/$defs/UuidOrNull"
         }
       },
       "required": [
@@ -1413,7 +1701,12 @@
           "$ref": "#/$defs/ClaimTransitionMetadata"
         }
       },
-      "required": ["target_status", "expected_version", "occurred_at", "metadata"],
+      "required": [
+        "target_status",
+        "expected_version",
+        "occurred_at",
+        "metadata"
+      ],
       "title": "ClaimTransitionRequest",
       "type": "object"
     },
@@ -1430,7 +1723,11 @@
           "$ref": "#/$defs/ReasonCodeOrNull"
         }
       },
-      "required": ["expected_version", "prepared", "note_code"],
+      "required": [
+        "expected_version",
+        "prepared",
+        "note_code"
+      ],
       "title": "ClaimChecklistUpdateRequest",
       "type": "object"
     },
@@ -1470,8 +1767,2118 @@
           "type": "array"
         }
       },
-      "required": ["error_code", "message"],
+      "required": [
+        "error_code",
+        "message"
+      ],
       "title": "ClaimError",
+      "type": "object"
+    },
+    "ClaimGuidanceCanonicalCoverageIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "default": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageRef"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageRef"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "authority": {
+          "const": "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+          "title": "Authority",
+          "type": "string"
+        },
+        "ledger_version": {
+          "minimum": 1,
+          "title": "Ledger Version",
+          "type": "integer"
+        },
+        "verification_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Verification Digest Sha256",
+          "type": "string"
+        },
+        "field_conflicts": {
+          "default": [],
+          "items": {
+            "enum": [
+              "insured_amount",
+              "currency",
+              "display_name"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Field Conflicts",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ref",
+        "source_refs",
+        "authority",
+        "ledger_version",
+        "verification_digest_sha256"
+      ],
+      "title": "CanonicalCoverageIdentity",
+      "type": "object"
+    },
+    "ClaimGuidanceCanonicalCoverageRef": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "PRIVATE_KNOWLEDGE_COVERAGE",
+            "OPERATIONAL_RIDER"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "contract_id": {
+          "format": "uuid",
+          "title": "Contract Id",
+          "type": "string"
+        },
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "contract_id",
+        "coverage_id"
+      ],
+      "title": "CanonicalCoverageRef",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCalculatedComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "parent_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Parent Path",
+          "type": "string"
+        },
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 162,
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Value",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        }
+      },
+      "required": [
+        "parent_path",
+        "expression_path",
+        "value",
+        "unit"
+      ],
+      "title": "GuidanceCalculatedComponent",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCalculationOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "FIELD",
+            "LITERAL",
+            "CHILD"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "field_path": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field Path"
+        },
+        "child_path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Child Path"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "supplied_value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supplied Value"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "expression_path",
+        "kind",
+        "unit",
+        "status"
+      ],
+      "title": "GuidanceCalculationOperand",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCalculationStep": {
+      "additionalProperties": false,
+      "properties": {
+        "step_number": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Step Number",
+          "type": "integer"
+        },
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "operation": {
+          "enum": [
+            "add",
+            "subtract",
+            "multiply",
+            "min",
+            "max",
+            "round"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "operands": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCalculationOperand"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Operands",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "rounding_rule": {
+          "anyOf": [
+            {
+              "enum": [
+                "half_up",
+                "half_even",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rounding Rule"
+        },
+        "unit_source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Unit Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "step_number",
+        "expression_path",
+        "operation",
+        "operands",
+        "unit",
+        "status"
+      ],
+      "title": "GuidanceCalculationStep",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCalculationTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "source_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Revision",
+          "type": "string"
+        },
+        "source_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Digest Sha256",
+          "type": "string"
+        },
+        "formula_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Formula Digest Sha256",
+          "type": "string"
+        },
+        "runtime_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Revision",
+          "type": "string"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "COMPLETE",
+            "PARTIAL",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "steps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCalculationStep"
+          },
+          "maxItems": 256,
+          "title": "Steps",
+          "type": "array"
+        },
+        "missing_paths": {
+          "default": [],
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Missing Paths",
+          "type": "array"
+        },
+        "calculated_components": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCalculatedComponent"
+          },
+          "maxItems": 256,
+          "title": "Calculated Components",
+          "type": "array"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "publication_id",
+        "source_revision",
+        "source_digest_sha256",
+        "formula_digest_sha256",
+        "runtime_revision",
+        "status",
+        "unit"
+      ],
+      "title": "GuidanceCalculationTrace",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageRef"
+        },
+        "canonical_identity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "contract_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Contract Label",
+          "type": "string"
+        },
+        "coverage_label": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Coverage Label",
+          "type": "string"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "group": {
+          "enum": [
+            "PRIMARY",
+            "CONDITIONAL"
+          ],
+          "title": "Group",
+          "type": "string"
+        },
+        "enrollment": {
+          "const": "DOCUMENTED",
+          "default": "DOCUMENTED",
+          "title": "Enrollment",
+          "type": "string"
+        },
+        "freshness": {
+          "enum": [
+            "CONFIRMED_AT_EVENT",
+            "DOCUMENT_CONTINUITY",
+            "STATUS_UNRESOLVED"
+          ],
+          "title": "Freshness",
+          "type": "string"
+        },
+        "condition_result": {
+          "enum": [
+            "MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Condition Result",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "conditions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCondition"
+          },
+          "maxItems": 128,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "relevance": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceRelevance"
+          },
+          "maxItems": 64,
+          "title": "Relevance",
+          "type": "array"
+        },
+        "contract_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceGuidanceContractAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "estimate": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceEstimate"
+        },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceScenario"
+          },
+          "maxItems": 32,
+          "title": "Scenarios",
+          "type": "array"
+        },
+        "cases": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidancePayoutCase"
+          },
+          "maxItems": 32,
+          "title": "Cases",
+          "type": "array"
+        },
+        "case_relation": {
+          "default": "UNRESOLVED",
+          "enum": [
+            "MUTUALLY_EXCLUSIVE",
+            "UNRESOLVED"
+          ],
+          "title": "Case Relation",
+          "type": "string"
+        },
+        "questions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceQuestion"
+          },
+          "maxItems": 64,
+          "title": "Questions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ref",
+        "contract_label",
+        "coverage_label",
+        "benefit_kind",
+        "group",
+        "freshness",
+        "condition_result",
+        "reason_codes",
+        "estimate"
+      ],
+      "title": "GuidanceCandidate",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCondition": {
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "rule_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Id"
+        },
+        "semantic_publication_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Publication Id"
+        },
+        "semantic_node_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Node Id"
+        },
+        "result": {
+          "enum": [
+            "MATCH",
+            "NO_MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceSemanticEvidence"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "result",
+        "reason_code",
+        "evidence"
+      ],
+      "title": "GuidanceCondition",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceContractAmount": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "amount_authority": {
+          "enum": [
+            "PROGRAM_VERIFIED",
+            "USER_CONFIRMED",
+            "DOCUMENT_REVIEWED",
+            "UNCONFIRMED"
+          ],
+          "title": "Amount Authority",
+          "type": "string"
+        },
+        "currency_authority": {
+          "enum": [
+            "PROGRAM_VERIFIED",
+            "USER_CONFIRMED",
+            "DOCUMENT_REVIEWED",
+            "UNCONFIRMED"
+          ],
+          "title": "Currency Authority",
+          "type": "string"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidancePrivateCertificate"
+              }
+            ]
+          },
+          "maxItems": 128,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "amount_authority",
+        "currency_authority"
+      ],
+      "title": "GuidanceContractAmount",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCostGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "unit": {
+          "const": "COST",
+          "default": "COST",
+          "title": "Unit",
+          "type": "string"
+        },
+        "line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Line Ids",
+          "type": "array"
+        },
+        "known_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Known Line Ids",
+          "type": "array"
+        },
+        "unknown_amount_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Unknown Amount Line Ids",
+          "type": "array"
+        },
+        "known_cost": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Known Cost"
+        },
+        "total_cost": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Total Cost"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "line_ids",
+        "known_line_ids",
+        "unknown_amount_line_ids",
+        "known_cost",
+        "total_cost",
+        "source_refs"
+      ],
+      "title": "GuidanceCostGroup",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceCurrencyCosts": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "covered": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceCostGroup"
+        },
+        "excluded": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceCostGroup"
+        },
+        "coverage_review": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceCostGroup"
+        },
+        "unconfirmed": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceCostGroup"
+        }
+      },
+      "required": [
+        "currency",
+        "covered",
+        "excluded",
+        "coverage_review",
+        "unconfirmed"
+      ],
+      "title": "GuidanceCurrencyCosts",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceEstimate": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "POINT",
+            "RANGE",
+            "FORMULA",
+            "UNAVAILABLE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount"
+        },
+        "lower": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lower"
+        },
+        "upper": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Upper"
+        },
+        "formula": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Formula"
+        },
+        "missing_inputs": {
+          "default": [],
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Missing Inputs",
+          "type": "array"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceSemanticEvidence"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "basis": {
+          "default": "DOCUMENT_FORMULA",
+          "enum": [
+            "DOCUMENT_FORMULA",
+            "REGISTERED_COSTS",
+            "CONFIRMED_COST_SUBSET",
+            "USER_SCENARIO",
+            "SOURCE_ALTERNATIVES"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "partial_amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partial Amount"
+        },
+        "trace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceGuidanceCalculationTrace"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "reason_code"
+      ],
+      "title": "GuidanceEstimate",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceEventSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "maximum": 2000,
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "GuidanceEventSpan",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "TERMS_SECTION",
+            "OPERATIONAL_EVIDENCE"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "page_start": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "page_end": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "publication_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publication Id"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        }
+      },
+      "required": [
+        "kind",
+        "evidence_id",
+        "page_start",
+        "page_end"
+      ],
+      "title": "GuidanceEvidence",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceExpenses": {
+      "additionalProperties": false,
+      "properties": {
+        "event_id": {
+          "format": "uuid",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Version"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "EMPTY",
+            "PARTIAL",
+            "UNAVAILABLE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reader_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Reader Revision",
+          "type": "string"
+        },
+        "digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Digest Sha256",
+          "type": "string"
+        },
+        "currencies": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCurrencyCosts"
+          },
+          "maxItems": 256,
+          "title": "Currencies",
+          "type": "array"
+        },
+        "unassigned_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Unassigned Line Ids",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_version",
+        "status",
+        "reader_revision",
+        "digest_sha256",
+        "currencies",
+        "unassigned_line_ids",
+        "reason_codes"
+      ],
+      "title": "GuidanceExpenses",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceHypothesis": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        },
+        "provenance": {
+          "const": "SCENARIO_ASSUMPTION",
+          "default": "SCENARIO_ASSUMPTION",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceEventSpan"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "field_path",
+        "value",
+        "spans",
+        "source_refs"
+      ],
+      "title": "GuidanceHypothesis",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidancePayoutCase": {
+      "additionalProperties": false,
+      "properties": {
+        "case_key": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Case Key",
+          "type": "string"
+        },
+        "source_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceCanonicalCoverageRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "contract_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceGuidanceContractAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "freshness": {
+          "anyOf": [
+            {
+              "enum": [
+                "CONFIRMED_AT_EVENT",
+                "DOCUMENT_CONTINUITY",
+                "STATUS_UNRESOLVED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Freshness"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "condition_result": {
+          "enum": [
+            "MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Condition Result",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "conditions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceCondition"
+          },
+          "maxItems": 128,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "relevance": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceRelevance"
+          },
+          "maxItems": 64,
+          "title": "Relevance",
+          "type": "array"
+        },
+        "estimate": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceEstimate"
+        },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceScenario"
+          },
+          "maxItems": 32,
+          "title": "Scenarios",
+          "type": "array"
+        },
+        "questions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceQuestion"
+          },
+          "maxItems": 64,
+          "title": "Questions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "case_key",
+        "benefit_kind",
+        "condition_result",
+        "reason_codes",
+        "estimate"
+      ],
+      "title": "GuidancePayoutCase",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidancePrivateCertificate": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "PRIVATE_CERTIFICATE",
+          "default": "PRIVATE_CERTIFICATE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "catalog_import_run_id": {
+          "format": "uuid",
+          "title": "Catalog Import Run Id",
+          "type": "string"
+        },
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        },
+        "document_alias": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Document Alias",
+          "type": "string"
+        },
+        "page_start": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "page_end": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "catalog_import_run_id",
+        "coverage_id",
+        "document_alias",
+        "page_start",
+        "page_end"
+      ],
+      "title": "GuidancePrivateCertificate",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "reason_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Reason Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field_path",
+        "reason_code"
+      ],
+      "title": "GuidanceQuestion",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceRelevance": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "CONFIRMED_EVENT",
+            "LOCAL_TOPIC",
+            "PLANNED_EVENT"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "rule_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Rule Key",
+          "type": "string"
+        },
+        "source_kind": {
+          "enum": [
+            "PRIVATE_RULE_PUBLICATION",
+            "OPERATIONAL_RULE_VERSION",
+            "SEMANTIC_NODE"
+          ],
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "semantic_node_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Node Id"
+        },
+        "spans": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceEventSpan"
+          },
+          "maxItems": 128,
+          "title": "Spans",
+          "type": "array"
+        },
+        "normalizer_key": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalizer Key"
+        },
+        "evidence": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/ClaimGuidanceGuidanceSemanticEvidence"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "field_path",
+        "publication_id",
+        "rule_key",
+        "source_kind",
+        "evidence"
+      ],
+      "title": "GuidanceRelevance",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceScenario": {
+      "additionalProperties": false,
+      "properties": {
+        "scenario_key": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Scenario Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "PLANNED_CARE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "hypotheses": {
+          "items": {
+            "$ref": "#/$defs/ClaimGuidanceGuidanceHypothesis"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "estimate": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceEstimate"
+        }
+      },
+      "required": [
+        "scenario_key",
+        "kind",
+        "hypotheses",
+        "estimate"
+      ],
+      "title": "GuidanceScenario",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceSemanticEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "SEMANTIC_CITATION",
+          "default": "SEMANTIC_CITATION",
+          "title": "Kind",
+          "type": "string"
+        },
+        "citation_id": {
+          "format": "uuid",
+          "title": "Citation Id",
+          "type": "string"
+        },
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "document_version_id": {
+          "format": "uuid",
+          "title": "Document Version Id",
+          "type": "string"
+        },
+        "terms_edition_id": {
+          "format": "uuid",
+          "title": "Terms Edition Id",
+          "type": "string"
+        },
+        "generation_id": {
+          "format": "uuid",
+          "title": "Generation Id",
+          "type": "string"
+        },
+        "root_node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Root Node Id",
+          "type": "string"
+        },
+        "source_node_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Node Id",
+          "type": "string"
+        },
+        "page_start": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        },
+        "page_end": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "start": {
+          "maximum": 262144,
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "maximum": 262144,
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "source_layer": {
+          "enum": [
+            "native",
+            "ocr"
+          ],
+          "title": "Source Layer",
+          "type": "string"
+        },
+        "bbox": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Bbox",
+          "type": "array"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "citation_id",
+        "publication_id",
+        "document_version_id",
+        "terms_edition_id",
+        "generation_id",
+        "root_node_id",
+        "source_node_id",
+        "page_start",
+        "page_end",
+        "start",
+        "end",
+        "source_layer",
+        "bbox",
+        "source_sha256",
+        "manifest_sha256"
+      ],
+      "title": "GuidanceSemanticEvidence",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceSourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "source_kind": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "source_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "digest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest Sha256"
+        }
+      },
+      "required": [
+        "source_kind",
+        "source_id"
+      ],
+      "title": "GuidanceSourceReference",
+      "type": "object"
+    },
+    "ClaimGuidanceGuidanceVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "default": "local-guidance-v1",
+          "enum": [
+            "local-guidance-v1",
+            "local-guidance-v2"
+          ],
+          "title": "Engine",
+          "type": "string"
+        },
+        "assumption_policy": {
+          "const": "document-continuity-v1",
+          "default": "document-continuity-v1",
+          "title": "Assumption Policy",
+          "type": "string"
+        },
+        "catalog_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalog Import Run Id"
+        },
+        "rule_import_run_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule Import Run Id"
+        },
+        "status_digest": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Digest"
+        }
+      },
+      "title": "GuidanceVersions",
+      "type": "object"
+    },
+    "ClaimGuidanceSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "claim-local-guidance-snapshot-v1",
+          "default": "claim-local-guidance-snapshot-v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "medical_event_id": {
+          "format": "uuid",
+          "title": "Medical Event Id",
+          "type": "string"
+        },
+        "family_member_id": {
+          "format": "uuid",
+          "title": "Family Member Id",
+          "type": "string"
+        },
+        "event_version": {
+          "minimum": 1,
+          "title": "Event Version",
+          "type": "integer"
+        },
+        "event_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Date"
+        },
+        "versions": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceVersions"
+        },
+        "candidate": {
+          "$ref": "#/$defs/ClaimGuidanceGuidanceCandidate"
+        },
+        "expenses": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceGuidanceExpenses"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "run_id",
+        "medical_event_id",
+        "family_member_id",
+        "event_version",
+        "event_date",
+        "versions",
+        "candidate",
+        "expenses"
+      ],
+      "title": "ClaimLocalGuidanceSnapshot",
       "type": "object"
     }
   }

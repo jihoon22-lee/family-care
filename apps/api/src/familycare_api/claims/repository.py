@@ -21,6 +21,10 @@ from familycare_api.claims.errors import (
     ClaimRepositoryUnavailable,
     InvalidClaimTransitionError,
 )
+from familycare_api.claims.guidance_repository import (
+    existing_operational_claim,
+    existing_private_claim,
+)
 from familycare_api.claims.snapshot import build_claim_snapshot
 from familycare_api.claims.state_machine import (
     InvalidClaimTransition,
@@ -28,10 +32,12 @@ from familycare_api.claims.state_machine import (
     transition_claim_status,
 )
 from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.calculation_repository import CalculationRepository
 from familycare_api.decisions.domain import ClaimHistoryFact
 from familycare_api.decisions.repository import DecisionRepository
+from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkError
 from familycare_api.policies.errors import VersionConflict
 
 
@@ -52,7 +58,7 @@ def read_claim_history(
         """
         SELECT outcome, counted_occurrence, payment_date, rider_id
         FROM claim_history
-        WHERE household_space_id = %s AND family_member_id = %s
+        WHERE household_space_id = %s AND family_member_id = %s AND rider_id IS NOT NULL
         ORDER BY created_at, id
         """,
         (scope.household_space_id, family_member_id),
@@ -73,6 +79,40 @@ class ClaimRepository:
 
     def __init__(self, database_url: str) -> None:
         self.database_url = _database_url(database_url)
+
+    def create_guidance_claim_case(
+        self,
+        scope: HouseholdScope,
+        event_id: UUID,
+        *,
+        run_id: UUID,
+        expected_event_version: int,
+        coverage: CanonicalCoverageRef,
+    ) -> dict[str, object]:
+        from familycare_api.claims.guidance_repository import create_guidance_claim
+
+        for attempt in range(3):
+            try:
+                with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    claim_id = create_guidance_claim(
+                        connection,
+                        scope,
+                        event_id,
+                        repository=DecisionRepository(self.database_url),
+                        run_id=run_id,
+                        expected_event_version=expected_event_version,
+                        coverage=coverage,
+                    )
+                return self.get_claim_case(scope, claim_id)
+            except psycopg.errors.SerializationFailure, psycopg.errors.DeadlockDetected:
+                if attempt == 2:
+                    raise ClaimInvalid from None
+            except ValueError:
+                raise ClaimInvalid from None
+            except psycopg.Error, CanonicalLinkError:
+                raise ClaimRepositoryUnavailable from None
+        raise ClaimInvalid  # pragma: no cover
 
     def create_claim_case(
         self,
@@ -108,6 +148,20 @@ class ClaimRepository:
             raise ClaimRepositoryUnavailable from None
         if selected is None:
             raise ClaimInvalid
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                event_row = DecisionRepository(self.database_url)._event_row(
+                    connection, scope, event_id, for_update=True
+                )
+                if event_row is None:
+                    raise ClaimInvalid
+                existing_id = existing_operational_claim(
+                    connection, scope, event_id, event_row["family_member_id"], rider_id
+                )
+            if existing_id is not None:
+                return self.get_claim_case(scope, existing_id)
+        except psycopg.Error, CanonicalLinkError:
+            raise ClaimRepositoryUnavailable from None
         if selected.get("active_claim_id") is not None:
             return self.get_claim_case(
                 scope,
@@ -166,6 +220,16 @@ class ClaimRepository:
         snapshot_id = uuid4()
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                event_row = decision_repository._event_row(
+                    connection, scope, event_id, for_update=True
+                )
+                if event_row is None:
+                    raise ClaimInvalid
+                existing_id = existing_operational_claim(
+                    connection, scope, event_id, event_row["family_member_id"], rider_id
+                )
+                if existing_id is not None:
+                    return self.get_claim_case(scope, existing_id)
                 row = connection.execute(
                     """
                     INSERT INTO claim_cases (
@@ -273,7 +337,7 @@ class ClaimRepository:
                     self._create_checklist(connection, claim_id, rules)
         except ClaimInvalid:
             raise
-        except psycopg.Error:
+        except psycopg.Error, CanonicalLinkError:
             raise ClaimRepositoryUnavailable from None
         return self.get_claim_case(scope, claim_id)
 
@@ -613,9 +677,10 @@ class ClaimRepository:
             """
             INSERT INTO claim_history (
               household_space_id, medical_event_id, family_member_id,
-              policy_contract_id, rider_id, outcome, payment_date,
+              policy_contract_id, rider_id, private_contract_id, private_coverage_id,
+              outcome, payment_date,
               counted_occurrence, amount, currency, reason_code
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 claim["household_space_id"],
@@ -623,6 +688,8 @@ class ClaimRepository:
                 claim["family_member_id"],
                 claim["policy_contract_id"],
                 claim["rider_id"],
+                claim.get("private_contract_id"),
+                claim.get("private_coverage_id"),
                 outcome,
                 payment_date,
                 outcome in {"paid", "partially_paid"},
@@ -644,9 +711,28 @@ class ClaimRepository:
         new_value = "NULL" if restore else "clock_timestamp()"
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                if restore:
+                    # Participate in creation's predicate conflict detection too:
+                    # a row lock alone does not refresh its earlier MVCC snapshot.
+                    connection.execute("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE")
+                    selected = connection.execute(
+                        "SELECT medical_event_id FROM claim_cases WHERE id=%s "
+                        "AND household_space_id=%s AND deleted_at IS NOT NULL",
+                        (claim_id, scope.household_space_id),
+                    ).fetchone()
+                    if selected is None:
+                        raise ClaimNotFound
+                    # Match creation's lock order: event first, then claim/source.
+                    # Historical events may remain soft-deleted; locking must not
+                    # replace the original source or require fresh analysis.
+                    connection.execute(
+                        "SELECT id FROM medical_events WHERE id=%s "
+                        "AND household_space_id=%s FOR UPDATE",
+                        (selected["medical_event_id"], scope.household_space_id),
+                    ).fetchone()
                 row = connection.execute(
                     f"""
-                    SELECT id, version FROM claim_cases
+                    SELECT * FROM claim_cases
                     WHERE id = %s AND household_space_id = %s AND deleted_at {deleted}
                     FOR UPDATE
                     """,
@@ -656,6 +742,24 @@ class ClaimRepository:
                     raise ClaimNotFound
                 if int(row["version"]) != expected_version:
                     raise VersionConflict
+                if restore:
+                    assert selected is not None
+                    if row["medical_event_id"] != selected["medical_event_id"]:
+                        raise VersionConflict
+                    lookup = (
+                        existing_operational_claim
+                        if row["rider_id"] is not None
+                        else existing_private_claim
+                    )
+                    existing = lookup(
+                        connection,
+                        scope,
+                        row["medical_event_id"],
+                        row["family_member_id"],
+                        row["rider_id"] or row["private_coverage_id"],
+                    )
+                    if existing is not None:
+                        raise ClaimInvalid
                 updated = connection.execute(
                     f"""
                     UPDATE claim_cases
@@ -668,11 +772,15 @@ class ClaimRepository:
                 ).fetchone()
                 if updated is None:
                     raise VersionConflict
-        except ClaimNotFound, VersionConflict:
+        except ClaimNotFound, VersionConflict, ClaimInvalid:
             raise
-        except psycopg.errors.UniqueViolation:
+        except (
+            psycopg.errors.UniqueViolation,
+            psycopg.errors.SerializationFailure,
+            psycopg.errors.DeadlockDetected,
+        ):
             raise ClaimInvalid from None
-        except psycopg.Error:
+        except psycopg.Error, CanonicalLinkError:
             raise ClaimRepositoryUnavailable from None
 
     @staticmethod
@@ -732,6 +840,14 @@ class ClaimRepository:
             "policy_contract_id": claim["policy_contract_id"],
             "rider_id": claim["rider_id"],
             "insurer_key": claim["insurer_key"],
+            "insurer_display": claim.get("insurer_display"),
+            "coverage": {
+                "kind": "OPERATIONAL_RIDER"
+                if claim["rider_id"] is not None
+                else "PRIVATE_KNOWLEDGE_COVERAGE",
+                "contract_id": claim["policy_contract_id"] or claim.get("private_contract_id"),
+                "coverage_id": claim["rider_id"] or claim.get("private_coverage_id"),
+            },
             "status": status,
             "receipt_number": claim.get("receipt_number"),
             "submitted_at": claim.get("submitted_at"),
@@ -770,7 +886,7 @@ class ClaimRepository:
         }
 
 
-def _snapshot_view(snapshot: Mapping[str, Any], policy_id: UUID) -> dict[str, object]:
+def _snapshot_view(snapshot: Mapping[str, Any], policy_id: UUID | None) -> dict[str, object]:
     candidate = cast(Mapping[str, Any], snapshot["candidate_snapshot_json"])
     candidates = tuple(
         item for item in candidate.get("candidates", ()) if isinstance(item, Mapping)
@@ -790,6 +906,7 @@ def _snapshot_view(snapshot: Mapping[str, Any], policy_id: UUID) -> dict[str, ob
     return {
         "snapshot_version": snapshot["snapshot_version"],
         "snapshot_sha256": snapshot["snapshot_sha256"],
+        "local_guidance": candidate.get("local_guidance"),
         "candidate": {
             "candidate_ids": [item["id"] for item in candidates if item.get("id")],
             "rider_ids": [item["rider_id"] for item in candidates if item.get("rider_id")],

@@ -61,6 +61,12 @@ from familycare_api.decisions.terms import RulesForEvent
 from familycare_api.decisions.terms_snapshots import decode_selections, encode_selections
 from familycare_api.guidance.engine import LocalGuidanceEngine
 from familycare_api.guidance.models import LocalGuidanceResponse
+from familycare_api.guidance.private_adapter import adapt_private_guidance
+from familycare_api.guidance.repository import (
+    combine_guidance_contexts,
+    read_operational_guidance,
+    read_subject_guidance,
+)
 from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
 
 
@@ -217,6 +223,7 @@ class DecisionRepository:
                         structured_values,
                         structured_questions,
                         cast(Mapping[Any, str | bool | None], overrides),
+                        code_scopes=cast(Any, changes.get("code_scopes")),
                     )
                     structured_values, structured_questions, _, _ = structured_update
                     fact_values = dict(cast(Mapping[str, object | None], fact_values))
@@ -466,7 +473,12 @@ class DecisionRepository:
                         )
                         if knowledge_read.context is not None:
                             local_guidance = LocalGuidanceEngine().evaluate(
-                                scope, event, knowledge_read.context
+                                scope,
+                                event,
+                                combine_guidance_contexts(
+                                    read_subject_guidance(connection, scope, event),
+                                    adapt_private_guidance(knowledge_read.context),
+                                ),
                             )
                             knowledge_result = self.knowledge_engine.evaluate(
                                 scope,
@@ -476,6 +488,23 @@ class DecisionRepository:
                             )
                 except psycopg.Error, ValueError, ArithmeticError:
                     knowledge_failures = ("KNOWLEDGE_SOURCE_UNAVAILABLE",)
+                try:
+                    with connection.transaction():
+                        operational = read_operational_guidance(connection, scope, event, self)
+                        shared_context = combine_guidance_contexts(
+                            operational,
+                            adapt_private_guidance(knowledge_read.context)
+                            if knowledge_read.context is not None
+                            else None,
+                        )
+                        local_guidance = LocalGuidanceEngine().evaluate(
+                            scope, event, shared_context
+                        )
+                except psycopg.Error, ValueError, ArithmeticError:
+                    knowledge_failures = (
+                        *knowledge_failures,
+                        "OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE",
+                    )
                 source_failures = tuple(
                     dict.fromkeys(
                         (
@@ -506,6 +535,7 @@ class DecisionRepository:
                     status="partial" if source_failures else "succeeded",
                     knowledge_result=knowledge_result,
                     local_guidance=local_guidance,
+                    local_guidance_stale=False if local_guidance is not None else None,
                     analysis_completeness=completeness,
                     source_failure_codes=source_failures,
                     catalog_coverage=knowledge_read.catalog_coverage,
@@ -550,6 +580,7 @@ class DecisionRepository:
     ) -> DecisionRunResult:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
                 run = connection.execute(
                     """
                     SELECT run.*
@@ -1191,6 +1222,34 @@ class DecisionRepository:
                 result.knowledge_result,
             )
 
+    def _local_guidance_is_stale(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        event: MedicalEvent,
+        guidance: LocalGuidanceResponse | None,
+    ) -> bool | None:
+        if guidance is None or guidance.schema_version == "1":
+            return None
+        if (
+            guidance.event_version != event.version
+            or guidance.versions.engine != "local-guidance-v2"
+        ):
+            return True
+        try:
+            with connection.transaction():
+                private = self.knowledge_repository.read_context(connection, scope, event)
+                operational = read_operational_guidance(connection, scope, event, self)
+                current = combine_guidance_contexts(
+                    operational,
+                    adapt_private_guidance(private.context)
+                    if private.context is not None
+                    else None,
+                )
+                return current.versions.status_digest != guidance.versions.status_digest
+        except psycopg.Error, ValueError, ArithmeticError:
+            return True
+
     def _load_result(
         self,
         connection: psycopg.Connection[dict[str, Any]],
@@ -1249,6 +1308,14 @@ class DecisionRepository:
             )
         except AnalysisAssistanceNotFound:
             assistance = None
+        local_guidance = (
+            LocalGuidanceResponse.model_validate(run["local_guidance_json"])
+            if run.get("local_guidance_json") is not None
+            else None
+        )
+        local_guidance_stale = self._local_guidance_is_stale(
+            connection, scope, _medical_event(event_row), local_guidance
+        )
         return DecisionRunResult(
             run_id=cast(UUID, run["id"]),
             medical_event_id=cast(UUID, run["medical_event_id"]),
@@ -1284,11 +1351,8 @@ class DecisionRepository:
             assistance=assistance,
             terms_selections=decode_selections(run.get("terms_selections_json")),
             source_rule_version_ids=tuple(run.get("source_rule_version_ids") or ()),
-            local_guidance=(
-                LocalGuidanceResponse.model_validate(run["local_guidance_json"])
-                if run.get("local_guidance_json") is not None
-                else None
-            ),
+            local_guidance=local_guidance,
+            local_guidance_stale=local_guidance_stale,
         )
 
 
@@ -1378,6 +1442,8 @@ def _medical_event(row: Mapping[str, Any]) -> MedicalEvent:
                 "state": item.state,
                 "confidence": item.confidence,
                 "evidence_ids": item.evidence_ids,
+                "code_system": item.code_system,
+                "code_version": item.code_version,
             }
             for item in structured_facts
         ),

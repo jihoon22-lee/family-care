@@ -126,8 +126,9 @@ def _sources(
     new_terms_body: str | None = None,
     change_scope: str = "특약",
     change_fields: tuple[str, ...] = (),
+    sample_amount: int = 317,
 ) -> dict[str, Any]:
-    retain_terms_change_policy(url, job)
+    retain_terms_change_policy(url, job, sample_amount=sample_amount)
     assert RangeEnrollmentProjector(url).project_pending() == 3
     assert DocumentMetadataRunner(url).run_once("synthetic-worker")
     assert DocumentMetadataProjector(url).project_pending() == 1

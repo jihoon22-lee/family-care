@@ -287,7 +287,7 @@ def test_claim_workflow_schema_is_recursive_strict_and_bounded() -> None:
         "RESOURCE_LIMIT_EXCEEDED",
         "VERSION_CONFLICT",
     ]
-    assert definitions["ClaimHistory"]["properties"]["rider_id"]["$ref"] == "#/$defs/Uuid"
+    assert definitions["ClaimHistory"]["properties"]["rider_id"]["$ref"] == "#/$defs/UuidOrNull"
     assert definitions["ClaimCase"]["properties"]["allowed_transitions"]["maxItems"] == 6
     assert definitions["ChecklistItem"]["properties"]["document_kind"]["maxLength"] == 64
     assert definitions["ClaimCaseSnapshot"]["properties"]["snapshot_sha256"]["pattern"] == (
@@ -296,6 +296,35 @@ def test_claim_workflow_schema_is_recursive_strict_and_bounded() -> None:
     assert schema["properties"]["checklist"]["maxItems"] == 64
     assert schema["properties"]["status_events"]["maxItems"] == 64
     assert schema["properties"]["history"]["maxItems"] == 64
+
+
+def test_claim_sources_require_one_complete_pair_for_cases_and_every_outcome() -> None:
+    schema = load_json(SCHEMA_PATH)
+    example = load_json(EXAMPLE_PATH)
+    validate = load_schema_validator()
+    for name, item in (
+        ("ClaimCase", example["claim_case"]),
+        *(("ClaimHistory", history) for history in example["history"]),
+    ):
+        definition = schema["$defs"][name]
+        assert not validate(definition, item, root_schema=schema)
+        private = {
+            **item,
+            "policy_contract_id": None,
+            "rider_id": None,
+            "private_contract_id": item["policy_contract_id"],
+            "private_coverage_id": item["rider_id"],
+        }
+        if name == "ClaimCase":
+            private.update(insurer_key=None, insurer_display="Sample Insurer")
+        assert not validate(definition, private, root_schema=schema)
+        for invalid in (
+            {**item, "rider_id": None},
+            {**private, "private_coverage_id": None},
+            {**private, "rider_id": item["rider_id"]},
+            {**private, "policy_contract_id": item["policy_contract_id"]},
+        ):
+            assert validate(definition, invalid, root_schema=schema)
 
 
 def test_claim_workflow_contract_has_no_medical_file_or_raw_text_fields() -> None:

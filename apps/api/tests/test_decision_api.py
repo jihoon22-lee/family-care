@@ -667,6 +667,7 @@ def test_analyze_returns_unknown_normally_with_exact_versions_and_evidence(
         "source_failure_codes",
         "assistance",
         "local_guidance",
+        "local_guidance_stale",
     }
     assert body["run_id"] == str(RUN_ONE_ID)
     assert body["event_version"] == 1

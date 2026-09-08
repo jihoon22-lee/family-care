@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from datetime import date
+from collections.abc import Iterator
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NoReturn
 from uuid import uuid4
@@ -13,6 +14,10 @@ import psycopg
 import pytest
 from alembic import command
 from alembic.config import Config
+from familycare_api.claims.repository import ClaimRepository, read_claim_history
+from familycare_api.claims.router import get_claim_service, medical_event_claim_router
+from familycare_api.claims.schemas import ClaimCaseResponse
+from familycare_api.claims.service import ClaimService
 from familycare_api.common.scope import resolve_household_scope
 from familycare_api.decisions.repository import DecisionRepository
 from familycare_api.decisions.router import get_decision_service, router
@@ -21,6 +26,7 @@ from familycare_api.errors import install_error_handlers
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from psycopg.types.json import Jsonb
+from sqlalchemy.exc import DBAPIError
 
 from apps.api.tests.test_decision_integration import _psycopg_url, _reset_database, _seed
 from apps.api.tests.test_private_knowledge_decision_integration import _seed_private_publication
@@ -29,10 +35,15 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
-def database_url() -> str:
+def database_url() -> Iterator[str]:
     value = os.environ["FAMILYCARE_TEST_DATABASE_URL"]
     _reset_database(value)
-    return value
+    try:
+        yield value
+    finally:
+        # Do not leave new guidance history in the shared synthetic test DB:
+        # later historical-schema tests must reach their own downgrade guard.
+        _reset_database(value)
 
 
 def test_api_returns_and_preserves_document_guidance_without_ai_or_latest_status(
@@ -86,6 +97,102 @@ def test_api_returns_and_preserves_document_guidance_without_ai_or_latest_status
         assert stored.status_code == 200
         assert stored.json()["local_guidance"] == guidance
 
+    local = service.get_decision_result(event.id, 1).local_guidance
+    assert local is not None
+    selected = local.candidates[0]
+    assert selected.ref.kind == "PRIVATE_KNOWLEDGE_COVERAGE"
+    claims = ClaimRepository(database_url)
+    app.include_router(medical_event_claim_router)
+    app.dependency_overrides[get_claim_service] = lambda: ClaimService(seed.scope_a, claims)
+    with TestClient(app) as client:
+        request = {
+            "guidance": {
+                "run_id": payload["run_id"],
+                "expected_event_version": 1,
+                "coverage": selected.ref.model_dump(mode="json"),
+            }
+        }
+        prepared = client.post(f"/api/v1/medical-events/{event.id}/claims", json=request)
+        assert prepared.status_code == 201
+        assert prepared.headers["cache-control"] == "no-store"
+        claim = prepared.json()
+        invalid = client.post(
+            f"/api/v1/medical-events/{event.id}/claims",
+            json={"guidance": {**request["guidance"], "amount": "999"}},
+        )
+        assert invalid.status_code == 422
+    validated = ClaimCaseResponse.model_validate(claim)
+    assert validated.policy_contract_id is None and validated.rider_id is None
+    assert validated.coverage == selected.ref
+    assert validated.insurer_key is None
+    assert validated.insurer_display
+    assert validated.snapshot.local_guidance.candidate == selected
+    assert validated.paid_amount is None
+    submitted = claims.transition_claim(
+        seed.scope_a,
+        validated.id,
+        target_status="submitted",
+        expected_version=1,
+        occurred_at=datetime.now(UTC),
+        metadata={},
+    )
+    from decimal import Decimal
+
+    paid = claims.transition_claim(
+        seed.scope_a,
+        validated.id,
+        target_status="paid",
+        expected_version=submitted["version"],
+        occurred_at=datetime.now(UTC),
+        metadata={"amount": Decimal("0.5"), "currency": "KRW", "payment_date": date(2026, 6, 17)},
+    )
+    assert paid["paid_amount"] == Decimal("0.5")
+    assert paid["snapshot"]["local_guidance"]["candidate"]["estimate"]["amount"] == "1"
+    future_event = service.create_medical_event(
+        family_member_id=seed.member_a,
+        mode="post_treatment",
+        situation="Synthetic follow-up",
+        event_date=date(2026, 6, 18),
+        facts={},
+    )
+    with psycopg.connect(
+        _psycopg_url(database_url), row_factory=psycopg.rows.dict_row
+    ) as connection:
+        future_context = service.repository.knowledge_repository.read_context(
+            connection,
+            seed.scope_a,
+            future_event,
+        ).context
+        assert future_context is not None
+        future_coverage = next(
+            c
+            for c in future_context.coverages
+            if c.knowledge_coverage_id == selected.ref.coverage_id
+        )
+        assert future_coverage.claim_history_counted_occurrence is not None
+        assert future_coverage.claim_history_counted_occurrence.value == 1
+        history = connection.execute(
+            "SELECT rider_id,private_coverage_id,amount FROM claim_history "
+            "WHERE medical_event_id=%s",
+            (event.id,),
+        ).fetchone()
+        assert history == {
+            "rider_id": None,
+            "private_coverage_id": selected.ref.coverage_id,
+            "amount": Decimal("0.5"),
+        }
+        assert all(
+            row.rider_id is not None
+            for row in read_claim_history(connection, seed.scope_a, seed.member_a)
+        )
+        for statement in (
+            "UPDATE claim_cases SET private_coverage_id=NULL WHERE id=%s",
+            "UPDATE claim_cases SET rider_id=private_coverage_id WHERE id=%s",
+            "UPDATE claim_cases SET family_member_id=gen_random_uuid() WHERE id=%s",
+        ):
+            with pytest.raises(psycopg.IntegrityError), connection.transaction():
+                connection.execute(statement, (validated.id,))
+
     with psycopg.connect(_psycopg_url(database_url)) as connection:
         assert connection.execute(
             "SELECT count(*) FROM analysis_assistance_jobs WHERE state IN ('QUEUED', 'RUNNING')"
@@ -117,6 +224,27 @@ def test_api_returns_and_preserves_document_guidance_without_ai_or_latest_status
     assert old.local_guidance is not None
     assert old.local_guidance.model_dump(mode="json") == guidance
     assert outbound_requests == []
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        corrected_member = connection.execute(
+            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
+            "VALUES (%s,'Synthetic Corrected Member','synthetic-corrected-member') RETURNING id",
+            (seed.scope_a.household_space_id,),
+        ).fetchone()[0]
+        connection.execute(
+            "UPDATE private_knowledge_subjects SET family_member_id=%s "
+            "WHERE id=(SELECT subject_id FROM private_knowledge_contracts WHERE id=%s)",
+            (corrected_member, selected.ref.contract_id),
+        )
+    claims.soft_delete_claim_case(seed.scope_a, validated.id, expected_version=paid["version"])
+    retained = claims.get_claim_case(seed.scope_a, validated.id, deleted_only=True)
+    assert retained["snapshot"]["snapshot_sha256"] == paid["snapshot"]["snapshot_sha256"]
+    assert retained["family_member_id"] == seed.member_a
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", database_url)
+    config = Config(str(Path(__file__).resolve().parents[3] / "apps/api/alembic.ini"))
+    with pytest.raises(DBAPIError, match="GUIDANCE_CLAIM_HISTORY_REQUIRES_PRESERVATION"):
+        command.downgrade(config, "0056_local_guidance_sources")
+    after_refusal = claims.get_claim_case(seed.scope_a, validated.id, deleted_only=True)
+    assert after_refusal["snapshot"] == retained["snapshot"]
 
 
 def test_guidance_storage_rejects_missing_null_and_mismatched_snapshot_identity(
@@ -218,3 +346,60 @@ def test_upgrade_preserves_a_pre_guidance_result_without_recalculating_it(
     finally:
         if not upgraded:
             command.upgrade(config, "head")
+
+
+def test_private_source_fallback_preserves_other_family_member_scope(
+    database_url, tmp_path, monkeypatch
+):
+    from apps.api.tests import test_private_knowledge_decision_integration as fixtures
+    from apps.api.tests.private_knowledge_publication_fixtures import mutate_publication_jsonl
+
+    original_writer = fixtures.write_synthetic_rule_publication_package
+
+    def admission_package(path):
+        root = original_writer(path)
+
+        def admission_rule(row):
+            row["rule_document"]["input_field_paths"] = ["MedicalEvent.admission_days"]
+            row["rule_document"]["expression"] = {
+                "op": "range",
+                "field": "MedicalEvent.admission_days",
+                "value": {"min": 1, "max": 365},
+                "unit": "days",
+            }
+
+        mutate_publication_jsonl(root, "rule-publications.jsonl", admission_rule)
+        return root
+
+    monkeypatch.setattr(fixtures, "write_synthetic_rule_publication_package", admission_package)
+    seed = _seed(database_url)
+    _seed_private_publication(database_url, seed, tmp_path)
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        connection.execute(
+            "INSERT INTO family_members(household_space_id,display_name,internal_alias) "
+            "VALUES (%s,'Synthetic Sibling','synthetic-sibling')",
+            (seed.scope_a.household_space_id,),
+        )
+
+    def unavailable(*args, **kwargs):
+        raise ValueError("SYNTHETIC_OPERATIONAL_SOURCE_UNAVAILABLE")
+
+    monkeypatch.setattr(
+        "familycare_api.decisions.repository.read_operational_guidance", unavailable
+    )
+    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    for text, expected_count in (
+        ("Synthetic Sibling는 5일 입원했습니다.", 0),
+        ("5일 입원했습니다.", 1),
+    ):
+        event = service.create_medical_event(
+            family_member_id=seed.member_a,
+            mode="post_treatment",
+            situation=text,
+            event_date=date(2025, 6, 15),
+            facts={},
+        )
+        result = service.analyze_medical_event(event.id)
+        assert result.local_guidance is not None
+        assert len(result.local_guidance.candidates) == expected_count
+        assert "OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE" in result.source_failure_codes

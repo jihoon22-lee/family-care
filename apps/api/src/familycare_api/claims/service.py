@@ -15,10 +15,21 @@ from familycare_api.claims.schemas import (
     ClaimTransitionRequest,
     ClaimUpdateRequest,
 )
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 
 
 class ClaimStore(Protocol):
+    def create_guidance_claim_case(
+        self,
+        scope: HouseholdScope,
+        event_id: UUID,
+        *,
+        run_id: UUID,
+        expected_event_version: int,
+        coverage: CanonicalCoverageRef,
+    ) -> object: ...
+
     def create_claim_case(
         self,
         scope: HouseholdScope,
@@ -97,6 +108,15 @@ class ClaimService:
         return cls(scope, ClaimRepository(database_url))
 
     def create_claim_case(self, event_id: UUID, request: ClaimCreateRequest) -> object:
+        if request.guidance is not None:
+            return self.repository.create_guidance_claim_case(
+                self.scope,
+                event_id,
+                run_id=request.guidance.run_id,
+                expected_event_version=request.guidance.expected_event_version,
+                coverage=request.guidance.coverage,
+            )
+        assert request.rider_id is not None
         return self.repository.create_claim_case(
             self.scope,
             event_id,

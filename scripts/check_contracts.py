@@ -869,6 +869,7 @@ def validate_openapi() -> list[str]:
         "source_failure_codes",
         "assistance",
         "local_guidance",
+        "local_guidance_stale",
     }
     if set(decision_response.get("properties", {})) != expected_decision_fields:
         errors.append("coverage decision response fields drifted from v2")
@@ -1742,6 +1743,39 @@ def render_decision_schema() -> str:
     return json.dumps(schema, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
 
 
+def render_claim_schema() -> str:
+    """Embed the typed local snapshot in the existing neutral workflow contract."""
+    from familycare_api.claims.guidance_snapshot import ClaimLocalGuidanceSnapshot
+
+    schema = load_json(CLAIM_SCHEMA_PATH)
+    local = ClaimLocalGuidanceSnapshot.model_json_schema()
+    definitions = local.pop("$defs", {})
+
+    def prefixed(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: child.replace("#/$defs/", "#/$defs/ClaimGuidance", 1)
+                if key == "$ref" and isinstance(child, str)
+                else prefixed(child)
+                for key, child in value.items()
+            }
+        if isinstance(value, list):
+            return [prefixed(child) for child in value]
+        return value
+
+    for key in tuple(schema["$defs"]):
+        if key.startswith("ClaimGuidance"):
+            del schema["$defs"][key]
+    schema["$defs"].update(
+        {"ClaimGuidance" + key: prefixed(value) for key, value in definitions.items()}
+    )
+    schema["$defs"]["ClaimGuidanceSnapshot"] = prefixed(local)
+    schema["$defs"]["CandidateSnapshot"]["properties"]["local_guidance"] = {
+        "$ref": "#/$defs/ClaimGuidanceSnapshot"
+    }
+    return json.dumps(schema, ensure_ascii=False, indent=2) + "\n"
+
+
 def _forbidden_benefit_keys(value: Any, path: str = "$") -> list[str]:
     """Return benefit-contract paths crossing the private-data boundary."""
 
@@ -2169,9 +2203,24 @@ def validate_claim_workflow_contract() -> list[str]:
     elif {item.get("outcome") for item in history if isinstance(item, dict)} != set(CLAIM_OUTCOMES):
         errors.append("claim-workflow example must cover paid, partially_paid, and denied")
 
-    history_rider = definitions.get("ClaimHistory", {}).get("properties", {}).get("rider_id", {})
-    if history_rider.get("$ref") != "#/$defs/Uuid":
-        errors.append("claim-workflow history rider must be required and non-null")
+    for name in ("ClaimCase", "ClaimHistory"):
+        source = definitions.get(name, {})
+        fixture = example["claim_case"] if name == "ClaimCase" else example["history"][0]
+        for invalid in (
+            {**fixture, "rider_id": None},
+            {**fixture, "policy_contract_id": None},
+            {
+                **fixture,
+                "private_contract_id": fixture["policy_contract_id"],
+                "private_coverage_id": fixture["rider_id"],
+            },
+        ):
+            if not validate_schema_instance(source, invalid, root_schema=schema):
+                errors.append(f"claim-workflow {name} must reject incomplete or mixed sources")
+        if "rider_id" not in source.get("required", []):
+            errors.append(f"claim-workflow {name} must retain rider_id")
+    if schema != json.loads(render_claim_schema()):
+        errors.append("claim-workflow local guidance schema is stale")
 
     _validate_claim_example_ids(example, "$", errors)
     return errors
@@ -2440,6 +2489,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write-openapi", action="store_true")
     parser.add_argument("--write-decision-schema", action="store_true")
+    parser.add_argument("--write-claim-schema", action="store_true")
     return parser.parse_args()
 
 
@@ -2447,6 +2497,10 @@ def main() -> int:
     """Validate contracts or regenerate only the deterministic OpenAPI artifact."""
 
     args = parse_args()
+    if args.write_claim_schema:
+        CLAIM_SCHEMA_PATH.write_text(render_claim_schema(), encoding="utf-8", newline="\n")
+        print(f"wrote {CLAIM_SCHEMA_PATH.relative_to(ROOT)}")
+        return 0
     if args.write_openapi:
         OPENAPI_PATH.parent.mkdir(parents=True, exist_ok=True)
         OPENAPI_PATH.write_text(render_openapi(), encoding="utf-8", newline="\n")

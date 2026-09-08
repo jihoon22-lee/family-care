@@ -118,6 +118,24 @@ def _validate_outcome(value: object) -> ClaimOutcome:
     return value
 
 
+def _validate_coverage_source(
+    policy_id: UUID | None,
+    rider_id: UUID | None,
+    private_contract_id: UUID | None,
+    private_coverage_id: UUID | None,
+) -> None:
+    operational = policy_id is not None and rider_id is not None
+    private = private_contract_id is not None and private_coverage_id is not None
+    if operational and private_contract_id is None and private_coverage_id is None:
+        _require_uuid(policy_id, "policy contract")
+        _require_uuid(rider_id, "rider")
+    elif private and policy_id is None and rider_id is None:
+        _require_uuid(private_contract_id, "private contract")
+        _require_uuid(private_coverage_id, "private coverage")
+    else:
+        raise ValueError("exactly one complete coverage source required")
+
+
 @dataclass(frozen=True)
 class ClaimCase:
     """A household-scoped claim preparation record, never an insurer submission."""
@@ -126,9 +144,9 @@ class ClaimCase:
     household_space_id: UUID
     medical_event_id: UUID
     family_member_id: UUID
-    policy_contract_id: UUID
-    rider_id: UUID
-    insurer_key: str
+    policy_contract_id: UUID | None
+    rider_id: UUID | None
+    insurer_key: str | None
     status: ClaimStatus = "preparing"
     receipt_number: str | None = None
     submitted_at: datetime | None = None
@@ -140,6 +158,9 @@ class ClaimCase:
     created_at: datetime | None = None
     updated_at: datetime | None = None
     deleted_at: datetime | None = None
+    private_contract_id: UUID | None = None
+    private_coverage_id: UUID | None = None
+    insurer_display: str | None = None
 
     def __post_init__(self) -> None:
         for value, label in (
@@ -147,11 +168,20 @@ class ClaimCase:
             (self.household_space_id, "household scope"),
             (self.medical_event_id, "medical event"),
             (self.family_member_id, "family member"),
-            (self.policy_contract_id, "policy contract"),
-            (self.rider_id, "rider"),
         ):
             _require_uuid(value, label)
-        _require_bounded_text(self.insurer_key, "insurer key", 160)
+        _validate_coverage_source(
+            self.policy_contract_id,
+            self.rider_id,
+            self.private_contract_id,
+            self.private_coverage_id,
+        )
+        if self.rider_id is not None:
+            _require_bounded_text(self.insurer_key, "insurer key", 160)
+        else:
+            if self.insurer_key is not None:
+                raise ValueError("private coverage has no operational insurer key")
+            _require_bounded_text(self.insurer_display, "insurer display", 240)
         _validate_status(self.status)
         _validate_receipt_number(self.receipt_number)
         _validate_amount(self.claimed_amount, "claimed amount")
@@ -230,8 +260,8 @@ class ClaimHistoryRecord:
     household_space_id: UUID
     medical_event_id: UUID
     family_member_id: UUID
-    policy_contract_id: UUID
-    rider_id: UUID
+    policy_contract_id: UUID | None
+    rider_id: UUID | None
     outcome: ClaimOutcome
     payment_date: date | None
     counted_occurrence: bool
@@ -239,6 +269,8 @@ class ClaimHistoryRecord:
     currency: str | None = None
     reason_code: str | None = None
     created_at: datetime | None = None
+    private_contract_id: UUID | None = None
+    private_coverage_id: UUID | None = None
 
     def __post_init__(self) -> None:
         for value, label in (
@@ -246,10 +278,14 @@ class ClaimHistoryRecord:
             (self.household_space_id, "household scope"),
             (self.medical_event_id, "medical event"),
             (self.family_member_id, "family member"),
-            (self.policy_contract_id, "policy contract"),
         ):
             _require_uuid(value, label)
-        _require_uuid(self.rider_id, "rider")
+        _validate_coverage_source(
+            self.policy_contract_id,
+            self.rider_id,
+            self.private_contract_id,
+            self.private_coverage_id,
+        )
         _validate_outcome(self.outcome)
         if not isinstance(self.counted_occurrence, bool):
             raise ValueError("counted occurrence must be boolean")

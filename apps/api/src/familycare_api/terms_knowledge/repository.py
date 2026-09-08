@@ -11,6 +11,7 @@ from uuid import UUID
 import psycopg
 from familycare_api.clauses.errors import TermsEditionNotFound
 from familycare_api.clauses.source_projection import ClauseSourceProjectionReader
+from familycare_api.clauses.source_regions import ClauseSourceSpan
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.repository import _database_url
 from familycare_api.terms_knowledge.core import (
@@ -31,6 +32,99 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 MAX_ROOT_PAGE_REPLAY_BYTES = 32 * 1024 * 1024
+
+# This index predicate narrows keys before LIMIT; its JSON never grants authority.
+# Invalid audit shapes select no keys, and every selected publication is replayed below.
+_SCOPED_ROOT_WHERE = """
+AND EXISTS (
+  SELECT 1 FROM jsonb_array_elements(
+    CASE WHEN jsonb_typeof(r.root_json#>'{manifest,nodes}')='array'
+      THEN r.root_json#>'{manifest,nodes}' ELSE '[]'::jsonb END
+  ) AS primary_node(value)
+  WHERE primary_node.value->>'node_id'=r.root_node_id
+    AND jsonb_typeof(primary_node.value->'citation_ids')='array'
+    AND primary_node.value->'citation_ids'<>'[]'::jsonb
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_array_elements(
+        CASE WHEN jsonb_typeof(primary_node.value->'citation_ids')='array'
+          THEN primary_node.value->'citation_ids' ELSE '[]'::jsonb END
+      ) AS anchor(value)
+      WHERE NOT EXISTS (
+        SELECT 1 FROM jsonb_array_elements(
+          CASE WHEN jsonb_typeof(r.root_json#>'{manifest,citations}')='array'
+            THEN r.root_json#>'{manifest,citations}' ELSE '[]'::jsonb END
+        ) AS citation(value), jsonb_array_elements(%s::jsonb) AS requested(value)
+        WHERE citation.value->'citation_id'=anchor.value
+          AND citation.value->'source_id'=primary_node.value->'source_id'
+          AND citation.value->'node_id'=requested.value->'node_id'
+          AND citation.value->'page_number'=requested.value->'page_number'
+          AND citation.value->'source_layer'=requested.value->'source_layer'
+          AND citation.value->'bbox'=requested.value->'bbox'
+          AND jsonb_typeof(citation.value->'start')='number'
+          AND jsonb_typeof(citation.value->'end')='number'
+          AND citation.value->'start'>=requested.value->'start'
+          AND citation.value->'end'<=requested.value->'end'
+          AND citation.value->'start'<citation.value->'end'
+      )
+    )
+)
+"""
+
+
+def _source_addresses(spans: tuple[ClauseSourceSpan, ...]) -> list[dict[str, Any]]:
+    if not isinstance(spans, tuple) or len(spans) > 4096:
+        raise ValueError("TERMS_SEMANTIC_ROOT_REQUEST_INVALID")
+    result = []
+    for span in spans:
+        if (
+            not isinstance(span, ClauseSourceSpan)
+            or type(span.node_id) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", span.node_id) is None
+            or type(span.page_number) is not int
+            or not 1 <= span.page_number <= 500
+            or type(span.start) is not int
+            or type(span.end) is not int
+            or not 0 <= span.start < span.end <= 262144
+            or span.source_layer not in ("native", "ocr")
+            or not isinstance(span.bbox, tuple)
+            or len(span.bbox) != 4
+            or any(type(v) not in (int, float) or not 0 <= v <= 100000 for v in span.bbox)
+            or span.bbox[0] >= span.bbox[2]
+            or span.bbox[1] >= span.bbox[3]
+        ):
+            raise ValueError("TERMS_SEMANTIC_ROOT_REQUEST_INVALID")
+        result.append(
+            {
+                "node_id": span.node_id,
+                "page_number": span.page_number,
+                "start": span.start,
+                "end": span.end,
+                "source_layer": span.source_layer,
+                "bbox": list(span.bbox),
+            }
+        )
+    return result
+
+
+def _root_in_source_scope(root: CompiledSemanticRoot, addresses: list[dict[str, Any]]) -> bool:
+    manifest = root.manifest
+    primary = next((n for n in manifest["nodes"] if n["node_id"] == root.root_node_id), None)
+    if primary is None or root.root_node_id not in manifest["verified_node_ids"]:
+        return False
+    citations = {c["citation_id"]: c for c in manifest["citations"]}
+    return bool(primary["citation_ids"]) and all(
+        (citation := citations.get(key)) is not None
+        and citation["source_id"] == primary["source_id"]
+        and any(
+            all(
+                citation[field] == address[field]
+                for field in ("node_id", "page_number", "source_layer", "bbox")
+            )
+            and address["start"] <= citation["start"] < citation["end"] <= address["end"]
+            for address in addresses
+        )
+        for key in primary["citation_ids"]
+    )
 
 
 class SemanticSourceChanged(ValueError):
@@ -161,10 +255,18 @@ class TermsSemanticRepository:
             return _plan(connection, scope, edition_id)
 
     def current_root_page(
-        self, scope: HouseholdScope, edition_id: UUID, *, after: str | None = None, limit: int = 32
+        self,
+        scope: HouseholdScope,
+        edition_id: UUID,
+        *,
+        after: str | None = None,
+        limit: int = 32,
+        source_spans: tuple[ClauseSourceSpan, ...] | None = None,
     ) -> tuple[SemanticRootView, ...]:
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-            return read_semantic_root_page(connection, scope, edition_id, after=after, limit=limit)
+            return read_semantic_root_page(
+                connection, scope, edition_id, after=after, limit=limit, source_spans=source_spans
+            )
 
     def publish_candidate(
         self,
@@ -399,12 +501,16 @@ def read_semantic_root_page(
     *,
     after: str | None = None,
     limit: int = 32,
+    source_spans: tuple[ClauseSourceSpan, ...] | None = None,
 ) -> tuple[SemanticRootView, ...]:
     """Read inside the caller's snapshot; page roots independently of attempt count.
 
     Current partial explanation and the same-source last usable result are distinct.
     Neither a semantic root nor an edition establishes an enrolled Rider binding.
     Unreplayable audit keys retain an empty view so pagination can advance safely.
+    source_spans narrows primary citations by original node/page/offset/layer/bbox
+    before paging. None retains edition-wide reads; an empty tuple selects nothing.
+    The caller still owns the Clause, enrollment and event-edition binding.
     """
     if (
         type(limit) is not int
@@ -418,9 +524,12 @@ def read_semantic_root_page(
         )
     ):
         raise ValueError("TERMS_SEMANTIC_ROOT_REQUEST_INVALID")
+    addresses = None if source_spans is None else _source_addresses(source_spans)
+    if addresses == []:
+        return ()
     _lock_source(connection, scope, edition_id)
     plan = _plan(connection, scope, edition_id)
-    parameters = (
+    parameters: tuple[object, ...] = (
         scope.household_space_id,
         edition_id,
         Jsonb(plan.input_context),
@@ -436,6 +545,9 @@ def read_semantic_root_page(
         "AND c.input_context=%s AND c.input_digest=%s "
         "AND p.verifier_revision=%s AND p.compiler_revision=%s "
     )
+    if addresses is not None:
+        join += _SCOPED_ROOT_WHERE
+        parameters += (Jsonb(addresses),)
     keys = connection.execute(
         "SELECT DISTINCT r.root_node_id "
         + join
@@ -474,6 +586,12 @@ def read_semantic_root_page(
         if compilation is None:
             return None
         root = next((root for root in compilation.roots if root.root_node_id == root_id), None)
+        if (
+            root is not None
+            and addresses is not None
+            and not _root_in_source_scope(root, addresses)
+        ):
+            return None
         return CurrentSemanticRoot(row["id"], root) if root is not None else None
 
     result = []

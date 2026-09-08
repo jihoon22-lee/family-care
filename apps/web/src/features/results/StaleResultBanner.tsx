@@ -8,7 +8,11 @@ export function StaleResultBanner({
   result: CoverageDecisionResponse;
   onReanalyze: () => void;
 }) {
-  if (!result.stale) return null;
+  const stale =
+    result.local_guidance?.schema_version === "2"
+      ? (result.local_guidance_stale ?? result.stale)
+      : result.stale;
+  if (!stale) return null;
   return (
     <div className={styles.staleBanner} role="alert">
       <strong>다시 분석이 필요합니다</strong>

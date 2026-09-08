@@ -18,3 +18,12 @@ id = "generic-api-key"
     regexes = [
       '''["']synthetic-(?:subject-001|citation-001|normalizer-001|calculation-001|rule-citation-001|calculation-citation-001)["']''',
     ]
+
+    [[rules.allowlists]]
+    description = "Exact Python field forwarding expression; contains no credential literal"
+    condition = "AND"
+    regexTarget = "line"
+    paths = ['''^apps/api/src/familycare_api/guidance/models\.py$''']
+    regexes = [
+      '''^\s*ref=item\.ref, case_key=item\.case_key, scenario_key=item\.scenario_key\s*$''',
+    ]

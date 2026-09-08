@@ -20,3 +20,92 @@
   overflow-wrap: anywhere;
   line-height: 1.6;
 }
+
+.contractAmount,
+.partial,
+.scenario,
+.sourceCase,
+.expenses {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-color, #dedbd5);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+
+.contractAmount p,
+.scenario p,
+.sourceCase p,
+.expenses p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.cases,
+.scenario,
+.sourceCase {
+  display: grid;
+  gap: 12px;
+}
+
+.scenario h4,
+.sourceCase h4,
+.expenses h2 {
+  margin: 0;
+}
+
+.trace {
+  min-width: 0;
+  margin-top: 4px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.trace summary {
+  width: fit-content;
+  padding: 8px 0;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.trace summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.steps {
+  padding-left: 24px;
+}
+
+.steps > li + li {
+  margin-top: 16px;
+}
+
+.steps ul {
+  padding-left: 18px;
+}
+
+.costGroup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 0;
+}
+
+.costGroup dd {
+  margin: 0;
+}
+
+.costGroup span {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
+@media (max-width: 420px) {
+  .costGroup {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
