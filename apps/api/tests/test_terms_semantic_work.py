@@ -98,3 +98,48 @@ def test_privacy_revision_creates_new_request_without_rewriting_original(semanti
     assert second.job_id != first.job_id
     with psycopg.connect(_psycopg_url(url)) as connection:
         assert connection.execute("SELECT count(*) FROM terms_semantic_jobs").fetchone()[0] == 2
+
+
+@pytest.mark.parametrize("mutation", ["rename", "restore", "create"])
+def test_privacy_lock_serializes_the_whole_member_set(semantic_context, mutation):
+    from uuid import UUID
+
+    from psycopg.errors import LockNotAvailable
+
+    url, scope, edition = semantic_context
+    other_id, new_id = UUID(int=770, version=4), UUID(int=771, version=4)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "INSERT INTO family_members("
+            "id,household_space_id,display_name,internal_alias,deleted_at) "
+            "VALUES(%s,%s,'Family Member B','synthetic-other',"
+            "CASE WHEN %s THEN clock_timestamp() ELSE NULL END)",
+            (other_id, scope.household_space_id, mutation == "restore"),
+        )
+    try:
+        with psycopg.connect(_psycopg_url(url)) as holder:
+            assert holder.execute(
+                "SELECT lock_terms_semantic_work_source(%s,%s)", (edition, scope.household_space_id)
+            ).fetchone()[0]
+            with psycopg.connect(_psycopg_url(url)) as contender:
+                contender.execute("SET LOCAL lock_timeout='100ms'")
+                with pytest.raises(LockNotAvailable), contender.transaction():
+                    if mutation == "rename":
+                        contender.execute(
+                            "UPDATE family_members SET display_name='Family Member C' WHERE id=%s",
+                            (other_id,),
+                        )
+                    elif mutation == "restore":
+                        contender.execute(
+                            "UPDATE family_members SET deleted_at=NULL WHERE id=%s", (other_id,)
+                        )
+                    else:
+                        contender.execute(
+                            "INSERT INTO family_members("
+                            "id,household_space_id,display_name,internal_alias) "
+                            "VALUES(%s,%s,'Family Member D','synthetic-new')",
+                            (new_id, scope.household_space_id),
+                        )
+    finally:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute("DELETE FROM family_members WHERE id=ANY(%s)", ([other_id, new_id],))

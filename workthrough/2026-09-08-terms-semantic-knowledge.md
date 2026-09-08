@@ -122,6 +122,10 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   -m integration -q` **12 passed** (7.13초), 관련 Ruff/mypy와 빈 합성 DB의 0053
   downgrade→0054 upgrade가 통과했다. 신규 API 준비 4개와 기존 policy 예산 8개의 증거이며,
   아직 새 Worker 예산·lease 경로의 검증은 아니다.
+- 0054의 privacy 잠금은 가정 FOR UPDATE와 삭제 상태를 포함한 전체 구성원 FOR SHARE를
+  사용한다. 다른 구성원의 수정·복원·신규 생성을 대상으로 RED를 확인한 뒤 PostgreSQL
+  **3개 통과**(3.11초)를 얻었다. 실제 요청 전 짧은 DB transaction 안에서 같은 privacy 집합을
+  확인하도록 보완했으며 네트워크 호출 중 DB 잠금을 유지하는 방식은 사용하지 않는다.
 
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.

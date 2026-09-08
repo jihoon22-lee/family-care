@@ -23,8 +23,10 @@ def upgrade() -> None:
       RETURNS BOOLEAN LANGUAGE plpgsql AS $$
       DECLARE found_id UUID;
       BEGIN
-        PERFORM id FROM household_spaces WHERE id=household_id FOR SHARE;
+        PERFORM id FROM household_spaces WHERE id=household_id FOR UPDATE;
         IF NOT FOUND THEN RETURN false; END IF;
+        -- Lock deleted rows too: restore changes the active privacy set without an INSERT.
+        PERFORM id FROM family_members WHERE household_space_id=household_id ORDER BY id FOR SHARE;
         SELECT e.id INTO found_id FROM terms_editions e
           JOIN insurance_document_components c ON c.id=e.source_component_id
             AND c.household_space_id=e.household_space_id
