@@ -74,7 +74,7 @@
    기존 정책 Worker에 묶음 검증·영속 요청 예약/캐시·문서 누적/UTC 일일 예산을 연결했다.
    전체 IR 범위 저장/재개·후보 publication·API projector를 합성 통합에 연결했고 기본
    Worker/Compose 설정을 전환했다. 실제 provider 구조화 파이프라인/보호된 자료 수용은 아직 남아 있으며 진단만 1회 실행했다.
-5. pending — 전체 필수 검사·합성 PostgreSQL/문서 흐름·리뷰·CI 후 B02를 merge한다.
+5. completed — 최종 `2deb5d6` CI 필수 7/7, 전체 합성 PG 519개, Web 172개와 Chromium mock E2E 17개 후 PR #76을 `bc727928a0030332452fb7b3bf639beba6b9e60e`로 merge했다. 이 항목은 코드 통합 완료이며 #62/#63의 보호된 수용은 열린 상태로 #64/B03 및 #69/B07에 인계한다.
 
 ## Local data contract
 

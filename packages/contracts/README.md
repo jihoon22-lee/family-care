@@ -48,3 +48,9 @@ FastAPI rather than hand-edited into committed artifacts.
 
 The OCR contract is deliberately separate from native extraction. Run
 `TMPDIR=/tmp uv run python scripts/check_ocr_contracts.py` for its focused provenance and privacy gate.
+
+Detailed terms candidates use `schemas/terms-semantic-knowledge.v1.schema.json` as their
+canonical contract. Run `TMPDIR=/tmp uv run python scripts/generate_terms_semantic_contract.py`
+to regenerate the strict API/Worker consumers; `check_contracts.py` detects drift.
+A valid candidate or citation does not confer rule authority: source identity, exact original
+spans, field meaning and dependency relations require independent validation before compilation.

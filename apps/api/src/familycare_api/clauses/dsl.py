@@ -771,7 +771,7 @@ def validate_rule_document(
         raise RuleValidationError("INVALID_RULE_TYPE")
 
     raw_input_paths = _sequence(document["input_field_paths"])
-    if not raw_input_paths or len(raw_input_paths) > MAX_RULE_ITEMS:
+    if len(raw_input_paths) > MAX_RULE_ITEMS:
         raise RuleValidationError("MISSING_REQUIRED_FIELD")
     input_paths: list[str] = []
     for raw_path in raw_input_paths:

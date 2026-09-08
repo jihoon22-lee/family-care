@@ -379,6 +379,28 @@ describe("Rider clause and CoverageRule review", () => {
     ).toBeDisabled();
   });
 
+  it("shows that a fixed amount needs no additional input", async () => {
+    installFetch({
+      ruleVersions: {
+        ...versions,
+        versions: [
+          {
+            ...versions.versions[0],
+            input_field_paths: [],
+            rule_kind: "fixed_amount",
+          },
+        ],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<RuleReviewPage />);
+    await user.click(await screen.findByRole("button", { name: /규칙 검토/ }));
+    const dialog = await screen.findByRole("dialog", {
+      name: /보장 규칙 검토/,
+    });
+    expect(within(dialog).getByText("추가 입력 없음")).toBeVisible();
+  });
+
   it("publishes only an approved, evidence-backed stored rule version", async () => {
     const fetchMock = installFetch({
       ruleItem: {

@@ -163,7 +163,9 @@ export function CoverageRuleReviewDialog({
               </div>
               <div>
                 <dt>필요 정보</dt>
-                <dd>{latest.input_field_paths.join(" · ")}</dd>
+                <dd>
+                  {latest.input_field_paths.join(" · ") || "추가 입력 없음"}
+                </dd>
               </div>
               <div>
                 <dt>근거 코드</dt>

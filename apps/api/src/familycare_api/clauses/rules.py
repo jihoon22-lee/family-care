@@ -117,10 +117,15 @@ class CoverageRuleVersion:
             raise ValueError("version number must be positive") from None
         if not isinstance(self.required, bool):
             raise ValueError("required must be boolean")
-        if not self.input_field_paths or any(
-            not isinstance(item, str) or not item for item in self.input_field_paths
-        ):
-            raise ValueError("input fields must be non-empty")
+        if any(not isinstance(item, str) or not item for item in self.input_field_paths):
+            raise ValueError("input field names must be non-empty")
+        if not self.input_field_paths:
+            try:
+                validate_rule_document(self.rule_document, (e.evidence_id for e in self.evidence))
+            except RuleValidationError:
+                raise ValueError(
+                    "empty input fields require a valid constant calculation"
+                ) from None
         if (
             not isinstance(self.result_reason_code, str)
             or not self.result_reason_code

@@ -421,6 +421,14 @@ def validate_document_metadata_contract() -> list[str]:
     return cast(list[str], module.validate())
 
 
+def validate_terms_semantic_contract() -> list[str]:
+    try:
+        module = import_module("scripts.generate_terms_semantic_contract")
+    except ModuleNotFoundError:  # pragma: no cover - direct script execution
+        module = import_module("generate_terms_semantic_contract")
+    return cast(list[str], module.validate())
+
+
 def render_openapi() -> str:
     """Render the canonical OpenAPI document deterministically."""
 
@@ -1508,7 +1516,7 @@ def validate_rider_clause_rules_contract() -> list[str]:
         .get("input_field_paths", {})
     )
     if (
-        input_paths.get("minItems") != 1
+        input_paths.get("minItems") != 0
         or input_paths.get("maxItems") != 8
         or input_paths.get("uniqueItems") is not True
     ):
@@ -2459,6 +2467,7 @@ def main() -> int:
         *validate_job_contract(),
         *validate_document_contracts(),
         *validate_document_metadata_contract(),
+        *validate_terms_semantic_contract(),
         *validate_insurance_document_inventory_contract(),
         *validate_insurance_reconciliation_contract(),
         *validate_batch_contracts(),
