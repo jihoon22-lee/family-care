@@ -67,6 +67,7 @@ def _errors(proposal: dict[str, Any]) -> list[str]:
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     ],
 )
 def test_body_proposal_carries_source_addressed_range_evidence(revision) -> None:

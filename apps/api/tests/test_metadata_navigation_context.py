@@ -123,7 +123,7 @@ def test_cached_navigation_context_cannot_change_a_legacy_revision() -> None:
             "lineage": projection["lineage"],
             "nodes": [node for node in projection["nodes"] if node["page_number"] == number],
         },
-        revision="document-metadata-v6",
+        revision="document-metadata-v7",
     )
     assert validate_component_metadata(component, projection, source_context=context)
     _legacy_identity(component, projection, revision="document-metadata-v4")
@@ -205,4 +205,108 @@ def test_document_heading_and_instruction_on_separate_lines_remain_restricted(
     assert worker_reference(source.nodes, persistent_only=True, navigation_instructions=True)
     assert reference_context_present(
         source.to_dict()["nodes"], persistent_only=True, navigation_instructions=True
+    )
+
+
+GUIDE_HEADING = "약관 이용 가이드"
+GUIDE_NOTICE = "예시 약관 이해를 돕는 참고 설명이 있습니다."
+
+
+@pytest.mark.parametrize("native", [False, True])
+def test_reading_guide_legend_does_not_start_a_quoted_example(native: bool) -> None:
+    if native:
+        from workers.analyzer.tests.test_document_structure import _build, _extraction, _page
+        from workers.analyzer.tests.test_document_text_lines import _words
+
+        source = _build(
+            _extraction(
+                _page(1, _words([GUIDE_HEADING, GUIDE_NOTICE])), _page(2, _words(BODY.splitlines()))
+            )
+        )
+    else:
+        source = _structure(GUIDE_HEADING + "\n" + GUIDE_NOTICE, BODY)
+    terms = [
+        c
+        for c in metadata_proposal(source, UUID(int=905), "c" * 64)["components"]
+        if c["role"] == "terms"
+    ]
+    assert len(terms) == 1
+    assert terms[0]["page_start"] == terms[0]["page_end"] == 2
+    assert validate_component_metadata(terms[0], source.to_dict())
+    _legacy_identity(terms[0], source.to_dict(), revision="document-metadata-v6")
+    assert (
+        validate_component_metadata(terms[0], source.to_dict(), revision="document-metadata-v6")
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        GUIDE_NOTICE,
+        GUIDE_NOTICE + "\n" + GUIDE_HEADING,
+        GUIDE_HEADING + "\n예시 가상 계약의 약관 이해를 돕는 참고 설명이 있습니다.",
+        GUIDE_HEADING + "\n" + GUIDE_NOTICE + "\n다음은 약관을 설명하기 위한 예시입니다.",
+    ],
+)
+def test_reading_guide_does_not_hide_unproven_or_actual_example_context(first: str) -> None:
+    source = _structure(first, BODY)
+    assert not any(
+        c["role"] == "terms"
+        for c in metadata_proposal(source, UUID(int=905), "c" * 64)["components"]
+    )
+
+
+def test_reading_guide_does_not_end_an_earlier_explanatory_document() -> None:
+    source = _structure("상품설명서(요약)", GUIDE_HEADING + "\n" + GUIDE_NOTICE, BODY)
+    assert not any(
+        c["role"] == "terms"
+        for c in metadata_proposal(source, UUID(int=905), "c" * 64)["components"]
+    )
+
+
+@pytest.mark.parametrize(
+    "corruption",
+    ["hidden_notice_raw", "hidden_heading_raw", "duplicate_view", "bool_page", "bool_order"],
+)
+def test_reading_guide_requires_unambiguous_complete_source_views(corruption: str) -> None:
+    from dataclasses import replace
+
+    from familycare_api.insurance_documents.terms_body_validation import reference_context_present
+    from familycare_worker.terms_body import reference_context_present as worker_reference
+
+    from workers.analyzer.tests.test_document_structure import _build, _extraction, _page
+    from workers.analyzer.tests.test_document_text_lines import _words
+
+    source = _build(_extraction(_page(1, _words([GUIDE_HEADING, GUIDE_NOTICE]))))
+    nodes = list(source.nodes)
+    heading_index = next(
+        i for i, n in enumerate(nodes) if n.kind == "TEXT_LINE" and n.text == GUIDE_HEADING
+    )
+    notice_index = next(
+        i for i, n in enumerate(nodes) if n.kind == "TEXT_LINE" and n.text == GUIDE_NOTICE
+    )
+    notice = nodes[notice_index]
+    if corruption in {"hidden_notice_raw", "hidden_heading_raw"}:
+        line = nodes[heading_index] if corruption == "hidden_heading_raw" else notice
+        raw_index = next(
+            i for i, n in enumerate(nodes) if n.node_id == line.source_spans[0].block_node_id
+        )
+        nodes[raw_index] = replace(nodes[raw_index], text=nodes[raw_index].text + "\n예시 조항")
+    elif corruption == "duplicate_view":
+        nodes.append(
+            replace(
+                notice,
+                node_id="synthetic-duplicate-notice",
+                source_path="/synthetic/duplicate-notice",
+            )
+        )
+    elif corruption == "bool_page":
+        nodes[notice_index] = replace(notice, page_number=True)
+    else:
+        nodes[heading_index] = replace(nodes[heading_index], reading_order=False)
+    forged = replace(source, nodes=tuple(nodes))
+    assert worker_reference(forged.nodes, persistent_only=True, reading_guides=True)
+    assert reference_context_present(
+        forged.to_dict()["nodes"], persistent_only=True, reading_guides=True
     )

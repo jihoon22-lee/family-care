@@ -39,10 +39,10 @@ def _migrate(url: str, operation: str, revision: str) -> subprocess.CompletedPro
     )
 
 
-@pytest.mark.parametrize("instruction", [False, True])
-def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6_history(
+@pytest.mark.parametrize("mode", ["contents", "instruction", "reading_guide"])
+def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v7_history(
     publication_database: Any,
-    instruction: bool,
+    mode: str,
 ) -> None:
     url, job = publication_database
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
@@ -56,6 +56,11 @@ def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6
             "VALUES(%s,2,600,800,200,1,0,1,'TEXT_SUFFICIENT')",
             (job.extraction_id,),
         )
+    first_page = {
+        "instruction": "상품설명서 및 보험증권을 참고하여 합성 보장을 확인하십시오.",
+        "contents": "목차\n상품설명서 .... 9\n보험약관 .... 2",
+        "reading_guide": "약관 이용 가이드\n예시 약관 이해를 돕는 참고 설명이 있습니다.",
+    }[mode]
     source = build_document_structure(
         {
             "document_version_id": str(job.document_version_id),
@@ -69,11 +74,7 @@ def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6
                 }
                 for number, text in enumerate(
                     (
-                        (
-                            "상품설명서 및 보험증권을 참고하여 합성 보장을 확인하십시오."
-                            if instruction
-                            else "목차\n상품설명서 .... 9\n보험약관 .... 2"
-                        ),
+                        first_page,
                         "보험사: Sample Assurance\n상품명: Sample Policy\n"
                         "제1조 (가상 지급 조건)\n회사는 보험수익자에게 보험금을 지급합니다.",
                     ),
@@ -100,8 +101,11 @@ def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6
             "SELECT identity_sha256 FROM document_structure_generations WHERE id=%s", (generation,)
         ).fetchone()["identity_sha256"]
     legacy = metadata_proposal(source, generation, identity)
-    prior_revision = "document-metadata-v5" if instruction else "document-metadata-v4"
-    prior_schema = "0049_metadata_navigation_pages" if instruction else "0048_clause_change_pairs"
+    prior_revision, prior_schema = {
+        "contents": ("document-metadata-v4", "0048_clause_change_pairs"),
+        "instruction": ("document-metadata-v5", "0049_metadata_navigation_pages"),
+        "reading_guide": ("document-metadata-v6", "0050_metadata_instructions"),
+    }[mode]
     legacy.update(revision=prior_revision, components=[], unresolved_pages=[1, 2])
     try:
         down = _migrate(url, "downgrade", prior_schema)
@@ -132,11 +136,11 @@ def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6
             assert connection.execute(
                 "SELECT validator_revision,outcome FROM document_metadata_publications"
             ).fetchall() == [
-                {"validator_revision": "document-metadata-api-v6", "outcome": "APPLIED"}
+                {"validator_revision": "document-metadata-api-v7", "outcome": "APPLIED"}
             ]
             current = connection.execute(
                 "SELECT id,to_jsonb(p)::text AS snapshot FROM document_metadata_proposals p "
-                "WHERE revision='document-metadata-v6'"
+                "WHERE revision='document-metadata-v7'"
             ).fetchone()
         refused = _migrate(url, "downgrade", prior_schema)
         assert (

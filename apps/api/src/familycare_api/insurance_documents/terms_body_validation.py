@@ -216,18 +216,175 @@ def _instruction_nodes(nodes: list[dict[str, Any]]) -> set[str]:
     return ignored
 
 
+def _guide_heading(text: str) -> bool:
+    return bool(
+        re.fullmatch(
+            r"(?:보험)?약관\s*(?:이용\s*(?:가이드|안내)|읽는\s*방법|이해\s*(?:가이드|길잡이))",
+            _reference_text(text),
+        )
+    )
+
+
+def _guide_notice(text: str) -> bool:
+    normalized = _reference_text(text)
+    return bool(
+        1 <= len(normalized) <= 240
+        and len(normalized.splitlines()) == 1
+        and re.fullmatch(
+            r"(?:예시|예문|예제)(?:\s|[:：])[^.!?。\n]{1,230}"
+            r"(?:합니다|됩니다|있습니다|없습니다|입니다)[.]?",
+            normalized,
+        )
+        and "약관" in normalized
+        and re.search(r"이해.{0,15}(?:돕|도움|쉽)", normalized)
+        and re.search(r"참고|참조", normalized)
+        and not re.search(
+            r"가정|가상|다음|아래|이하|경우|계약자|피보험자|보험금|지급|사망|입원|수술|인용",
+            normalized,
+        )
+    )
+
+
+def _guide_view_sources(
+    node: dict[str, Any], by_id: dict[str, dict[str, Any]]
+) -> tuple[str, ...] | None:
+    """Validate one view without suppressing another invalid source on the page."""
+    try:
+        if (
+            node["kind"] not in {"BLOCK", "TEXT_LINE"}
+            or not isinstance(node["node_id"], str)
+            or not 1 <= len(node["node_id"]) <= 128
+            or not isinstance(node["source_path"], str)
+            or not node["source_path"]
+            or type(node["page_number"]) is not int
+            or not 1 <= node["page_number"] <= 500
+            or node["source_layer"] not in {"native", "ocr"}
+            or type(node["reading_order"]) is not int
+            or node["reading_order"] < 0
+            or node["schedulable"] is not True
+            or node.get("issue_codes")
+        ):
+            return None
+        _box(node)
+        if node["kind"] != "TEXT_LINE":
+            return ()
+        spans = node["source_spans"]
+        if (
+            len(node["text"].splitlines()) != 1
+            or not 1 <= len(spans) <= 4096
+            or any(
+                type(span[key]) is not int
+                for span in spans
+                for key in ("block_start", "block_end", "line_start", "line_end")
+            )
+            or not _lineage_valid(node, by_id)
+        ):
+            return None
+        identifiers = tuple(span["block_node_id"] for span in spans)
+        if any(
+            type(by_id[span["block_node_id"]]["page_number"]) is not int
+            or type(by_id[span["block_node_id"]]["reading_order"]) is not int
+            or by_id[span["block_node_id"]]["reading_order"] < 0
+            or type(by_id[span["block_node_id"]]["schedulable"]) is not bool
+            or by_id[span["block_node_id"]].get("issue_codes")
+            or by_id[span["block_node_id"]]["text"][: span["block_start"]].strip()
+            or by_id[span["block_node_id"]]["text"][span["block_end"] :].strip()
+            for span in spans
+        ):
+            return None
+        return identifiers
+    except KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError:
+        return None
+
+
+def _guide_source_views(
+    nodes: list[dict[str, Any]],
+) -> list[tuple[dict[str, Any], tuple[str, ...]]]:
+    """Retain complete logical lines with unique addresses and raw ownership."""
+    if (
+        not 1 <= len(nodes) <= 4096
+        or sum(len(node["text"]) for node in nodes) > 262144
+        or sum(len(node["text"].splitlines()) for node in nodes) > 4096
+    ):
+        return []
+    by_id = {node["node_id"]: node for node in nodes}
+    if len(by_id) != len(nodes) or len({(n["kind"], n["source_path"]) for n in nodes}) != len(
+        nodes
+    ):
+        return []
+    views = [
+        (node, sources)
+        for node in nodes
+        if (sources := _guide_view_sources(node, by_id)) is not None
+    ]
+    owners: dict[str, int] = {}
+    for _, sources in views:
+        for identifier in sources:
+            owners[identifier] = owners.get(identifier, 0) + 1
+    return [
+        (node, sources)
+        for node, sources in views
+        if node["node_id"] not in owners and all(owners[identifier] == 1 for identifier in sources)
+    ]
+
+
+def _reading_guide_lines(nodes: list[dict[str, Any]]) -> set[tuple[str, int]]:
+    """Exempt only a legend notice below a proved guide heading in the same source."""
+    ignored: set[tuple[str, int]] = set()
+    try:
+        views = _guide_source_views(nodes)
+        headings = [
+            (node, index)
+            for node, _ in views
+            for index, text in enumerate(node["text"].splitlines())
+            if _guide_heading(text)
+        ]
+        by_id = {node["node_id"]: node for node in nodes}
+        for node, raw_ids in views:
+            for index, text in enumerate(node["text"].splitlines()):
+                if not _guide_notice(text):
+                    continue
+                if not any(
+                    (heading["node_id"] == node["node_id"] and heading_index < index)
+                    or (
+                        heading["node_id"] != node["node_id"]
+                        and heading["page_number"] == node["page_number"]
+                        and heading["source_layer"] == node["source_layer"]
+                        and heading["reading_order"] < node["reading_order"]
+                        and _box(heading)[3] <= _box(node)[1]
+                    )
+                    for heading, heading_index in headings
+                ):
+                    continue
+                ignored.add((node["node_id"], index))
+                # TEXT_LINE is proved to contain one line. Its fully represented
+                # raw words cannot become independent example headings again.
+                for identifier in raw_ids:
+                    ignored.update(
+                        (identifier, raw_index)
+                        for raw_index, _ in enumerate(by_id[identifier]["text"].splitlines())
+                    )
+        return ignored
+    except KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError:
+        return set()
+
+
 def reference_context_present(
     nodes: list[dict[str, Any]],
     *,
     persistent_only: bool = False,
     navigation_instructions: bool = False,
+    reading_guides: bool = False,
 ) -> bool:
     """A visible reference boundary persists until a new document boundary."""
     ignored = _instruction_nodes(nodes) if navigation_instructions else set()
+    guide_lines = _reading_guide_lines(nodes) if persistent_only and reading_guides else set()
     for node in nodes:
         if ignored and node["node_id"] in ignored:
             continue
-        for line in node["text"].splitlines():
+        for index, line in enumerate(node["text"].splitlines()):
+            if guide_lines and (node["node_id"], index) in guide_lines:
+                continue
             text = _reference_text(line)
             if persistent_only:
                 navigation = re.match(

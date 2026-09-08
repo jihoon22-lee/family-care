@@ -508,6 +508,31 @@ def _navigation_instruction(text: str) -> bool:
     )
 
 
+def _complete_view_sources(node: StructureNode, by_id: dict[str, StructureNode]) -> set[str] | None:
+    """Return completely represented raw words; preserve unrepresented tails."""
+    if node.kind == "BLOCK":
+        return set()
+    try:
+        if any(
+            type(value) is not int
+            for span in node.source_spans
+            for value in (span.block_start, span.block_end, span.line_start, span.line_end)
+        ):
+            return None
+        represented = _lineage(node, by_id)
+        if any(
+            by_id[span.block_node_id].page_number != node.page_number
+            or by_id[span.block_node_id].issue_codes
+            or by_id[span.block_node_id].text[: span.block_start].strip()
+            or by_id[span.block_node_id].text[span.block_end :].strip()
+            for span in node.source_spans
+        ):
+            return None
+        return represented
+    except _InvalidPage, KeyError, TypeError, ValueError, AttributeError, IndexError:
+        return None
+
+
 def _instruction_nodes(nodes: Sequence[StructureNode]) -> set[str]:
     by_id = {node.node_id: node for node in nodes}
     ignored: set[str] = set()
@@ -518,29 +543,124 @@ def _instruction_nodes(nodes: Sequence[StructureNode]) -> set[str]:
             continue
         if not _navigation_instruction(node.text):
             continue
-        if node.kind == "BLOCK":
-            ignored.add(node.node_id)
-            continue
-        try:
-            if any(
-                type(value) is not int
-                for span in node.source_spans
-                for value in (span.block_start, span.block_end, span.line_start, span.line_end)
-            ):
-                continue
-            represented = _lineage(node, by_id)
-            if any(
-                by_id[span.block_node_id].page_number != node.page_number
-                or by_id[span.block_node_id].issue_codes
-                or by_id[span.block_node_id].text[: span.block_start].strip()
-                or by_id[span.block_node_id].text[span.block_end :].strip()
-                for span in node.source_spans
-            ):
-                continue
+        represented = _complete_view_sources(node, by_id)
+        if represented is not None:
             ignored.update(represented)
             ignored.add(node.node_id)
-        except _InvalidPage, KeyError, TypeError, ValueError, AttributeError, IndexError:
+    return ignored
+
+
+def _reading_guide_heading(text: str) -> bool:
+    return (
+        re.fullmatch(
+            r"(?:보험)?약관\s*(?:이용\s*(?:가이드|안내)|읽는\s*방법|이해\s*(?:가이드|길잡이))",
+            _reference_text(text),
+        )
+        is not None
+    )
+
+
+def _reading_guide_notice(text: str) -> bool:
+    text = _reference_text(text)
+    return bool(
+        len(text) <= 240
+        and len(text.splitlines()) == 1
+        and re.fullmatch(
+            r"(?:예시|예문|예제)(?:\s|[:：])[^.!?。\n]{1,230}"
+            r"(?:합니다|됩니다|있습니다|없습니다|입니다)[.]?",
+            text,
+        )
+        and "약관" in text
+        and re.search(r"이해.{0,15}(?:돕|도움|쉽)", text)
+        and re.search(r"참고|참조", text)
+        and not re.search(
+            r"가정|가상|다음|아래|이하|경우|계약자|피보험자|보험금|지급|사망|입원|수술|인용", text
+        )
+    )
+
+
+def _reading_guide_lines(nodes: Sequence[StructureNode]) -> set[tuple[str, int]]:
+    """Exclude only a proven reading-guide legend, never the rest of its page."""
+    if (
+        not 1 <= len(nodes) <= _MAX_NODES
+        or sum(len(node.text) for node in nodes) > _MAX_TEXT
+        or sum(len(node.text.splitlines()) for node in nodes) > _MAX_LINES
+    ):
+        return set()
+    by_id = {node.node_id: node for node in nodes}
+    ignored: set[tuple[str, int]] = set()
+    if len(by_id) != len(nodes) or len({(n.kind, n.source_path) for n in nodes}) != len(nodes):
+        return ignored
+    valid: list[tuple[StructureNode, set[str]]] = []
+    for node in nodes:
+        if (
+            node.kind not in {"BLOCK", "TEXT_LINE"}
+            or not isinstance(node.node_id, str)
+            or not 1 <= len(node.node_id) <= 128
+            or not isinstance(node.source_path, str)
+            or not node.source_path
+            or node.issue_codes
+            or node.schedulable is not True
+            or node.source_layer not in {"native", "ocr"}
+            or type(node.page_number) is not int
+            or not 1 <= node.page_number <= 500
+            or type(node.reading_order) is not int
+            or node.reading_order < 0
+            or (node.kind == "TEXT_LINE" and len(node.text.splitlines()) != 1)
+        ):
             continue
+        represented = _complete_view_sources(node, by_id)
+        if represented is None or any(
+            type(by_id[identifier].page_number) is not int
+            or type(by_id[identifier].reading_order) is not int
+            or by_id[identifier].reading_order < 0
+            or type(by_id[identifier].schedulable) is not bool
+            for identifier in represented
+        ):
+            continue
+        try:
+            _box(node)
+        except _InvalidPage:
+            continue
+        valid.append((node, represented))
+    claims: dict[str, int] = {}
+    for _, represented in valid:
+        for identifier in represented:
+            claims[identifier] = claims.get(identifier, 0) + 1
+    valid = [
+        (node, represented)
+        for node, represented in valid
+        if node.node_id not in claims and all(claims[identifier] == 1 for identifier in represented)
+    ]
+    headings = [
+        (node, index)
+        for node, _ in valid
+        for index, line in enumerate(node.text.splitlines())
+        if _reading_guide_heading(line)
+    ]
+    for node, represented in valid:
+        for index, line in enumerate(node.text.splitlines()):
+            if not _reading_guide_notice(line):
+                continue
+            if not any(
+                header.page_number == node.page_number
+                and header.source_layer == node.source_layer
+                and (
+                    (header.node_id == node.node_id and header_index < index)
+                    or (
+                        header.node_id != node.node_id
+                        and header.reading_order < node.reading_order
+                        and _box(header)[3] <= _box(node)[1]
+                    )
+                )
+                for header, header_index in headings
+            ):
+                continue
+            ignored.add((node.node_id, index))
+            for identifier in represented:
+                ignored.update(
+                    (identifier, i) for i, _ in enumerate(by_id[identifier].text.splitlines())
+                )
     return ignored
 
 
@@ -549,15 +669,19 @@ def reference_context_present(
     *,
     persistent_only: bool = False,
     navigation_instructions: bool = False,
+    reading_guides: bool = False,
 ) -> bool:
     """Retain an explicit reference boundary even if its layout is unsupported."""
     ignored = _instruction_nodes(nodes) if navigation_instructions else set()
     if not persistent_only:
         return any(_reference(node) for node in nodes if node.node_id not in ignored)
+    ignored_lines = _reading_guide_lines(nodes) if reading_guides else set()
     for node in nodes:
         if node.node_id in ignored:
             continue
-        for line in node.text.splitlines():
+        for index, line in enumerate(node.text.splitlines()):
+            if (node.node_id, index) in ignored_lines:
+                continue
             text = _reference_text(line)
             navigation = re.match(
                 r"^(?:목\s*차|차\s*례|table\s+of\s+contents)(?=\s|[:：(（\[【]|$)", text, re.I

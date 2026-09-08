@@ -1114,3 +1114,33 @@ neutral metadata 계약/생성 소비자만 확장하며 HTTP 계약·보험 판
 검사를 추가했다. 최종 관련 pure **23 passed** (0.86초), Ruff lint와 mypy가 통과했다.
 위 전체 Python/PG 수치는 이 마지막 단일 줄 guard 이전 실행이며 최종 CI에서 재확인한다.
 보관 추출 집계도 guard 이전 소스로 시작되어 그 결과를 최종 소스 수용으로 사용하지 않는다.
+
+
+### Reading-guide legend context
+
+`196051e`의 [CI 34213549708](https://github.com/jihoon22-lee/family-care/actions/runs/34213549708)는
+필수 7/7, 기본 Python **2,566 passed / 518 deselected / 3 subtests** (32.42초)와 전체 PG
+**518 passed / 2566 deselected** (705.07초), Web/build·이미지 3개를 통과했다.
+
+읽기 전용 후속 진단에서 참조 문장의 역할이 v6가 지원한 상품설명서 명령형과 다름을
+확인했다. 명시적 약관 이용 가이드 제목과 그 아래의 예시 표시 설명이라는 원문 관계를
+고정된 문법/배치 predicate로 확인했으며 추가 provider 호출은 하지 않았다. 이전 AI enum을
+분류 권한으로 승격하지 않았다. 가이드의 표시 설명이 다음 본문까지 제한하는 합성
+RED **2 failed / 5 passed**를 확인한 뒤 v7의 지속 문맥 검사만 보완했다.
+
+가이드 제목과 예시 표시의 설명은 같은 원문 페이지/layer에서 앞뒤 순서를 입증해야 한다.
+설명에 실제 가정/당사자/지급 사례가 있거나 별도 예시/문서 경계가 있으면 제한을 유지한다.
+plain BLOCK에서는 해당 줄만 제외하고, native 단어는 유효한 단일 줄이 전체 원문을
+대표할 때만 중복에서 제외한다. 다른 줄의 숨겨진 문장, 잘못된 원문 주소·bool/int 혼용,
+같은 raw 단어를 여러 줄이 주장하는 경우를 거부한다. v1~v6 JSON과 판독 규칙을 보존하며
+0051은 새 이력이 있으면 downgrade를 거부한다. API/Worker가 각각 원문을 검사한다.
+2026-09-08 19:43~19:48 KST, `196051e` 위 v7 API/Worker·0051·schema/생성 소비자와
+관련 테스트 변경에서 기본 Python **2,588 passed / 519 deselected / 3 subtests** (34.83초),
+관련 metadata PG **39 passed** (30.43초)가 통과했다. 전용 합성 test DB/파괴적 검사 guard와
+`TMPDIR=/tmp`를 사용했고 v4/v5/v6 JSON 보존→v7 재처리·판본 등록·중복 방지·이력 downgrade
+거부를 포함했다. Ruff format **687 files**/lint, mypy **276 sources**, generated contracts,
+정적 container/workflow 정책, 문서 **50**·안전 **881 paths**·diff도 통과했다.
+API 전용 proof는 별도 worktree에서 RED 후 기존 v6 회귀와 함께 검증했고 통합 관련 **99개**가
+통과했다. 이후 양쪽 raw source/정수/범위 조건을 맞추고 text-only legacy 호출 회귀를 추가해
+위 전체 검사를 실행했다. 실제 추출의 현재 소스 읽기 전용 집계와 최종 CI는 진행 중이며
+실제 판본 신원·가입 적용 수용과 운영 전환을 완료한 것으로 표현하지 않는다.

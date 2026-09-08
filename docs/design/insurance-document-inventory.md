@@ -241,8 +241,8 @@ summary로 반복하지 않는다.
 ## Source-verified component publication (v0.5)
 
 Worker는 보존 IR에서 역할 제목과 명시적인 보험사·상품·코드·날짜의 원문 위치를
-`document-metadata-v6` 제안으로 저장한다. 이 revision은 IR identity와 독립적이며 기존
-v1~v5 제안은 당시의 검증 규칙으로 읽는다. publication과 제안의 revision 대응도 DB에서 검사한다.
+`document-metadata-v7` 제안으로 저장한다. 이 revision은 IR identity와 독립적이며 기존
+v1~v6 제안은 당시의 검증 규칙으로 읽는다. publication과 제안의 revision 대응도 DB에서 검사한다.
 판본일과 적용 시작/종료일을 구분하고 상충 값·해석 불가 필드를 보존한다. 인접 페이지는
 각 페이지의 역할 근거와 일치하는 상품/판본 식별 근거가 있을 때만 합친다. 증권·청약서·
 계약변경서는 상품 정보가 같다는 이유로 합치지 않는다.

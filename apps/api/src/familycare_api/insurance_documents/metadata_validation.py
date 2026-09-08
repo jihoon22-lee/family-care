@@ -553,7 +553,12 @@ class MetadataSourceContext:
                     _observe(
                         nodes,
                         issuer_captions=self.revision
-                        in {"document-metadata-v4", "document-metadata-v5", "document-metadata-v6"},
+                        in {
+                            "document-metadata-v4",
+                            "document-metadata-v5",
+                            "document-metadata-v6",
+                            "document-metadata-v7",
+                        },
                     ).roles
                 ),
             )
@@ -563,9 +568,11 @@ class MetadataSourceContext:
         if number in self.states:
             return
         restricted = self.before(number)
-        if self.revision in {"document-metadata-v5", "document-metadata-v6"} and is_navigation_page(
-            nodes
-        ):
+        if self.revision in {
+            "document-metadata-v5",
+            "document-metadata-v6",
+            "document-metadata-v7",
+        } and is_navigation_page(nodes):
             self.states[number] = restricted
             self.last_page = number
             return
@@ -576,8 +583,15 @@ class MetadataSourceContext:
         self.states[number] = restricted or reference_context_present(
             nodes,
             persistent_only=self.revision
-            in {"document-metadata-v4", "document-metadata-v5", "document-metadata-v6"},
-            navigation_instructions=self.revision == "document-metadata-v6",
+            in {
+                "document-metadata-v4",
+                "document-metadata-v5",
+                "document-metadata-v6",
+                "document-metadata-v7",
+            },
+            navigation_instructions=self.revision
+            in {"document-metadata-v6", "document-metadata-v7"},
+            reading_guides=self.revision == "document-metadata-v7",
         )
         self.last_page = number
 
@@ -587,7 +601,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v6",
+    revision: str = "document-metadata-v7",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -615,6 +629,7 @@ def _validate(
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
@@ -623,6 +638,7 @@ def _validate(
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     }:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
@@ -678,6 +694,7 @@ def _validate(
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     }:
 
         def context_page(number: int) -> dict[str, Any]:
@@ -705,6 +722,7 @@ def _validate(
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     } and len(span_indices) != len(component["role_spans"]):
         return None
     previous_numbers: tuple[int, ...] = ()
@@ -720,15 +738,22 @@ def _validate(
             identifiers = [node["node_id"] for node in page_nodes]
             if len(set(identifiers)) != len(identifiers):
                 return None
-        if revision in {"document-metadata-v5", "document-metadata-v6"} and is_navigation_page(
-            page_nodes
-        ):
+        if revision in {
+            "document-metadata-v5",
+            "document-metadata-v6",
+            "document-metadata-v7",
+        } and is_navigation_page(page_nodes):
             return None
         page = _observe(
             page_nodes,
             legacy=revision == "document-metadata-v1",
             issuer_captions=revision
-            in {"document-metadata-v4", "document-metadata-v5", "document-metadata-v6"},
+            in {
+                "document-metadata-v4",
+                "document-metadata-v5",
+                "document-metadata-v6",
+                "document-metadata-v7",
+            },
         )
         restricted = False
         if source_context is not None:
@@ -746,6 +771,7 @@ def _validate(
                 "document-metadata-v4",
                 "document-metadata-v5",
                 "document-metadata-v6",
+                "document-metadata-v7",
             }
             else None
         )
@@ -755,7 +781,12 @@ def _validate(
             basis = "CONTRACTUAL_PROVISIONS"
         if set(page.roles) != {role}:
             return None
-        if revision in {"document-metadata-v4", "document-metadata-v5", "document-metadata-v6"}:
+        if revision in {
+            "document-metadata-v4",
+            "document-metadata-v5",
+            "document-metadata-v6",
+            "document-metadata-v7",
+        }:
             _bind_insurer_captions(page, page_nodes)
         numbers = body[0] if body is not None and role == "terms" else ()
         sequence_verified = bool(body is not None and role == "terms" and body[2])
@@ -769,6 +800,7 @@ def _validate(
                     "document-metadata-v4",
                     "document-metadata-v5",
                     "document-metadata-v6",
+                    "document-metadata-v7",
                 }
                 and role == "terms"
                 and bool(numbers)
@@ -799,6 +831,7 @@ def _validate(
             "document-metadata-v4",
             "document-metadata-v5",
             "document-metadata-v6",
+            "document-metadata-v7",
         }:
             range_evidence.append(
                 {
@@ -822,6 +855,7 @@ def _validate(
         "document-metadata-v4",
         "document-metadata-v5",
         "document-metadata-v6",
+        "document-metadata-v7",
     }:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:
