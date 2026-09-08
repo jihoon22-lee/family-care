@@ -376,6 +376,73 @@ def _active_nodes(
     return [nodes[key] for key in closure if key not in overridden]
 
 
+def _condition_expression(payload: SemanticCondition) -> dict[str, Any] | None:
+    """Keep semantic comparison direction, scalar types and field dimensions explicit."""
+    boolean_fields = {
+        "MedicalEvent.admission",
+        "MedicalEvent.performed",
+        "MedicalEvent.diagnosis_confirmed",
+    }
+    integer_units = {
+        "MedicalEvent.admission_days": "days",
+        "ClaimHistory.counted_occurrence": "occurrences",
+    }
+    ordinary_kinds = {"eligibility", "exclusion"}
+    count_field = payload.field == "ClaimHistory.counted_occurrence"
+    allowed_integer_kinds = ordinary_kinds | ({"frequency"} if count_field else set())
+    valid = False
+    if payload.operator == "equals":
+        valid = payload.unit is None and (
+            (
+                payload.field in boolean_fields
+                and type(payload.value) is bool
+                and payload.rule_kind in ordinary_kinds
+            )
+            or (
+                payload.field in integer_units
+                and type(payload.value) is int
+                and payload.rule_kind in allowed_integer_kinds
+            )
+        )
+    elif payload.operator == "range":
+        valid = (
+            payload.field in integer_units
+            and payload.unit == integer_units[payload.field]
+            and isinstance(payload.value, list)
+            and len(payload.value) == 2
+            and all(type(value) is int for value in payload.value)
+            and payload.rule_kind in allowed_integer_kinds
+        )
+    elif payload.operator == "days_since":
+        valid = (
+            payload.field == "PolicyContract.contract_start"
+            and type(payload.value) is int
+            and payload.unit == "days"
+            and payload.rule_kind in {"eligibility", "temporal"}
+        )
+    elif payload.operator in {"count_before", "count_below"}:
+        valid = (
+            count_field
+            and type(payload.value) is int
+            and payload.unit == "occurrences"
+            and payload.rule_kind in {"eligibility", "frequency"}
+        )
+    if not valid:
+        return None
+    expression: dict[str, Any] = {
+        "op": "count_before" if payload.operator == "count_below" else payload.operator,
+        "field": payload.field,
+        "value": payload.value,
+    }
+    if payload.operator == "range" and isinstance(payload.value, list):
+        expression["value"] = {"min": payload.value[0], "max": payload.value[1]}
+    if payload.unit is not None:
+        expression["unit"] = payload.unit
+    # Existing count_before evaluates count >= threshold, despite its historical name.
+    # Its tri-state NOT preserves missing history as UNKNOWN, never inventing zero.
+    return {"op": "not", "args": [expression]} if payload.operator == "count_below" else expression
+
+
 def _compile_root(
     graph: TermsSemanticKnowledge,
     root: str,
@@ -485,11 +552,13 @@ def _compile_root(
             )
         elif isinstance(payload, SemanticCondition):
             kind = payload.rule_kind
-            expression = {"op": payload.operator, "field": payload.field, "value": payload.value}
-            if payload.operator == "range" and isinstance(payload.value, list):
-                expression["value"] = {"min": payload.value[0], "max": payload.value[1]}
-            if payload.unit is not None:
-                expression["unit"] = payload.unit
+            expression = _condition_expression(payload)
+            if expression is None:
+                diagnostics.append(
+                    SemanticDiagnostic(
+                        node.node_id, "CONDITION_UNSUPPORTED", "unsupported_condition"
+                    )
+                )
         if expression is not None:
             try:
                 rule_evidence = tuple(

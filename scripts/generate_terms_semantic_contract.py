@@ -24,7 +24,7 @@ def _type(schema: dict[str, Any]) -> str:
     if "enum" in schema:
         return "Literal[" + ", ".join(repr(value) for value in schema["enum"]) + "]"
     if "anyOf" in schema:
-        return " | ".join(_type(item) for item in schema["anyOf"])
+        return " | ".join(_annotation(item) for item in schema["anyOf"])
     if schema["type"] == "array":
         return f"list[{_annotation(schema['items'])}]"
     return {

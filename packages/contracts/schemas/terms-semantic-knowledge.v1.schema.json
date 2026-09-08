@@ -204,11 +204,13 @@
           "type": "string"
         },
         "operator": {
+          "description": "count_before retains the existing DSL meaning: known prior occurrence count is at least the threshold. count_below means strictly fewer prior occurrences and compiles to tri-state NOT(count_before); missing history remains UNKNOWN.",
           "enum": [
             "equals",
             "days_since",
             "count_before",
-            "range"
+            "range",
+            "count_below"
           ],
           "type": "string"
         },

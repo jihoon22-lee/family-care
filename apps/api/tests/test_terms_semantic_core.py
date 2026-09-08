@@ -460,3 +460,88 @@ def test_large_classification_table_uses_bounded_existing_boolean_dsl() -> None:
     expression = root.rules[0]["expression"]
     assert expression["op"] == "any"
     assert [len(group["value"]) for group in expression["args"]] == [16, 16, 8]
+
+
+@pytest.mark.parametrize(
+    "count,expected", [(0, "MATCH"), (1, "MATCH"), (2, "NO_MATCH"), (None, "UNKNOWN")]
+)
+@pytest.mark.parametrize("kind", ["frequency", "eligibility"])
+def test_frequency_count_below_evaluates_known_and_missing_history(
+    count: int | None, expected: str, kind: str
+) -> None:
+    from familycare_api.decisions.operators import evaluate_expression
+
+    graph = synthetic_graph()
+    graph["nodes"][3]["payload"] = {
+        "kind": "condition",
+        "rule_kind": kind,
+        "field": "ClaimHistory.counted_occurrence",
+        "operator": "count_below",
+        "value": 2,
+        "unit": "occurrences",
+    }
+    root = compiled(graph).roots[0]
+    assert len(root.rules) == 1
+    document = root.rules[0]
+    assert document["expression"]["op"] == "not"
+    assert document["expression"]["args"][0]["op"] == "count_before"
+    validated = validate_rule_document(document, root.citation_ids)
+    assert validated.expression is not None
+    history = (
+        {}
+        if count is None
+        else {"counted_occurrence": FactValue(value=count, confirmation="user", evidence_ids=())}
+    )
+    facts = FactContext(medical_event={}, policy={}, rider={}, claim_history=history)
+    assert evaluate_expression(validated.expression, facts).result == expected
+
+
+@pytest.mark.parametrize(
+    "field,operator,value,unit,kind",
+    [
+        ("MedicalEvent.admission", "equals", 1, None, "eligibility"),
+        ("MedicalEvent.admission_days", "equals", True, None, "eligibility"),
+        ("MedicalEvent.admission", "equals", True, None, "temporal"),
+        ("MedicalEvent.admission_days", "count_below", 2, "occurrences", "frequency"),
+        ("ClaimHistory.counted_occurrence", "count_below", True, "occurrences", "frequency"),
+        ("ClaimHistory.counted_occurrence", "count_below", 2, "days", "frequency"),
+        ("ClaimHistory.counted_occurrence", "count_below", 2, "occurrences", "exclusion"),
+        ("PolicyContract.contract_start", "days_since", False, "days", "temporal"),
+    ],
+)
+def test_condition_pairs_do_not_conflate_boolean_count_days_or_rule_meaning(
+    field: str, operator: str, value: object, unit: str | None, kind: str
+) -> None:
+    graph = synthetic_graph()
+    graph["nodes"][3]["payload"] = {
+        "kind": "condition",
+        "rule_kind": kind,
+        "field": field,
+        "operator": operator,
+        "value": value,
+        "unit": unit,
+    }
+    root = compiled(graph).roots[0]
+    assert root.rules == ()
+    assert root.explanations
+    assert "CONDITION_UNSUPPORTED" in {d.code for d in root.diagnostics}
+
+
+def test_generated_union_members_enforce_neutral_schema_constraints() -> None:
+    from familycare_api.terms_knowledge.core import SemanticKnowledgeError
+
+    graph = synthetic_graph()
+    graph["nodes"][3]["payload"] = {
+        "kind": "condition",
+        "rule_kind": "frequency",
+        "field": "ClaimHistory.counted_occurrence",
+        "operator": "count_before",
+        "value": -1,
+        "unit": "occurrences",
+    }
+    with pytest.raises(SemanticKnowledgeError):
+        parse_knowledge(graph)
+    graph = synthetic_graph()
+    graph["sources"][0]["terms_edition_id"] = "invalid-edition-identity"
+    with pytest.raises(SemanticKnowledgeError):
+        parse_knowledge(graph)

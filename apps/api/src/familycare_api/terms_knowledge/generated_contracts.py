@@ -93,10 +93,14 @@ class SemanticCondition(SemanticContract):
         "ClaimHistory.counted_occurrence",
     ]
     kind: Literal["condition"]
-    operator: Literal["equals", "days_since", "count_before", "range"]
+    operator: Literal["equals", "days_since", "count_before", "range", "count_below"]
     rule_kind: Literal["eligibility", "exclusion", "temporal", "frequency"]
     unit: Literal["days", "occurrences"] | None
-    value: bool | int | list[Annotated[int, Field(ge=0, le=100000)]]
+    value: (
+        bool
+        | Annotated[int, Field(ge=0, le=100000)]
+        | Annotated[list[Annotated[int, Field(ge=0, le=100000)]], Field(min_length=2, max_length=2)]
+    )
 
 
 class SemanticDailyCalculation(SemanticContract):
@@ -150,7 +154,7 @@ class SemanticInformation(SemanticContract):
 
 
 class SemanticLimit(SemanticContract):
-    currency: str | None
+    currency: Annotated[str, Field(min_length=1, max_length=3, pattern="^[A-Z]{3}$")] | None
     kind: Literal["limit"]
     measure: Literal["payable_days", "maximum_amount"]
     unit: Literal["days", "amount"]
@@ -270,7 +274,17 @@ class SemanticSource(SemanticContract):
     structure_identity_sha256: Annotated[
         str, Field(min_length=1, max_length=64, pattern="^[0-9a-f]{64}$")
     ]
-    terms_edition_id: str | None
+    terms_edition_id: (
+        Annotated[
+            str,
+            Field(
+                min_length=1,
+                max_length=36,
+                pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            ),
+        ]
+        | None
+    )
 
 
 class TermsSemanticKnowledge(SemanticContract):
