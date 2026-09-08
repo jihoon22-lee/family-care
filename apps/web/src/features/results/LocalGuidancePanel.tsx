@@ -1,11 +1,15 @@
 import { useId } from "react";
 import type {
   GuidanceCandidate,
-  GuidanceEstimate,
   GuidanceEvidence,
   GuidanceSemanticEvidence,
   LocalGuidanceResponse,
 } from "../../api/generated";
+import {
+  CandidateAmounts,
+  ContractAmount,
+  Expenses,
+} from "./LocalGuidanceDetails";
 import { pageLabel } from "./resultPresentation";
 import styles from "./Results.module.css";
 import panelStyles from "./LocalGuidancePanel.module.css";
@@ -44,54 +48,6 @@ function questionCopy(path: string): string {
   const lastCharacter = label.charCodeAt(label.length - 1);
   const particle = (lastCharacter - 0xac00) % 28 === 0 ? "를" : "을";
   return `${label}${particle} 알려주세요.`;
-}
-
-function money(amount: string, currency: string | null | undefined): string {
-  const [integer, fraction] = amount.split(".");
-  const formatted =
-    integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",") +
-    (fraction ? `.${fraction}` : "");
-  return currency === "KRW"
-    ? `${formatted}원`
-    : `${formatted}${currency ? ` ${currency}` : ""}`;
-}
-
-function Estimate({ estimate }: { estimate: GuidanceEstimate }) {
-  let amount: string | null = null;
-  if (estimate.kind === "POINT" && estimate.amount != null) {
-    amount = money(estimate.amount, estimate.currency);
-  } else if (
-    estimate.kind === "RANGE" &&
-    estimate.lower != null &&
-    estimate.upper != null
-  ) {
-    amount = `${money(estimate.lower, estimate.currency)} ~ ${money(estimate.upper, estimate.currency)}`;
-  }
-  return (
-    <div className={panelStyles.estimate}>
-      <strong>
-        {estimate.kind === "FORMULA" ? "예상 금액 계산식" : "예상 금액"}
-      </strong>
-      {amount ? <p className={styles.subtotalAmount}>{amount}</p> : null}
-      {estimate.formula ? (
-        <p className={panelStyles.formula}>{estimate.formula}</p>
-      ) : null}
-      {estimate.kind === "UNAVAILABLE" || (!amount && !estimate.formula) ? (
-        <p className={styles.cardCopy}>예상 금액을 계산할 자료가 부족합니다.</p>
-      ) : null}
-      {estimate.assumptions?.includes("CONDITIONS_REMAIN") ? (
-        <p className={styles.cardCopy}>
-          남은 조건이 충족되는 경우의 예상입니다.
-        </p>
-      ) : null}
-      {estimate.missing_inputs?.length ? (
-        <p className={styles.cardCopy}>
-          계산에 필요한 정보:{" "}
-          {[...new Set(estimate.missing_inputs.map(inputLabel))].join(", ")}
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function evidenceKey(item: GuidanceEvidence | GuidanceSemanticEvidence) {
@@ -153,7 +109,10 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           가입 분석과 앱 원장의 통화가 달라 계산식만 안내합니다.
         </p>
       ) : null}
-      <Estimate estimate={candidate.estimate} />
+      {candidate.contract_amount ? (
+        <ContractAmount value={candidate.contract_amount} />
+      ) : null}
+      <CandidateAmounts candidate={candidate} inputLabel={inputLabel} />
       {candidate.freshness === "STATUS_UNRESOLVED" ? (
         <p className={styles.cardCopy}>
           사건일의 계약 상태에 따라 이 후보가 달라질 수 있습니다.
@@ -257,6 +216,7 @@ export function LocalGuidancePanel({
           </section>
         ) : null;
       })}
+      {guidance.expenses ? <Expenses expenses={guidance.expenses} /> : null}
       {questions.length ? (
         <section className={styles.group} aria-labelledby={`${id}-questions`}>
           <div className={styles.groupHeading}>
