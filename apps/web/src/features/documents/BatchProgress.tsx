@@ -33,6 +33,17 @@ const OCR_STATE_LABELS: Record<
   warning: "OCR 확인 필요",
 };
 
+const STRUCTURE_LABELS: Record<
+  NonNullable<BatchResponse["items"][number]["structure_state"]>,
+  string
+> = {
+  PENDING: "문서 내용을 준비하고 있습니다.",
+  PREPARED: "문서 내용 준비 완료",
+  PARTIAL: "문서 일부를 준비하지 못했습니다.",
+  FAILED: "가져온 문서의 내용 준비에 실패했습니다.",
+  RETRYABLE_FAILED: "문서 내용 준비를 다시 시도할 예정입니다.",
+};
+
 export function BatchProgress({
   batch,
   busy = false,
@@ -76,6 +87,9 @@ export function BatchProgress({
               <small>시도 {item.attempts}회</small>
               <small>OCR 상태: {OCR_STATE_LABELS[item.ocr_state]}</small>
               <small>OCR 처리 페이지 {item.ocr_pages_processed}</small>
+              {item.structure_state ? (
+                <small>{STRUCTURE_LABELS[item.structure_state]}</small>
+              ) : null}
             </span>
             <span className={`import-state import-state-${item.state}`}>
               {ITEM_LABELS[item.state]}

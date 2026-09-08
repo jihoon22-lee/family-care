@@ -150,6 +150,10 @@ def test_private_batch_status_item_and_projection_include_kind_without_source_ke
             "ocr_state": "pending",
             "ocr_pages_processed": 0,
             "ocr_warning_codes": [],
+            "structure_state": None,
+            "structure_error_code": None,
+            "structure_planned_chunks": None,
+            "structure_unprocessed_ranges": None,
         }
     ]
     assert "source_key" not in str(projected)

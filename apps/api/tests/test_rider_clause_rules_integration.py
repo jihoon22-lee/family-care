@@ -536,6 +536,23 @@ def _row(database_url: str, query: str, *parameters: object) -> dict[str, Any]:
     return result
 
 
+def test_failed_confirmation_preserves_explicit_rejection(
+    database_url: str,
+    seed: Seed,
+) -> None:
+    repository = RiderClauseLinkRepository(database_url)
+    rejected = repository.reject(
+        seed.scope_a, seed.link_id, expected_version=1, reason_code="WRONG_CLAUSE"
+    )
+    before = _row(database_url, "SELECT * FROM rider_clause_links WHERE id=%s", seed.link_id)
+    with pytest.raises(RiderClauseLinkInvalid) as invalid:
+        repository.confirm(seed.scope_a, seed.link_id, expected_version=rejected.version)
+    assert invalid.value.reason_code == "LINK_NOT_ACTIVE"
+    assert (
+        _row(database_url, "SELECT * FROM rider_clause_links WHERE id=%s", seed.link_id) == before
+    )
+
+
 def test_valid_link_confirmation_and_rule_publication_commit_exact_evidence(
     database_url: str,
     seed: Seed,

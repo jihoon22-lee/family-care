@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -405,45 +405,58 @@ describe("insurance document inventory", () => {
     });
   });
 
-  it("attaches an unpaired component with USER_CONFIRMED and reloads the inventory", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(ATTACHABLE_INVENTORY))
-      .mockResolvedValueOnce(
-        jsonResponse(
-          {
-            id: "synthetic-item-attached-001",
-            insurance_document_component_id: "synthetic-component-unpaired-001",
-            insurance_document_set_id: "synthetic-set-001",
-            match_state: "USER_CONFIRMED",
-            role: "terms",
-            version: 1,
-          },
-          201,
-        ),
-      )
-      .mockResolvedValueOnce(jsonResponse(INVENTORY));
-    vi.stubGlobal("fetch", fetchMock);
-    const user = userEvent.setup();
+  it.each(["USER_CONFIRMED", "PROGRAM_VERIFIED"] as const)(
+    "attaches a %s component with a separate user-confirmed relationship",
+    async (reviewState) => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            ...ATTACHABLE_INVENTORY,
+            unpaired_components: ATTACHABLE_INVENTORY.unpaired_components.map(
+              (component) => ({ ...component, review_state: reviewState }),
+            ),
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              id: "synthetic-item-attached-001",
+              insurance_document_component_id:
+                "synthetic-component-unpaired-001",
+              insurance_document_set_id: "synthetic-set-001",
+              match_state: "USER_CONFIRMED",
+              role: "terms",
+              version: 1,
+            },
+            201,
+          ),
+        )
+        .mockResolvedValueOnce(jsonResponse(INVENTORY));
+      vi.stubGlobal("fetch", fetchMock);
+      const user = userEvent.setup();
 
-    renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+      renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
 
-    const target = await screen.findByRole("combobox", {
-      name: /문서를 연결할 보험/i,
-    });
-    expect(target).toHaveValue("synthetic-set-001");
-    await user.click(screen.getByRole("button", { name: /약관.*문서 연결$/ }));
+      const target = await screen.findByRole("combobox", {
+        name: /문서를 연결할 보험/i,
+      });
+      expect(target).toHaveValue("synthetic-set-001");
+      await user.click(
+        screen.getByRole("button", { name: /약관.*문서 연결$/ }),
+      );
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
-    expect(fetchMock.mock.calls[1]?.[0]).toBe(
-      "/api/v1/insurance-document-sets/synthetic-set-001/items",
-    );
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
-      expected_set_version: 2,
-      insurance_document_component_id: "synthetic-component-unpaired-001",
-      match_state: "USER_CONFIRMED",
-    });
-  });
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        "/api/v1/insurance-document-sets/synthetic-set-001/items",
+      );
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+        expected_set_version: 2,
+        insurance_document_component_id: "synthetic-component-unpaired-001",
+        match_state: "USER_CONFIRMED",
+      });
+    },
+  );
 
   it("creates a registered document set before the first attachment", async () => {
     const fetchMock = vi
@@ -531,4 +544,53 @@ describe("insurance document inventory", () => {
       method: "DELETE",
     });
   });
+});
+
+it("shows program terms applicability without presenting it as user confirmation", async () => {
+  const user = userEvent.setup();
+  const data: MemberInsuranceDocumentInventoryResponse = {
+    ...INVENTORY,
+    registered_policies: [
+      {
+        ...INVENTORY.registered_policies[0],
+        completeness: "CERTIFICATE_AND_TERMS",
+        missing_document_roles: [],
+        documents: [],
+        terms_applicability: [
+          {
+            assessment_id: "synthetic-applicability-001",
+            terms_edition_id: "synthetic-edition-001",
+            policy_component_id: "synthetic-policy-component-001",
+            component: component({
+              role: "terms",
+              review_state: "PROGRAM_VERIFIED",
+              page_start: 3,
+              page_end: 8,
+            }),
+            status: "MATCH",
+            selection_state: "AUTOMATIC",
+            matched_by: "PRODUCT_CODE_PRINTED_PERIOD",
+            reason_codes: ["PRODUCT_CODE_PRINTED_PERIOD_MATCH"],
+          },
+        ],
+      },
+    ],
+    unpaired_components: [],
+    unregistered_document_sets: [],
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(data)));
+  renderWithProviders(<InsuranceDocumentInventory memberId={MEMBER_ID} />);
+  await user.click(await screen.findByText("연결된 문서 묶음 세부 편집 · 1건"));
+  const label = await screen.findByText("문서 근거로 약관 연결");
+  const card = label.closest("article");
+  expect(card).not.toBeNull();
+  expect(label).toBeVisible();
+  expect(
+    within(card!).getByText("상품코드와 계약일·적용기간 대조"),
+  ).toBeVisible();
+  expect(within(card!).getByText("3–8쪽")).toBeVisible();
+  expect(within(card!).queryByText("사용자 확인")).not.toBeInTheDocument();
+  expect(
+    within(card!).queryByRole("button", { name: /연결 해제/ }),
+  ).not.toBeInTheDocument();
 });

@@ -9,6 +9,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from familycare_api.common.coverage_identity import CanonicalCoverageIdentity
 from familycare_api.private_knowledge.reconciliation import KnowledgeEntityCounts
 
 _STRICT = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -81,6 +82,8 @@ class KnowledgeContractPageResponse(BaseModel):
 
 class KnowledgeCoverageResponse(BaseModel):
     model_config = _STRICT
+
+    canonical_identity: CanonicalCoverageIdentity | None = None
 
     id: UUID
     display_name: str = Field(min_length=1, max_length=800)

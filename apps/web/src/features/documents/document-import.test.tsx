@@ -343,6 +343,47 @@ describe("document import page", () => {
     );
   });
 
+  it("keeps polling local preparation after document import succeeds", async () => {
+    const pending = batch("succeeded", "succeeded");
+    const prepared = batch("succeeded", "succeeded");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response([MEMBER]))
+      .mockResolvedValueOnce(response([SOURCE]))
+      .mockResolvedValueOnce(
+        response(
+          {
+            ...pending,
+            items: pending.items.map((item) => ({
+              ...item,
+              structure_state: "PENDING",
+            })),
+          },
+          202,
+        ),
+      )
+      .mockResolvedValueOnce(
+        response({
+          ...prepared,
+          items: prepared.items.map((item) => ({
+            ...item,
+            structure_state: "PREPARED",
+          })),
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const user = userEvent.setup();
+    renderWithProviders(<ImportPage />);
+    await user.click(
+      await screen.findByRole("checkbox", { name: /^Sample Policy A\.pdf/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "가져오기 시작" }));
+    expect(
+      await screen.findByText("문서 내용 준비 완료", {}, { timeout: 2500 }),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
   it("retries a transient polling failure and clears the error at terminal state", async () => {
     const fetchMock = vi
       .fn()

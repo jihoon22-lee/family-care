@@ -87,7 +87,8 @@
     "BenefitType": {
       "enum": [
         "fixed",
-        "indemnity"
+        "indemnity",
+        "unknown"
       ],
       "title": "BenefitType",
       "type": "string"

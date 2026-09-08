@@ -14,6 +14,8 @@ const ISSUE_COPY = {
   MISSING_EVIDENCE: "후보 값을 뒷받침하는 근거가 필요합니다.",
   STALE_EVIDENCE: "문서 판본이 바뀌어 최신 근거를 다시 연결해야 합니다.",
   TERMS_ONLY_RIDER: "약관에서만 확인된 후보는 가입 담보로 등록하지 않습니다.",
+  NOT_ENROLLED:
+    "원문에 미가입 또는 가입 예시로 표시되어 가입 담보로 등록하지 않습니다.",
   UNSUPPORTED_DSL: "현재 지원하지 않는 규칙 구조입니다.",
   UNSUPPORTED_STRUCTURE: "자동으로 구조화하기 어려운 항목입니다.",
   WRONG_EDITION: "계약일에 적용되는 약관 판본인지 다시 확인해야 합니다.",
@@ -46,6 +48,10 @@ export function CandidateReviewDialog({
   const [error, setError] = useState<string>();
   const dialogRef = useRef<HTMLDivElement>(null);
   const evidenceComplete = evidenceIsComplete(item);
+  const enrollmentExcluded = item.issues.some(
+    (issue) =>
+      issue.code === "TERMS_ONLY_RIDER" || issue.code === "NOT_ENROLLED",
+  );
 
   const close = useCallback(() => onClose(), [onClose]);
   useEffect(() => {
@@ -77,7 +83,7 @@ export function CandidateReviewDialog({
   }, [close]);
 
   async function confirm() {
-    if (!evidenceComplete) return;
+    if (!evidenceComplete || enrollmentExcluded) return;
     setWorking(true);
     setError(undefined);
     try {
@@ -186,7 +192,7 @@ export function CandidateReviewDialog({
               <button
                 type="button"
                 className="primary-button"
-                disabled={working || !evidenceComplete}
+                disabled={working || !evidenceComplete || enrollmentExcluded}
                 onClick={confirm}
               >
                 확인

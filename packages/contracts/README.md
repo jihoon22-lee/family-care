@@ -13,6 +13,11 @@ API, and analyzer services.
 - `examples/` contains synthetic examples that must not include real insurance or family data. Queue examples are password-free and do not contain `content_sha256` before Worker intake; encrypted batch examples contain only opaque source IDs and bounded status projections.
 - `apps/api/src/familycare_api/documents/generated_contracts.py` and `workers/analyzer/src/familycare_worker/generated_contracts.py` are deterministic TypedDict consumers generated from the Phase 1 document schemas; do not edit them manually.
 - `apps/api/src/familycare_api/documents/generated_batch_contracts.py` and `workers/analyzer/src/familycare_worker/generated_batch_contracts.py` are deterministic TypedDict consumers generated from the encrypted batch schemas; do not edit them manually.
+- `schemas/document-metadata-proposal.v1.schema.json` owns the protected local component proposal
+  shape and explicit role/field vocabulary. Regenerate both `generated_metadata.py` consumers with
+  `TMPDIR=/tmp uv run python scripts/generate_document_metadata_contract.py`. Its independent
+  revision does not change retained IR identity. These proposals classify source content only;
+  the API rechecks original anchors, conflicting values, dates and page boundaries before use.
 - `apps/api/src/familycare_api/contracts/generated_business.py` includes deterministic TypedDict
   consumers for the shared policy, review, decision, calculation, claim, and private-knowledge
   contracts; do not edit it manually.

@@ -522,7 +522,7 @@ class OperationalCandidateResponse(CandidateBaseResponse):
 
     @classmethod
     def from_domain(cls, value: ClaimCandidate) -> Self:
-        if value.id is None or value.rider_type not in {"fixed", "indemnity"}:
+        if value.id is None or value.rider_type not in {"fixed", "indemnity", "unknown"}:
             raise ValueError("persisted candidate identity and type are required")
         return cls(
             candidate_id=value.id,
@@ -532,7 +532,13 @@ class OperationalCandidateResponse(CandidateBaseResponse):
             ),
             contract_label="등록 보험 계약",
             coverage_label=value.rider_label or "보험 담보",
-            benefit_kind="FIXED" if value.rider_type == "fixed" else "INDEMNITY",
+            benefit_kind=(
+                "FIXED"
+                if value.rider_type == "fixed"
+                else "INDEMNITY"
+                if value.rider_type == "indemnity"
+                else "UNKNOWN"
+            ),
             aggregate_result=value.aggregate_result,
             required_match_count=value.required_match_count,
             required_unknown_count=value.required_unknown_count,

@@ -32,6 +32,15 @@ afterEach(() => {
 });
 
 describe("ledger read projection", () => {
+  it("retains an unclassified Rider amount without presenting it as a payment", async () => {
+    const fixture = structuredClone(SYNTHETIC_LEDGER);
+    fixture.ridersByPolicy["synthetic-policy-001"][0].benefit_type = "unknown";
+    installFetch(fixture);
+    renderWithProviders(<LedgerPage memberId="synthetic-member-a" />);
+    expect(
+      await screen.findByText("유형 미분류 · 가입금액 1000 SYN"),
+    ).toBeInTheDocument();
+  });
   it("uses same-origin requests with credentials and no-store, without Web Storage writes", async () => {
     const fetchMock = installFetch();
     const storageWrite = vi.spyOn(Storage.prototype, "setItem");

@@ -749,6 +749,12 @@ export interface BatchItemResponse {
     | "retryable_failed"
     | "running"
     | "succeeded";
+  structure_error_code?:
+    "STRUCTURE_PREPARATION_RETRY" | "STRUCTURE_SOURCE_INVALID" | null;
+  structure_planned_chunks?: number | null;
+  structure_state?:
+    "FAILED" | "PARTIAL" | "PENDING" | "PREPARED" | "RETRYABLE_FAILED" | null;
+  structure_unprocessed_ranges?: number | null;
 }
 
 export interface BatchResponse {
@@ -901,6 +907,7 @@ export type CandidateIssueCode =
   | "MISSING_EVIDENCE"
   | "CONFLICTING_EVIDENCE"
   | "TERMS_ONLY_RIDER"
+  | "NOT_ENROLLED"
   | "UNSUPPORTED_STRUCTURE"
   | "LOW_CONFIDENCE"
   | "INVALID_UNIT"
@@ -946,6 +953,16 @@ export type CandidateStatus =
   "AI_VERIFIED" | "NEEDS_REVIEW" | "USER_CONFIRMED" | "rejected";
 
 export type CandidateVersionId = string;
+
+export interface CanonicalCoverageIdentity {
+  authority: "PROGRAM_VERIFIED_SOURCE_IDENTITY";
+  field_conflicts?: Array<"insured_amount" | "currency" | "display_name">;
+  ledger_version: number;
+  ref: CanonicalCoverageRef;
+  schema_version?: "1";
+  source_refs: Array<CanonicalCoverageRef>;
+  verification_digest_sha256: string;
+}
 
 export interface CanonicalCoverageRef {
   contract_id: string;
@@ -1179,7 +1196,12 @@ export interface ComponentCreateRequest {
   page_start: number;
   review_state?: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface ConditionalFixedSubtotalResponse {
@@ -1444,6 +1466,7 @@ export interface FamilyMemberUpdateRequest {
 export interface GuidanceCandidate {
   assumptions?: Array<string>;
   benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  canonical_identity?: CanonicalCoverageIdentity | null;
   condition_result: "MATCH" | "UNKNOWN";
   conditions?: Array<GuidanceCondition>;
   contract_label: string;
@@ -1535,9 +1558,19 @@ export interface InsuranceDocumentComponentResponse {
   id: string;
   page_end: number;
   page_start: number;
-  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  review_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   version: number;
 }
 
@@ -1553,7 +1586,12 @@ export interface InsuranceDocumentSetItemMutationResponse {
   insurance_document_set_id: string;
   match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   version: number;
 }
 
@@ -1582,15 +1620,30 @@ export interface InventoryComponentResponse {
   page_start: number;
   processing_state:
     "READY" | "PENDING" | "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
-  review_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  review_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface InventorySetItemResponse {
   component: InventoryComponentResponse;
   id: string | null;
-  match_state: "SUGGESTED" | "USER_CONFIRMED" | "CONFLICT" | "REJECTED";
+  match_state:
+    | "SUGGESTED"
+    | "USER_CONFIRMED"
+    | "CONFLICT"
+    | "REJECTED"
+    | "PROGRAM_VERIFIED";
   version: number;
 }
 
@@ -1705,6 +1758,7 @@ export interface KnowledgeCoverageMappingResponse {
 
 export interface KnowledgeCoverageResponse {
   benefit_type: "FIXED" | "INDEMNITY" | "UNKNOWN" | "NOT_APPLICABLE";
+  canonical_identity?: CanonicalCoverageIdentity | null;
   component_classification:
     "BENEFIT_COVERAGE" | "NON_BENEFIT_CONTRACT_COMPONENT" | "UNKNOWN";
   component_role: "MAIN_CONTRACT" | "RIDER";
@@ -1969,7 +2023,10 @@ export interface OperationalLinkRequest {
 
 export interface OperationalLinkResponse {
   authority:
-    "SNAPSHOT_EXACT_EVIDENCE" | "USER_CONFIRMED_OPERATIONAL_IDENTITY" | null;
+    | "SNAPSHOT_EXACT_EVIDENCE"
+    | "PROGRAM_VERIFIED_SOURCE_IDENTITY"
+    | "USER_CONFIRMED_OPERATIONAL_IDENTITY"
+    | null;
   confirmed_at: string | null;
   conflict: boolean;
   decision: "MATCH" | "NO_MATCH" | "UNKNOWN";
@@ -2303,12 +2360,18 @@ export interface RegisteredPolicyInventoryResponse {
   has_product_explanation: boolean;
   insurer_display: string;
   missing_document_roles: Array<
-    "policy" | "terms" | "product_explanation" | "application" | "supporting"
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment"
   >;
   policy_id: string;
   product_display: string;
   rider_count: number;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
+  terms_applicability?: Array<TermsApplicabilityResponse>;
 }
 
 export interface ReviewIssue {
@@ -2319,6 +2382,7 @@ export interface ReviewIssue {
     | "INVALID_UNIT"
     | "LOW_CONFIDENCE"
     | "MISSING_EVIDENCE"
+    | "NOT_ENROLLED"
     | "STALE_EVIDENCE"
     | "TERMS_ONLY_RIDER"
     | "UNSUPPORTED_DSL"
@@ -2375,7 +2439,7 @@ export interface RiderClauseLinkResponse {
 }
 
 export interface RiderResponse {
-  benefit_type: "fixed" | "indemnity";
+  benefit_type: "fixed" | "indemnity" | "unknown";
   coverage_end_date: string | null;
   coverage_start_date: string | null;
   currency: string | null;
@@ -2396,7 +2460,12 @@ export interface RoleDocumentSummaryResponse {
   component_count: number;
   items: Array<InventorySetItemResponse>;
   role:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
   source_count: number;
 }
 
@@ -2490,17 +2559,32 @@ export interface StructuringJobResponse {
     | "cancelled";
 }
 
+export interface TermsApplicabilityResponse {
+  assessment_id: string;
+  component: InventoryComponentResponse;
+  matched_by: string | null;
+  policy_component_id: string;
+  reason_codes: Array<string>;
+  selection_state: "AUTOMATIC" | "USER_SELECTED" | "USER_OWNED" | "UNRESOLVED";
+  status: "MATCH" | "NO_MATCH" | "UNKNOWN";
+  terms_edition_id: string;
+}
+
 export interface TermsEditionResponse {
   applicability_end: string | null;
   applicability_start: string | null;
   content_sha256: string;
   document_version_id: string;
+  edition_date?: string | null;
   id: string;
   insurer_display: string;
   insurer_key: string;
   normalization_version: string;
   product_display: string;
   product_key: string;
+  source_component_id?: string | null;
+  source_page_end?: number | null;
+  source_page_start?: number | null;
   version: number;
 }
 
@@ -2509,7 +2593,12 @@ export interface UnreadableSourceResponse {
   document_batch_item_id: string;
   processing_state: "PASSWORD_REQUIRED" | "OCR_REQUIRED" | "FAILED";
   source_kind:
-    "policy" | "terms" | "product_explanation" | "application" | "supporting";
+    | "policy"
+    | "terms"
+    | "product_explanation"
+    | "application"
+    | "supporting"
+    | "amendment";
 }
 
 export interface UnregisteredDocumentSetResponse {
@@ -2525,6 +2614,7 @@ export interface UnregisteredDocumentSetResponse {
     | "TERMS_ONLY"
     | "PRODUCT_EXPLANATION_ONLY"
     | "APPLICATION_ONLY"
+    | "AMENDMENT_ONLY"
     | "POLICY_UNREVIEWED"
     | "SUPPORTING_ONLY";
   product_display: string | null;

@@ -29,6 +29,7 @@ from familycare_worker.ai.verifier import (
     VerifierInventedField,
     VerifierPayloadInvalid,
     verify_policy_candidate,
+    verify_policy_candidate_batch,
 )
 
 _INVALID_CANDIDATE_ID = UUID("00000000-0000-4000-8000-000000000001")
@@ -251,4 +252,114 @@ def run_policy_batch_pipeline(
     return _result(overall, tuple(candidates))
 
 
-__all__ = ["run_policy_batch_pipeline", "run_policy_pipeline"]
+def run_bounded_policy_batch_pipeline(
+    *,
+    evidence: Sequence[EvidenceSlice],
+    provider: AiProvider,
+    structurer_model: str,
+    verifier_model: str,
+) -> CandidatePipelineResult:
+    """Structure once, verify once, and retain successful structuring after an outage."""
+
+    if (
+        not 1 <= len(evidence) <= 64
+        or len({item.evidence_id for item in evidence}) != len(evidence)
+        or not structurer_model
+        or not verifier_model
+    ):
+        return _result("VALIDATION_ERROR")
+    try:
+        batch, request_id = structure_policy_candidate_batch(
+            evidence=evidence,
+            provider=provider,
+            model=structurer_model,
+        )
+    except (
+        ProviderValidationError,
+        ProviderConfigurationError,
+        RetryableProviderError,
+        TimeoutError,
+        ConnectionError,
+    ) as error:
+        return _result(_provider_error(error))
+    return verify_structured_policy_batch(
+        candidates=(batch.policy, *batch.riders),
+        structurer_request_id=request_id,
+        evidence=evidence,
+        provider=provider,
+        verifier_model=verifier_model,
+    )
+
+
+def verify_structured_policy_batch(
+    *,
+    candidates: Sequence[StructurerCandidate],
+    structurer_request_id: str,
+    evidence: Sequence[EvidenceSlice],
+    provider: AiProvider,
+    verifier_model: str,
+    allow_unclassified_enrollment: bool = False,
+) -> CandidatePipelineResult:
+    """Resume a retained structurer stage without paying for it again."""
+
+    try:
+        batch, verifier_request_id = verify_policy_candidate_batch(
+            candidates=candidates,
+            evidence=evidence,
+            provider=provider,
+            model=verifier_model,
+        )
+    except (
+        ProviderValidationError,
+        ProviderConfigurationError,
+        RetryableProviderError,
+        TimeoutError,
+        ConnectionError,
+    ) as error:
+        classification = (
+            "NEEDS_REVIEW" if isinstance(error, VerifierPayloadInvalid) else _provider_error(error)
+        )
+        return _result(
+            classification,
+            tuple(
+                _candidate(
+                    item,
+                    status="NEEDS_REVIEW",
+                    issues=("LOW_CONFIDENCE",),
+                    request_ids=(structurer_request_id,),
+                )
+                for item in candidates
+            ),
+        )
+    by_id = {item.candidate_id: item for item in batch.decisions}
+    results: list[PolicyCandidate] = []
+    for source in candidates:
+        verified = by_id[source.candidate_id]
+        issues = validate_candidate(
+            candidate=source,
+            verifier=verified,
+            evidence=evidence,
+            allow_unclassified_enrollment=allow_unclassified_enrollment,
+        )
+        status = (
+            "rejected"
+            if verified.decision == "rejected"
+            else "NEEDS_REVIEW"
+            if verified.decision == "needs_review" or issues
+            else "AI_VERIFIED"
+        )
+        results.append(
+            _candidate(
+                source,
+                status=status,
+                issues=issues,
+                request_ids=(structurer_request_id, verifier_request_id),
+            )
+        )
+    return _result(
+        "SUCCESS" if all(item.status == "AI_VERIFIED" for item in results) else "NEEDS_REVIEW",
+        tuple(results),
+    )
+
+
+__all__ = ["run_policy_batch_pipeline", "run_policy_pipeline", "run_bounded_policy_batch_pipeline"]

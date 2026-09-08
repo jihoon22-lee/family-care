@@ -114,6 +114,7 @@ class OperationalLinkResponse(BaseModel):
     authority: (
         Literal[
             "SNAPSHOT_EXACT_EVIDENCE",
+            "PROGRAM_VERIFIED_SOURCE_IDENTITY",
             "USER_CONFIRMED_OPERATIONAL_IDENTITY",
         ]
         | None

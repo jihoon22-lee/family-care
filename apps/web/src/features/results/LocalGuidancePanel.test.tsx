@@ -347,3 +347,52 @@ describe("local guidance result", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+it("explains a numeric source conflict while preserving the candidate and formula", () => {
+  const source = candidate("Sample Linked Coverage", {
+    kind: "FORMULA",
+    currency: "KRW",
+    formula: "가입금액 × 1",
+    reason_code: "CALCULATION_INPUT_NEEDED",
+    missing_inputs: ["Rider.insured_amount"],
+  });
+  const identity = {
+    ref: {
+      kind: "OPERATIONAL_RIDER" as const,
+      contract_id: "synthetic-policy-002",
+      coverage_id: "synthetic-rider-002",
+    },
+    source_refs: [
+      source.ref,
+      {
+        kind: "OPERATIONAL_RIDER" as const,
+        contract_id: "synthetic-policy-002",
+        coverage_id: "synthetic-rider-002",
+      },
+    ],
+    authority: "PROGRAM_VERIFIED_SOURCE_IDENTITY" as const,
+    ledger_version: 2,
+    verification_digest_sha256: "a".repeat(64),
+    field_conflicts: ["insured_amount" as const],
+  };
+  render(
+    <ActionFirstResult
+      onOpenEvidence={vi.fn()}
+      onReanalyze={vi.fn()}
+      onStartClaim={vi.fn()}
+      result={result(
+        guidance([
+          { ...source, ref: identity.ref, canonical_identity: identity },
+        ]),
+      )}
+    />,
+  );
+  expect(
+    screen.getByRole("heading", { name: "Sample Linked Coverage" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("가입 분석과 앱 원장의 금액이 달라 계산식만 안내합니다."),
+  ).toBeInTheDocument();
+  expect(screen.getByText("가입금액 × 1")).toBeInTheDocument();
+  expect(screen.queryByText("Legacy Coverage")).not.toBeInTheDocument();
+});

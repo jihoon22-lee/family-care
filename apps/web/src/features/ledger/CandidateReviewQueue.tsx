@@ -3,8 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import type { PolicyReviewItem } from "../../api/generated";
 import { CandidateReviewDialog, ISSUE_COPY } from "./CandidateReviewDialog";
 
-function isTermsOnly(item: PolicyReviewItem): boolean {
-  return item.issues.some((issue) => issue.code === "TERMS_ONLY_RIDER");
+function isExcludedEnrollment(item: PolicyReviewItem): boolean {
+  return item.issues.some(
+    (issue) =>
+      issue.code === "TERMS_ONLY_RIDER" || issue.code === "NOT_ENROLLED",
+  );
 }
 
 function stringField(
@@ -61,7 +64,9 @@ export function CandidateReviewQueue({
     setOpenItem(item);
   }
 
-  const visible = expanded ? items : items.filter((item) => !isTermsOnly(item));
+  const visible = expanded
+    ? items
+    : items.filter((item) => !isExcludedEnrollment(item));
   return (
     <section className="review-queue" aria-labelledby="review-queue-title">
       <header>

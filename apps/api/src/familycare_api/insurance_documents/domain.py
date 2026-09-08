@@ -6,8 +6,14 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-DocumentRole = Literal["policy", "terms", "product_explanation", "application", "supporting"]
+DocumentRole = Literal[
+    "policy", "terms", "product_explanation", "application", "supporting", "amendment"
+]
 ReviewState = Literal["SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED"]
+ComponentReviewState = Literal[
+    "SUGGESTED", "USER_CONFIRMED", "CONFLICT", "REJECTED", "PROGRAM_VERIFIED"
+]
+InventoryMatchState = ReviewState | Literal["PROGRAM_VERIFIED"]
 ProcessingState = Literal[
     "READY",
     "PENDING",
@@ -23,6 +29,7 @@ PrimaryClassification = Literal[
     "TERMS_ONLY",
     "PRODUCT_EXPLANATION_ONLY",
     "APPLICATION_ONLY",
+    "AMENDMENT_ONLY",
     "POLICY_UNREVIEWED",
     "SUPPORTING_ONLY",
 ]
@@ -33,6 +40,7 @@ _ROLE_ORDER: tuple[DocumentRole, ...] = (
     "product_explanation",
     "application",
     "supporting",
+    "amendment",
 )
 
 
@@ -45,7 +53,7 @@ class InventoryComponent:
     role: DocumentRole
     page_start: int
     page_end: int
-    review_state: ReviewState
+    review_state: ComponentReviewState
     processing_state: ProcessingState
     duplicate_state: DuplicateState
 
@@ -57,7 +65,7 @@ class InventoryComponent:
 @dataclass(frozen=True)
 class InventorySetItem:
     component: InventoryComponent
-    match_state: ReviewState
+    match_state: InventoryMatchState
     id: UUID | None = None
     version: int = 1
 
@@ -83,6 +91,7 @@ class InventoryPolicy:
     product_display: str
     status: PolicyStatus
     rider_count: int
+    source_review_state: str = "USER_CONFIRMED"
 
 
 @dataclass(frozen=True)
@@ -92,7 +101,7 @@ class InsuranceDocumentComponentRecord:
     role: DocumentRole
     page_start: int
     page_end: int
-    review_state: ReviewState
+    review_state: ComponentReviewState
     version: int
 
 
@@ -135,6 +144,19 @@ class RoleDocumentSummary:
 
 
 @dataclass(frozen=True)
+class TermsApplicabilityLink:
+    assessment_id: UUID
+    policy_id: UUID
+    terms_edition_id: UUID
+    policy_component_id: UUID
+    component: InventoryComponent
+    status: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    reason_codes: tuple[str, ...]
+    matched_by: str | None
+    selection_state: Literal["AUTOMATIC", "USER_SELECTED", "USER_OWNED", "UNRESOLVED"] = "AUTOMATIC"
+
+
+@dataclass(frozen=True)
 class RegisteredPolicyInventory:
     policy: InventoryPolicy
     completeness: Completeness
@@ -144,6 +166,7 @@ class RegisteredPolicyInventory:
     missing_document_roles: tuple[DocumentRole, ...]
     document_set_id: UUID | None
     document_set_version: int | None
+    terms_applicability: tuple[TermsApplicabilityLink, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -185,7 +208,10 @@ class MemberInsuranceDocumentInventory:
 
 
 def _confirmed(item: InventorySetItem) -> bool:
-    return item.match_state == "USER_CONFIRMED" and item.component.review_state == "USER_CONFIRMED"
+    return item.match_state == "USER_CONFIRMED" and item.component.review_state in {
+        "USER_CONFIRMED",
+        "PROGRAM_VERIFIED",
+    }
 
 
 def _role_summaries(
@@ -221,10 +247,19 @@ def _primary_classification(items: tuple[InventorySetItem, ...]) -> PrimaryClass
         return "PRODUCT_EXPLANATION_ONLY"
     if "application" in roles:
         return "APPLICATION_ONLY"
+    if "amendment" in roles:
+        return "AMENDMENT_ONLY"
     return "SUPPORTING_ONLY"
 
 
 def _fallback_policy_item(policy: InventoryPolicy) -> InventorySetItem:
+    authority: InventoryMatchState
+    if policy.source_review_state == "AI_VERIFIED":
+        authority = "PROGRAM_VERIFIED"
+    elif policy.source_review_state == "USER_CONFIRMED":
+        authority = "USER_CONFIRMED"
+    else:
+        authority = "SUGGESTED"
     return InventorySetItem(
         component=InventoryComponent(
             id=None,
@@ -234,11 +269,11 @@ def _fallback_policy_item(policy: InventoryPolicy) -> InventorySetItem:
             role="policy",
             page_start=policy.source_evidence_page,
             page_end=policy.source_evidence_page,
-            review_state="USER_CONFIRMED",
+            review_state=authority,
             processing_state="READY",
             duplicate_state="UNIQUE",
         ),
-        match_state="USER_CONFIRMED",
+        match_state=authority,
     )
 
 
@@ -249,9 +284,21 @@ def build_member_inventory(
     document_sets: tuple[InventorySet, ...],
     unpaired_components: tuple[InventoryComponent, ...] = (),
     unreadable_sources: tuple[UnreadableSource, ...] = (),
+    terms_applicability: tuple[TermsApplicabilityLink, ...] = (),
 ) -> MemberInsuranceDocumentInventory:
     """Derive completeness without granting enrollment authority to document metadata."""
 
+    policy_ids = {policy.id for policy in policies}
+    applicable = tuple(item for item in terms_applicability if item.policy_id in policy_ids)
+    connected = tuple(item for item in applicable if item.status == "MATCH")
+    connected_ids = {
+        identifier
+        for item in connected
+        for identifier in (item.policy_component_id, item.component.id)
+    }
+    unpaired_components = tuple(
+        item for item in unpaired_components if item.id not in connected_ids
+    )
     sets_by_policy = {
         item.policy_contract_id: item
         for item in document_sets
@@ -290,9 +337,11 @@ def build_member_inventory(
         )
         if not authoritative_policy:
             items = (_fallback_policy_item(policy), *items)
-        confirmed_terms = authoritative_policy and any(
-            _confirmed(item) and item.component.role == "terms" for item in items
-        )
+        policy_applicability = tuple(link for link in applicable if link.policy_id == policy.id)
+        confirmed_terms = (
+            authoritative_policy
+            and any(_confirmed(item) and item.component.role == "terms" for item in items)
+        ) or any(link.status == "MATCH" for link in policy_applicability)
         summaries = _role_summaries(tuple(items), bundled_sources)
         all_items.extend(items)
         registered.append(
@@ -308,6 +357,7 @@ def build_member_inventory(
                     _confirmed(item) and item.component.role == "application" for item in items
                 ),
                 missing_document_roles=() if confirmed_terms else ("terms",),
+                terms_applicability=policy_applicability,
                 document_set_id=(
                     policy_document_set.id if policy_document_set is not None else None
                 ),
@@ -350,6 +400,7 @@ def build_member_inventory(
         if item.component.id is not None
     }
     counted_components.update({item.identity: item for item in unpaired_components})
+    counted_components.update({item.component.identity: item.component for item in connected})
     component_values = tuple(counted_components.values())
     terms_only_identities = {
         set_item.component.identity
@@ -361,6 +412,7 @@ def build_member_inventory(
     terms_only_identities.update(
         item.identity for item in unpaired_components if item.role == "terms"
     )
+    terms_only_identities.difference_update(item.component.identity for item in connected)
     conflict_items = {
         item.component.identity
         for item in all_items
@@ -398,6 +450,8 @@ __all__ = [
     "DocumentRole",
     "DuplicateState",
     "InventoryComponent",
+    "InventoryMatchState",
+    "TermsApplicabilityLink",
     "InsuranceDocumentComponentRecord",
     "InsuranceDocumentSetItemRecord",
     "InsuranceDocumentSetRecord",

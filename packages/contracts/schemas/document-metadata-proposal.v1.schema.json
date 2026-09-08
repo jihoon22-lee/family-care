@@ -1,0 +1,360 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://familycare.local/contracts/document-metadata-proposal.v1.schema.json",
+  "title": "DocumentMetadataProposal",
+  "description": "Protected local component and edition metadata proposals; never enrollment or applicability authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "revision": {
+      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7"]
+    },
+    "generation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "structure_identity_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DocumentMetadataComponent"
+      },
+      "minItems": 0,
+      "maxItems": 500
+    },
+    "unresolved_pages": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+      },
+      "minItems": 0,
+      "maxItems": 500
+    }
+  },
+  "required": [
+    "schema_version",
+    "revision",
+    "generation_id",
+    "structure_identity_sha256",
+    "components",
+    "unresolved_pages"
+  ],
+  "anyOf": [
+    { "properties": { "revision": { "enum": ["document-metadata-v1", "document-metadata-v2"] } } },
+    {
+      "properties": {
+        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7"] },
+        "components": { "items": { "required": ["range_evidence"] } }
+      }
+    }
+  ],
+  "$defs": {
+    "DocumentMetadataRangeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page_number": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "basis": {
+          "enum": ["FORMAL_METADATA", "CONTRACTUAL_PROVISIONS", "ARTICLE_CONTINUATION", "TABLE_CONTINUATION"]
+        },
+        "previous_page": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1, "maximum": 499 },
+            { "type": "null" }
+          ]
+        },
+        "article_numbers": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "maxItems": 500
+        },
+        "article_sequence_verified": { "type": "boolean" },
+        "role_span_indices": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 9999 },
+          "minItems": 1,
+          "maxItems": 10000
+        }
+      },
+      "required": ["page_number", "basis", "previous_page", "article_numbers", "article_sequence_verified", "role_span_indices"]
+    },
+    "DocumentMetadataSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "page_number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "anchor_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "anchor_end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "node_id",
+        "page_number",
+        "start",
+        "end",
+        "text",
+        "anchor_start",
+        "anchor_end"
+      ]
+    },
+    "DocumentMetadataFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "#/$defs/DocumentMetadataField"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "spans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentMetadataSpan"
+          },
+          "minItems": 1,
+          "maxItems": 10000
+        }
+      },
+      "required": [
+        "field",
+        "value",
+        "spans"
+      ]
+    },
+    "DocumentMetadataComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "identity": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "role": {
+          "$ref": "#/$defs/DocumentMetadataRole"
+        },
+        "page_start": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "page_end": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "role_spans": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentMetadataSpan"
+          },
+          "minItems": 1,
+          "maxItems": 10000
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentMetadataFact"
+          },
+          "minItems": 0,
+          "maxItems": 10000
+        },
+        "conflicting_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentMetadataField"
+          },
+          "minItems": 0,
+          "maxItems": 13
+        },
+        "unresolved_fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentMetadataField"
+          },
+          "minItems": 0,
+          "maxItems": 13
+        },
+        "authority": {
+          "const": "CONTENT_CLASSIFICATION_ONLY"
+        },
+        "range_evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DocumentMetadataRangeEvidence" },
+          "minItems": 1,
+          "maxItems": 500
+        }
+      },
+      "required": [
+        "identity",
+        "role",
+        "page_start",
+        "page_end",
+        "role_spans",
+        "facts",
+        "conflicting_fields",
+        "unresolved_fields",
+        "authority"
+      ]
+    },
+    "DocumentMetadataField": {
+      "enum": [
+        "insurer",
+        "product_name",
+        "product_code",
+        "rider_code",
+        "terms_code",
+        "edition_code",
+        "edition_date",
+        "applicability_start",
+        "applicability_end",
+        "amendment_effective_date",
+        "contract_date",
+        "terms_reference",
+        "edition_reference"
+      ]
+    },
+    "DocumentMetadataRole": {
+      "enum": [
+        "policy",
+        "terms",
+        "product_explanation",
+        "application",
+        "amendment"
+      ]
+    }
+  },
+  "x-role-titles": {
+    "policy": [
+      "보험증권",
+      "보험가입증서",
+      "policy certificate",
+      "insurance certificate"
+    ],
+    "terms": [
+      "보험약관",
+      "보통약관",
+      "특별약관",
+      "약관",
+      "policy terms",
+      "insurance terms"
+    ],
+    "product_explanation": [
+      "상품설명서",
+      "보험상품설명서",
+      "product explanation"
+    ],
+    "application": [
+      "보험청약서",
+      "청약서",
+      "insurance application"
+    ],
+    "amendment": [
+      "계약변경서",
+      "보험계약변경서",
+      "policy amendment"
+    ]
+  },
+  "x-field-labels": {
+    "insurer": [
+      "보험사",
+      "보험회사",
+      "insurer"
+    ],
+    "product_name": [
+      "상품명",
+      "보험상품명",
+      "product name"
+    ],
+    "product_code": [
+      "상품코드",
+      "보험상품코드",
+      "product code"
+    ],
+    "rider_code": [
+      "특약코드",
+      "담보코드",
+      "rider code"
+    ],
+    "terms_code": [
+      "약관코드",
+      "terms code"
+    ],
+    "edition_code": [
+      "판본코드",
+      "판본번호",
+      "edition code"
+    ],
+    "edition_date": [
+      "판본일",
+      "판본일자",
+      "약관개정일",
+      "edition date"
+    ],
+    "applicability_start": [
+      "적용시작일",
+      "적용개시일",
+      "applicable from"
+    ],
+    "applicability_end": [
+      "적용종료일",
+      "applicable through"
+    ],
+    "amendment_effective_date": [
+      "변경적용일",
+      "amendment effective date"
+    ],
+    "contract_date": [
+      "계약일",
+      "계약일자",
+      "contract date"
+    ],
+    "terms_reference": [
+      "참조약관코드",
+      "적용약관코드",
+      "terms reference"
+    ],
+    "edition_reference": [
+      "적용판본코드",
+      "edition reference"
+    ]
+  },
+  "x-maximum-local-payload-bytes": 8388608
+}

@@ -9,6 +9,10 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
+from familycare_api.documents.generated_batch_contracts import (
+    StructurePreparationError,
+    StructurePreparationState,
+)
 from familycare_api.documents.import_sources import ResolvedImportSource
 
 
@@ -32,6 +36,10 @@ class BatchItemRecord:
     ocr_state: str
     ocr_pages_processed: int
     ocr_warning_codes: tuple[str, ...]
+    structure_state: StructurePreparationState | None = None
+    structure_error_code: StructurePreparationError | None = None
+    structure_planned_chunks: int | None = None
+    structure_unprocessed_ranges: int | None = None
 
 
 @dataclass(frozen=True)
@@ -92,6 +100,10 @@ def _batch(row: dict[str, Any], items: list[dict[str, Any]]) -> BatchRecord:
                 ocr_state=cast(str, item["ocr_state"]),
                 ocr_pages_processed=cast(int, item["ocr_pages_processed"]),
                 ocr_warning_codes=tuple(cast(list[str], item["ocr_warning_codes"])),
+                structure_state=item.get("structure_state"),
+                structure_error_code=item.get("structure_error_code"),
+                structure_planned_chunks=item.get("structure_planned_chunks"),
+                structure_unprocessed_ranges=item.get("structure_unprocessed_ranges"),
             )
             for item in items
         ),
@@ -201,13 +213,50 @@ class BatchRepository:
                     return None
                 items = connection.execute(
                     """
-                    SELECT source_id, display_label, document_kind, state, error_code, attempts,
-                           ocr_state, ocr_pages_processed, ocr_warning_codes
-                    FROM document_batch_items
-                    WHERE batch_id = %s
-                    ORDER BY created_at, id
+                    SELECT item.source_id, item.display_label, item.document_kind, item.state,
+                           item.error_code, item.attempts, item.ocr_state,
+                           item.ocr_pages_processed, item.ocr_warning_codes,
+                           CASE WHEN item.state = 'succeeded'
+                             THEN COALESCE(preparation.state, 'PENDING')
+                             ELSE NULL END AS structure_state,
+                           preparation.error_code AS structure_error_code,
+                           jsonb_array_length(generation.plan_json->'chunks')
+                             AS structure_planned_chunks,
+                           jsonb_array_length(generation.plan_json->'unprocessed')
+                             AS structure_unprocessed_ranges
+                    FROM document_batch_items item
+                    LEFT JOIN LATERAL (
+                      SELECT version.id FROM document_versions version
+                      WHERE version.document_id = item.document_id
+                        AND (item.processed_document_version_id IS NULL
+                             OR version.id = item.processed_document_version_id)
+                      ORDER BY version.version_number DESC, version.id LIMIT 1
+                    ) version ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT extraction.id FROM extractions extraction
+                      WHERE extraction.document_version_id = version.id
+                        AND extraction.status = 'succeeded'
+                      ORDER BY extraction.succeeded_at DESC, extraction.id LIMIT 1
+                    ) extraction ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT layer.id FROM ocr_layers layer
+                      WHERE layer.extraction_id = extraction.id AND layer.status = 'succeeded'
+                      ORDER BY layer.created_at DESC, layer.id DESC LIMIT 1
+                    ) layer ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT preparation.* FROM document_structure_preparations preparation
+                      WHERE preparation.batch_item_id = item.id
+                        AND preparation.extraction_id = extraction.id
+                        AND preparation.ocr_layer_id IS NOT DISTINCT FROM layer.id
+                      ORDER BY preparation.created_at DESC, preparation.id DESC LIMIT 1
+                    ) preparation ON TRUE
+                    LEFT JOIN document_structure_generations generation
+                      ON generation.id = preparation.generation_id
+                     AND generation.household_space_id = %s
+                    WHERE item.batch_id = %s
+                    ORDER BY item.created_at, item.id
                     """,
-                    (batch_id,),
+                    (household_space_id, batch_id),
                 ).fetchall()
                 return _batch(row, items)
         except psycopg.Error:

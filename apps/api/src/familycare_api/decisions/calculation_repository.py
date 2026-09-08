@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -12,6 +12,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from familycare_api.clauses.rules import CoverageRuleVersion
+from familycare_api.clauses.terms_change_selection import TermsEventSelection, TermsStatus
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.calculation_validation import decimal_from_wire, validate_receipt_line
@@ -29,6 +30,8 @@ from familycare_api.decisions.errors import (
     MedicalEventNotFound,
     ReceiptLineNotFound,
 )
+from familycare_api.decisions.terms import RulesForEvent
+from familycare_api.decisions.terms_snapshots import decode_selections
 from familycare_api.policies.errors import VersionConflict
 
 CALCULATION_ENGINE_VERSION = "benefit-calculation-v1"
@@ -226,6 +229,8 @@ class CalculationRepository:
                 event = connection.execute(
                     """
                     SELECT event.id, event.version AS event_version,
+                           event.family_member_id, event.event_date, run.terms_selections_json,
+                           run.source_rule_version_ids,
                            run.id AS decision_run_id, run.engine_version AS decision_engine_version,
                            run.created_at AS run_created_at
                     FROM medical_events AS event
@@ -310,6 +315,8 @@ class CalculationRepository:
         candidate = _claim_candidate(row)
         if candidate.id is None:
             raise DecisionRepositoryUnavailable
+        if candidate.rider_type not in {"fixed", "indemnity"}:
+            return None
         locked = connection.execute(
             """
             SELECT candidate.id
@@ -329,6 +336,18 @@ class CalculationRepository:
             scope,
             candidate.rider_id,
             cast(datetime, event["run_created_at"]),
+            family_member_id=cast(UUID, event["family_member_id"]),
+            event_date=cast(date | None, event["event_date"]),
+            terms_selections=(
+                decode_selections(event["terms_selections_json"])
+                if event.get("terms_selections_json") is not None
+                else None
+            ),
+            rule_version_ids=(
+                tuple(event["source_rule_version_ids"])
+                if event.get("source_rule_version_ids") is not None
+                else None
+            ),
         )
         if len(rules) != 1:
             return None
@@ -373,7 +392,11 @@ class CalculationRepository:
             },
             claim_history={},
         )
-        if rider_updated_at > run_created_at:
+        if rules.status_for(rule.id) != "MATCH":
+            result = BenefitCalculationResult.unknown(
+                cast(Any, candidate.rider_type), "TERMS_APPLICABILITY_UNRESOLVED"
+            )
+        elif rider_updated_at > run_created_at:
             result = BenefitCalculationResult.unknown(
                 cast(Any, candidate.rider_type or "fixed"), "STALE_POLICY_INPUT"
             )
@@ -489,10 +512,29 @@ class CalculationRepository:
         scope: HouseholdScope,
         rider_id: UUID,
         cutoff: datetime,
-    ) -> tuple[CoverageRuleVersion, ...]:
+        *,
+        family_member_id: UUID | None = None,
+        event_date: date | None = None,
+        terms_selections: tuple[TermsEventSelection, ...] | None = None,
+        rule_version_ids: tuple[UUID, ...] | None = None,
+    ) -> RulesForEvent:
+        retained = None
+        if (terms_selections is None) != (rule_version_ids is None):
+            return RulesForEvent(())
+        if terms_selections is not None:
+            retained = tuple(s for s in terms_selections if s.scope.rider_id == rider_id)
+            if not retained or any(
+                s.scope.household_space_id != scope.household_space_id
+                or s.scope.family_member_id != family_member_id
+                or s.event_date != event_date
+                for s in retained
+            ):
+                return RulesForEvent(())
         rows = connection.execute(
             """
             SELECT version.id, version.coverage_rule_id, version.candidate_version_id,
+                   clause.id AS clause_id, edition.id AS terms_edition_id,
+                   policy.id AS policy_contract_id,
                    version.version_number, version.schema_version, version.rule_kind,
                    version.required, version.input_field_paths, version.expression_json,
                    version.result_reason_code, version.review_state, version.executable,
@@ -516,6 +558,17 @@ class CalculationRepository:
              AND link.rider_id = %(rider)s
              AND link.deleted_at IS NULL
              AND link.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
+            JOIN clauses AS clause
+              ON clause.id=link.clause_id AND clause.terms_edition_id=link.terms_edition_id
+             AND clause.household_space_id=%(scope)s AND clause.deleted_at IS NULL
+             AND terms_edition_allows_pages(clause.terms_edition_id,clause.household_space_id,
+               clause.physical_page_start,clause.physical_page_end)
+            JOIN riders AS rider ON rider.id=link.rider_id
+              AND rider.household_space_id=%(scope)s AND rider.deleted_at IS NULL
+            JOIN policy_contracts AS policy ON policy.id=rider.policy_contract_id
+              AND policy.household_space_id=%(scope)s AND policy.deleted_at IS NULL
+            JOIN terms_editions AS edition ON edition.id=clause.terms_edition_id
+             AND (%(retained)s OR policy_terms_link_applicability(policy.id,edition.id,%(scope)s))
             JOIN LATERAL (
               SELECT candidate.*
               FROM coverage_rule_versions AS candidate
@@ -524,6 +577,7 @@ class CalculationRepository:
                 AND candidate.review_state IN ('AI_VERIFIED', 'USER_CONFIRMED')
                 AND candidate.published_at IS NOT NULL
                 AND candidate.published_at <= %(cutoff)s
+                AND (%(versions)s::uuid[] IS NULL OR candidate.id=ANY(%(versions)s))
                 AND candidate.expression_json ? 'calculation'
               ORDER BY candidate.version_number DESC, candidate.id DESC
               LIMIT 1
@@ -560,7 +614,13 @@ class CalculationRepository:
             ORDER BY rule.id, version.id, evidence.physical_page NULLS LAST,
                      evidence.id NULLS LAST
             """,
-            {"scope": scope.household_space_id, "rider": rider_id, "cutoff": cutoff},
+            {
+                "scope": scope.household_space_id,
+                "rider": rider_id,
+                "cutoff": cutoff,
+                "retained": retained is not None,
+                "versions": list(rule_version_ids) if rule_version_ids is not None else None,
+            },
         ).fetchall()
         grouped: dict[UUID, tuple[dict[str, Any], list[EvidenceRef]]] = {}
         for row in rows:
@@ -571,7 +631,38 @@ class CalculationRepository:
             evidence = _evidence(row)
             if evidence is not None:
                 grouped[version_id][1].append(evidence)
-        return tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
+        if retained is None:
+            return RulesForEvent(
+                tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
+            )
+        versions = []
+        judgments: list[tuple[UUID, TermsStatus]] = []
+        for row, retained_evidence in grouped.values():
+            selection = next(
+                (
+                    s
+                    for s in retained
+                    if s.scope.clause_id == row["clause_id"]
+                    and s.scope.policy_contract_id == row["policy_contract_id"]
+                ),
+                None,
+            )
+            status: TermsStatus = "UNKNOWN"
+            if selection is not None:
+                status = next(
+                    (
+                        e.status
+                        for e in selection.editions
+                        if e.edition_id == row["terms_edition_id"]
+                    ),
+                    "UNKNOWN",
+                )
+            if status == "NO_MATCH":
+                continue
+            version = _coverage_rule(row, retained_evidence)
+            versions.append(version)
+            judgments.append((version.id, status))
+        return RulesForEvent(tuple(versions), retained, tuple(judgments))
 
     @staticmethod
     def _receipt_row(

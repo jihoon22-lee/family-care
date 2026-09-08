@@ -18,7 +18,11 @@ from familycare_worker.ai.evidence_loader import (
     PolicyEvidenceLoader,
 )
 from familycare_worker.ai.minimizer import EvidenceMinimizationError, minimize_evidence
-from familycare_worker.ai.policy_pipeline import run_policy_batch_pipeline, run_policy_pipeline
+from familycare_worker.ai.policy_pipeline import (
+    run_bounded_policy_batch_pipeline,
+    run_policy_pipeline,
+    verify_structured_policy_batch,
+)
 from familycare_worker.ai.provider import (
     DEFAULT_STRUCTURER_MODEL,
     DEFAULT_VERIFIER_MODEL,
@@ -31,6 +35,7 @@ from familycare_worker.ai.provider import (
     ProviderUnavailableError,
     ProviderValidationError,
 )
+from familycare_worker.ai.range_structurer import structure_policy_range
 from familycare_worker.ai.recommender import (
     DEFAULT_ASSISTANCE_MODEL,
     RecommendationCandidate,
@@ -83,6 +88,12 @@ from familycare_worker.policy_jobs import (
     PolicyStructuringQueue,
     PolicyStructuringQueueUnavailable,
     map_policy_structuring_error,
+)
+from familycare_worker.policy_range_repository import PolicyRangeConflict, PolicyRangeRepository
+from familycare_worker.policy_request_budget import (
+    BudgetedPolicyProvider,
+    PolicyBudgetExhausted,
+    PolicyRequestBudget,
 )
 from familycare_worker.recommendation_jobs import (
     InvalidRecommendationWork,
@@ -238,6 +249,8 @@ class PolicyStructuringJobRunner:
         structurer_model: str = DEFAULT_STRUCTURER_MODEL,
         verifier_model: str = DEFAULT_VERIFIER_MODEL,
         lease_seconds: int = 180,
+        request_budget: PolicyRequestBudget | None = None,
+        range_repository: PolicyRangeRepository | None = None,
     ) -> None:
         if (
             not isinstance(structurer_model, str)
@@ -249,6 +262,8 @@ class PolicyStructuringJobRunner:
             or not 1 <= lease_seconds <= 3_600
         ):
             raise ValueError("invalid policy structuring runner configuration")
+        self.request_budget = request_budget
+        self.range_repository = range_repository
         self.queue = queue
         self.evidence_loader = evidence_loader
         self.provider = provider
@@ -264,6 +279,9 @@ class PolicyStructuringJobRunner:
         if job is None:
             return False
         try:
+            if self.range_repository is not None:
+                self._run_range(job, worker_id)
+                return True
             evidence = self.evidence_loader.load(
                 household_space_id=job.household_space_id,
                 document_version_id=job.document_version_id,
@@ -276,21 +294,29 @@ class PolicyStructuringJobRunner:
                 family_member_id=job.family_member_id,
             )
             minimized = minimize_evidence(evidence, sensitive_terms=member_terms)
+            provider = self.provider
+            if self.request_budget is not None:
+                provider = BudgetedPolicyProvider(
+                    provider=provider, budget=self.request_budget, job=job, worker_id=worker_id
+                )
             leased_provider = _LeasedPolicyProvider(
-                self.provider,
+                provider,
                 lambda: self.queue.heartbeat(
                     job.id,
                     worker_id,
                     lease_seconds=self.lease_seconds,
                 ),
             )
-            result = run_policy_batch_pipeline(
+            result = run_bounded_policy_batch_pipeline(
                 evidence=minimized,
                 provider=leased_provider,
                 structurer_model=self.structurer_model,
                 verifier_model=self.verifier_model,
             )
-            if not result.candidates:
+            if isinstance(provider, BudgetedPolicyProvider) and provider.budget_exhausted:
+                provider.budget.pause(job, worker_id)
+                return True
+            if result.classification not in {"SUCCESS", "NEEDS_REVIEW"} or not result.candidates:
                 self._safe_fail(
                     job.id,
                     worker_id,
@@ -312,6 +338,8 @@ class PolicyStructuringJobRunner:
         except EvidenceRepositoryUnavailable, PolicyCandidateRepositoryUnavailable:
             return True
         except _PolicyStructuringLeaseLost:
+            return True
+        except PolicyRangeConflict:
             return True
         except PolicyStructuringJobNotFound, PolicyStructuringJobStateConflict:
             return True
@@ -336,6 +364,63 @@ class PolicyStructuringJobRunner:
                 map_policy_structuring_error(error),
             )
         return True
+
+    def _run_range(self, job: PolicyStructuringJobRecord, worker_id: str) -> None:
+        assert self.range_repository is not None
+        member_terms = self.evidence_loader.load_member_terms(
+            household_space_id=job.household_space_id,
+            family_member_id=job.family_member_id,
+        )
+        work = self.range_repository.next(job, worker_id, sensitive_terms=member_terms)
+        if work is None:
+            return
+        provider: AiProvider = self.provider
+        if self.request_budget is not None:
+            provider = BudgetedPolicyProvider(
+                provider=provider, budget=self.request_budget, job=job, worker_id=worker_id
+            )
+        leased = _LeasedPolicyProvider(
+            provider,
+            lambda: self.queue.heartbeat(
+                job.id,
+                worker_id,
+                lease_seconds=self.lease_seconds,
+            ),
+        )
+        try:
+            batch, request_id = structure_policy_range(
+                envelope=work.envelope,
+                provider=leased,
+                model=self.structurer_model,
+            )
+        except PolicyBudgetExhausted:
+            assert self.request_budget is not None
+            self.request_budget.pause(job, worker_id)
+            return
+        except ProviderValidationError:
+            self.range_repository.reject(job, worker_id, work)
+            return
+        result = (
+            verify_structured_policy_batch(
+                candidates=batch.candidates,
+                allow_unclassified_enrollment=True,
+                structurer_request_id=request_id,
+                evidence=work.envelope.evidence,
+                provider=leased,
+                verifier_model=self.verifier_model,
+            )
+            if batch.candidates
+            else CandidatePipelineResult(classification="SUCCESS", candidates=())
+        )
+        if isinstance(provider, BudgetedPolicyProvider) and provider.budget_exhausted:
+            provider.budget.pause(job, worker_id)
+            return
+        if result.classification == "VALIDATION_ERROR":
+            result = result.model_copy(update={"classification": "NEEDS_REVIEW"})
+        if result.classification not in {"SUCCESS", "NEEDS_REVIEW"}:
+            self._safe_fail(job.id, worker_id, _POLICY_RESULT_ERRORS[result.classification])
+            return
+        self.range_repository.save(job, worker_id, work, batch, result)
 
     def _safe_fail(
         self,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from uuid import UUID
 
 import pytest
@@ -66,6 +67,65 @@ def test_registered_policy_without_reviewed_set_is_certificate_only() -> None:
     assert registered.missing_document_roles == ("terms",)
     assert registered.documents[0].role == "policy"
     assert registered.documents[0].source_count == 1
+
+
+@pytest.mark.parametrize(
+    "match_state,expected",
+    [("USER_CONFIRMED", "CERTIFICATE_AND_TERMS"), ("SUGGESTED", "CERTIFICATE_ONLY")],
+)
+def test_program_role_validation_requires_a_separate_terms_relationship(
+    match_state: str, expected: str
+) -> None:
+    policy_component = _component(
+        91,
+        "policy",
+        content="f" * 64,
+        document_version_id=POLICY_VERSION_ID,
+        page_start=1,
+        page_end=1,
+    )
+    terms = replace(_component(92, "terms"), review_state="PROGRAM_VERIFIED")
+    document_set = InventorySet(
+        UUID(int=93),
+        POLICY_ID,
+        "Sample Insurer",
+        "Sample Policy",
+        "Sample Policy",
+        1,
+        (
+            InventorySetItem(policy_component, "USER_CONFIRMED"),
+            InventorySetItem(terms, match_state),
+        ),
+    )
+    result = build_member_inventory(MEMBER_ID, policies=(_policy(),), document_sets=(document_set,))
+    assert result.registered_policies[0].completeness == expected
+
+
+def test_client_cannot_claim_program_component_or_pairing_authority() -> None:
+    from familycare_api.insurance_documents.schemas import (
+        ComponentCreateRequest,
+        DocumentSetItemCreateRequest,
+    )
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ComponentCreateRequest.model_validate(
+            {
+                "document_batch_item_id": str(UUID(int=94)),
+                "role": "terms",
+                "page_start": 1,
+                "page_end": 1,
+                "review_state": "PROGRAM_VERIFIED",
+            }
+        )
+    with pytest.raises(ValidationError):
+        DocumentSetItemCreateRequest.model_validate(
+            {
+                "insurance_document_component_id": str(UUID(int=95)),
+                "match_state": "PROGRAM_VERIFIED",
+                "expected_set_version": 1,
+            }
+        )
 
 
 def test_only_confirmed_authoritative_policy_and_terms_complete_a_policy() -> None:
@@ -336,3 +396,44 @@ def test_unregistered_roles_never_become_enrollment_authority(
     assert inventory.summary.certificate_backed_policies == 0
     assert inventory.unregistered_document_sets[0].primary_classification == expected
     assert inventory.unregistered_document_sets[0].enrollment_confirmed is False
+
+
+def test_program_applicability_completes_inventory_without_a_user_set_item() -> None:
+    from familycare_api.insurance_documents.domain import TermsApplicabilityLink
+
+    terms = replace(_component(951, "terms"), review_state="PROGRAM_VERIFIED")
+    link = TermsApplicabilityLink(
+        assessment_id=UUID(int=952),
+        policy_id=POLICY_ID,
+        terms_edition_id=UUID(int=953),
+        policy_component_id=UUID(int=954),
+        component=terms,
+        status="MATCH",
+        reason_codes=("EXPLICIT_EDITION_REFERENCE_MATCH",),
+        matched_by="EXPLICIT_EDITION_REFERENCE",
+    )
+    inventory = build_member_inventory(
+        MEMBER_ID,
+        policies=(_policy(),),
+        document_sets=(),
+        unpaired_components=(terms,),
+        terms_applicability=(link,),
+    )
+    registered = inventory.registered_policies[0]
+    assert registered.completeness == "CERTIFICATE_AND_TERMS"
+    assert registered.terms_applicability == (link,)
+    assert registered.missing_document_roles == ()
+    assert inventory.summary.terms_only_documents == 0
+    assert not inventory.unpaired_components
+    assert all(document.role != "terms" for document in registered.documents)
+
+
+def test_program_policy_source_is_not_presented_as_user_confirmation() -> None:
+    policy = replace(_policy(), source_review_state="AI_VERIFIED")
+    registered = build_member_inventory(
+        MEMBER_ID, policies=(policy,), document_sets=()
+    ).registered_policies[0]
+    source = registered.documents[0].items[0]
+    assert source.id is None
+    assert source.component.review_state == "PROGRAM_VERIFIED"
+    assert source.match_state == "PROGRAM_VERIFIED"

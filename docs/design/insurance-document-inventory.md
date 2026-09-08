@@ -34,8 +34,8 @@
 
 등록 보험의 문서 완전성은 다음 두 값만 사용한다.
 
-- `CERTIFICATE_AND_TERMS`: 증권과 사용자 확인된 적용 약관이 모두 있다.
-- `CERTIFICATE_ONLY`: 증권은 있지만 사용자 확인된 적용 약관이 없다.
+- `CERTIFICATE_AND_TERMS`: 증권과 사용자 확인 또는 원문 근거로 적용이 검증된 약관이 있다.
+- `CERTIFICATE_ONLY`: 증권은 있지만 확인된 적용 약관이 없다.
 
 상품설명서와 청약서는 필수 약관을 대체하지 않는다. `has_product_explanation`, `has_application`과 각각의 component/source 건수로 별도 표시하므로 `증권+약관+상품설명서`, `약관+상품설명서이나 증권 없음` 같은 조합을 정확히 표현할 수 있다.
 
@@ -100,7 +100,16 @@ private batch item은 성공 완료 transaction에서 `processed_document_versio
 
 등록 set의 authoritative policy component는 `PolicyContract.source_document_version_id`와 정책 Evidence page에 포함되어야 한다. `PolicyContract`가 여전히 가입 authority이며 component나 set만으로 계약을 생성하지 않는다. 하나의 공통 약관 component가 같은 가족 구성원의 여러 계약에 적용될 수 있으므로 component와 set은 다대다 연결을 허용한다.
 
-`USER_CONFIRMED` active set item만 문서 완전성 계산에 포함한다. AI나 문자열 유사도가 만든 `SUGGESTED`는 검토 대기 자료로만 표시한다. set, 계약, component와 batch item은 같은 HouseholdSpace와 FamilyMember여야 하며, component의 DocumentVersion은 그 batch item이 처리한 document의 version이어야 한다.
+`USER_CONFIRMED` active set item과 현재 원문 검증 `MATCH` 적용 연결을 문서 완전성 계산에
+포함한다. AI나 문자열 유사도가 만든 `SUGGESTED`는 검토 대기 자료로만 표시한다. set, 계약,
+component와 batch item은 같은 HouseholdSpace와 FamilyMember여야 하며, component의
+DocumentVersion은 그 batch item이 처리한 document의 version이어야 한다.
+
+`registered_policies[].terms_applicability`는 판본/양쪽 component ID, 판정·선택 출처·방법·
+고정 사유만 반환한다. 원문 metadata는 반환하지 않는다. 프로그램 연결은 사용자 set item이나
+확인 actor를 만들지 않으며 화면에서 `문서 근거로 약관 연결`과 실제 사용자 선택을 구분한다.
+기존 증권 fallback도 실제 Evidence의 확인 출처를 사용한다. 읽기 전용 `PROGRAM_VERIFIED`를
+사용자가 요청으로 지정할 수 없고 수동 요청의 검수 상태 계약은 그대로 유지한다.
 
 ## Duplicate and shared-copy handling
 
@@ -201,7 +210,7 @@ summary로 반복하지 않는다.
 2. 약관이나 상품설명서만으로 PolicyContract 또는 Rider를 만들지 않는다.
 3. 상품설명서는 약관을 대체하지 않는다.
 4. 청약서는 증권이나 현재 계약 상태 근거를 대체하지 않는다.
-5. `USER_CONFIRMED` set item만 `CERTIFICATE_AND_TERMS`를 만든다.
+5. 사용자 확인 관계 또는 현재 원문 검증 적용 `MATCH`가 있어야 `CERTIFICATE_AND_TERMS`다.
 6. source filename이나 source-level kind만으로 component role이나 보험별 묶음을 확정하지 않는다.
 7. 하나의 DocumentVersion이 여러 보험·역할 component를 가질 수 있으며 물리 source 수와 component 수를 혼동하지 않는다.
 8. 누락·판독 불가·상충 상태는 오류로 숨기지 않고 보완 필요 자료로 보여 준다.
@@ -228,3 +237,68 @@ summary로 반복하지 않는다.
 - no-store, 메모리 전용 Web cache, app-shell-only service worker
 - source path, archive key, 문서 본문, 정책번호, password의 API/log 부재
 - 키보드와 작은 화면에서 접힌 등록 document set 편집기·미연결 자료 구분
+
+## Source-verified component publication (v0.5)
+
+Worker는 보존 IR에서 역할 제목과 명시적인 보험사·상품·코드·날짜의 원문 위치를
+`document-metadata-v7` 제안으로 저장한다. 이 revision은 IR identity와 독립적이며 기존
+v1~v6 제안은 당시의 검증 규칙으로 읽는다. publication과 제안의 revision 대응도 DB에서 검사한다.
+판본일과 적용 시작/종료일을 구분하고 상충 값·해석 불가 필드를 보존한다. 인접 페이지는
+각 페이지의 역할 근거와 일치하는 상품/판본 식별 근거가 있을 때만 합친다. 증권·청약서·
+계약변경서는 상품 정보가 같다는 이유로 합치지 않는다.
+
+API는 로컬 원문의 노드·페이지·문자 범위·라벨과 표의 인접 셀을 다시 검증한다.
+표지 경로의 역할 분류는 페이지의 첫 제목 영역으로 한정한다. 먼저 나온 본문·제출 목록·모호한
+열이나 표를 지나서 나타난 역할명은 제목 근거가 아니다. 표와 제목의 선후를 증명할 수
+없는 배치는 미분류로 남긴다. 본문에 나타난 필드는 원문 제안에 보존하되 unresolved로
+표시한다. 실제 가입·대상자·판본 적용 검증은 이 역할 분류와 별도로 수행한다.
+v2는 보험 상품 표제 뒤의 정식 제목, 상품 표제와 약관 제목이 함께 있는 줄, 공백으로
+구분한 명시적 필드도 원문 span으로 검증한다. 공백 라벨이 제출 목록·참고 문구를
+metadata로 바꾸지 않으며 임의의 앞 문장을 상품명으로 추정하지 않는다.
+표 안의 단일 셀 제목은 셀 좌표와 원래 native 읽기 순서가 일치하고 세로 영역이 겹치지
+않을 때만 검사한다. 선언된 표 header는 제외하고, 선행 다중 셀 행 전체가 유효한
+라벨–값 쌍이 아니면 뒤의 본문 제목을 표지로 승격하지 않는다. 원래 IR 순서는 변경하지 않는다.
+한쪽 상충 값의 누락, 다른 역할 제목, 잘못된 날짜 의미나 lineage는 게시할 수 없다.
+큰 IR도 페이지별로 읽으며 외부 최소화 문자열의 offset을 원문 offset으로 쓰지 않는다.
+
+v3의 별도 본문 경로는 번호 있는 조항과 계약 당사자·지급 의무·제외·정의 관계를 원문에서
+확인한다. 제목/라벨이 없는 본문도 분류할 수 있으며 원문 단어와 줄의 좌표·순서를 먼저
+검증한다. 열·각주·표의 국소 문제는 다른 명확한 본문 영역을 지우지 않는다. 서로 다른 열의
+주어와 술어는 결합하지 않으며, 여러 독립 영역의 출력 순서를 원문 읽기 순서로 확정하지 않는다.
+
+v4는 명시적인 보험회사형 표제의 원문 span을 같은 증권/약관 역할 영역과 연결해 보험사
+metadata로 보존한다. 표제 영역 유지에 허용한 일반 회사명·무배당/갱신형 수식어가 보험사
+근거가 되지는 않는다. 다른 열이나 본문 뒤 각주를 차용하지 않고 복수 보험사 표제의 충돌은
+보존한다. Worker와 API가 독립 관측하며 v3의 원래 분류와 판본 등록 보류 이력을 유지한다.
+목차의 탐색 문맥은 해당 페이지에서 끝나며 이후 페이지는 본문 근거로 따로 검증한다.
+목차가 앞선 상품설명서/예시 문맥을 지우지는 않는다. 기존 v3의 문맥 검증은 그대로 보존한다.
+
+`range_evidence`는 페이지별 근거 종류, 이전 페이지, 관찰한 조항 번호와 순서 검증 여부,
+`role_spans`를 참조하는 `role_span_indices`를 가진다. 페이지 전체는 검사하되 역할 증명에는
+첫 유효 조항의 제목과 최소한의 연속 원문 문장만 보존해 전체 조항을 metadata에 중복하지 않는다.
+전체 본문은 IR에 그대로 남는다. 순서가 검증된 다음 조항 또는 기존의 일치하는 상품/판본
+metadata가 있어야 인접 페이지를 결합한다. 표지 다음 첫 조항도 검증하며, 페이지 간격·
+다른 문서·조항 번호 재시작을 임의로 흡수하지 않는다.
+
+상품설명·인용·예시 문맥은 페이지를 넘어 유지한다. API는 component 이전의 원문 문맥도
+독립적으로 읽고 generation별 작은 문맥 캐시를 공유한다. 새 정식 약관 경계를 확인하면
+이전 설명 문맥을 종료할 수 있다. 앞 페이지 header를 확인하지 못한 연속표는 현재 본문
+분류 근거로 게시하지 않는다. 역할 분류는 전체 조항 추출·판본 적용·가입·지급 조건의 완료를
+의미하지 않으며, 지원하지 못한 원문 영역과 기존 분석/검토 이력은 보존한다.
+
+`document_metadata_publications`는 API 검증 이력과 생성된 component를 상호 참조한다.
+프로그램 생성 component의 `created_by`는 비어 있고 immutable publication 출처가 있다.
+응답의 `PROGRAM_VERIFIED`는 원문 역할/범위 분류만 확인한다. 수동 생성 요청과
+set-item의 `match_state`는 기존 사용자 검토 enum을 유지한다. 사용자가 프로그램 분류
+component의 연결을 확인하면 기존 원문 분류와 별개의 `USER_CONFIRMED` 관계가 된다.
+`amendment` 역할은 계약변경서로 별도 보존한다.
+
+게시자는 current generation·성공 item·문서 version·가정·구성원·삭제 상태를 확인한다.
+같은 원문 bytes와 페이지 범위의 기존 component는 삭제/제외 이력까지 조회하여 자동
+재생성하지 않는다. 제안은 `APPLIED`, `DEFERRED`, `INVALID`로 기록하고 사용자 결정을
+덮지 않는다. 이 단계는 자동 document set, 보험 가입이나 적용 약관 연결을 만들지 않는다.
+
+별도 `component-terms-v1` 소비자가 이미 게시된 프로그램 terms component도 찾아
+판본을 등록한다. component별 등록/보류 이력과 원문 metadata snapshot을 보존하며,
+기존 사용자 판본과 삭제 이력은 자동 재등록하지 않는다. 판본의 페이지 경계와 현재 사용
+조건은 [약관 연결 설계](clause-linking-search.md#terms-structure)를 따른다.

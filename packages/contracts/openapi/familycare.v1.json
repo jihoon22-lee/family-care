@@ -599,6 +599,63 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "structure_error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "STRUCTURE_PREPARATION_RETRY",
+                  "STRUCTURE_SOURCE_INVALID"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure Error Code"
+          },
+          "structure_planned_chunks": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure Planned Chunks"
+          },
+          "structure_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "FAILED",
+                  "PARTIAL",
+                  "PENDING",
+                  "PREPARED",
+                  "RETRYABLE_FAILED"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure State"
+          },
+          "structure_unprocessed_ranges": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Structure Unprocessed Ranges"
           }
         },
         "required": [
@@ -1374,6 +1431,67 @@
           }
         },
         "title": "CandidateSnapshotResponse",
+        "type": "object"
+      },
+      "CanonicalCoverageIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "authority": {
+            "const": "PROGRAM_VERIFIED_SOURCE_IDENTITY",
+            "title": "Authority",
+            "type": "string"
+          },
+          "field_conflicts": {
+            "default": [],
+            "items": {
+              "enum": [
+                "insured_amount",
+                "currency",
+                "display_name"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "Field Conflicts",
+            "type": "array"
+          },
+          "ledger_version": {
+            "minimum": 1.0,
+            "title": "Ledger Version",
+            "type": "integer"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/CanonicalCoverageRef"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CanonicalCoverageRef"
+            },
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "verification_digest_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Verification Digest Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "source_refs",
+          "authority",
+          "ledger_version",
+          "verification_digest_sha256"
+        ],
+        "title": "CanonicalCoverageIdentity",
         "type": "object"
       },
       "CanonicalCoverageRef": {
@@ -2554,7 +2672,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -3915,6 +4034,16 @@
             "title": "Benefit Kind",
             "type": "string"
           },
+          "canonical_identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalCoverageIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "condition_result": {
             "enum": [
               "MATCH",
@@ -4500,7 +4629,8 @@
               "SUGGESTED",
               "USER_CONFIRMED",
               "CONFLICT",
-              "REJECTED"
+              "REJECTED",
+              "PROGRAM_VERIFIED"
             ],
             "title": "Review State",
             "type": "string"
@@ -4511,7 +4641,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4601,7 +4732,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4789,7 +4921,8 @@
               "SUGGESTED",
               "USER_CONFIRMED",
               "CONFLICT",
-              "REJECTED"
+              "REJECTED",
+              "PROGRAM_VERIFIED"
             ],
             "title": "Review State",
             "type": "string"
@@ -4800,7 +4933,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -4838,14 +4972,22 @@
             "title": "Id"
           },
           "match_state": {
-            "enum": [
-              "SUGGESTED",
-              "USER_CONFIRMED",
-              "CONFLICT",
-              "REJECTED"
+            "anyOf": [
+              {
+                "enum": [
+                  "SUGGESTED",
+                  "USER_CONFIRMED",
+                  "CONFLICT",
+                  "REJECTED"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "PROGRAM_VERIFIED",
+                "type": "string"
+              }
             ],
-            "title": "Match State",
-            "type": "string"
+            "title": "Match State"
           },
           "version": {
             "minimum": 1.0,
@@ -5709,6 +5851,16 @@
             ],
             "title": "Benefit Type",
             "type": "string"
+          },
+          "canonical_identity": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalCoverageIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "component_classification": {
             "enum": [
@@ -7315,6 +7467,7 @@
               {
                 "enum": [
                   "SNAPSHOT_EXACT_EVIDENCE",
+                  "PROGRAM_VERIFIED_SOURCE_IDENTITY",
                   "USER_CONFIRMED_OPERATIONAL_IDENTITY"
                 ],
                 "type": "string"
@@ -9002,7 +9155,8 @@
                 "terms",
                 "product_explanation",
                 "application",
-                "supporting"
+                "supporting",
+                "amendment"
               ],
               "type": "string"
             },
@@ -9036,6 +9190,15 @@
             ],
             "title": "Status",
             "type": "string"
+          },
+          "terms_applicability": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TermsApplicabilityResponse"
+            },
+            "maxItems": 500,
+            "title": "Terms Applicability",
+            "type": "array"
           }
         },
         "required": [
@@ -9066,6 +9229,7 @@
               "INVALID_UNIT",
               "LOW_CONFIDENCE",
               "MISSING_EVIDENCE",
+              "NOT_ENROLLED",
               "STALE_EVIDENCE",
               "TERMS_ONLY_RIDER",
               "UNSUPPORTED_DSL",
@@ -9247,7 +9411,8 @@
           "benefit_type": {
             "enum": [
               "fixed",
-              "indemnity"
+              "indemnity",
+              "unknown"
             ],
             "title": "Benefit Type",
             "type": "string"
@@ -9403,7 +9568,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Role",
             "type": "string"
@@ -9737,6 +9903,82 @@
         "title": "StructuringJobResponse",
         "type": "object"
       },
+      "TermsApplicabilityResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_id": {
+            "format": "uuid",
+            "title": "Assessment Id",
+            "type": "string"
+          },
+          "component": {
+            "$ref": "#/components/schemas/InventoryComponentResponse"
+          },
+          "matched_by": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched By"
+          },
+          "policy_component_id": {
+            "format": "uuid",
+            "title": "Policy Component Id",
+            "type": "string"
+          },
+          "reason_codes": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "selection_state": {
+            "enum": [
+              "AUTOMATIC",
+              "USER_SELECTED",
+              "USER_OWNED",
+              "UNRESOLVED"
+            ],
+            "title": "Selection State",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "MATCH",
+              "NO_MATCH",
+              "UNKNOWN"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assessment_id",
+          "terms_edition_id",
+          "policy_component_id",
+          "component",
+          "status",
+          "selection_state",
+          "matched_by",
+          "reason_codes"
+        ],
+        "title": "TermsApplicabilityResponse",
+        "type": "object"
+      },
       "TermsEditionResponse": {
         "additionalProperties": false,
         "description": "Terms metadata that can be shown without exposing household scope.",
@@ -9775,6 +10017,18 @@
             "title": "Document Version Id",
             "type": "string"
           },
+          "edition_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edition Date"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -9809,6 +10063,42 @@
             "minLength": 1,
             "title": "Product Key",
             "type": "string"
+          },
+          "source_component_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Component Id"
+          },
+          "source_page_end": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Page End"
+          },
+          "source_page_start": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Page Start"
           },
           "version": {
             "minimum": 1.0,
@@ -9861,7 +10151,8 @@
               "terms",
               "product_explanation",
               "application",
-              "supporting"
+              "supporting",
+              "amendment"
             ],
             "title": "Source Kind",
             "type": "string"
@@ -9933,6 +10224,7 @@
               "TERMS_ONLY",
               "PRODUCT_EXPLANATION_ONLY",
               "APPLICATION_ONLY",
+              "AMENDMENT_ONLY",
               "POLICY_UNREVIEWED",
               "SUPPORTING_ONLY"
             ],

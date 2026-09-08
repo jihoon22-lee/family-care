@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from familycare_api.common.coverage_identity import CanonicalCoverageIdentity, CanonicalCoverageRef
+
 Code = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[A-Z][A-Z0-9_]*$")]
 Label = Annotated[str, Field(min_length=1, max_length=800)]
 Money = Annotated[str, Field(pattern=r"^(0|[1-9][0-9]*)(\.[0-9]+)?$", max_length=80)]
@@ -18,12 +20,6 @@ Freshness = Literal["CONFIRMED_AT_EVENT", "DOCUMENT_CONTINUITY", "STATUS_UNRESOL
 
 class GuidanceModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class CanonicalCoverageRef(GuidanceModel):
-    kind: Literal["PRIVATE_KNOWLEDGE_COVERAGE", "OPERATIONAL_RIDER"]
-    contract_id: UUID
-    coverage_id: UUID
 
 
 class GuidanceEvidence(GuidanceModel):
@@ -98,6 +94,7 @@ class GuidanceEstimate(GuidanceModel):
 
 class GuidanceCandidate(GuidanceModel):
     ref: CanonicalCoverageRef
+    canonical_identity: CanonicalCoverageIdentity | None = None
     contract_label: Label
     coverage_label: Label
     benefit_kind: Literal["FIXED", "INDEMNITY", "UNKNOWN"]

@@ -74,3 +74,13 @@ backend browser tests, Windows/mobile devices, and protected data were not exerc
 by this dependency task. Required remote CI, publishing, and merge are handled by
 the integrating task. No release tag, deployment, private data access, or external
 AI call was made here.
+
+## Integration record
+
+PR [#77](https://github.com/jihoon22-lee/family-care/pull/77) passed all seven required
+checks, including three image builds, in
+[run 34090180563](https://github.com/jihoon22-lee/family-care/actions/runs/34090180563)
+on `5e3c4f3fd31dbd73a985b51242ec293278dda5e1`. It merged as
+`44c20172c4f1cc5bd1a90540feff808e930cc4ba`. The integrating agent confirmed the
+backend/Python/DB/contracts/container/workflow source inputs match the already
+verified B01 baseline. Release and deployment remain separate milestone work.

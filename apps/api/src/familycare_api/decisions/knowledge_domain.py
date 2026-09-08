@@ -11,6 +11,7 @@ from typing import Literal
 from uuid import UUID
 
 from familycare_api.clauses.dsl import RuleKind
+from familycare_api.common.coverage_identity import CanonicalCoverageIdentity
 from familycare_api.decisions.domain import TriState
 
 KnowledgeFactProvenance = Literal[
@@ -221,10 +222,18 @@ class KnowledgeCoverageContext:
     certificate_amount_evidence_state: KnowledgeCertificateAmountEvidenceState = "UNAVAILABLE"
     certificate_evidence: tuple[KnowledgeCertificateEvidence, ...] = ()
     claim_history_counted_occurrence: KnowledgeFact | None = None
+    canonical_identity: CanonicalCoverageIdentity | None = None
 
     def __post_init__(self) -> None:
         _nonzero(self.knowledge_contract_id, "knowledge contract")
         _nonzero(self.knowledge_coverage_id, "knowledge coverage")
+        if self.canonical_identity is not None and not any(
+            source.kind == "PRIVATE_KNOWLEDGE_COVERAGE"
+            and source.contract_id == self.knowledge_contract_id
+            and source.coverage_id == self.knowledge_coverage_id
+            for source in self.canonical_identity.source_refs
+        ):
+            raise ValueError("coverage identity differs from its knowledge source")
         if not self.contract_label or len(self.contract_label) > 240:
             raise ValueError("invalid contract label")
         if not self.coverage_label or len(self.coverage_label) > 800:

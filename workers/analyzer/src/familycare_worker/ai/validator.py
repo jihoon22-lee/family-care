@@ -83,13 +83,23 @@ def _validate_units(fields: Sequence[CandidateField], issues: list[IssueCode]) -
             _append_issue(issues, "INVALID_DATE")
 
 
-def _validate_semantics(candidate: StructurerCandidate, issues: list[IssueCode]) -> None:
+def _validate_semantics(
+    candidate: StructurerCandidate, issues: list[IssueCode], *, allow_unclassified_enrollment: bool
+) -> None:
     fields = {field.field_id: field.value for field in candidate.fields}
     for field in candidate.fields:
         invalid = (
             field.field_id in _STRING_FIELDS
             and (not isinstance(field.value, str) or not field.value.strip())
-        ) or (field.field_id == "benefit_type" and field.value not in {"fixed", "indemnity"})
+        ) or (
+            field.field_id == "benefit_type"
+            and field.value
+            not in (
+                {"fixed", "indemnity", "unknown"}
+                if allow_unclassified_enrollment
+                else {"fixed", "indemnity"}
+            )
+        )
         invalid = invalid or (
             field.field_id in {"policy_status", "rider_status"}
             and field.value not in _LEDGER_STATUSES
@@ -100,7 +110,8 @@ def _validate_semantics(candidate: StructurerCandidate, issues: list[IssueCode])
     required = (
         {"insurer", "product_name"}
         if candidate.candidate_kind == "policy_contract"
-        else {"rider_name", "rider_key", "benefit_type"}
+        else {"rider_name", "rider_key"}
+        | (set() if allow_unclassified_enrollment else {"benefit_type"})
         if candidate.candidate_kind == "rider"
         else set()
     )
@@ -113,13 +124,16 @@ def validate_candidate(
     candidate: StructurerCandidate,
     verifier: VerifierDecision,
     evidence: Sequence[EvidenceSlice],
+    allow_unclassified_enrollment: bool = False,
 ) -> tuple[IssueCode, ...]:
     """Return stable issues; an empty tuple is the publication boundary."""
 
     issues: list[IssueCode] = list(verifier.issue_codes)
     if candidate.candidate_kind == "policy_party":
         _append_issue(issues, "UNSUPPORTED_STRUCTURE")
-    _validate_semantics(candidate, issues)
+    _validate_semantics(
+        candidate, issues, allow_unclassified_enrollment=allow_unclassified_enrollment
+    )
     evidence_by_id = {item.evidence_id: item for item in evidence}
     candidate_evidence: set[UUID] = set()
     field_ids = [field.field_id for field in candidate.fields]

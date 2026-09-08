@@ -90,6 +90,17 @@ function ContractAnalysis({
                       ? "정액형"
                       : "보장 유형 확인 필요"}
                 </p>
+                {coverage.canonical_identity ? <p>앱 담보와 연결됨</p> : null}
+                {coverage.canonical_identity?.field_conflicts?.includes(
+                  "insured_amount",
+                ) ? (
+                  <p>앱 원장과 가입금액이 다릅니다.</p>
+                ) : null}
+                {coverage.canonical_identity?.field_conflicts?.includes(
+                  "currency",
+                ) ? (
+                  <p>앱 원장과 통화가 다릅니다.</p>
+                ) : null}
                 {coverage.insured_amount && coverage.currency ? (
                   <p>
                     가입금액{" "}
@@ -408,6 +419,19 @@ export function PrivateInsuranceCatalog({ memberId }: { memberId?: string }) {
                   </span>
                 ) : null}
               </div>
+              {contract.operational_link.authority ===
+              "PROGRAM_VERIFIED_SOURCE_IDENTITY" ? (
+                <div className="reconciliation-link-controls compact">
+                  <p>원본 근거로 자동 연결</p>
+                  <button
+                    disabled={linkPending}
+                    onClick={() => void reopenLinkReview(contract)}
+                    type="button"
+                  >
+                    앱 계약 연결 다시 검토
+                  </button>
+                </div>
+              ) : null}
               {contract.reconciliation_state === "LINK_REVIEW_REQUIRED" &&
               contract.operational_link.decision !== "NO_MATCH" ? (
                 <div className="reconciliation-link-controls">

@@ -305,6 +305,10 @@ def test_create_and_lookup_are_household_member_scoped_and_metadata_only(
         "ocr_state",
         "ocr_pages_processed",
         "ocr_warning_codes",
+        "structure_state",
+        "structure_error_code",
+        "structure_planned_chunks",
+        "structure_unprocessed_ranges",
     }
     assert all(item.ocr_state == "pending" for item in scoped.items)
     assert all(item.ocr_pages_processed == 0 for item in scoped.items)

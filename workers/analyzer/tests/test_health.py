@@ -345,6 +345,32 @@ def test_environment_builds_event_runner_without_document_roots(
     assert recommendation_runners[0].model == "synthetic-assistance-model"
 
 
+def test_environment_prepares_stored_documents_without_private_roots_or_api_key(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    from familycare_worker.document_preparation import DocumentPreparationRunner
+
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    for name in (
+        "FAMILYCARE_DOCUMENT_ROOT",
+        "FAMILYCARE_WORK_ROOT",
+        "FAMILYCARE_IMPORT_ROOT",
+        "FAMILYCARE_ARCHIVE_ROOT",
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+        "FAMILYCARE_SECRET_SOCKET",
+        "OPENAI_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    runner = _runner_from_environment(Event())
+    assert isinstance(runner, FairJobRunner)
+    preparations = [item for item in runner._runners if isinstance(item, DocumentPreparationRunner)]
+    assert len(preparations) == 1
+    from familycare_worker.document_metadata_repository import DocumentMetadataRunner
+
+    metadata = [item for item in runner._runners if isinstance(item, DocumentMetadataRunner)]
+    assert len(metadata) == 1
+
+
 def test_private_work_root_alone_does_not_enable_the_document_runner(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
@@ -404,6 +430,10 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
             item for item in runner.runner._runners if isinstance(item, PolicyStructuringJobRunner)
         ]
         assert len(policy_runners) == 1
+        policy_runner = policy_runners[0]
+        from familycare_worker.policy_range_repository import PolicyRangeRepository
+
+        assert isinstance(policy_runner.range_repository, PolicyRangeRepository)
         provider = policy_runners[0].provider
         assert isinstance(provider, OpenAiResponsesAdapter)
         schemas = provider._schemas
@@ -411,6 +441,12 @@ def test_private_environment_wires_policy_queue_and_strict_schemas(
         assert "policy_candidate_verifier_v1" in schemas
         assert "event_clause_recommendations_v1" in schemas
         assert provider._output_token_limits["medical_event_structurer_v1"] == 2_000  # noqa: SLF001
+        assert provider._output_token_limits["policy_candidate_batch_structurer_v2"] == 8_192  # noqa: SLF001
+        assert provider._output_token_limits["policy_candidate_batch_verifier_v2"] == 4_096  # noqa: SLF001
+        assert provider._output_token_limits["policy_range_structurer_v3"] == 8_192  # noqa: SLF001
+        assert policy_runner.request_budget is not None
+        assert policy_runner.request_budget.per_document == 4
+        assert policy_runner.request_budget.daily == 8
         assert provider._request_timeouts["medical_event_structurer_v1"] == 50.0  # noqa: SLF001
     finally:
         runner.shutdown()

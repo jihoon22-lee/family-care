@@ -327,3 +327,45 @@ Windows descriptor behavior, Windows/mobile clients, OS-level egress enforcement
 automation, public production sandbox and full disaster recovery remain deferred. The authoritative
 runtime boundary is `docs/design/private-data-runtime.md` and authentication remains governed by
 `docs/design/authentication.md`.
+
+## v0.5 local structure page storage
+
+기존 추출 BLOCK에 유한 숫자 네 개지만 폭·높이가 0이거나 역전·음수인 rectangle이 있으면,
+로컬 adapter는 원문과 raw 좌표를 보존하고 파생 `bbox`만 `null`로 둔다.
+`SOURCE_BBOX_UNAVAILABLE`은 위치를 확인할 수 없다는 뜻이며 원문 없음이나 추출 실패가
+아니다. 좌표 기반 줄 결합·물리 위치 연결에는 쓰지 않는다. 문자열·페이지 근거는 기존의
+독립 가입/필드 검증을 통과할 수 있으며 모든 내용을 일괄 수동 검토 상태로 바꾸지 않는다.
+배열 형태·숫자 타입 오류와 table/cell의 잘못된 좌표는 계속 거부한다. 준비 revision은
+`stored-structure-geometry-v3-ch4096-context4096-max16384`이며 이전 실패 이력을 수정하지
+않고 재시도한다. 유효한 기존 원문의 IR identity·형식은 유지한다.
+
+`0036_structure_page_storage`는 큰 파생 IR을 페이지 payload로 보존한다. parser의 64 MiB 출력,
+500페이지·CPU·메모리·timeout과 adapter의 합산 source 한도는 유지한다. 원문 단어와
+줄/좌표/출처를 함께 보존하면 작은 source도 큰 IR로 확장되므로 파생 저장 한도는 별도다.
+
+논리 IR이 8 MiB 이하면 기존 inline JSON 형식을 사용한다. 큰 IR은 작은 generation header와
+part 0의 정확한 header JSON, part 1..N의 페이지 JSON으로 나눈다. 모든 native/OCR 원문,
+노드·셀·문맥·source spans와 원래 배열 위치를 보존한다. `json` 열은 음의 0과 지수 표기 등
+원래 숫자 직렬화도 유지한다. 논리 identity는 기존 canonical IR JSON·NUL·plan JSON의
+SHA-256과 동일하며 streaming 계산으로 전체 IR 문자열/사전 복제를 피한다. 저장 형식 변경은
+재추출 revision·노드 ID·source digest를 바꾸지 않는다.
+
+각 part는 64 MiB, 전체 파생 payload는 512 MiB, 범위 계획은 기존 64 MiB로 제한한다.
+이 값은 직렬화 크기이며 프로세스 RAM 상한이 아니다. 한 페이지나 전체 복잡도가 이 제한을
+넘으면 명시적으로 준비에 실패하고 기존 정상 generation을 유지한다. 모든 parser 허용 입력이
+반드시 구조화 저장에 성공한다는 보장은 아니다. 어떤 한도를 넘더라도 원문을 잘라 성공으로
+기록하지 않는다. 전용 합성 DB에서 100페이지·10만 단어·10만5천 노드의 기존 64 MiB 초과
+사례를 원문 복원과 앞/중간/마지막 페이지 조회까지 검증한다.
+
+generation과 전체 part는 같은 transaction에 저장한다. 지연 constraint가 commit 전에
+part 0..N의 완전성·합산 크기를 확인하고, part의 변경/삭제와 기존 manifest 확장을 거부한다.
+실패한 새 저장은 current 변경도 rollback한다. 페이지 이력이 있으면 downgrade를 거부한다.
+기존 inline generation은 변경하지 않는다.
+
+API/Worker의 `document_structure_projection(generation, household, pages)`는 요청한 페이지의
+모든 노드와 명시된 문맥 노드를 두 저장 형식에서 같은 `{lineage,nodes}`로 반환한다. 다른
+가정은 반환하지 않고, 노드/lineage 크기를 먼저 합산해 64 MiB를 넘으면 aggregate 전에
+보류한다. 페이지 PK와 node-ID GIN으로 문맥을 찾으며 저장 원문 전체를 HTTP 경로로 읽지
+않는다. 전체 원문 복원은 Worker의 보호된 로컬 감사용 `read_structure_payload`에만 제공하고
+복원 뒤 논리 digest를 재검사한다. 이 저장/조회 계약은 provider 전송량이나 가입 권위를
+확대하지 않으며 실제 runtime 적용은 별도 백업·복원·수용 절차를 따른다.

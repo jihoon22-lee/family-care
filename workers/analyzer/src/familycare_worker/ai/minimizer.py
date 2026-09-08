@@ -22,10 +22,12 @@ _POLICY_IDENTIFIER_PATTERN = re.compile(
     r"\s*[:#]?\s*(?P<value>[A-Z0-9][A-Z0-9._/-]{4,})",
     re.IGNORECASE,
 )
+MINIMIZATION_REVISION = "source-window-minimizer-v2"
+
 _IDENTITY_LABEL = (
     r"계약자(?:명)?|피보험자(?:명)?|보험\s*수익자|수익자(?:명)?|성명|이름|"
     r"주소|거주지|소재지|생년월일|주민등록번호|"
-    r"policyholder|insured\s+(?:person|name)|beneficiary(?:\s+name)?|"
+    r"policyholder|insured(?!\s+amount\b)(?:\s+(?:person|name))?|beneficiary(?:\s+name)?|"
     r"full\s+name|customer\s+name|address|date\s+of\s+birth"
 )
 _FOLLOWING_FIELD_LABEL = (
@@ -124,4 +126,74 @@ def minimize_evidence(
     return tuple(minimized)
 
 
-__all__ = ["EvidenceMinimizationError", "minimize_evidence", "minimize_text"]
+class SourceWindowMinimizer:
+    """Resolve source-wide identity spans once, then reuse original range offsets."""
+
+    def __init__(self, source: str, *, sensitive_terms: Sequence[str]) -> None:
+        terms = _bounded_terms(sensitive_terms)
+        if not isinstance(source, str) or len(source) > 1_048_576:
+            raise EvidenceMinimizationError
+        spans: list[tuple[int, int]] = []
+        patterns = (
+            (_EMAIL_PATTERN, None),
+            (_PHONE_PATTERN, None),
+            (_POLICY_IDENTIFIER_PATTERN, "value"),
+            (_LABELLED_IDENTITY_PATTERN, "value"),
+            *((re.compile(re.escape(term), re.IGNORECASE), None) for term in terms),
+        )
+        for pattern, group in patterns:
+            for match in pattern.finditer(source):
+                spans.append(match.span(group if group is not None else 0))
+                if len(spans) > 32768:
+                    raise EvidenceMinimizationError
+        merged: list[tuple[int, int]] = []
+        for left, right in sorted(spans):
+            if merged and left <= merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], right))
+            else:
+                merged.append((left, right))
+        self._source = source
+        self._spans = tuple(merged)
+
+    def window(self, start: int, end: int) -> str:
+        if (
+            type(start) is not int
+            or type(end) is not int
+            or not 0 <= start < end <= len(self._source)
+            or end - start > 8192
+        ):
+            raise EvidenceMinimizationError
+        result: list[str] = []
+        cursor = start
+        for left, right in self._spans:
+            if left >= end:
+                break
+            if right <= start:
+                continue
+            left, right = max(left, start), min(right, end)
+            result.extend((self._source[cursor:left], _REDACTED))
+            cursor = right
+        result.append(self._source[cursor:end])
+        minimized = "".join(result)
+        if not minimized or len(minimized) > 8192:
+            raise EvidenceMinimizationError
+        return minimized
+
+
+def minimize_source_window(
+    source: str,
+    *,
+    start: int,
+    end: int,
+    sensitive_terms: Sequence[str],
+) -> str:
+    """Redact before clipping, preserving original source coordinates."""
+    return SourceWindowMinimizer(source, sensitive_terms=sensitive_terms).window(start, end)
+
+
+__all__ = [
+    "EvidenceMinimizationError",
+    "minimize_evidence",
+    "minimize_text",
+    "minimize_source_window",
+]

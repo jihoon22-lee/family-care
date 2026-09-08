@@ -97,6 +97,11 @@ class TermsEdition:
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    source_component_id: UUID | None = None
+    source_page_start: int | None = None
+    source_page_end: int | None = None
+    edition_date: date | None = None
+    source_period_verified: bool = False
 
     def __post_init__(self) -> None:
         _require_uuid(self.id, field="id")
@@ -112,6 +117,13 @@ class TermsEdition:
         _require_hash(self.content_sha256, field="content_sha256")
         _require_version(self.normalization_version)
         _require_positive_version(self.version)
+        if self.source_component_id is not None:
+            _require_uuid(self.source_component_id, field="source_component_id")
+            if self.source_page_start is None or self.source_page_end is None:
+                raise ValueError("component edition requires source page bounds")
+            _require_page_range(self.source_page_start, self.source_page_end)
+        elif self.source_page_start is not None or self.source_page_end is not None:
+            raise ValueError("source page bounds require a component")
         if (
             self.applicability_start is not None
             and self.applicability_end is not None
@@ -123,6 +135,15 @@ class TermsEdition:
         """Return whether this projection belongs to the server-owned scope."""
 
         return self.household_space_id == scope.household_space_id
+
+    def contains_pages(self, start: int, end: int) -> bool:
+        """Legacy editions retain whole-document scope; new editions are bounded."""
+
+        return self.source_component_id is None or (
+            self.source_page_start is not None
+            and self.source_page_end is not None
+            and self.source_page_start <= start <= end <= self.source_page_end
+        )
 
 
 @dataclass(frozen=True)

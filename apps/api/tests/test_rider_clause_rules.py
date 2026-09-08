@@ -146,6 +146,64 @@ def test_verified_policy_rider_and_applicable_terms_pass() -> None:
     validate_rider_clause_link(HouseholdScope(context.policy_household_space_id), context)
 
 
+def _alias_context() -> RiderClauseLinkValidationContext:
+    context = _context()
+    evidence = replace(
+        context.rider_source_evidence, evidence_id=_id(41), document_version_id=_id(21)
+    )
+    return replace(
+        context,
+        rider_source_evidence=evidence,
+        link=replace(context.link, evidence=(evidence, *context.clause.evidence)),
+    )
+
+
+def test_another_document_requires_explicit_server_verified_alias() -> None:
+    context = _alias_context()
+    assert _reason(context) == "TERMS_ONLY_RIDER"
+    verified = replace(context, rider_source_alias_verified=True)
+    validate_rider_clause_link(HouseholdScope(context.policy_household_space_id), verified)
+
+
+@pytest.mark.parametrize("proof", [False, None, "true", 1])
+def test_only_boolean_true_can_authorize_a_source_alias(proof: object) -> None:
+    context = replace(_alias_context(), rider_source_alias_verified=proof)
+    assert _reason(context) == "TERMS_ONLY_RIDER"
+
+
+@pytest.mark.parametrize(
+    ("change", "reason"),
+    [
+        ({"rider_document_kind": "terms"}, "TERMS_ONLY_RIDER"),
+        ({"evidence_integrity_valid": False}, "LINK_EVIDENCE_INVALID"),
+        ({"rider_policy_contract_id": _id(999)}, "RIDER_POLICY_MISMATCH"),
+        ({"candidate_review_state": "NEEDS_REVIEW"}, "CANDIDATE_NOT_APPROVED"),
+        ({"policy_product_key": "another-policy"}, "TERMS_EDITION_MISMATCH"),
+    ],
+)
+def test_alias_proof_does_not_replace_other_source_checks(
+    change: dict[str, object], reason: str
+) -> None:
+    context = replace(_alias_context(), rider_source_alias_verified=True, **change)
+    assert _reason(context) == reason
+
+
+def test_alias_proof_preserves_exact_link_and_clause_evidence_checks() -> None:
+    context = replace(_alias_context(), rider_source_alias_verified=True)
+    missing_source = replace(context, link=replace(context.link, evidence=context.clause.evidence))
+    assert _reason(missing_source) == "LINK_EVIDENCE_INCOMPLETE"
+    wrong_clause = replace(
+        context.clause,
+        evidence=(replace(context.clause.evidence[0], document_version_id=_id(777)),),
+    )
+    assert _reason(replace(context, clause=wrong_clause)) == "CLAUSE_DOCUMENT_MISMATCH"
+    unreviewed = replace(context.rider_source_evidence, review_state="NEEDS_REVIEW")
+    assert _reason(replace(context, rider_source_evidence=unreviewed)) == "TERMS_ONLY_RIDER"
+    with pytest.raises(RiderClauseLinkInvalid) as captured:
+        validate_rider_clause_link(HouseholdScope(_id(999)), context)
+    assert captured.value.reason_code == "LINK_SCOPE_MISMATCH"
+
+
 @pytest.mark.parametrize(
     ("change", "reason"),
     [

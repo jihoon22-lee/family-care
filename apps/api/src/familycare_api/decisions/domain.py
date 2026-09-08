@@ -14,13 +14,14 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, Protocol
 from uuid import UUID
 
-from familycare_api.clauses.rules import CoverageRuleVersion
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 
 if TYPE_CHECKING:
+    from familycare_api.clauses.terms_change_selection import TermsEventSelection
     from familycare_api.decisions.assistance import AnalysisAssistance
     from familycare_api.decisions.knowledge_domain import KnowledgeDecisionResult
+    from familycare_api.decisions.terms import RulesForEvent
     from familycare_api.guidance.models import LocalGuidanceResponse
 
 TriState = Literal["MATCH", "NO_MATCH", "UNKNOWN"]
@@ -368,6 +369,8 @@ class DecisionRunResult:
     event_fact_schema_version: str = "medical-event-facts.v2"
     assistance: AnalysisAssistance | None = None
     local_guidance: LocalGuidanceResponse | None = None
+    terms_selections: tuple[TermsEventSelection, ...] = ()
+    source_rule_version_ids: tuple[UUID, ...] = ()
 
     def __post_init__(self) -> None:
         if self.status not in {"succeeded", "partial", "failed"}:
@@ -394,8 +397,13 @@ class PolicySnapshotReader(Protocol):
 
 class RuleReader(Protocol):
     def executable_for_rider(
-        self, scope: HouseholdScope, rider_id: UUID
-    ) -> tuple[CoverageRuleVersion, ...]: ...
+        self,
+        scope: HouseholdScope,
+        rider_id: UUID,
+        *,
+        family_member_id: UUID,
+        event_date: date | None,
+    ) -> RulesForEvent: ...
 
 
 class EvidenceRepository(Protocol):

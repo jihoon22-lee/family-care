@@ -2,19 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Literal, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from familycare_api.insurance_documents.domain import (
     Completeness,
+    ComponentReviewState,
     DocumentRole,
     DuplicateState,
     InsuranceDocumentComponentRecord,
     InsuranceDocumentSetItemRecord,
     InsuranceDocumentSetRecord,
     InventoryComponent,
+    InventoryMatchState,
     InventorySetItem,
     MemberInsuranceDocumentInventory,
     PolicyStatus,
@@ -99,7 +101,7 @@ class InventoryComponentResponse(BaseModel):
     role: DocumentRole
     page_start: int = Field(ge=1, le=500)
     page_end: int = Field(ge=1, le=500)
-    review_state: ReviewState
+    review_state: ComponentReviewState
     processing_state: ProcessingState
     duplicate_state: DuplicateState
 
@@ -122,7 +124,7 @@ class InventorySetItemResponse(BaseModel):
 
     id: UUID | None
     version: int = Field(ge=1)
-    match_state: ReviewState
+    match_state: InventoryMatchState
     component: InventoryComponentResponse
 
     @classmethod
@@ -145,6 +147,21 @@ class RoleDocumentSummaryResponse(BaseModel):
     items: tuple[InventorySetItemResponse, ...] = Field(max_length=100)
 
 
+class TermsApplicabilityResponse(BaseModel):
+    model_config = _STRICT
+
+    assessment_id: UUID
+    terms_edition_id: UUID
+    policy_component_id: UUID
+    component: InventoryComponentResponse
+    status: Literal["MATCH", "NO_MATCH", "UNKNOWN"]
+    selection_state: Literal["AUTOMATIC", "USER_SELECTED", "USER_OWNED", "UNRESOLVED"]
+    matched_by: str | None = Field(max_length=64)
+    reason_codes: tuple[Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")], ...] = Field(
+        min_length=1, max_length=32
+    )
+
+
 class RegisteredPolicyInventoryResponse(BaseModel):
     model_config = _STRICT
 
@@ -160,6 +177,7 @@ class RegisteredPolicyInventoryResponse(BaseModel):
     missing_document_roles: tuple[DocumentRole, ...] = Field(max_length=5)
     document_set_id: UUID | None
     document_set_version: int | None
+    terms_applicability: tuple[TermsApplicabilityResponse, ...] = Field(default=(), max_length=500)
 
 
 class UnregisteredDocumentSetResponse(BaseModel):
@@ -251,6 +269,19 @@ class MemberInsuranceDocumentInventoryResponse(BaseModel):
                     missing_document_roles=item.missing_document_roles,
                     document_set_id=item.document_set_id,
                     document_set_version=item.document_set_version,
+                    terms_applicability=tuple(
+                        TermsApplicabilityResponse(
+                            assessment_id=link.assessment_id,
+                            terms_edition_id=link.terms_edition_id,
+                            policy_component_id=link.policy_component_id,
+                            component=InventoryComponentResponse.from_domain(link.component),
+                            status=link.status,
+                            matched_by=link.matched_by,
+                            reason_codes=link.reason_codes,
+                            selection_state=link.selection_state,
+                        )
+                        for link in item.terms_applicability
+                    ),
                 )
                 for item in inventory.registered_policies
             ),
@@ -291,7 +322,7 @@ class InsuranceDocumentComponentResponse(BaseModel):
     role: DocumentRole
     page_start: int = Field(ge=1)
     page_end: int = Field(ge=1)
-    review_state: ReviewState
+    review_state: ComponentReviewState
     version: int = Field(ge=1)
 
     @classmethod

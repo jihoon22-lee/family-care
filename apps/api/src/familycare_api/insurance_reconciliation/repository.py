@@ -13,6 +13,10 @@ from psycopg.rows import dict_row
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.domain import DocumentRole
 from familycare_api.insurance_documents.repository import _processing_state
+from familycare_api.insurance_reconciliation.canonical_repository import (
+    CanonicalLinkError,
+    CanonicalLinkRepository,
+)
 from familycare_api.insurance_reconciliation.domain import (
     DocumentResolutionHistory,
     KnowledgeContractSource,
@@ -167,7 +171,7 @@ class InsuranceReconciliationRepository:
                     """
                     SELECT DISTINCT policy.id, policy.insurer_display,
                            policy.product_display, policy.status,
-                           EXISTS (
+                           (EXISTS (
                              SELECT 1
                              FROM insurance_document_sets AS document_set
                              JOIN insurance_document_set_items AS set_item
@@ -177,13 +181,21 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.superseded_by_component_id IS NULL
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id
                                AND document_set.deleted_at IS NULL
                                AND component.role = 'terms'
-                           ) AS has_terms,
+                           ) OR EXISTS (
+                             SELECT 1 FROM current_policy_terms_applicability applicable
+                             WHERE applicable.policy_contract_id=policy.id
+                               AND applicable.household_space_id=policy.household_space_id
+                               AND applicable.family_member_id=party.family_member_id
+                               AND applicable.status='MATCH'
+                               AND applicable.selection_state IN ('AUTOMATIC','USER_SELECTED')
+                           )) AS has_terms,
                            EXISTS (
                              SELECT 1
                              FROM insurance_document_sets AS document_set
@@ -194,7 +206,8 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.superseded_by_component_id IS NULL
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id
@@ -211,7 +224,8 @@ class InsuranceReconciliationRepository:
                              JOIN insurance_document_components AS component
                                ON component.id = set_item.insurance_document_component_id
                               AND component.deleted_at IS NULL
-                              AND component.review_state = 'USER_CONFIRMED'
+                              AND component.superseded_by_component_id IS NULL
+                              AND component.review_state IN ('USER_CONFIRMED','PROGRAM_VERIFIED')
                              WHERE document_set.household_space_id = policy.household_space_id
                                AND document_set.family_member_id = %s
                                AND document_set.policy_contract_id = policy.id
@@ -278,6 +292,18 @@ class InsuranceReconciliationRepository:
                 ).fetchall()
                 if len(unreadable_rows) > _MAX_UNREADABLE_SOURCES:
                     raise ReconciliationRepositoryTooLarge
+                try:
+                    with connection.transaction():
+                        program_links = CanonicalLinkRepository.read_in_transaction(
+                            connection, scope
+                        )
+                except psycopg.Error, CanonicalLinkError:
+                    program_links = ()
+                program_policies = {
+                    item.knowledge_contract_id: item.policy_contract_id
+                    for item in program_links
+                    if item.family_member_id == member_id
+                }
                 generated = connection.execute(
                     "SELECT clock_timestamp() AS generated_at"
                 ).fetchone()
@@ -285,7 +311,7 @@ class InsuranceReconciliationRepository:
                     raise ReconciliationRepositoryUnavailable
         except ReconciliationRepositoryError:
             raise
-        except psycopg.Error:
+        except psycopg.Error, CanonicalLinkError:
             raise ReconciliationRepositoryUnavailable from None
 
         labels: dict[DocumentRole, str] = {
@@ -304,6 +330,7 @@ class InsuranceReconciliationRepository:
                     certificate_decision=cast(TriState, row["certificate_decision"]),
                     current_status=cast(Any, row["current_status"]),
                     snapshot_policy_contract_id=cast(UUID | None, row["policy_contract_id"]),
+                    program_policy_contract_id=program_policies.get(row["id"]),
                     snapshot_operational_decision=cast(
                         TriState, row["operational_binding_decision"]
                     ),

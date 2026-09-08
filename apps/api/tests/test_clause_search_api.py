@@ -204,6 +204,10 @@ def test_terms_editions_list_is_scoped_and_no_store(
             "content_sha256": "b" * 64,
             "normalization_version": NORMALIZATION_VERSION,
             "version": 1,
+            "source_component_id": None,
+            "source_page_start": None,
+            "source_page_end": None,
+            "edition_date": None,
         }
     ]
     assert catalog.list_scopes == [SCOPE_A]

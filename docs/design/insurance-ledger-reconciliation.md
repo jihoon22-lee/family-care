@@ -174,3 +174,59 @@ Evidence 원장, 후보 검토를 막지 않으며 각 경계가 독립적으로
 - migration upgrade/downgrade, current unique index, digest/idempotency와 supersede history
 - 단일 Web summary, 정확한 ID 기반 link/resolution mutation, 부분 실패, focus/수동 refresh와
   reconciliation·inventory 동시 cache invalidation
+
+## v0.5 source-verified canonical coverage identity
+
+`0034_canonical_links`는 현재 비공개 지식의 담보와 가입 원장의 Rider를 별도 불변 이력으로
+연결한다. exact content manifest가 증권의 bytes·쪽수·종류를 연결하고, 해당 페이지의 원래
+담보명과 native 물리 좌표가 유일한 가입 publication에 대응해야 한다. 패키지의 `line`은
+원래 출처 위치로 보존하며 추출 행 번호로 해석하지 않는다. 저장된 모든 동일 bytes IR의
+미처리 줄·표·raw words까지 검사하고 다른 위치의 동일 이름, OCR·불명확한 이름 근거는
+자동 연결하지 않는다. 관계없는 미해결 텍스트는 자동 연결을 막지 않는다.
+
+현재 가정·구성원·primary insured 관계, 원본 문서/추출/근거, 원장 version, 사용자 연결
+결정과 계약/담보 1:1 관계를 저장과 조회 때 재검사한다. 사용자 `NO_MATCH`·재검토·충돌
+결정은 자동 연결보다 우선한다. 기존 exact snapshot 연결과 원본 값은 수정하지 않는다.
+원장 금액/이름 교정 후 identity를 재검사할 수 있지만 snapshot과의 값 차이는 별도로 남기며
+이 연결이 과거 금액을 최신 확정 금액으로 승격하지 않는다. 계산 소비는 B04의 독립 경계다.
+
+기존 API background consumer가 30초 간격으로 연결 이력을 갱신한다. 현재 유효한 이력만
+통합 계약 조회의 `PROGRAM_VERIFIED_SOURCE_IDENTITY`로 표시하고 Web에서 자동 연결을
+다시 검토할 수 있다. 새 사용자 확인은 기존 mutation 계약의 `expected_current_link_id`를
+사용한다. 가입/유효성·약관 판본·청구 가능성은 별도 상태로 유지한다. source inventory는 현재
+증권 검토의 alias와 물리 페이지만 요청한다. 각 페이지의 전체 native/OCR 노드와 명시된
+문맥 노드를 모든 동일 bytes 재추출본에서 SQL로 투영하고, 그 합계가 64 MiB를 넘으면 해당
+페이지 연결만 보류한다. 다른 약관·페이지·중복된 source snapshot 본문은 Python으로 읽지
+않으며 마지막 페이지 하나만 캐시한다. 이 제한은 직렬화 JSON 제한이며 전체 프로세스나 DB의
+RAM 상한은 아니다. 과거 이력과 원본 IR은 보존한다. 약관 판본/component 연결은 후속 작업이다.
+
+
+상세 담보와 로컬 안내의 optional `canonical_identity`는 공통 ref와 두 출처의 원래 ID,
+원장 version·검증 digest·필드별 차이를 같은 계약으로 전달한다. 원문 snapshot의 표시명과
+금액은 보존한다. 결과 입력에서는 충돌한 가입금액/통화만 사용할 수 없는 값으로 처리하고
+해당 입력에 의존하는 금액은 계산식으로 남긴다. 이름 차이는 독립적인 계산을 막지 않는다.
+로컬 안내의 ref는 확인된 운영 Rider ID를 사용하며 두 출처의 참조도 결과 snapshot에
+보존한다. 기존 v2 운영/지식 평가 기록은 감사와 이전 API 호환성을 위해 유지한다.
+운영 원장만 있는 담보까지 로컬 안내로 통합하는 작업은 B04에서 수행한다.
+
+확인된 공통 Rider로 기존 청구 이력을 조회하되 이력이 없다는 이유로 0회를 만들지 않는다.
+identity 조회 실패는 savepoint 안에서 격리하여 기존 private catalog·통합 계약·로컬 안내를
+숨기지 않는다. 실패한 identity는 현재 공통 연결로 반환하지 않는다. 과거 결과의 원본 JSON은
+새 연결이나 원장 교정 때문에 다시 쓰지 않으며 새 분석은 최신 source 검증을 사용한다.
+
+
+`0035_user_identity_proof`는 최초 publication이 사용자 확인인 경우에도 native 원문에서
+identity를 독립적으로 검증한다. proof의 `publication_authority`와
+`name_source_candidate_version_id`는 원래 확인 주체의 종류와 이름을 가져온 정확한 후보
+버전을 남긴다. 기존 사용자 publication을 프로그램 publication으로 다시 쓰지 않는다.
+원래 이름의 물리 위치를 우선 사용하고 원래 이름에 위치 근거가 없을 때만 교정된 이름을
+같은 source 범위의 native 원문과 대조한다. 원장 표시명 변경은 원래 담보 identity를 바꾸지
+않는다. 현재 편집 중인 후보가 있어도 마지막 publication과 원장 값이 유효하면 연결을
+유지한다. 계약 연결의 명시적 거부·충돌과 삭제된 문서/관계는 계속 별도로 반영한다.
+
+canonical 표시명과 증권 검토의 원래 이름이 달라도 양쪽의 canonical 계약/담보 ID가
+명시적으로 일치하면 증권 검토 이름으로 원문을 검증한다. 전체 원문 중복 검사는 이 원래
+이름을 사용한다. 알려진 source alias를 활용하는 경로이며 이름 유사도만으로 연결하지
+않는다. 원래 publication authority를 속이거나 다른 후보를 이름 근거로 쓰는 DB 입력은
+거부한다. 사용자 publication을 참조하는 새 이력이 있으면 지원하지 않는 이전 guard로의
+schema downgrade도 거부하여 원본을 보존한다.

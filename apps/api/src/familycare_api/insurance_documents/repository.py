@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, cast
+from typing import Any, Literal, cast
 from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
 
+from familycare_api.common.document_locks import lock_document_content
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.domain import (
+    ComponentReviewState,
     DocumentRole,
     DuplicateState,
     InsuranceDocumentComponentRecord,
@@ -24,6 +26,7 @@ from familycare_api.insurance_documents.domain import (
     PolicyStatus,
     ProcessingState,
     ReviewState,
+    TermsApplicabilityLink,
     UnreadableSource,
     build_member_inventory,
 )
@@ -71,7 +74,7 @@ def _component(row: dict[str, Any]) -> InventoryComponent:
         role=cast(DocumentRole, row["role"]),
         page_start=int(row["page_start"]),
         page_end=int(row["page_end"]),
-        review_state=cast(ReviewState, row["component_review_state"]),
+        review_state=cast(ComponentReviewState, row["component_review_state"]),
         processing_state=_processing_state(row),
         duplicate_state=_duplicate_state(row),
     )
@@ -274,6 +277,7 @@ class InsuranceDocumentRepository:
                         policy.source_document_version_id,
                         version.content_sha256 AS source_content_sha256,
                         source.physical_page AS source_evidence_page,
+                        source.review_state AS source_review_state,
                         policy.insurer_display,
                         policy.product_display,
                         policy.status,
@@ -299,6 +303,18 @@ class InsuranceDocumentRepository:
                     """,
                     (scope.household_space_id, member_id),
                 ).fetchall()
+                applicability_rows = connection.execute(
+                    "SELECT a.id AS assessment_id,a.policy_contract_id,a.terms_edition_id,"
+                    "a.policy_component_id,a.status,a.reason_codes,a.matched_by,"
+                    "a.selection_state,component.* "
+                    "FROM current_policy_terms_applicability a "
+                    "JOIN terms_editions edition ON edition.id=a.terms_edition_id "
+                    "JOIN (" + _COMPONENT_SELECT + ") component "
+                    "ON component.component_id=edition.source_component_id "
+                    "WHERE a.household_space_id=%s AND a.family_member_id=%s "
+                    "ORDER BY a.policy_contract_id,a.created_at,a.id",
+                    (scope.household_space_id, member_id),
+                ).fetchall()
                 set_rows = connection.execute(
                     """
                     SELECT id, policy_contract_id, insurer_display, product_display,
@@ -322,6 +338,7 @@ class InsuranceDocumentRepository:
                       AND set_item.deleted_at IS NULL
                       AND document_set.deleted_at IS NULL
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                     ORDER BY set_item.created_at, set_item.id
                     """,
                     (scope.household_space_id, member_id),
@@ -332,6 +349,7 @@ class InsuranceDocumentRepository:
                     WHERE component.household_space_id = %s
                       AND component.family_member_id = %s
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                       AND NOT EXISTS (
                           SELECT 1 FROM insurance_document_set_items AS active_item
                           JOIN insurance_document_sets AS active_set
@@ -396,6 +414,7 @@ class InsuranceDocumentRepository:
                 product_display=cast(str, row["product_display"]),
                 status=cast(PolicyStatus, row["status"]),
                 rider_count=int(row["rider_count"]),
+                source_review_state=row["source_review_state"],
             )
             for row in policy_rows
         )
@@ -425,6 +444,20 @@ class InsuranceDocumentRepository:
             member_id,
             policies=policies,
             document_sets=document_sets,
+            terms_applicability=tuple(
+                TermsApplicabilityLink(
+                    assessment_id=row["assessment_id"],
+                    policy_id=row["policy_contract_id"],
+                    terms_edition_id=row["terms_edition_id"],
+                    policy_component_id=row["policy_component_id"],
+                    component=_component(row),
+                    status=cast(Literal["MATCH", "NO_MATCH", "UNKNOWN"], row["status"]),
+                    reason_codes=tuple(row["reason_codes"]),
+                    matched_by=row["matched_by"],
+                    selection_state=row["selection_state"],
+                )
+                for row in applicability_rows
+            ),
             unpaired_components=(
                 tuple(_component(row) for row in unpaired_rows)
                 + tuple(_synthetic_component(row) for row in synthetic_rows)
@@ -444,6 +477,7 @@ class InsuranceDocumentRepository:
             "product_explanation": "상품설명서 문서",
             "application": "청약서 문서",
             "supporting": "보조자료 문서",
+            "amendment": "계약변경서 문서",
         }
         return UnreadableSource(
             document_batch_item_id=cast(UUID, row["document_batch_item_id"]),
@@ -467,6 +501,20 @@ class InsuranceDocumentRepository:
     ) -> InsuranceDocumentComponentRecord | None:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                identity = connection.execute(
+                    "SELECT version.content_sha256 FROM document_batch_items item "
+                    "JOIN document_batches batch ON batch.id=item.batch_id "
+                    "JOIN document_versions version "
+                    "ON version.id=item.processed_document_version_id "
+                    "AND version.document_id=item.document_id WHERE item.id=%s "
+                    "AND batch.household_space_id=%s AND batch.family_member_id=%s",
+                    (document_batch_item_id, scope.household_space_id, member_id),
+                ).fetchone()
+                if identity is None:
+                    return None
+                lock_document_content(
+                    connection, scope.household_space_id, identity["content_sha256"]
+                )
                 source = connection.execute(
                     """
                     SELECT item.id AS document_batch_item_id, item.state,
@@ -504,6 +552,7 @@ class InsuranceDocumentRepository:
                     WHERE household_space_id = %s AND family_member_id = %s
                       AND document_version_id = %s AND role = %s
                       AND deleted_at IS NULL
+                      AND superseded_by_component_id IS NULL
                       AND NOT (page_end < %s OR page_start > %s)
                     LIMIT 1
                     """,
@@ -633,6 +682,16 @@ class InsuranceDocumentRepository:
     ) -> InsuranceDocumentSetItemRecord | None:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                identity = connection.execute(
+                    "SELECT v.content_sha256 FROM insurance_document_components c "
+                    "JOIN document_versions v ON v.id=c.document_version_id "
+                    "WHERE c.id=%s AND c.household_space_id=%s",
+                    (insurance_document_component_id, scope.household_space_id),
+                ).fetchone()
+                if identity is not None:
+                    lock_document_content(
+                        connection, scope.household_space_id, identity["content_sha256"]
+                    )
                 document_set = connection.execute(
                     """
                     SELECT id, family_member_id, policy_contract_id, version
@@ -666,6 +725,7 @@ class InsuranceDocumentRepository:
                       AND batch.household_space_id = component.household_space_id
                       AND batch.family_member_id = component.family_member_id
                       AND component.deleted_at IS NULL
+                      AND component.superseded_by_component_id IS NULL
                     FOR SHARE OF component, item, batch, version
                     """,
                     (
@@ -676,10 +736,10 @@ class InsuranceDocumentRepository:
                 ).fetchone()
                 if component is None:
                     raise PolicyStateConflict
-                if (
-                    match_state == "USER_CONFIRMED"
-                    and component["review_state"] != "USER_CONFIRMED"
-                ):
+                if match_state == "USER_CONFIRMED" and component["review_state"] not in {
+                    "USER_CONFIRMED",
+                    "PROGRAM_VERIFIED",
+                }:
                     raise PolicyStateConflict
                 self._validate_optional_evidence(
                     connection,

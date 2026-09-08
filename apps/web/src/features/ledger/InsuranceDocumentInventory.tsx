@@ -17,6 +17,7 @@ import {
 import { useInsuranceDocumentInventory } from "./useInsuranceDocumentInventory";
 
 const ROLE_LABELS: Record<InventoryComponentResponse["role"], string> = {
+  amendment: "계약변경서",
   application: "청약서",
   policy: "증권",
   product_explanation: "상품설명서",
@@ -43,6 +44,7 @@ const REVIEW_LABELS: Record<
   REJECTED: "제외",
   SUGGESTED: "연결 제안",
   USER_CONFIRMED: "사용자 확인",
+  PROGRAM_VERIFIED: "원문 분류 확인",
 };
 
 const MATCH_LABELS: Record<InventorySetItemResponse["match_state"], string> = {
@@ -50,6 +52,7 @@ const MATCH_LABELS: Record<InventorySetItemResponse["match_state"], string> = {
   REJECTED: "제외",
   SUGGESTED: "연결 제안",
   USER_CONFIRMED: "사용자 확인",
+  PROGRAM_VERIFIED: "원문 검증",
 };
 
 const DUPLICATE_LABELS: Record<
@@ -66,6 +69,7 @@ const CLASSIFICATION_LABELS: Record<
   string
 > = {
   APPLICATION_ONLY: "청약서만 있는 자료",
+  AMENDMENT_ONLY: "계약변경서만 있는 자료",
   POLICY_UNREVIEWED: "증권 검토 대기 자료",
   PRODUCT_EXPLANATION_ONLY: "상품설명서만 있는 자료",
   SUPPORTING_ONLY: "보조자료만 있는 자료",
@@ -278,6 +282,43 @@ function PolicyInventoryCard({
           />
         ))}
       </ul>
+      {(policy.terms_applicability ?? []).length > 0 ? (
+        <section aria-label="약관 연결 근거">
+          <ul className="insurance-inventory-component-list">
+            {(policy.terms_applicability ?? []).map((link) => (
+              <li key={link.assessment_id}>
+                <strong>
+                  {link.status === "MATCH"
+                    ? link.selection_state === "USER_SELECTED"
+                      ? "사용자 연결·원문 근거 일치"
+                      : "문서 근거로 약관 연결"
+                    : link.status === "NO_MATCH"
+                      ? "약관 적용 근거 불일치"
+                      : "약관 연결 근거 확인 필요"}
+                </strong>
+                <ComponentMeta component={link.component} />
+                <p>
+                  {link.status === "MATCH"
+                    ? link.matched_by === "EXPLICIT_EDITION_REFERENCE"
+                      ? "증권에 명시된 적용 약관·판본 대조"
+                      : "상품코드와 계약일·적용기간 대조"
+                    : link.reason_codes.includes(
+                          "USER_DOCUMENT_DECISION_EXISTS",
+                        )
+                      ? "기존에 선택하거나 제외한 문서 상태를 유지합니다."
+                      : link.reason_codes.includes(
+                            "AMBIGUOUS_MATCHING_EDITIONS",
+                          )
+                        ? "같은 계약에 맞는 판본이 둘 이상입니다."
+                        : link.status === "NO_MATCH"
+                          ? "문서에 적힌 코드 또는 적용기간이 이 계약과 맞지 않습니다."
+                          : "이 계약에 적용되는 약관을 정할 원문 근거가 아직 충분하지 않습니다."}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <div className="insurance-inventory-policy-notes">
         {policy.missing_document_roles.includes("terms") ? (
           <span className="inventory-note inventory-note-caution">
@@ -486,7 +527,9 @@ function UnpairedComponent({
 }) {
   const componentId = component.id;
   const availableTargets = targets ?? [];
-  const attachable = component.review_state === "USER_CONFIRMED";
+  const attachable = ["USER_CONFIRMED", "PROGRAM_VERIFIED"].includes(
+    component.review_state,
+  );
   return (
     <li className="insurance-inventory-unpaired-item">
       <div className="insurance-inventory-role-heading">
@@ -730,7 +773,11 @@ export function InsuranceDocumentInventory({
   }, [targets, unpairedComponentIds]);
 
   async function attach(component: InventoryComponentResponse): Promise<void> {
-    if (!data || !component.id || component.review_state !== "USER_CONFIRMED")
+    if (
+      !data ||
+      !component.id ||
+      !["USER_CONFIRMED", "PROGRAM_VERIFIED"].includes(component.review_state)
+    )
       return;
     const targetKey = selectedTargets[component.id] ?? targets[0]?.key;
     const target = targets.find((candidate) => candidate.key === targetKey);

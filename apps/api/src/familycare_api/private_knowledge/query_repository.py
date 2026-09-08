@@ -12,6 +12,10 @@ from psycopg.rows import dict_row
 from pydantic import ValidationError
 
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.insurance_reconciliation.canonical_repository import (
+    CanonicalLinkError,
+    CanonicalLinkRepository,
+)
 from familycare_api.private_knowledge.reconciliation import KnowledgeEntityCounts
 from familycare_api.private_knowledge.schemas import (
     CurrentKnowledgeResponse,
@@ -80,7 +84,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                         executable_mapping_count=safety[1],
                         unsafe_operational_binding_count=safety[2],
                     )
-        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError:
+        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError, CanonicalLinkError:
             raise PrivateKnowledgeQueryRepositoryError from None
 
     def list_contracts(
@@ -113,7 +117,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                         items=items,
                         next_cursor=items[-1].id if has_more and items else None,
                     )
-        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError:
+        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError, CanonicalLinkError:
             raise PrivateKnowledgeQueryRepositoryError from None
 
     def get_contract(
@@ -143,7 +147,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                     if not contract_rows:
                         return None
                     contract = self._contract_item(contract_rows[0])
-                    coverages = self._coverages(connection, run_id, contract_id)
+                    coverages = self._coverages(connection, scope, run_id, contract_id)
                     assignments = self._assignments(connection, run_id, contract_id)
                     mappings = self._mappings(connection, run_id, contract_id)
                     sections, next_section_cursor = self._sections(
@@ -167,7 +171,7 @@ class PostgresPrivateKnowledgeQueryRepository:
                     return response
         except PrivateKnowledgeQueryTooLargeError:
             raise
-        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError:
+        except psycopg.Error, KeyError, TypeError, ValueError, ValidationError, CanonicalLinkError:
             raise PrivateKnowledgeQueryRepositoryError from None
 
     @staticmethod
@@ -373,6 +377,7 @@ class PostgresPrivateKnowledgeQueryRepository:
     @staticmethod
     def _coverages(
         connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
         run_id: UUID,
         contract_id: UUID,
     ) -> tuple[KnowledgeCoverageResponse, ...]:
@@ -390,7 +395,21 @@ class PostgresPrivateKnowledgeQueryRepository:
         ).fetchall()
         if len(rows) > _MAX_COVERAGES:
             raise PrivateKnowledgeQueryTooLargeError
-        return tuple(KnowledgeCoverageResponse.model_validate(row) for row in rows)
+        try:
+            with connection.transaction():
+                identities = {
+                    link.knowledge_coverage_id: link.identity()
+                    for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+                    if link.knowledge_contract_id == contract_id and link.import_run_id == run_id
+                }
+        except psycopg.Error, CanonicalLinkError:
+            identities = {}
+        return tuple(
+            KnowledgeCoverageResponse.model_validate(
+                {**row, "canonical_identity": identities.get(row["id"])}
+            )
+            for row in rows
+        )
 
     @staticmethod
     def _assignments(

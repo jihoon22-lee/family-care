@@ -35,6 +35,12 @@ export function ClauseSearchFilters({
             {editions.map((edition) => (
               <option key={edition.id} value={edition.id}>
                 {edition.insurer_display} · {edition.product_display}
+                {edition.edition_date
+                  ? ` · 판본일 ${edition.edition_date}`
+                  : ""}
+                {edition.source_page_start && edition.source_page_end
+                  ? ` · ${edition.source_page_start}–${edition.source_page_end}쪽`
+                  : ""}
               </option>
             ))}
           </select>

@@ -119,6 +119,10 @@ class RiderClauseLinkValidationContext:
     candidate_review_state: CandidateReviewState
     evidence_integrity_valid: bool
     common_special_terms_conflict: bool
+    # Supplied only by the repository after validating retained source aliases.
+    rider_source_alias_verified: bool = False
+    program_applicability_verified: bool = False
+    program_applicability_blocked: bool = False
 
 
 def _invalid(reason_code: RiderClauseReasonCode) -> NoReturn:
@@ -145,7 +149,10 @@ def validate_rider_clause_link(
         _invalid("RIDER_POLICY_MISMATCH")
     if (
         context.rider_document_kind != "policy"
-        or context.rider_source_evidence.document_version_id != context.policy_document_version_id
+        or (
+            context.rider_source_evidence.document_version_id != context.policy_document_version_id
+            and context.rider_source_alias_verified is not True
+        )
         or context.rider_source_evidence.review_state not in _APPROVED_REVIEW_STATES
     ):
         _invalid("TERMS_ONLY_RIDER")
@@ -157,21 +164,30 @@ def validate_rider_clause_link(
         _invalid("CANDIDATE_NOT_APPROVED")
 
     edition = context.terms_edition
-    if (
-        link.terms_edition_id != edition.id
-        or context.policy_insurer_key != edition.insurer_key
-        or context.policy_product_key != edition.product_key
-    ):
+    if link.terms_edition_id != edition.id:
         _invalid("TERMS_EDITION_MISMATCH")
-    if context.contract_date is None:
-        _invalid("CONTRACT_DATE_UNKNOWN")
-    if (
-        edition.applicability_start is not None
-        and context.contract_date < edition.applicability_start
-    ) or (
-        edition.applicability_end is not None and context.contract_date > edition.applicability_end
-    ):
+    if context.program_applicability_blocked is True:
         _invalid("TERMS_EDITION_NOT_APPLICABLE")
+    if not (
+        edition.source_component_id is not None and context.program_applicability_verified is True
+    ):
+        if (
+            context.policy_insurer_key != edition.insurer_key
+            or context.policy_product_key != edition.product_key
+        ):
+            _invalid("TERMS_EDITION_MISMATCH")
+        if context.contract_date is None:
+            _invalid("CONTRACT_DATE_UNKNOWN")
+        if edition.source_component_id is not None and edition.source_period_verified is not True:
+            _invalid("TERMS_EDITION_NOT_APPLICABLE")
+        if (
+            edition.applicability_start is not None
+            and context.contract_date < edition.applicability_start
+        ) or (
+            edition.applicability_end is not None
+            and context.contract_date > edition.applicability_end
+        ):
+            _invalid("TERMS_EDITION_NOT_APPLICABLE")
     if context.common_special_terms_conflict:
         _invalid("TERMS_SCOPE_CONFLICT")
 
@@ -180,6 +196,7 @@ def validate_rider_clause_link(
         link.clause_id != clause.id
         or clause.terms_edition_id != edition.id
         or clause.deleted_at is not None
+        or not edition.contains_pages(clause.physical_page_start, clause.physical_page_end)
         or not clause.evidence
         or any(
             evidence.document_version_id != edition.document_version_id
