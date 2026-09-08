@@ -12,10 +12,12 @@ from uuid import UUID
 import psycopg
 from familycare_api.clauses.errors import TermsEditionNotFound
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.terms_knowledge.core import SemanticKnowledgeError, parse_knowledge
 from familycare_api.terms_knowledge.generated_contracts import SemanticWorkEnvelope
 from familycare_api.terms_knowledge.local_candidates import _citation
 from familycare_api.terms_knowledge.projector import _revision
 from familycare_api.terms_knowledge.repository import (
+    SemanticSourceChanged,
     SemanticSourcePlan,
     TermsSemanticRepository,
     _plan,
@@ -26,6 +28,27 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 WORK_REVISION = "terms-semantic-work-v1"
+
+
+def _candidate_payload(job: dict[str, Any]) -> dict[str, Any]:
+    graph = parse_knowledge(job["graph_json"])
+    try:
+        envelope = SemanticWorkEnvelope.model_validate(job["envelope_json"])
+    except ValidationError:
+        raise SemanticKnowledgeError from None
+    regions = {r.region_id for r in envelope.regions}
+    citations = {c.citation_id: c for r in envelope.regions for c in r.citations}
+    if (
+        graph.sources != [envelope.source]
+        or set(graph.processing.expected_region_ids) != set(envelope.expected_region_ids)
+        or not set(graph.processing.consumed_region_ids) <= regions
+        or any(not set(n.region_ids) <= regions for n in graph.nodes)
+        or any(
+            c.citation_id not in citations or c != citations[c.citation_id] for c in graph.citations
+        )
+    ):
+        raise SemanticKnowledgeError
+    return graph.model_dump(mode="json")
 
 
 class SemanticWorkUnsupported(ValueError):
@@ -245,6 +268,71 @@ class TermsSemanticWorkRepository:
                         reason,
                         job_id,
                     ),
+                )
+                completed += 1
+        return completed
+
+    def project_pending(
+        self, *, limit: int = 5, stop_requested: Callable[[], bool] = lambda: False
+    ) -> int:
+        if type(limit) is not int or not 1 <= limit <= 25:
+            raise ValueError("SEMANTIC_WORK_LIMIT_INVALID")
+        completed = 0
+        for _ in range(limit):
+            if stop_requested():
+                break
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                candidate = connection.execute(
+                    "SELECT j.id,j.household_space_id,j.terms_edition_id "
+                    "FROM terms_semantic_jobs j "
+                    "WHERE j.state='succeeded' AND NOT EXISTS(SELECT 1 FROM "
+                    "terms_semantic_job_publications p WHERE p.job_id=j.id "
+                    "AND p.projection_revision=%s) "
+                    "ORDER BY j.created_at,j.id LIMIT 1",
+                    (_revision(),),
+                ).fetchone()
+                if candidate is None:
+                    break
+                scope = HouseholdScope(candidate["household_space_id"])
+                current = connection.execute(
+                    "SELECT lock_terms_semantic_work_source(%s,%s) AS current",
+                    (candidate["terms_edition_id"], scope.household_space_id),
+                ).fetchone()
+                job = connection.execute(
+                    "SELECT j.*,c.graph_json FROM terms_semantic_jobs j "
+                    "JOIN terms_semantic_candidates c ON c.id=j.candidate_id "
+                    "WHERE j.id=%s AND j.household_space_id=%s AND j.state='succeeded' "
+                    "AND NOT EXISTS(SELECT 1 FROM terms_semantic_job_publications p "
+                    "WHERE p.job_id=j.id AND p.projection_revision=%s) FOR UPDATE OF j SKIP LOCKED",
+                    (candidate["id"], scope.household_space_id, _revision()),
+                ).fetchone()
+                if job is None:
+                    continue
+                publication_id = None
+                outcome = "PUBLISHED"
+                try:
+                    if (
+                        not current
+                        or not current["current"]
+                        or _privacy_digest(connection, scope) != job["privacy_digest"]
+                    ):
+                        raise SemanticSourceChanged
+                    publication = self.repository._publish_in_transaction(
+                        connection,
+                        scope,
+                        job["terms_edition_id"],
+                        _candidate_payload(job),
+                        expected_input_digest=job["input_digest"],
+                    )
+                    publication_id = publication.publication_id
+                except TermsEditionNotFound, SemanticSourceChanged:
+                    outcome = "STALE"
+                except SemanticKnowledgeError:
+                    outcome = "REJECTED"
+                connection.execute(
+                    "INSERT INTO terms_semantic_job_publications(job_id,projection_revision,"
+                    "outcome,publication_id) VALUES(%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                    (job["id"], _revision(), outcome, publication_id),
                 )
                 completed += 1
         return completed

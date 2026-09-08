@@ -179,89 +179,109 @@ class TermsSemanticRepository:
         graph = parse_knowledge(payload)
         canonical = graph.model_dump(mode="json")
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
-            connection.execute(
-                "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (str(edition_id),)
+            return self._publish_in_transaction(
+                connection,
+                scope,
+                edition_id,
+                canonical,
+                expected_input_digest=expected_input_digest,
             )
-            _lock_source(connection, scope, edition_id)
-            plan = _plan(connection, scope, edition_id)
-            if plan.input_digest != expected_input_digest:
-                raise SemanticSourceChanged
-            verified = verify_and_compile(canonical, sources={"terms": plan.snapshot})
+
+    def _publish_in_transaction(
+        self,
+        connection: psycopg.Connection[dict[str, Any]],
+        scope: HouseholdScope,
+        edition_id: UUID,
+        canonical: dict[str, Any],
+        *,
+        expected_input_digest: str,
+    ) -> SemanticPublication:
+        """Publish a prevalidated canonical candidate in the caller's locked transaction."""
+        connection.execute(
+            "SELECT id FROM household_spaces WHERE id=%s FOR KEY SHARE",
+            (scope.household_space_id,),
+        )
+        connection.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended(%s,0))", (str(edition_id),)
+        )
+        _lock_source(connection, scope, edition_id)
+        plan = _plan(connection, scope, edition_id)
+        if plan.input_digest != expected_input_digest:
+            raise SemanticSourceChanged
+        verified = verify_and_compile(canonical, sources={"terms": plan.snapshot})
+        candidate = connection.execute(
+            "INSERT INTO terms_semantic_candidates(household_space_id,terms_edition_id,"
+            "input_context,input_digest,graph_json,graph_sha256) "
+            "VALUES(%s,%s,%s,%s,%s,encode(sha256(convert_to(%s::jsonb::text,'UTF8')),'hex')) "
+            "ON CONFLICT(terms_edition_id,input_digest,graph_sha256) DO NOTHING RETURNING id",
+            (
+                scope.household_space_id,
+                edition_id,
+                Jsonb(plan.input_context),
+                plan.input_digest,
+                Jsonb(canonical),
+                Jsonb(canonical),
+            ),
+        ).fetchone()
+        if candidate is None:
             candidate = connection.execute(
-                "INSERT INTO terms_semantic_candidates(household_space_id,terms_edition_id,"
-                "input_context,input_digest,graph_json,graph_sha256) "
-                "VALUES(%s,%s,%s,%s,%s,encode(sha256(convert_to(%s::jsonb::text,'UTF8')),'hex')) "
-                "ON CONFLICT(terms_edition_id,input_digest,graph_sha256) DO NOTHING RETURNING id",
-                (
-                    scope.household_space_id,
-                    edition_id,
-                    Jsonb(plan.input_context),
-                    plan.input_digest,
-                    Jsonb(canonical),
-                    Jsonb(canonical),
-                ),
+                "SELECT id FROM terms_semantic_candidates WHERE terms_edition_id=%s "
+                "AND household_space_id=%s AND input_digest=%s "
+                "AND graph_sha256=encode(sha256(convert_to(%s::jsonb::text,'UTF8')),'hex')",
+                (edition_id, scope.household_space_id, plan.input_digest, Jsonb(canonical)),
             ).fetchone()
-            if candidate is None:
-                candidate = connection.execute(
-                    "SELECT id FROM terms_semantic_candidates WHERE terms_edition_id=%s "
-                    "AND household_space_id=%s AND input_digest=%s "
-                    "AND graph_sha256=encode(sha256(convert_to(%s::jsonb::text,'UTF8')),'hex')",
-                    (edition_id, scope.household_space_id, plan.input_digest, Jsonb(canonical)),
-                ).fetchone()
-            assert candidate is not None
-            result = verified.compilation
-            outcome = _outcome(result)
+        assert candidate is not None
+        result = verified.compilation
+        outcome = _outcome(result)
+        publication = connection.execute(
+            "INSERT INTO terms_semantic_publications(candidate_id,household_space_id,"
+            "terms_edition_id,"
+            "verifier_revision,compiler_revision,proof_sha256,outcome,"
+            "processing_complete,result_json) "
+            "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+            "ON CONFLICT(candidate_id,verifier_revision,compiler_revision,proof_sha256) "
+            "DO NOTHING RETURNING id",
+            (
+                candidate["id"],
+                scope.household_space_id,
+                edition_id,
+                VERIFIER_REVISION,
+                COMPILER_REVISION,
+                verified.proof_sha256,
+                outcome,
+                result.processing_complete,
+                Jsonb(asdict(result)),
+            ),
+        ).fetchone()
+        if publication is None:
             publication = connection.execute(
-                "INSERT INTO terms_semantic_publications(candidate_id,household_space_id,"
-                "terms_edition_id,"
-                "verifier_revision,compiler_revision,proof_sha256,outcome,"
-                "processing_complete,result_json) "
-                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) "
-                "ON CONFLICT(candidate_id,verifier_revision,compiler_revision,proof_sha256) "
-                "DO NOTHING RETURNING id",
-                (
-                    candidate["id"],
-                    scope.household_space_id,
-                    edition_id,
-                    VERIFIER_REVISION,
-                    COMPILER_REVISION,
-                    verified.proof_sha256,
-                    outcome,
-                    result.processing_complete,
-                    Jsonb(asdict(result)),
-                ),
+                "SELECT id,result_json,proof_sha256 FROM terms_semantic_publications "
+                "WHERE candidate_id=%s AND verifier_revision=%s AND compiler_revision=%s "
+                "AND proof_sha256=%s",
+                (candidate["id"], VERIFIER_REVISION, COMPILER_REVISION, verified.proof_sha256),
             ).fetchone()
-            if publication is None:
-                publication = connection.execute(
-                    "SELECT id,result_json,proof_sha256 FROM terms_semantic_publications "
-                    "WHERE candidate_id=%s AND verifier_revision=%s AND compiler_revision=%s "
-                    "AND proof_sha256=%s",
-                    (candidate["id"], VERIFIER_REVISION, COMPILER_REVISION, verified.proof_sha256),
-                ).fetchone()
-                assert publication is not None
-                if (
-                    publication["result_json"] != json.loads(json.dumps(asdict(result)))
-                    or publication["proof_sha256"] != verified.proof_sha256
-                ):
-                    raise SemanticSourceChanged
-            else:
-                for root in result.roots:
-                    connection.execute(
-                        "INSERT INTO terms_semantic_root_publications(publication_id,root_node_id,"
-                        "semantic_sha256,manifest_sha256,executable,root_json) "
-                        "VALUES(%s,%s,%s,%s,%s,%s)",
-                        (
-                            publication["id"],
-                            root.root_node_id,
-                            root.semantic_sha256,
-                            root.manifest_sha256,
-                            root.executable,
-                            Jsonb(asdict(root)),
-                        ),
-                    )
-            return SemanticPublication(
-                publication["id"], candidate["id"], edition_id, outcome, result
-            )
+            assert publication is not None
+            if (
+                publication["result_json"] != json.loads(json.dumps(asdict(result)))
+                or publication["proof_sha256"] != verified.proof_sha256
+            ):
+                raise SemanticSourceChanged
+        else:
+            for root in result.roots:
+                connection.execute(
+                    "INSERT INTO terms_semantic_root_publications(publication_id,root_node_id,"
+                    "semantic_sha256,manifest_sha256,executable,root_json) "
+                    "VALUES(%s,%s,%s,%s,%s,%s)",
+                    (
+                        publication["id"],
+                        root.root_node_id,
+                        root.semantic_sha256,
+                        root.manifest_sha256,
+                        root.executable,
+                        Jsonb(asdict(root)),
+                    ),
+                )
+        return SemanticPublication(publication["id"], candidate["id"], edition_id, outcome, result)
 
     def current(self, scope: HouseholdScope, edition_id: UUID) -> tuple[SemanticPublication, ...]:
         """Return replayed attempts, newest first; never trust stored executable flags."""

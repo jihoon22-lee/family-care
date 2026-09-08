@@ -127,6 +127,17 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   **3개 통과**(3.11초)를 얻었다. 실제 요청 전 짧은 DB transaction 안에서 같은 privacy 집합을
   확인하도록 보완했으며 네트워크 호출 중 DB 잠금을 유지하는 방식은 사용하지 않는다.
 
+- API inbox는 완료 후보의 원래 envelope·source·privacy를 재검증한 뒤 같은 transaction에서
+  원문 의미 검증과 compilation을 수행한다. 새 verifier revision은 기존 후보를 재사용하며,
+  범위 밖 인용은 REJECTED, 오래된 source/privacy는 STALE로 불변 기록한다.
+  직접 publication도 가정→판본 순서로 잠가 inbox와의 교착을 방지한다.
+- 2026-09-08 23:22 KST, `6114062` + repository/work_repository/전용 테스트에서
+  `TMPDIR=/tmp uv run pytest apps/api/tests/test_terms_semantic_work.py
+  apps/api/tests/test_terms_knowledge_repository.py -m integration -q`는 전용 합성 DB와
+  destructive-test guard 설정으로 **28 passed** (39.61초). 동시 inbox/direct publication,
+  원문 변경·privacy 변경·변조 인용·새 의미 revision의 기존 후보 재사용을 포함한다.
+  관련 Ruff와 두 repository의 mypy도 통과했다. provider 예약은 0건이다.
+
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.
 B02의 보호된 수용과 전체 기존 자료 cutover는 #62/#63/#69의 열린 범위로 유지한다.
