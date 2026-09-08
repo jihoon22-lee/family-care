@@ -353,3 +353,24 @@ apps/api/tests/test_claim_workflow_integration.py apps/api/tests/test_guidance_a
 -m integration -q --tb=short`는 **26 passed / 20 deselected**(49.47초)였다. 전용 합성 DB와
 destructive guard를 사용했다. source별 경우와 새 소계 필드를 포함한 원문→300/400·이전 300,
 private/operational 청구·canonical 이력·동시 생성·저장 롤백·금액 출처를 재검증했다.
+
+04:38~04:42 KST 전체 필수 검사, source `52298b5`와 아래 명시한 후속 변경:
+
+- `corepack pnpm web:check`: format/lint/typecheck, **210 tests / 25 files passed**(41.15초),
+  Vite/PWA build 통과. 시점 이후 Web 동작 변경은 없다.
+- `ruff format --check .`: 기존 B04 원문 범위 검사 한 곳의 줄바꿈 실패를 formatter로 고친 뒤
+  **782 files passed**. `ruff check .`도 통과했다. 새 청구 계약 테스트/해당 파일 lint도 통과했다.
+- `python -m mypy apps/api/src workers/analyzer/src scripts`: **318 source files passed**.
+- `python -m pytest apps/api/tests workers/analyzer/tests scripts/tests -q --tb=short`: 최초
+  **1 failed / 3396 passed**. private 청구를 추가하기 전의 `rider_id` non-null 구조 assertion이
+  새 계약과 충돌했다. 필드를 nullable로 인정하되 기존 operational/모든 private 지급 outcome의
+  완전한 참조 쌍을 허용하고 불완전·혼합 참조를 거부하는 실제 schema 검증을 추가했다.
+  해당 계약 **7 passed** 후 전체 재실행은 **3398 passed / 627 deselected / 3 subtests passed**
+  (27.59초)였다. integration 627개는 이 명령에서 실행되지 않았다.
+- `python scripts/check_contracts.py`, `python scripts/check_containers.py`,
+  `python scripts/check_workflows.py`: 모두 통과. 컨테이너 결과는 3 image/4 service 정의 검사이며
+  실제 image build 결과는 별도 CI에서 확인한다.
+
+Python은 B04 checkout의 API/Worker/루트 PYTHONPATH와 공유된 잠금 버전 가상환경,
+`TMPDIR=/tmp`를 사용했다. Web·Python·다른 에이전트의 무거운 검사는 직렬이었다.
+전체 PostgreSQL·브라우저·API 시간/작업 공존·PR CI는 남은 검증이다.

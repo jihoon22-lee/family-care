@@ -88,10 +88,7 @@ def _source_addresses(spans: tuple[ClauseSourceSpan, ...]) -> list[dict[str, Any
             or span.source_layer not in ("native", "ocr")
             or not isinstance(span.bbox, tuple)
             or len(span.bbox) != 4
-            or any(
-                type(v) not in (int, float) or not 0 <= v <= 100000
-                for v in span.bbox
-            )
+            or any(type(v) not in (int, float) or not 0 <= v <= 100000 for v in span.bbox)
             or span.bbox[0] >= span.bbox[2]
             or span.bbox[1] >= span.bbox[3]
         ):
