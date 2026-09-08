@@ -802,3 +802,37 @@ revision에 바인딩한 뒤 관련 **26개**, 전체 **432 passed / 2,018 desel
 없으므로 기존 Chromium mock 17개 결과는 이전 검증으로 구분하며 반복하지 않았다.
 별도 빈 합성 DB의 `head → 0039 → head` migration 왕복도 통과했다. 실제 자료 수용과
 운영 전환은 위의 읽기 전용 관찰만으로 완료한 것으로 처리하지 않는다.
+
+## Issuer captions and retained validation revisions
+
+`document-metadata-v4`와 `0044_metadata_insurer_captions`는 명시 보험사형 표제를 같은
+증권/약관의 원문 역할 영역에 연결한다. 기존 독립 상품 표제 경로를 유지하며 일반 회사명,
+무배당/갱신형 수식어, 계약자 표현을 보험사로 바꾸지 않는다. 명시 필드 또는 다른 보험사
+표제와 충돌하면 모든 값과 충돌을 보존한다. 이전 revision은 원래 의미로 검증하고, insurer
+정보 부족으로 남긴 판본 등록 보류 이력은 새 성공 이력으로 덮지 않는다.
+
+최초 합성 **10개**가 insurer 누락으로 실패한 뒤 원문 span 보존과 독립 API 검증을 추가했다.
+새 보험사형 prelude와 neutral schema revision 부재도 RED 후 반영했다. 독립 정적 리뷰에서
+찾은 먼저 추출된 footer, 큰 간격과 다른 표 셀의 전체 표 좌표 차용을 **3개 RED**로 재현했다.
+추출순서와 세로 방향, 실제 단일 셀 위치, 기존 본문 경로와 같은 제한된 근접 흐름을 확인한다.
+늦게 추출된 중간 비본문 장벽도 RED 후 수정했고 caption 관련 **26개**가 통과했다.
+
+관련 pure **124개**와 PostgreSQL **18개**는 공간 장벽 최종 변경 전 통과했다. 첫 PG fixture는
+insurer가 없으면 판본 자체가 아직 없다는 기존 계약을 잘못 가정해 실패했다. fixture를
+보류 publication 기준으로 수정했고, 현재 producer를 과거 v3로 조회한 expectation도 바로잡았다.
+이 결과를 최종 전체 검사나 실제 자료 적용 완료로 확대하지 않는다. 외부 provider와 운영
+schema/data 쓰기는 실행하지 않았다.
+
+최초 보관 추출 집계에서 새 insurer 인식은 늘지 않았고 본문 분류도 이전 중간 소스 관찰보다
+줄었다. 추가 읽기 전용 원인 집계에서는 본문 자체가 인식돼도 앞선 reference 문맥 때문에
+component로 분류되지 않는 경우를 확인했다. 목차 다음 정상 본문이 차단되는 **3개 RED**를
+재현하고 v4에서 탐색 문맥과 지속되는 설명/예시 문맥을 분리했다. 목차가 이전 설명 문맥을
+지우지 않는 회귀와 v3 원래 의미도 보존한다. 관련 **155개**, 기본 Python 전체 **2,332 passed /
+434 deselected / 3 subtests** (23.65초), mypy **263 sources**와 생성 계약을 통과했다.
+공개 진행 기록의 초기 보호된 관찰도 중간 소스 결과임을 명확히 해 최종 판독 수용과 구분했다.
+
+`634a37a` 위의 최종 v4/0044 변경으로 metadata 관련 PostgreSQL **52 passed / 101 deselected**
+(34.94초), 빈 별도 합성 DB의 `head → 0039 → head`, Ruff format **647 files**/lint,
+문서 **50개**·안전 **841 paths**·diff를 통과했다. 위 기본 pytest·mypy·생성 계약도 같은 코드
+입력의 증거다. Web/HTTP 입력은 바뀌지 않아 `634a37a`의 Web 172개/build와 전체 CI 7/7 결과를
+이전 증거로 유지했다. B02 PR 완료 전에는 전체 필수 검사와 통합 수용을 다시 확인한다.

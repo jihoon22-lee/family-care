@@ -138,6 +138,7 @@ class _Observed:
     roles: dict[str, set[str]] = field(default_factory=dict)
     facts: dict[tuple[str, str], set[str]] = field(default_factory=dict)
     unresolved: set[str] = field(default_factory=set)
+    insurer_captions: list[str] = field(default_factory=list)
 
     def add(self, name: str, raw: str, span: str) -> None:
         value = _value(name, raw)
@@ -252,7 +253,9 @@ def _metadata_row_context(node: dict[str, Any]) -> bool:
     return True
 
 
-def _observe(nodes: list[dict[str, Any]], *, legacy: bool = False) -> _Observed:
+def _observe(
+    nodes: list[dict[str, Any]], *, legacy: bool = False, issuer_captions: bool = False
+) -> _Observed:
     observed = _Observed()
     patterns = _LEGACY_PATTERNS if legacy else _PATTERNS
     nodes, positioned = (nodes, False) if legacy else _source_layout(nodes)
@@ -321,7 +324,9 @@ def _observe(nodes: list[dict[str, Any]], *, legacy: bool = False) -> _Observed:
                 )
             ):
                 labelled = False
-            prelude = not legacy and _cover_caption(trimmed)
+            prelude = not legacy and (
+                _cover_caption(trimmed) or (issuer_captions and _insurer_caption(trimmed))
+            )
             if raw.strip() and not known_title and not labelled and not prelude:
                 title_area_open = False
                 metadata_area_open = False
@@ -365,6 +370,22 @@ def _observe(nodes: list[dict[str, Any]], *, legacy: bool = False) -> _Observed:
                         offset + len(raw),
                     ),
                 )
+            if (
+                issuer_captions
+                and metadata_area_open
+                and not table_barrier
+                and not labelled
+                and _insurer_caption(trimmed)
+            ):
+                observed.insurer_captions.append(
+                    _span(
+                        node,
+                        offset + trim_start,
+                        offset + trim_start + len(trimmed),
+                        offset,
+                        offset + len(raw),
+                    )
+                )
             for name, pattern in patterns.items():
                 match = pattern.fullmatch(raw)
                 if match:
@@ -383,6 +404,104 @@ def _observe(nodes: list[dict[str, Any]], *, legacy: bool = False) -> _Observed:
                     )
             offset += len(line)
     return observed
+
+
+def _insurer_caption(text: str) -> bool:
+    if not 3 < len(text) <= 160 or _REFERENCE_HEADING.search(text):
+        return False
+    if re.search(
+        r"[:：.!?。]|계약자|피보험자|수익자|가입자|대리점|설계사|"
+        r"\b(?:policyholder|insured|beneficiary|agent|broker)\b",
+        text,
+        re.IGNORECASE,
+    ):
+        return False
+    return bool(
+        re.fullmatch(
+            r"(?:\S+(?:생명보험|손해보험|화재해상보험)|"
+            r"[\w ]+\s(?:Assurance|Life Insurance|Insurance Company))",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _bind_insurer_captions(observed: _Observed, nodes: list[dict[str, Any]]) -> None:
+    if set(observed.roles) not in ({"policy"}, {"terms"}):
+        return
+    by_id = {node["node_id"]: node for node in nodes}
+    roles = [json.loads(span) for span in next(iter(observed.roles.values()))]
+    for serialized in observed.insurer_captions:
+        span = json.loads(serialized)
+        for role in roles:
+            same_region = span["node_id"] == role["node_id"]
+            if not same_region:
+                same_region = _caption_region_adjacent(
+                    by_id[span["node_id"]], by_id[role["node_id"]], nodes
+                )
+            if same_region:
+                observed.add("insurer", span["text"], serialized)
+                break
+
+
+def _caption_region_adjacent(
+    left_node: dict[str, Any], right_node: dict[str, Any], nodes: list[dict[str, Any]]
+) -> bool:
+    boxes = []
+    for node in (left_node, right_node):
+        box = node.get("bbox")
+        if node["kind"] == "TABLE_ROW":
+            cells = node.get("cells", [])
+            if len(cells) != 1 or cells[0]["text"] != node["text"]:
+                return False
+            box = cells[0].get("bbox")
+        if box is None or box[2] <= box[0] or box[3] <= box[1]:
+            return False
+        boxes.append(box)
+    left, right = boxes
+    if left[1] > right[1]:
+        left, right = right, left
+        left_node, right_node = right_node, left_node
+    overlap = min(left[2], right[2]) - max(left[0], right[0])
+    return (
+        left_node["reading_order"] < right_node["reading_order"]
+        and overlap >= 0.5 * min(left[2] - left[0], right[2] - right[0])
+        and 0 <= right[1] - left[3] <= min(48, 3 * min(left[3] - left[1], right[3] - right[1]))
+        and not _caption_interrupted(left_node, right_node, left, right, nodes)
+    )
+
+
+def _caption_interrupted(
+    first: dict[str, Any], last: dict[str, Any], left: Any, right: Any, nodes: list[dict[str, Any]]
+) -> bool:
+    represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
+    for node in nodes:
+        if node["node_id"] in represented or node["node_id"] in {first["node_id"], last["node_id"]}:
+            continue
+        box = node.get("bbox")
+        if node["kind"] == "TABLE_ROW" and len(node.get("cells", [])) == 1:
+            box = node["cells"][0].get("bbox")
+        if box is None or not (
+            box[1] < right[1]
+            and box[3] > left[3]
+            and box[0] < min(left[2], right[2])
+            and box[2] > max(left[0], right[0])
+        ):
+            continue
+        if not node.get("schedulable", True) or any(
+            "UNRESOLVED" in code for code in node.get("issue_codes", [])
+        ):
+            return True
+        for line in node["text"].splitlines():
+            text = line.strip()
+            if text and not (
+                _cover_caption(text)
+                or _insurer_caption(text)
+                or _cover_role(text)
+                or any(pattern.fullmatch(line) for pattern in _PATTERNS.values())
+            ):
+                return True
+    return False
 
 
 def _conflicts(facts: dict[tuple[str, str], set[str]]) -> set[str]:
@@ -407,11 +526,18 @@ class ValidatedComponent:
 class MetadataSourceContext:
     """Small server-owned context cache shared across a generation's components."""
 
-    def __init__(self, lineage: dict[str, Any], load_page: Callable[[int], dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        lineage: dict[str, Any],
+        load_page: Callable[[int], dict[str, Any]],
+        *,
+        revision: str = "document-metadata-v3",
+    ) -> None:
         self.lineage = dict(lineage)
         self.load_page = load_page
         self.states = {0: False}
         self.last_page = 0
+        self.revision = revision
 
     def before(self, number: int) -> bool:
         for page in range(self.last_page + 1, number):
@@ -419,7 +545,11 @@ class MetadataSourceContext:
             if source["lineage"] != self.lineage:
                 raise ValueError("metadata context lineage mismatch")
             nodes = [node for node in source["nodes"] if node["page_number"] == page]
-            self.remember(page, nodes, set(_observe(nodes).roles))
+            self.remember(
+                page,
+                nodes,
+                set(_observe(nodes, issuer_captions=self.revision == "document-metadata-v4").roles),
+            )
         return self.states[number - 1]
 
     def remember(self, number: int, nodes: list[dict[str, Any]], formal_roles: set[str]) -> None:
@@ -430,7 +560,9 @@ class MetadataSourceContext:
             restricted = False
         elif formal_roles:
             restricted = True
-        self.states[number] = restricted or reference_context_present(nodes)
+        self.states[number] = restricted or reference_context_present(
+            nodes, persistent_only=self.revision == "document-metadata-v4"
+        )
         self.last_page = number
 
 
@@ -439,7 +571,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v3",
+    revision: str = "document-metadata-v4",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -460,10 +592,15 @@ def _validate(
     revision: str,
     source_context: MetadataSourceContext | None,
 ) -> ValidatedComponent | None:
-    if revision not in {"document-metadata-v1", "document-metadata-v2", "document-metadata-v3"}:
+    if revision not in {
+        "document-metadata-v1",
+        "document-metadata-v2",
+        "document-metadata-v3",
+        "document-metadata-v4",
+    }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
-    if revision == "document-metadata-v3":
+    if revision in {"document-metadata-v3", "document-metadata-v4"}:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
         return None
@@ -513,7 +650,7 @@ def _validate(
         node_ids.add(node["node_id"])
         if start <= node["page_number"] <= end:
             pages.setdefault(node["page_number"], []).append(node)
-    if revision == "document-metadata-v3":
+    if revision in {"document-metadata-v3", "document-metadata-v4"}:
 
         def context_page(number: int) -> dict[str, Any]:
             if page_loader is not None:
@@ -523,7 +660,9 @@ def _validate(
                 "nodes": [node for node in projection["nodes"] if node["page_number"] == number],
             }
 
-        source_context = source_context or MetadataSourceContext(lineage, context_page)
+        source_context = source_context or MetadataSourceContext(
+            lineage, context_page, revision=revision
+        )
         if source_context.lineage != lineage:
             return None
     observed = _Observed()
@@ -533,7 +672,9 @@ def _validate(
         json.dumps(span, sort_keys=True): index
         for index, span in enumerate(component["role_spans"])
     }
-    if revision == "document-metadata-v3" and len(span_indices) != len(component["role_spans"]):
+    if revision in {"document-metadata-v3", "document-metadata-v4"} and len(span_indices) != len(
+        component["role_spans"]
+    ):
         return None
     previous_numbers: tuple[int, ...] = ()
     previous_sequence = False
@@ -548,7 +689,11 @@ def _validate(
             identifiers = [node["node_id"] for node in page_nodes]
             if len(set(identifiers)) != len(identifiers):
                 return None
-        page = _observe(page_nodes, legacy=revision == "document-metadata-v1")
+        page = _observe(
+            page_nodes,
+            legacy=revision == "document-metadata-v1",
+            issuer_captions=revision == "document-metadata-v4",
+        )
         restricted = False
         if source_context is not None:
             restricted = source_context.before(number)
@@ -557,20 +702,26 @@ def _validate(
             elif page.roles:
                 restricted = True
             source_context.remember(number, page_nodes, set(page.roles))
-        body = body_evidence(number, page_nodes) if revision == "document-metadata-v3" else None
+        body = (
+            body_evidence(number, page_nodes)
+            if revision in {"document-metadata-v3", "document-metadata-v4"}
+            else None
+        )
         basis = "FORMAL_METADATA"
         if not page.roles and body is not None and not restricted:
             page.roles["terms"] = {json.dumps(span, sort_keys=True) for span in body[1]}
             basis = "CONTRACTUAL_PROVISIONS"
         if set(page.roles) != {role}:
             return None
+        if revision == "document-metadata-v4":
+            _bind_insurer_captions(page, page_nodes)
         numbers = body[0] if body is not None and role == "terms" else ()
         sequence_verified = bool(body is not None and role == "terms" and body[2])
         scalars = {name: _key(value) for name, value in page.facts if name not in _MULTIPLE}
         if number > start:
             common = scalar_summary.keys() & scalars.keys()
             body_continues = (
-                revision == "document-metadata-v3"
+                revision in {"document-metadata-v3", "document-metadata-v4"}
                 and role == "terms"
                 and bool(numbers)
                 and sequence_verified
@@ -595,7 +746,7 @@ def _validate(
                 or any(scalar_summary[name] != scalars[name] for name in common)
             ):
                 return None
-        if revision == "document-metadata-v3":
+        if revision in {"document-metadata-v3", "document-metadata-v4"}:
             range_evidence.append(
                 {
                     "page_number": number,
@@ -613,7 +764,7 @@ def _validate(
         observed.unresolved.update(page.unresolved)
         for key, spans in page.facts.items():
             observed.facts.setdefault(key, set()).update(spans)
-    if revision == "document-metadata-v3":
+    if revision in {"document-metadata-v3", "document-metadata-v4"}:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:
             return None

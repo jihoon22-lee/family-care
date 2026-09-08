@@ -197,6 +197,7 @@ def test_components_share_source_context_without_reloading_every_preceding_page(
             {"lineage": source["lineage"], "nodes": []},
             page_loader=load_page,
             source_context=context,
+            revision="document-metadata-v3",
         )
     assert calls == [2, 1, 3]
 
@@ -215,4 +216,4 @@ def test_range_addresses_reject_noninteger_and_ambiguous_indices(change: str) ->
         evidence["role_span_indices"] = [0, 99]
     else:
         evidence["page_number"] = True
-    assert validate_component_metadata(component, source) is None
+    assert validate_component_metadata(component, source, revision="document-metadata-v3") is None

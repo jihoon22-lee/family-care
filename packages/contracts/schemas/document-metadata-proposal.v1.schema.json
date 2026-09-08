@@ -10,7 +10,7 @@
       "const": "1"
     },
     "revision": {
-      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3"]
+      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4"]
     },
     "generation_id": {
       "type": "string",
@@ -51,7 +51,7 @@
     { "properties": { "revision": { "enum": ["document-metadata-v1", "document-metadata-v2"] } } },
     {
       "properties": {
-        "revision": { "const": "document-metadata-v3" },
+        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4"] },
         "components": { "items": { "required": ["range_evidence"] } }
       }
     }

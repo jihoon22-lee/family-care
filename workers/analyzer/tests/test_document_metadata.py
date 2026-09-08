@@ -61,7 +61,7 @@ def test_mixed_document_roles_come_from_source_and_preserve_all_spans() -> None:
         (3, 3),
         (4, 4),
     ]
-    assert result.revision == "document-metadata-v3"
+    assert result.revision == "document-metadata-v4"
     assert result.unresolved_pages == ()
     nodes = {node.node_id: node for node in source.nodes}
     for component in result.components:

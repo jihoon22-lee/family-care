@@ -32,7 +32,7 @@ from familycare_worker.generated_metadata import (
 from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v3"
+REVISION = "document-metadata-v4"
 
 
 class DocumentMetadataError(ValueError):
@@ -135,14 +135,107 @@ def _product_heading(raw: str) -> bool:
 def _cover_prelude(raw: str) -> bool:
     if _REFERENCE_HEADING.search(raw) or len(raw) > 160:
         return False
-    return _product_heading(raw) or bool(
-        re.fullmatch(
-            r"(?:\(?무배당\)?|\(?갱신형\)?|\S+(?:생명|화재|손해보험|생명보험|주식회사)|"
-            r"[\w ]+(?:Assurance|Life|Insurance Company))",
+    return (
+        _product_heading(raw)
+        or _insurer_heading(raw)
+        or bool(
+            re.fullmatch(
+                r"(?:\(?무배당\)?|\(?갱신형\)?|\S+(?:생명|화재|손해보험|생명보험|주식회사)|"
+                r"[\w ]+(?:Assurance|Life|Insurance Company))",
+                raw,
+                re.IGNORECASE,
+            )
+        )
+    )
+
+
+def _insurer_heading(raw: str) -> bool:
+    """An insurance-company caption, not every permitted cover prelude."""
+    return bool(
+        3 < len(raw) <= 160
+        and not _REFERENCE_HEADING.search(raw)
+        and not re.search(
+            r"[:：.!?。]|계약자|피보험자|수익자|가입자|대리점|설계사|"
+            r"\b(?:policyholder|insured|beneficiary|agent|broker)\b",
+            raw,
+            re.IGNORECASE,
+        )
+        and re.fullmatch(
+            r"(?:\S+(?:생명보험|손해보험|화재해상보험)|"
+            r"[\w ]+\s(?:Assurance|Life Insurance|Insurance Company))",
             raw,
             re.IGNORECASE,
         )
     )
+
+
+def _caption_shares_role_region(
+    caption: MetadataSpan, roles: Sequence[MetadataSpan], nodes: dict[str, StructureNode]
+) -> bool:
+    for role in roles:
+        if caption.node_id == role.node_id:
+            return True
+        left_node, right_node = nodes[caption.node_id], nodes[role.node_id]
+        left, right = _caption_box(left_node), _caption_box(right_node)
+        if left is None or right is None:
+            continue
+        if left[1] > right[1]:
+            left, right = right, left
+            left_node, right_node = right_node, left_node
+        if left_node.reading_order >= right_node.reading_order or not 0 <= right[1] - left[
+            3
+        ] <= min(48, 3 * min(left[3] - left[1], right[3] - right[1])):
+            continue
+        if min(left[2], right[2]) - max(left[0], right[0]) >= 0.5 * min(
+            left[2] - left[0], right[2] - right[0]
+        ) and not _caption_obstructed(left_node, right_node, left, right, nodes):
+            return True
+    return False
+
+
+def _caption_box(node: StructureNode) -> tuple[float, float, float, float] | None:
+    box = node.bbox
+    if node.kind == "TABLE_ROW":
+        if len(node.cells) != 1 or node.cells[0].text != node.text:
+            return None
+        box = node.cells[0].bbox
+    if box is None or box[2] <= box[0] or box[3] <= box[1]:
+        return None
+    return box
+
+
+def _caption_obstructed(
+    first: StructureNode,
+    last: StructureNode,
+    left: tuple[float, float, float, float],
+    right: tuple[float, float, float, float],
+    nodes: dict[str, StructureNode],
+) -> bool:
+    represented = {span.block_node_id for node in nodes.values() for span in node.source_spans}
+    for node in nodes.values():
+        if node.node_id in represented or node.node_id in {first.node_id, last.node_id}:
+            continue
+        box = _caption_box(node)
+        if box is None or not (
+            box[1] < right[1]
+            and box[3] > left[3]
+            and box[0] < min(left[2], right[2])
+            and box[2] > max(left[0], right[0])
+        ):
+            continue
+        if not node.schedulable or any("UNRESOLVED" in code for code in node.issue_codes):
+            return True
+        if any(
+            line.strip()
+            and not (
+                _cover_prelude(line.strip())
+                or _role_title(line.strip())
+                or any(pattern.fullmatch(line) for _, pattern in _LABEL_PATTERNS)
+            )
+            for line in node.text.splitlines()
+        ):
+            return True
+    return False
 
 
 def _role_title(raw: str) -> tuple[ComponentRole, int, int, int] | None:
@@ -391,12 +484,13 @@ def analyze_metadata_pages(
     payload_bytes = 0
     reference_context = False
     for page, nodes in pages:
+        source_nodes = {node.node_id: node for node in nodes}
         body_observation = observe_terms_body(page.page_number, nodes, require_local_contexts=True)
         body_available = body_observation.status == "SUPPORTED" and all(
             set(context.context_node_ids) <= set(context.header_node_ids)
             for context in body_observation.table_contexts
         )
-        has_reference = reference_context_present(nodes)
+        has_reference = reference_context_present(nodes, persistent_only=True)
         nodes, positioned = _layout_nodes(nodes)
         line_blocks = {span.block_node_id for node in nodes for span in node.source_spans}
         tables = [node for node in nodes if node.kind == "TABLE_ROW"]
@@ -408,6 +502,7 @@ def analyze_metadata_pages(
         metadata_area_open = True
         roles: dict[ComponentRole, list[MetadataSpan]] = {}
         facts: list[DocumentFact] = []
+        insurer_captions: list[MetadataSpan] = []
         unresolved_fields: set[str] = set()
         for node in nodes:
             if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
@@ -554,6 +649,21 @@ def analyze_metadata_pages(
                             ),
                         )
                     )
+                if (
+                    metadata_area_open
+                    and not table_barrier
+                    and not labelled
+                    and _insurer_heading(trimmed)
+                ):
+                    insurer_captions.append(
+                        _span(
+                            node,
+                            offset + trim_start,
+                            offset + trim_start + len(trimmed),
+                            anchor_start=offset,
+                            anchor_end=offset + len(raw),
+                        )
+                    )
                 for field, pattern in _LABEL_PATTERNS:
                     match = pattern.fullmatch(raw)
                     if match is None:
@@ -603,6 +713,13 @@ def analyze_metadata_pages(
         if len(roles) != 1 or page.active_layer == "unavailable":
             unresolved.append(page.page_number)
             continue
+        if set(roles) <= {"policy", "terms"}:
+            role_spans_for_caption = next(iter(roles.values()))
+            facts.extend(
+                DocumentFact("insurer", unicodedata.normalize("NFC", span.text), (span,))
+                for span in insurer_captions
+                if _caption_shares_role_region(span, role_spans_for_caption, source_nodes)
+            )
         role, role_spans = next(iter(roles.items()))
         page_facts = _facts(facts)
         component = ComponentProposal(

@@ -19,7 +19,7 @@ from familycare_api.insurance_documents.metadata_validation import (
 )
 from familycare_api.insurance_documents.repository import _database_url
 
-VALIDATOR_REVISION = "document-metadata-api-v3"
+VALIDATOR_REVISION = "document-metadata-api-v4"
 
 
 class DocumentMetadataProjector:
@@ -59,7 +59,8 @@ class DocumentMetadataProjector:
                     JOIN documents document ON document.id=version.document_id
                     WHERE proposal.state='PREPARED' AND g.is_current
                       AND proposal.revision IN (
-                        'document-metadata-v1','document-metadata-v2','document-metadata-v3')
+                        'document-metadata-v1','document-metadata-v2','document-metadata-v3',
+                        'document-metadata-v4')
                       AND item.state='succeeded' AND member.deleted_at IS NULL
                       AND document.deleted_at IS NULL
                       AND (item.processed_document_version_id IS NULL
@@ -129,8 +130,10 @@ class DocumentMetadataProjector:
             return dict(projection["source"])
 
         source_context = (
-            MetadataSourceContext(source["lineage"], load_page)
-            if source["metadata_revision"] == "document-metadata-v3"
+            MetadataSourceContext(
+                source["lineage"], load_page, revision=source["metadata_revision"]
+            )
+            if source["metadata_revision"] in {"document-metadata-v3", "document-metadata-v4"}
             else None
         )
         for component in source["proposal_json"]["components"]:

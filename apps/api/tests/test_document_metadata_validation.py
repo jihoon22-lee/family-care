@@ -30,7 +30,8 @@ def _inputs(
 def _legacy_identity(
     component: dict[str, Any], source: dict[str, Any], *, revision: str = "document-metadata-v1"
 ) -> None:
-    component.pop("range_evidence", None)
+    if revision in {"document-metadata-v1", "document-metadata-v2"}:
+        component.pop("range_evidence", None)
     lineage = source["lineage"]
     component["identity"] = hashlib.sha256(
         json.dumps(

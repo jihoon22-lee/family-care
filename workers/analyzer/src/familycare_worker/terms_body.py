@@ -493,9 +493,23 @@ def role_witness(observation: TermsBodyObservation) -> tuple[BodySpan, ...]:
     return ()
 
 
-def reference_context_present(nodes: Sequence[StructureNode]) -> bool:
+def reference_context_present(
+    nodes: Sequence[StructureNode], *, persistent_only: bool = False
+) -> bool:
     """Retain an explicit reference boundary even if its layout is unsupported."""
-    return any(_reference(node) for node in nodes)
+    if not persistent_only:
+        return any(_reference(node) for node in nodes)
+    for node in nodes:
+        for line in node.text.splitlines():
+            text = _reference_text(line)
+            navigation = re.match(
+                r"^(?:목\s*차|차\s*례|table\s+of\s+contents)(?=\s|[:：(（\[【]|$)", text, re.I
+            )
+            if navigation:
+                text = _reference_text(text[navigation.end() :].lstrip(":： "))
+            if _CONTEXT.search(text) or _EXAMPLE_START.search(text):
+                return True
+    return False
 
 
 def _observe_region(page_number: int, nodes: Sequence[StructureNode]) -> TermsBodyObservation:

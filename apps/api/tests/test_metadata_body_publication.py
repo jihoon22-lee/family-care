@@ -173,7 +173,7 @@ def test_body_range_refines_a_v2_cover_and_preserves_the_original_edition(
             "WHERE c.superseded_by_component_id IS NULL"
         ).fetchall()
         assert current == [
-            {"page_start": 1, "page_end": 2, "validator_revision": "document-metadata-api-v3"}
+            {"page_start": 1, "page_end": 2, "validator_revision": "document-metadata-api-v4"}
         ]
         assert connection.execute("SELECT count(*) AS n FROM terms_editions").fetchone()["n"] == 2
     assert projector.project_pending() == 0

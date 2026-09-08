@@ -153,13 +153,22 @@ def body_evidence(
         return None
 
 
-def reference_context_present(nodes: list[dict[str, Any]]) -> bool:
+def reference_context_present(
+    nodes: list[dict[str, Any]], *, persistent_only: bool = False
+) -> bool:
     """A visible reference boundary persists until a new document boundary."""
-    return any(
-        _REFERENCE.search(_reference_text(line))
-        for node in nodes
-        for line in node["text"].splitlines()
-    )
+    for node in nodes:
+        for line in node["text"].splitlines():
+            text = _reference_text(line)
+            if persistent_only:
+                navigation = re.match(
+                    r"^(?:목\s*차|차\s*례|table\s+of\s+contents)(?=\s|[:：(（\[【]|$)", text, re.I
+                )
+                if navigation:
+                    text = _reference_text(text[navigation.end() :].lstrip(":： "))
+            if _REFERENCE.search(text):
+                return True
+    return False
 
 
 def _reference_text(text: str) -> str:

@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from scripts.check_document_contracts import validate_schema_instance
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -58,8 +60,11 @@ def _errors(proposal: dict[str, Any]) -> list[str]:
     return validate_schema_instance(schema, proposal)
 
 
-def test_v3_proposal_carries_source_addressed_range_evidence() -> None:
-    assert _errors(_proposal()) == []
+@pytest.mark.parametrize("revision", ["document-metadata-v3", "document-metadata-v4"])
+def test_body_proposal_carries_source_addressed_range_evidence(revision) -> None:
+    proposal = _proposal()
+    proposal["revision"] = revision
+    assert _errors(proposal) == []
 
 
 def test_v3_cannot_omit_range_evidence_or_claim_enrollment_authority() -> None:
