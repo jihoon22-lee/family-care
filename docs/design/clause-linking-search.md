@@ -38,6 +38,13 @@ legacy NULL 날짜 의미는 호환용으로 유지한다. 판본 등록은 계�
 목차 자체는 component/판본으로 등록하지 않는다. API는 전체 원문을 독립 검증하고 문맥 캐시는
 같은 generation lineage와 판독 revision에서만 재사용한다. v1~v4 이력과 검증 의미는 유지한다.
 
+`document-metadata-v6`는 상품설명서를 참고·참조·확인하도록 요청하는 완결된 한 줄의
+안내 문장을 새 설명 문서의 시작으로 처리하지 않는다. 실제 설명서 제목·예시/인용 문맥과
+이미 시작한 제한은 보존한다. native 줄은 단어 전체·주소·좌표·정수 범위의 원문 연결을
+확인한 경우에만 그 단어의 중복 boundary를 제외하며 불완전한 연결은 기존 검사를 유지한다.
+이 예외는 v6의 지속 문맥 검사에만 적용하고 조항 본문 판독 및 v1~v5 의미는 바꾸지 않는다.
+0050은 v6 validator 이력을 허용하며 해당 제안/게시가 존재하면 downgrade를 거부한다.
+
 ### Component applicability
 
 `0042_terms_applicability`는 계약/피보험자와 증권 Evidence의 정확한 version·페이지를 먼저

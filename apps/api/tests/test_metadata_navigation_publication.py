@@ -39,8 +39,10 @@ def _migrate(url: str, operation: str, revision: str) -> subprocess.CompletedPro
     )
 
 
-def test_navigation_reprocessing_preserves_v4_and_refuses_loss_of_v5_history(
+@pytest.mark.parametrize("instruction", [False, True])
+def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v6_history(
     publication_database: Any,
+    instruction: bool,
 ) -> None:
     url, job = publication_database
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
@@ -67,7 +69,11 @@ def test_navigation_reprocessing_preserves_v4_and_refuses_loss_of_v5_history(
                 }
                 for number, text in enumerate(
                     (
-                        "목차\n상품설명서 .... 9\n보험약관 .... 2",
+                        (
+                            "상품설명서 및 보험증권을 참고하여 합성 보장을 확인하십시오."
+                            if instruction
+                            else "목차\n상품설명서 .... 9\n보험약관 .... 2"
+                        ),
                         "보험사: Sample Assurance\n상품명: Sample Policy\n"
                         "제1조 (가상 지급 조건)\n회사는 보험수익자에게 보험금을 지급합니다.",
                     ),
@@ -94,17 +100,19 @@ def test_navigation_reprocessing_preserves_v4_and_refuses_loss_of_v5_history(
             "SELECT identity_sha256 FROM document_structure_generations WHERE id=%s", (generation,)
         ).fetchone()["identity_sha256"]
     legacy = metadata_proposal(source, generation, identity)
-    legacy.update(revision="document-metadata-v4", components=[], unresolved_pages=[1, 2])
+    prior_revision = "document-metadata-v5" if instruction else "document-metadata-v4"
+    prior_schema = "0049_metadata_navigation_pages" if instruction else "0048_clause_change_pairs"
+    legacy.update(revision=prior_revision, components=[], unresolved_pages=[1, 2])
     try:
-        down = _migrate(url, "downgrade", "0048_clause_change_pairs")
+        down = _migrate(url, "downgrade", prior_schema)
         assert down.returncode == 0, down.stderr
         with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
             previous = connection.execute(
                 "INSERT INTO document_metadata_proposals("
                 "generation_id,revision,state,attempts,proposal_json) "
-                "VALUES(%s,'document-metadata-v4','PREPARED',1,%s) "
+                "VALUES(%s,%s,'PREPARED',1,%s) "
                 "RETURNING id,to_jsonb(document_metadata_proposals)::text AS snapshot",
-                (generation, Jsonb(legacy)),
+                (generation, prior_revision, Jsonb(legacy)),
             ).fetchone()
         up = _migrate(url, "upgrade", "head")
         assert up.returncode == 0, up.stderr
@@ -124,13 +132,13 @@ def test_navigation_reprocessing_preserves_v4_and_refuses_loss_of_v5_history(
             assert connection.execute(
                 "SELECT validator_revision,outcome FROM document_metadata_publications"
             ).fetchall() == [
-                {"validator_revision": "document-metadata-api-v5", "outcome": "APPLIED"}
+                {"validator_revision": "document-metadata-api-v6", "outcome": "APPLIED"}
             ]
             current = connection.execute(
                 "SELECT id,to_jsonb(p)::text AS snapshot FROM document_metadata_proposals p "
-                "WHERE revision='document-metadata-v5'"
+                "WHERE revision='document-metadata-v6'"
             ).fetchone()
-        refused = _migrate(url, "downgrade", "0048_clause_change_pairs")
+        refused = _migrate(url, "downgrade", prior_schema)
         assert (
             refused.returncode != 0
             and "metadata revision history prevents downgrade" in refused.stderr

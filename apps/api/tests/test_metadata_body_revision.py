@@ -61,7 +61,13 @@ def _errors(proposal: dict[str, Any]) -> list[str]:
 
 
 @pytest.mark.parametrize(
-    "revision", ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5"]
+    "revision",
+    [
+        "document-metadata-v3",
+        "document-metadata-v4",
+        "document-metadata-v5",
+        "document-metadata-v6",
+    ],
 )
 def test_body_proposal_carries_source_addressed_range_evidence(revision) -> None:
     proposal = _proposal()

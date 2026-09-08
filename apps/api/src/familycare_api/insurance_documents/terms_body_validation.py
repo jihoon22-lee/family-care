@@ -153,11 +153,80 @@ def body_evidence(
         return None
 
 
+def _navigation_instruction(text: str) -> bool:
+    """A complete instruction referring to documents is not a document heading."""
+    normalized = unicodedata.normalize("NFKC", text.strip())
+    if len(normalized.splitlines()) != 1:
+        return False
+    return bool(
+        re.fullmatch(
+            r"(?:보험)?상품\s*설명서(?:를|을|와|과|\s)[^.!?。\n]{0,160}"
+            r"(?:참고|참조|확인)[^.!?。\n]{0,80}(?:하십시오|하시기\s*바랍니다|하세요)[.]?",
+            normalized,
+        )
+        and not re.search(r"예시|예문|예제|인용|설명하기\s*위한|[:：]", normalized)
+    )
+
+
+def _instruction_nodes(nodes: list[dict[str, Any]]) -> set[str]:
+    by_id = {node["node_id"]: node for node in nodes}
+    ignored: set[str] = set()
+    if len(by_id) != len(nodes) or len({(n["kind"], n["source_path"]) for n in nodes}) != len(
+        nodes
+    ):
+        return ignored
+    for node in nodes:
+        if (
+            node["kind"] not in {"BLOCK", "TEXT_LINE"}
+            or node.get("issue_codes")
+            or not node.get("schedulable")
+        ):
+            continue
+        if not _navigation_instruction(node["text"]):
+            continue
+        if node["kind"] == "BLOCK":
+            ignored.add(node["node_id"])
+            continue
+        try:
+            if any(
+                type(value) is not int
+                for span in node["source_spans"]
+                for value in (
+                    span["block_start"],
+                    span["block_end"],
+                    span["line_start"],
+                    span["line_end"],
+                )
+            ):
+                continue
+            if not _lineage_valid(node, by_id):
+                continue
+            spans = node["source_spans"]
+            if any(
+                by_id[span["block_node_id"]].get("issue_codes")
+                or by_id[span["block_node_id"]]["text"][: span["block_start"]].strip()
+                or by_id[span["block_node_id"]]["text"][span["block_end"] :].strip()
+                for span in spans
+            ):
+                continue
+            ignored.update(span["block_node_id"] for span in spans)
+            ignored.add(node["node_id"])
+        except KeyError, TypeError, ValueError, AttributeError, IndexError:
+            continue
+    return ignored
+
+
 def reference_context_present(
-    nodes: list[dict[str, Any]], *, persistent_only: bool = False
+    nodes: list[dict[str, Any]],
+    *,
+    persistent_only: bool = False,
+    navigation_instructions: bool = False,
 ) -> bool:
     """A visible reference boundary persists until a new document boundary."""
+    ignored = _instruction_nodes(nodes) if navigation_instructions else set()
     for node in nodes:
+        if ignored and node["node_id"] in ignored:
+            continue
         for line in node["text"].splitlines():
             text = _reference_text(line)
             if persistent_only:

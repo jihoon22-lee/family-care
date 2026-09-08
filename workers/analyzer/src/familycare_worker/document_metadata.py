@@ -33,7 +33,7 @@ from familycare_worker.navigation_page import is_navigation_page
 from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v5"
+REVISION = "document-metadata-v6"
 
 
 class DocumentMetadataError(ValueError):
@@ -495,7 +495,9 @@ def analyze_metadata_pages(
             set(context.context_node_ids) <= set(context.header_node_ids)
             for context in body_observation.table_contexts
         )
-        has_reference = reference_context_present(nodes, persistent_only=True)
+        has_reference = reference_context_present(
+            nodes, persistent_only=True, navigation_instructions=True
+        )
         nodes, positioned = _layout_nodes(nodes)
         line_blocks = {span.block_node_id for node in nodes for span in node.source_spans}
         tables = [node for node in nodes if node.kind == "TABLE_ROW"]

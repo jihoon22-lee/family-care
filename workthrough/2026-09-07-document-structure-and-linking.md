@@ -1078,3 +1078,39 @@ workflow 정책, 문서 **50**·안전 **876 paths**·diff도 통과했다. 전�
 v4 API 검증을 거치도록 했다. 이력이 있는 downgrade 보호는 유지하며 수정한 PG
 **4 passed / 30 deselected** (18.71초)를 확인했다. 이전 전체 CI를 성공으로 표현하지 않는다.
 같은 모듈의 최신 v5 사례와 함께 실행한 관련 PG **34 passed** (131.25초)도 통과했다.
+
+
+### Source-verified reference instructions
+
+`7ea0846`의 [CI 34210842147](https://github.com/jihoon22-lee/family-care/actions/runs/34210842147)는
+필수 7/7(이미지 3개 포함), 기본 Python **2,545 passed / 517 deselected / 3 subtests**와
+전체 PG **517 passed / 2545 deselected**를 통과했다. 앞 실패 기록은 그대로 보존한다.
+
+승인된 최소 문맥 진단은 외부 요청 **1회**, 입력 396/output 42 tokens로 끝났다.
+한 사례의 문서 참조 안내문이 지속 설명 문맥으로 오인될 가능성을 지적한 결과이며
+실제 분류·자격·계산 권한으로 사용하지 않았다. 원문·식별자·요청 ID·키를 기록하지 않았고
+runtime 데이터도 쓰지 않았다. 새 `metadata_diagnostic_packet.py`는 제한된 길이·이름/
+URL/경로/숫자 최소화와 enum 응답 DTO만 제공하며 자동 provider 호출 경로가 아니다.
+
+완결된 안내문 뒤의 정상 본문이 누락되는 합성 RED **2개** 후 v6의 지속 문맥 검사만
+보완했다. native 단어 전체가 유효한 한 줄에 포함될 때만 중복 boundary를 제외한다.
+별도 제목·예시/인용·숨겨진 문장·위조된 원문 연결은 계속 제한하며 이미 시작한 설명 문맥을
+끝내지 않는다. v5 판독 의미와 JSON은 보존하고 0050은 새 이력이 있으면 downgrade를 막는다.
+neutral metadata 계약/생성 소비자만 확장하며 HTTP 계약·보험 판정은 바꾸지 않는다.
+
+2026-09-08 18:54~18:59 KST, `7ea0846` 위 v6 API/Worker·schema·0050·진단 helper와
+관련 테스트 변경으로 Ruff format **685 files**/lint, mypy **276 sources**, 기본 Python
+**2,563 passed / 518 deselected / 3 subtests** (26.91초), 관련 metadata PostgreSQL
+**38 passed** (29.17초)가 통과했다. PG는 v4/v5 원래 JSON 보존→재처리·중복 방지·판본 등록·
+이력 downgrade 거부를 포함하며 전용 합성 test DB/파괴적 검사 guard와 `TMPDIR=/tmp`를
+사용했다. 최초 PG 명령은 잘못된 테스트 경로로 수집 전 종료하여 결과 없음으로 남겼고
+올바른 경로의 위 38개 검증을 실행했다. 계약·정적 container/workflow 정책도 통과했다.
+이 중간 변경의 Web/전체 PG·실제 기기·실제 구조화 파이프라인·운영 전환 완료를 의미하지
+않는다. 최종 소스 CI와 B02 수용/merge는 남아 있다.
+
+
+독립 정적 리뷰에서 정규식의 공백이 줄바꿈을 허용하는 경계를 발견했다. 별도 제목과
+안내 두 줄을 한 문장으로 제외하는 합성 RED **2 failed / 1 passed** 후 명시적 단일 줄
+검사를 추가했다. 최종 관련 pure **23 passed** (0.86초), Ruff lint와 mypy가 통과했다.
+위 전체 Python/PG 수치는 이 마지막 단일 줄 guard 이전 실행이며 최종 CI에서 재확인한다.
+보관 추출 집계도 guard 이전 소스로 시작되어 그 결과를 최종 소스 수용으로 사용하지 않는다.
