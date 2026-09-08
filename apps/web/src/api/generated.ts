@@ -36,6 +36,8 @@ export const API_PATHS = [
   "/api/v1/family-members/{member_id}/insurance-document-sets",
   "/api/v1/family-members/{member_id}/insurance-reconciliation",
   "/api/v1/family-members/{member_id}/restore",
+  "/api/v1/guidance-reviews/{job_id}",
+  "/api/v1/guidance-reviews/{job_id}/cancel",
   "/api/v1/insurance-document-set-items/{item_id}",
   "/api/v1/insurance-document-sets/{document_set_id}",
   "/api/v1/insurance-document-sets/{document_set_id}/items",
@@ -46,6 +48,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}/analyze",
   "/api/v1/medical-events/{event_id}/calculations",
   "/api/v1/medical-events/{event_id}/claims",
+  "/api/v1/medical-events/{event_id}/guidance-reviews",
   "/api/v1/medical-events/{event_id}/receipt-lines",
   "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
@@ -287,6 +290,17 @@ export const API_OPERATIONS = [
       "restore_family_member_api_v1_family_members__member_id__restore_post",
   },
   {
+    method: "GET",
+    path: "/api/v1/guidance-reviews/{job_id}",
+    operationId: "get_guidance_review_api_v1_guidance_reviews__job_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/guidance-reviews/{job_id}/cancel",
+    operationId:
+      "cancel_guidance_review_api_v1_guidance_reviews__job_id__cancel_post",
+  },
+  {
     method: "DELETE",
     path: "/api/v1/insurance-document-set-items/{item_id}",
     operationId:
@@ -352,6 +366,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/claims",
     operationId:
       "create_claim_case_api_v1_medical_events__event_id__claims_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/guidance-reviews",
+    operationId:
+      "request_guidance_review_api_v1_medical_events__event_id__guidance_reviews_post",
   },
   {
     method: "GET",
@@ -1712,6 +1732,32 @@ export interface GuidanceRelevance {
   source_kind:
     "PRIVATE_RULE_PUBLICATION" | "OPERATIONAL_RULE_VERSION" | "SEMANTIC_NODE";
   spans?: Array<GuidanceEventSpan>;
+}
+
+export interface GuidanceReviewJob {
+  completed_at?: string | null;
+  created_at: string;
+  decision_run_id: string;
+  error_code?: string | null;
+  event_version: number;
+  http_attempts: number;
+  id: string;
+  medical_event_id: string;
+  schema_version?: "1";
+  stale?: boolean;
+  state:
+    | "queued"
+    | "running"
+    | "partial"
+    | "completed"
+    | "disagreement"
+    | "failed"
+    | "cancelled";
+}
+
+export interface GuidanceReviewRequest {
+  decision_run_id: string;
+  expected_event_version: number;
 }
 
 export interface GuidanceScenario {

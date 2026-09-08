@@ -1,8 +1,17 @@
 # B04 local claim guidance
 
 [WP05 #65](https://github.com/jihoon22-lee/family-care/issues/65)와
-[WP06 #66](https://github.com/jihoon22-lee/family-care/issues/66)의 후보·금액 경로를 구현 중이다.
+[WP06 #66](https://github.com/jihoon22-lee/family-care/issues/66)의 후보·금액 경로를 구현했다.
 기반은 B03 PR #78 merge `3f4a47cc2d1b4e649d202850020b94882dc4adfe`, 필수 CI 7/7이다.
+
+최종 [PR #79](https://github.com/jihoon22-lee/family-care/pull/79)는 2026-09-09 KST에
+merge `05325888bb52b7b6c00365fd237d7473bef1dc20`으로 통합했다. source `02be761`의
+[CI 34289732889](https://github.com/jihoon22-lee/family-care/actions/runs/34289732889)
+필수 7/7 통과: Python **3398 passed / 3 subtests**(42.16초), PostgreSQL
+**644 passed**(1048.43초)와 migration 왕복, Web **210 passed**/build, Chromium mock
+**20 passed**(21.1초), 이미지 3개. 이전 전체 PG의 fixture 실패 4개와 Gitleaks 오탐은
+아래 수정·대조 검사와 최종 CI로 해소했다. #65는 코드·합성 수용으로 종료했고 #66의
+AI 교정 재평가는 #67에서 이어 검증한다. 아래 단계별 기록은 당시 소스/결과를 보존한다.
 
 ## Common input and first operational path
 
