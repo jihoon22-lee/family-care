@@ -26,6 +26,7 @@ from familycare_api.clauses.dsl import (
 ALLOWED_FIELDS = (
     "MedicalEvent.event_date",
     "MedicalEvent.classification",
+    "MedicalEvent.treatment_kind",
     "MedicalEvent.admission_days",
     "PolicyContract.contract_start",
     "PolicyContract.contract_end",

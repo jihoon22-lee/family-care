@@ -1464,12 +1464,70 @@ export interface FamilyMemberUpdateRequest {
   internal_alias?: string | null;
 }
 
+export interface GuidanceCalculatedComponent {
+  currency?: string | null;
+  expression_path: string;
+  parent_path: string;
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  value: string;
+}
+
+export interface GuidanceCalculationOperand {
+  child_path?: string | null;
+  currency?: string | null;
+  expression_path: string;
+  field_path?: string | null;
+  kind: "FIELD" | "LITERAL" | "CHILD";
+  provenance?: string | null;
+  reason_codes?: Array<string>;
+  source_refs?: Array<GuidanceSourceReference>;
+  stale?: boolean;
+  status: "AVAILABLE" | "UNAVAILABLE" | "FAILED";
+  supplied_value?: string | null;
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  value?: string | null;
+}
+
+export interface GuidanceCalculationStep {
+  currency?: string | null;
+  expression_path: string;
+  operands: Array<GuidanceCalculationOperand>;
+  operation: "add" | "subtract" | "multiply" | "min" | "max" | "round";
+  reason_codes?: Array<string>;
+  rounding_rule?: "half_up" | "half_even" | "up" | "down" | null;
+  status: "AVAILABLE" | "UNAVAILABLE" | "FAILED";
+  step_number: number;
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  unit_source_refs?: Array<GuidanceSourceReference>;
+  value?: string | null;
+}
+
+export interface GuidanceCalculationTrace {
+  calculated_components?: Array<GuidanceCalculatedComponent>;
+  currency?: string | null;
+  formula_digest_sha256: string;
+  missing_paths?: Array<string>;
+  publication_id: string;
+  reason_codes?: Array<string>;
+  runtime_revision: string;
+  source_digest_sha256: string;
+  source_refs?: Array<GuidanceSourceReference>;
+  source_revision: string;
+  status: "COMPLETE" | "PARTIAL" | "UNAVAILABLE" | "FAILED";
+  steps?: Array<GuidanceCalculationStep>;
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  value?: string | null;
+}
+
 export interface GuidanceCandidate {
   assumptions?: Array<string>;
   benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
   canonical_identity?: CanonicalCoverageIdentity | null;
+  case_relation?: "MUTUALLY_EXCLUSIVE" | "UNRESOLVED";
+  cases?: Array<GuidancePayoutCase>;
   condition_result: "MATCH" | "UNKNOWN";
   conditions?: Array<GuidanceCondition>;
+  contract_amount?: GuidanceContractAmount | null;
   contract_label: string;
   coverage_label: string;
   enrollment?: "DOCUMENTED";
@@ -1479,6 +1537,8 @@ export interface GuidanceCandidate {
   questions?: Array<GuidanceQuestion>;
   reason_codes: Array<string>;
   ref: CanonicalCoverageRef;
+  relevance?: Array<GuidanceRelevance>;
+  scenarios?: Array<GuidanceScenario>;
 }
 
 export interface GuidanceCondition {
@@ -1490,17 +1550,59 @@ export interface GuidanceCondition {
   semantic_publication_id?: string | null;
 }
 
+export interface GuidanceContractAmount {
+  amount?: string | null;
+  amount_authority:
+    "PROGRAM_VERIFIED" | "USER_CONFIRMED" | "DOCUMENT_REVIEWED" | "UNCONFIRMED";
+  currency?: string | null;
+  currency_authority:
+    "PROGRAM_VERIFIED" | "USER_CONFIRMED" | "DOCUMENT_REVIEWED" | "UNCONFIRMED";
+  evidence?: Array<GuidanceEvidence | GuidancePrivateCertificate>;
+  source_refs?: Array<GuidanceSourceReference>;
+}
+
+export interface GuidanceCostGroup {
+  known_cost: string | null;
+  known_line_ids: Array<string>;
+  line_ids: Array<string>;
+  source_refs: Array<GuidanceSourceReference>;
+  total_cost: string | null;
+  unit?: "COST";
+  unknown_amount_line_ids: Array<string>;
+}
+
+export interface GuidanceCurrencyCosts {
+  coverage_review: GuidanceCostGroup;
+  covered: GuidanceCostGroup;
+  currency: string;
+  excluded: GuidanceCostGroup;
+  unconfirmed: GuidanceCostGroup;
+}
+
 export interface GuidanceEstimate {
   amount?: string | null;
   assumptions?: Array<string>;
+  basis?:
+    | "DOCUMENT_FORMULA"
+    | "REGISTERED_COSTS"
+    | "CONFIRMED_COST_SUBSET"
+    | "USER_SCENARIO"
+    | "SOURCE_ALTERNATIVES";
   currency?: string | null;
   evidence?: Array<GuidanceEvidence | GuidanceSemanticEvidence>;
   formula?: string | null;
   kind: "POINT" | "RANGE" | "FORMULA" | "UNAVAILABLE";
   lower?: string | null;
   missing_inputs?: Array<string>;
+  partial_amount?: string | null;
   reason_code: string;
+  trace?: GuidanceCalculationTrace | null;
   upper?: string | null;
+}
+
+export interface GuidanceEventSpan {
+  end: number;
+  start: number;
 }
 
 export interface GuidanceEvidence {
@@ -1512,9 +1614,70 @@ export interface GuidanceEvidence {
   source_sha256?: string | null;
 }
 
+export interface GuidanceExpenses {
+  currencies: Array<GuidanceCurrencyCosts>;
+  digest_sha256: string;
+  event_id: string;
+  event_version: number | null;
+  reader_revision: string;
+  reason_codes: Array<string>;
+  status: "AVAILABLE" | "EMPTY" | "PARTIAL" | "UNAVAILABLE";
+  unassigned_line_ids: Array<string>;
+}
+
+export interface GuidanceHypothesis {
+  field_path: string;
+  provenance?: "SCENARIO_ASSUMPTION";
+  source_refs: Array<GuidanceSourceReference>;
+  spans: Array<GuidanceEventSpan>;
+  value: boolean | number | string;
+}
+
+export interface GuidancePayoutCase {
+  assumptions?: Array<string>;
+  benefit_kind: "FIXED" | "INDEMNITY" | "UNKNOWN";
+  case_key: string;
+  condition_result: "MATCH" | "UNKNOWN";
+  conditions?: Array<GuidanceCondition>;
+  estimate: GuidanceEstimate;
+  questions?: Array<GuidanceQuestion>;
+  reason_codes: Array<string>;
+  relevance?: Array<GuidanceRelevance>;
+  scenarios?: Array<GuidanceScenario>;
+}
+
+export interface GuidancePrivateCertificate {
+  catalog_import_run_id: string;
+  coverage_id: string;
+  document_alias: string;
+  kind?: "PRIVATE_CERTIFICATE";
+  page_end: number;
+  page_start: number;
+}
+
 export interface GuidanceQuestion {
   field_path: string;
   reason_code: string;
+}
+
+export interface GuidanceRelevance {
+  evidence: Array<GuidanceEvidence | GuidanceSemanticEvidence>;
+  field_path: string;
+  kind: "CONFIRMED_EVENT" | "LOCAL_TOPIC" | "PLANNED_EVENT";
+  normalizer_key?: string | null;
+  publication_id: string;
+  rule_key: string;
+  semantic_node_id?: string | null;
+  source_kind:
+    "PRIVATE_RULE_PUBLICATION" | "OPERATIONAL_RULE_VERSION" | "SEMANTIC_NODE";
+  spans?: Array<GuidanceEventSpan>;
+}
+
+export interface GuidanceScenario {
+  estimate: GuidanceEstimate;
+  hypotheses: Array<GuidanceHypothesis>;
+  kind: "PLANNED_CARE";
+  scenario_key: string;
 }
 
 export interface GuidanceSemanticEvidence {
@@ -1534,6 +1697,13 @@ export interface GuidanceSemanticEvidence {
   source_sha256: string;
   start: number;
   terms_edition_id: string;
+}
+
+export interface GuidanceSourceReference {
+  digest_sha256?: string | null;
+  source_id: string;
+  source_kind: string;
+  version?: number | string | null;
 }
 
 export interface GuidanceSupport {
@@ -1883,6 +2053,7 @@ export interface LocalGuidanceResponse {
   candidates: Array<GuidanceCandidate>;
   event_date: string | null;
   event_version: number;
+  expenses?: GuidanceExpenses | null;
   family_member_id: string;
   medical_event_id: string;
   outcome:

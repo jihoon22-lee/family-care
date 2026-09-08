@@ -86,6 +86,7 @@ FIELD_PATHS = frozenset(
     {
         "MedicalEvent.event_date",
         "MedicalEvent.classification",
+        "MedicalEvent.treatment_kind",
         "MedicalEvent.admission_days",
         "MedicalEvent.admission",
         "MedicalEvent.performed",
@@ -227,6 +228,7 @@ class _FieldSpec:
 _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "MedicalEvent.event_date": _FieldSpec("date", frozenset({"date"})),
     "MedicalEvent.classification": _FieldSpec("string", frozenset()),
+    "MedicalEvent.treatment_kind": _FieldSpec("string", frozenset()),
     "MedicalEvent.admission_days": _FieldSpec("integer", frozenset({"days"})),
     "MedicalEvent.admission": _FieldSpec("boolean", frozenset()),
     "MedicalEvent.performed": _FieldSpec("boolean", frozenset()),

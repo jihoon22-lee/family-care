@@ -4,7 +4,6 @@ from dataclasses import replace
 
 from familycare_api.clauses.dsl import RuleValidationError, validate_rule_document
 from familycare_api.decisions.knowledge_domain import KnowledgeFactContext
-from familycare_api.decisions.knowledge_engine import _legacy_fact_context
 from familycare_api.decisions.operators import OperatorEvaluationError, evaluate_expression
 from familycare_api.guidance.domain import (
     GuidanceCoverageInput,
@@ -12,6 +11,7 @@ from familycare_api.guidance.domain import (
     GuidanceRuleInput,
 )
 from familycare_api.guidance.event_facts import CodeScope, EventFactRead, scope_code_facts
+from familycare_api.guidance.runtime_facts import runtime_fact_context
 
 
 class GuidanceRuleRuntime:
@@ -55,7 +55,7 @@ class GuidanceRuleRuntime:
                     ),
                 ).context
             outcome = evaluate_expression(
-                validated.expression, _legacy_fact_context(facts, coverage)
+                validated.expression, runtime_fact_context(facts, coverage)
             )
         except RuleValidationError, OperatorEvaluationError:
             return self._unknown(rule, "UNSUPPORTED_DSL"), True

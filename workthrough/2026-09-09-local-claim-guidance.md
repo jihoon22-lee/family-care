@@ -136,3 +136,93 @@ DB snapshot 제약, 코드 metadata 이력, 300/400 및 source stale 보존을 �
 독립 정적 검토는 부분 지식 소실·원문 범위 paging·구성원 명칭 미연결을 발견했고 해당 경로를
 수정했다. 코드 metadata의 사용자 권한/버전 잠금/이력과 새 stale·0056 경계에서는 추가
 P1/P2를 발견하지 않았다. 정적 검토를 동적 검증으로 표현하지 않는다.
+
+## 사건 관련성·계산 출처·등록 비용 연결
+
+`guidance/activity_binding.py`, `event_facts.py`, `relevance.py`, `runtime_facts.py`는 실제
+원문의 활동 조건과 사건 해석을 연결한다. 특정 수술명/분류 코드를 키워드로 확정하지 않으며
+실제 사건·조건부 주제·예정의 관련성에 원문 citation과 입력 span을 남긴다. 명시 사실은
+해석으로 덮지 않는다. 새 evaluator는 AI 제안의 수치·이력·Rider 필드를 확정 사실로 사용하지
+않는다. 기존 판정 snapshot의 정책은 변경하지 않았다.
+
+`calculation_source.py`는 실제 publication과 원문 산식으로 단위·통화·지급 기준을 검증한다.
+`calculation_runtime.py`/`trace_projection.py`는 모든 피연산자·음수 중간값·명시 반올림·누락값을
+보존한다. 가입금액의 실제 권한과 증권/원장 출처는 별도 `contract_amount` 필드이며 산식 없는
+예상액으로 승격하지 않는다. 단위가 미지원인 식은 값으로 위장하지 않고 원문 식을 유지한다.
+
+`expenses.py`/`expense_projection.py`는 같은 transaction의 실제 영수증 행·버전으로 보장 확인,
+제외, 보장 검토, 미확정 비용을 통화별로 구분한다. 기존 private context의 전체 확인 비용
+합계에 제외 비용까지 들어가던 의미를 v2 계산에서는 사용하지 않는다. 확인된 보장 부분만
+계산하며 미상은 0원이 아니다. 다른 비용이 남으면 `FORMULA`와 `partial_amount`를 제공하고,
+완전한 등록 비용 집합은 `REGISTERED_COSTS`로 표시한다. 이는 전체 수령액의 확정이나 하한이
+아니다. 부분 비용으로 전체 비용 조건을 `NO_MATCH` 처리하지 않는다. 비용 digest를 guidance
+stale 입력에 포함하고 저장된 과거 결과는 그대로 유지한다.
+
+검증은 2026-09-09 03:04~03:08 KST, source `b49beee`와 위 사건/trace/비용 관련 미커밋 변경에서
+실행했다. 이후 지급 경우/시나리오 변경의 결과로 재사용하지 않는다.
+
+- 비용 입력 계약 부재 RED 12개 후 새 비용 계산 테스트를 추가했다. 테스트의 Decimal 및
+  range DSL 형식을 바로잡은 뒤 부분 비용이 후보를 지우는 RED도 확인하고 수정했다.
+- `python -m pytest apps/api/tests/test_guidance_expense_estimates.py
+  apps/api/tests/test_guidance_expenses.py apps/api/tests/test_guidance_local_event_engine.py
+  apps/api/tests/test_guidance_calculation_provenance.py apps/api/tests/test_local_guidance.py
+  -q --tb=short`: **81 passed**(0.55초), guidance mypy **22 source files** 통과.
+- `python -m pytest apps/api/tests/test_guidance_expenses_integration.py
+  apps/api/tests/test_semantic_local_guidance_integration.py
+  apps/api/tests/test_operational_local_guidance.py apps/api/tests/test_local_guidance_integration.py
+  apps/api/tests/test_guidance_code_scope_integration.py -m integration -q --tb=short`:
+  전용 합성 test DB에서 **16 passed**(23.55초). 첫 실행은 test 전용 URL 변수 누락으로 수집
+  전에 안전하게 거부되었으며 결과 없음이다. 올바른 `FAMILYCARE_TEST_DATABASE_URL`로 실행했다.
+  실제 receipt CRUD·RR·가정/사건 거부·실패 복구, 비용 수정의 stale 및 과거 snapshot 보존,
+  기존 원문 300/400 분석과 코드 metadata를 함께 검증했다.
+
+독립 runtime 구현 `34ef6eb`(원 커밋 `ca10b9c`)은 명시적 `scenario_inputs`에서 같은 값·단위·
+실제 EVENT_SCENARIO UUID/version/digest가 일치하는 예정 입원 일수만 계산한다. 기본 신뢰 목록을
+확장하지 않고 `SCENARIO_ASSUMPTION`을 trace에 유지한다. 별도 worktree의 `b49beee`+runtime/test
+두 파일에서 관련 순수 **97 passed**(0.58초), Ruff/mypy/diff 검사를 03:17 KST에 통과했다.
+주 안내의 시나리오/원문별 지급 경우 통합과 새 계약 생성·Web·전체 필수 검사는 이어 진행한다.
+
+## 원문별 지급 경우와 예정 일수의 통합
+
+각 원문 root의 규칙/산식을 `GuidancePayoutCaseInput`으로 유지하고, 동일 canonical 후보의
+`cases` 안에서 각각 활동·관련성·조건·금액을 평가한다. A의 분류가 맞고 B가 틀려도 A를
+지우지 않는다. 분류 원문이 계산 root에서 이미 참조된 경우는 원문 주소와 조건 계약을 함께
+비교해 중복을 제거한다. 별개 원문은 같은 문구여도 유지한다. 코드 체계/판본이 같은 필수
+분류 집합의 배타성이 검증되고 각 식이 같은 통화/가정으로 계산될 때만 `SOURCE_ALTERNATIVES`
+범위를 제공하며 `SOURCE_CASE_APPLIES` 가정을 붙인다. 동시 지급·합산 권한으로 사용하지 않는다.
+
+예정 입원 일수는 실제 사건값을 바꾸지 않고 `scenarios`의 가설·span·실제 사건 UUID/version/
+digest로 남긴다. 기본 결과는 필요한 일수와 식을 유지하고, 별도 가정 계산에서만 5일→300을
+제공한다. 이미 확인된 실제 일수·다른 가족·취소된 계획은 이 가설로 덮지 않는다. 계산식의
+AST 주소는 public `expression_path`로 이름을 명확히 하고 제한된 `/calculation/args/...`
+형식만 허용했다. 파일 경로 금지 검사나 allowlist를 완화하지 않았다.
+
+독립 정적 검토가 발견한 operational 산식 소실도 RED 후 수정했다. 새 semantic 조건 root가
+있어도 기존 operational 산식을 별도 case로 보존하며, 교체·중복 근거 없이 버리지 않는다.
+등록된 금액과 원문 benefit 종류가 충돌하면 한쪽으로 재분류하지 않는다. 가입금액 권한이
+통화 권한을 대신하던 RED도 수정했다.
+
+2026-09-09 03:23~03:33 KST, `dec52ae`와 위 guidance/계약/테스트 미커밋 변경의 증거:
+
+- `dec52ae`의 독립 case relation helper(원 커밋 `60025bb`)는 별도 `b49beee` worktree에서
+  신규 순수 **36 passed**(0.36초), Ruff·mypy·diff 통과 후 통합했다.
+- 초기 사건/시나리오/지급 경우/비용/원문 suite **68 passed**(0.63초), 같은 단계의
+  PostgreSQL 5개 파일 **16 passed**(24.13초), guidance mypy **25 source files** 통과.
+- `python -m pytest apps/api/tests/test_guidance*.py apps/api/tests/test_local_guidance.py
+  apps/api/tests/test_rule_dsl.py apps/api/tests/test_decision_api.py
+  apps/api/tests/test_decision_privacy.py apps/api/tests/test_policy_ledger_contracts.py
+  -q --tb=short`: **632 passed / 9 integration deselected**(5.57초).
+  이는 이후 통화 권한/operational 보존 수정 전 실행이다.
+- 최종 수정 후 `python -m pytest apps/api/tests/test_guidance_semantic_binding.py
+  apps/api/tests/test_guidance_payout_cases.py apps/api/tests/test_guidance_calculation_provenance.py
+  apps/api/tests/test_guidance_scenarios.py -q --tb=short`: **24 passed**(0.49초).
+  `test_semantic_local_guidance_integration.py`와 `test_operational_local_guidance.py`를
+  `-m integration -q --tb=short`로 다시 실행해 **5 passed**(12.92초) 확인했다.
+- OpenAPI·decision schema·business/Web 타입을 생성하고 `python scripts/check_contracts.py`
+  통과. 첫 검사에서 일반 `path` 필드가 거부되어 위의 제한된 `expression_path`로 고쳤다.
+  해당 소스의 Ruff와 mypy **25 source files**도 통과했다.
+- `corepack pnpm --filter @familycare/web test src/features/results/LocalGuidancePanel.test.tsx`
+  **14 passed**(1.31초), Web typecheck 통과. 기존 표시와 새 optional 계약의 호환 확인이며,
+  새 trace/부분 비용/시나리오/case 표시의 구현·검증을 대신하지 않는다.
+- 문서 **50 files**, 안전 **969 paths**, diff 검사 통과. 실제 문서·외부 provider·운영 환경을
+  사용하지 않았다. B04의 상세 UI·청구 bridge·합계·품질/성능·전체 필수 검사와 CI는 남아 있다.

@@ -18,6 +18,7 @@ from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import KnowledgeStatusInterval
+from familycare_api.guidance.amount_projection import operational_contract_amount
 from familycare_api.guidance.amount_source import read_operational_amount_source
 from familycare_api.guidance.domain import (
     GuidanceCalculationInput,
@@ -132,9 +133,14 @@ def read_subject_guidance(
         for key in ("display_name", "internal_alias")
         if (value := member[key])
     )
+    from familycare_api.guidance.expenses import read_expenses
+
+    expenses = read_expenses(connection, scope, event.id, event.version)
     # Names stay in transient parser inputs; snapshots retain only their aggregate digest.
     digest = hashlib.sha256(
-        json.dumps(members, sort_keys=True, default=str, separators=(",", ":")).encode()
+        json.dumps(
+            [members, expenses.digest_sha256], sort_keys=True, default=str, separators=(",", ":")
+        ).encode()
     ).hexdigest()
     return GuidanceContext(
         household_space_id=scope.household_space_id,
@@ -142,6 +148,7 @@ def read_subject_guidance(
         coverages=(),
         selected_subject_terms=selected_terms,
         other_subject_terms=other_terms,
+        expenses=expenses,
         versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
     )
 
@@ -272,10 +279,13 @@ def read_operational_guidance(
             if len(semantic_kinds) == 1
             else "UNKNOWN"
         )
-        for root in semantic.roots:
-            rules.extend(root.rules)
-            if root.calculation is not None and root.calculation.calculation_kind == benefit:
-                calculations.append(root.calculation)
+        from familycare_api.guidance.payout_cases import semantic_payout_cases
+
+        cases = semantic_payout_cases(
+            semantic.roots,
+            operational_rules=tuple(rules),
+            operational_calculations=tuple(calculations),
+        )
         starts = [
             d for d in (snapshot.contract_start, snapshot.rider_coverage_start) if d is not None
         ]
@@ -312,9 +322,12 @@ def read_operational_guidance(
                 )
                 else None,
                 status_intervals=intervals,
-                rules=tuple(rules),
-                calculation=calculations[0] if len(calculations) == 1 else None,
-                knowledge_incomplete=any(not root.complete for root in semantic.roots),
+                # Each replayed original root owns its referenced conditions.
+                # Legacy aggregate rules remain the fallback when none is available.
+                rules=() if cases else tuple(rules),
+                calculation=None if cases else calculations[0] if len(calculations) == 1 else None,
+                cases=cases,
+                contract_amount=operational_contract_amount(amount_source),
                 certificate_amount_decision=amount_source.amount_decision,
                 certificate_amount_evidence_state=(
                     "DIRECT" if amount_source.amount_decision == "MATCH" else "UNAVAILABLE"
@@ -355,6 +368,7 @@ def read_operational_guidance(
         coverages=tuple(coverages),
         selected_subject_terms=subjects.selected_subject_terms,
         other_subject_terms=subjects.other_subject_terms,
+        expenses=subjects.expenses,
         versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
     )
 
@@ -383,8 +397,8 @@ def combine_guidance_contexts(
         if previous is None:
             preferred[key] = coverage
         elif (
-            (not previous.rules or previous.disposition == "BLOCKED")
-            and coverage.rules
+            (not (previous.rules or previous.cases) or previous.disposition == "BLOCKED")
+            and (coverage.rules or coverage.cases)
             and coverage.disposition == "PUBLISHED"
             and "NO_MATCH"
             not in (
@@ -412,5 +426,6 @@ def combine_guidance_contexts(
         coverages=tuple(preferred.values()),
         selected_subject_terms=operational.selected_subject_terms,
         other_subject_terms=operational.other_subject_terms,
+        expenses=operational.expenses,
         versions=private.versions.model_copy(update={"status_digest": digest}),
     )

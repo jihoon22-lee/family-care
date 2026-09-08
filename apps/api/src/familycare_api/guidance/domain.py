@@ -21,7 +21,13 @@ from familycare_api.decisions.knowledge_domain import (
     KnowledgeFactNormalizer,
     KnowledgeStatusInterval,
 )
-from familycare_api.guidance.models import GuidanceEvidenceRef, GuidanceVersions
+from familycare_api.guidance.event_facts import CodeScope
+from familycare_api.guidance.expenses import ExpenseRead
+from familycare_api.guidance.models import (
+    GuidanceContractAmount,
+    GuidanceEvidenceRef,
+    GuidanceVersions,
+)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -59,6 +65,19 @@ class GuidanceCalculationInput:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class GuidancePayoutCaseInput:
+    case_key: str
+    rules: tuple[GuidanceRuleInput, ...]
+    calculation: GuidanceCalculationInput | None
+    benefit_type: KnowledgeBenefitType
+    knowledge_incomplete: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.case_key, str) or not 1 <= len(self.case_key) <= 256:
+            raise ValueError("GUIDANCE_PAYOUT_CASE_IDENTITY_INVALID")
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class GuidanceCoverageInput:
     ref: CanonicalCoverageRef
     contract_label: str
@@ -92,8 +111,12 @@ class GuidanceCoverageInput:
     claim_history_counted_occurrence: KnowledgeFact | None = None
     canonical_identity: CanonicalCoverageIdentity | None = None
     knowledge_incomplete: bool = False
+    contract_amount: GuidanceContractAmount | None = None
+    cases: tuple[GuidancePayoutCaseInput, ...] = ()
 
     def __post_init__(self) -> None:
+        if len({case.case_key for case in self.cases}) != len(self.cases):
+            raise ValueError("GUIDANCE_DUPLICATE_PAYOUT_CASE")
         if (
             self.canonical_identity is not None
             and self.ref not in self.canonical_identity.source_refs
@@ -112,8 +135,10 @@ class GuidanceContext:
     coverages: tuple[GuidanceCoverageInput, ...]
     versions: GuidanceVersions = field(default_factory=GuidanceVersions)
     normalizers: tuple[KnowledgeFactNormalizer, ...] = ()
+    normalizer_code_scopes: Mapping[str, CodeScope] = field(default_factory=dict)
     supporting_facts: Mapping[str, KnowledgeFact] = field(default_factory=dict)
     receipt_currency: str | None = None
+    expenses: ExpenseRead | None = None
     selected_subject_terms: tuple[str, ...] = ()
     other_subject_terms: tuple[str, ...] = ()
 

@@ -86,6 +86,17 @@ _INELIGIBLE_TOPIC_REASONS = frozenset(
 _ACTIVITY_SUFFIX = re.compile(
     r"(?:하지|할|하는|한|한지|했다|했습니다|했어요|했음|하였습니다|하였음|한다|합니다|중)"
 )
+_ACTIVITY_VALUES = {
+    "surgery": "surgery",
+    "operation": "surgery",
+    "수술": "surgery",
+    "admission": "admission",
+    "inpatient": "admission",
+    "입원": "admission",
+    "outpatient": "outpatient",
+    "외래": "outpatient",
+    "통원": "outpatient",
+}
 
 
 class EventFactsError(ValueError):
@@ -449,6 +460,22 @@ def build_event_facts(
         raise EventFactsError
     _scope_tuple(code_scopes)
     explicit, actual_scopes, conflicts, reasons = _read_explicit(event)
+    activity_path = "MedicalEvent.treatment_kind"
+    if activity is not None and (kind := explicit.get(activity_path)) is not None:
+        # Match only this finite broad activity vocabulary. A more specific
+        # procedure name is not proof that the broad activity did not occur.
+        canonical = _ACTIVITY_VALUES.get(
+            unicodedata.normalize("NFKC", kind.value).casefold().strip()
+            if isinstance(kind.value, str)
+            else ""
+        )
+        explicit[activity_path] = replace(
+            kind,
+            value=canonical,
+            provenance=kind.provenance if canonical is not None else "UNCONFIRMED",
+        )
+        if canonical is None:
+            reasons.add("LOCAL_ACTIVITY_TYPE_UNRESOLVED")
     if event.situation.strip():
         try:
             interpretation = interpret_situation(
@@ -476,7 +503,10 @@ def build_event_facts(
     local_paths: set[str] = set()
     for item in interpretation.facts:
         confirmed = item.state == "CONFIRMED"
-        if item.field_path == "MedicalEvent.performed" and activity != item.activity:
+        if (
+            item.field_path in {"MedicalEvent.performed", "MedicalEvent.treatment_kind"}
+            and activity != item.activity
+        ):
             confirmed = False
             reasons.add("LOCAL_ACTIVITY_BINDING_REQUIRED")
         derived[item.field_path] = KnowledgeFact(
@@ -491,6 +521,33 @@ def build_event_facts(
             derived[item.field_path] = replace(derived[item.field_path], provenance="CONFLICTING")
         elif confirmed:
             local_paths.add(item.field_path)
+    activity_observations = tuple(
+        item
+        for item in interpretation.facts
+        if activity is not None
+        and activity == item.activity
+        and item.state == "CONFIRMED"
+        and item.value is True
+        and (
+            (activity_fact := explicit.get(item.field_path)) is None
+            or (activity_fact.value is True and activity_fact.is_trusted)
+        )
+    )
+    activities = {item.activity for item in activity_observations}
+    if len(activities) == 1:
+        # This is the broad activity explicitly described by the user, never a
+        # diagnosis/procedure code or proof that its insurance definition matches.
+        path = "MedicalEvent.treatment_kind"
+        derived[path] = KnowledgeFact(
+            next(iter(activities)),
+            "DERIVED_CONFIRMED",
+            evidence_keys=tuple(
+                f"{INTERPRETATION_REVISION}:{span.start}:{span.end}"
+                for item in activity_observations
+                for span in item.spans
+            ),
+        )
+        local_paths.add(path)
     topic_fields: dict[str, list[NormalizerTopic]] = {}
     for topic in topics:
         if topic.relevance_allowed:

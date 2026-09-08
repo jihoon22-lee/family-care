@@ -2,84 +2,61 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from familycare_api.clauses.dsl import (
-    CompiledCalculation,
-    RuleValidationError,
-    validate_rule_document,
-)
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
     KnowledgeDecisionContext,
+    KnowledgeFact,
     KnowledgeFactContext,
 )
-from familycare_api.decisions.knowledge_engine import (
-    _CalculationInputUnavailable,
-    _CalculationState,
-    _legacy_fact_context,
-)
+from familycare_api.guidance.activity_binding import source_activity
+from familycare_api.guidance.calculation_runtime import CalculationSourceRef
+from familycare_api.guidance.case_relations import source_case_relation
 from familycare_api.guidance.domain import (
     GuidanceCitation,
     GuidanceContext,
     GuidanceCoverageInput,
+    GuidancePayoutCaseInput,
     GuidanceRuleEvaluation,
 )
-from familycare_api.guidance.event_facts import EventFactRead, build_event_facts
+from familycare_api.guidance.estimates import estimate_coverage
+from familycare_api.guidance.event_facts import CodeScope, EventFactRead, build_event_facts
+from familycare_api.guidance.expense_projection import (
+    RECEIPT_FIELDS,
+    covered_cost_input,
+    expense_failure,
+    expense_summary,
+)
+from familycare_api.guidance.interpretation import Activity
 from familycare_api.guidance.models import (
     Freshness,
     GuidanceCandidate,
     GuidanceCondition,
-    GuidanceEstimate,
+    GuidanceEventSpan,
     GuidanceEvidenceRef,
     GuidanceQuestion,
+    GuidanceRelevance,
     GuidanceSupport,
     LocalGuidanceResponse,
 )
+from familycare_api.guidance.payout_cases import (
+    MAX_PAYOUT_CASES,
+    case_coverage,
+    combine_payout_cases,
+)
 from familycare_api.guidance.private_adapter import adapt_private_guidance
+from familycare_api.guidance.relevance import find_relevance
 from familycare_api.guidance.rule_runtime import GuidanceRuleRuntime
-
-_RELEVANCE_KINDS = frozenset({"eligibility", "classification", "indemnity_eligibility"})
-_FIELD_LABELS = {
-    "Rider.insured_amount": "가입금액",
-    "MedicalEvent.admission_days": "입원 일수",
-    "Receipt.confirmed_amount": "확인된 비용",
-    "Receipt.covered_amount": "보장대상 비용",
-    "ClaimHistory.counted_occurrence": "이전 지급 횟수",
-}
+from familycare_api.guidance.scenarios import planned_care_scenarios
 
 
 def _unique(values: Sequence[str]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(values))
-
-
-def _money(value: Decimal) -> str:
-    rendered = format(value, "f")
-    return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
-
-
-def _formula(node: CompiledCalculation) -> str:
-    values = [
-        _formula(item)
-        if isinstance(item, CompiledCalculation)
-        else _FIELD_LABELS.get(item, item)
-        if isinstance(item, str)
-        else _money(item)
-        if isinstance(item, Decimal)
-        else "?"
-        for item in node.operands
-    ]
-    symbols = {"add": " + ", "subtract": " - ", "multiply": " × "}
-    if node.operator in symbols:
-        return "(" + symbols[node.operator].join(values) + ")"
-    if node.operator == "round":
-        return f"반올림[{node.rounding}]({', '.join(values)})"
-    return f"{'최솟값' if node.operator == 'min' else '최댓값'}({', '.join(values)})"
 
 
 def _evidence(
@@ -142,44 +119,96 @@ class LocalGuidanceEngine:
             selected_subject_terms=context.selected_subject_terms,
             other_subject_terms=context.other_subject_terms,
         )
-        normalized = event_read.context
-        facts = KnowledgeFactContext(
-            facts={**context.supporting_facts, **normalized.facts},
-            audit_conflicts=normalized.audit_conflicts,
-        )
+        activity_reads: dict[Activity | None, EventFactRead] = {None: event_read}
         candidates: list[GuidanceCandidate] = []
         unsupported = 0
-        failures: list[str] = []
-        for coverage in sorted(
+        expense_error = expense_failure(context.expenses, event)
+        failures: list[str] = [expense_error] if expense_error else []
+        for source_coverage in sorted(
             context.coverages, key=lambda item: (item.ref.kind, str(item.ref.coverage_id))
         ):
-            coverage_facts = facts
-            if (
-                context.receipt_currency is None
-                or context.receipt_currency != coverage.currency
-                or (
-                    coverage.canonical_identity is not None
-                    and "currency" in coverage.canonical_identity.field_conflicts
+            if len(source_coverage.cases) > MAX_PAYOUT_CASES:
+                failures.append("GUIDANCE_PAYOUT_CASE_LIMIT_EXCEEDED")
+                unsupported += 1
+                continue
+            views = (
+                tuple(case_coverage(source_coverage, case) for case in source_coverage.cases)
+                if source_coverage.cases
+                else (source_coverage,)
+            )
+            matches: list[tuple[GuidancePayoutCaseInput, GuidanceCandidate]] = []
+            matched_views: list[GuidanceCoverageInput] = []
+            all_supported = True
+            for index, coverage in enumerate(views):
+                activity = source_activity(coverage)
+                if activity not in activity_reads:
+                    activity_reads[activity] = build_event_facts(
+                        event,
+                        context.normalizers,
+                        selected_subject_terms=context.selected_subject_terms,
+                        other_subject_terms=context.other_subject_terms,
+                        activity=activity,
+                    )
+                coverage_read = activity_reads[activity]
+                normalized = coverage_read.context
+                facts = KnowledgeFactContext(
+                    facts={**context.supporting_facts, **normalized.facts},
+                    audit_conflicts=normalized.audit_conflicts,
                 )
-            ):
+                cost = covered_cost_input(
+                    context.expenses,
+                    event,
+                    None
+                    if (
+                        coverage.canonical_identity is not None
+                        and "currency" in coverage.canonical_identity.field_conflicts
+                    )
+                    else coverage.currency,
+                )
+                # The old private context aggregated confirmed excluded costs too.
+                # The v2 runtime uses the receipt reader's covered subset and real refs.
+                receipt_facts = (
+                    {path: KnowledgeFact(cost.value, "USER_CONFIRMED") for path in RECEIPT_FIELDS}
+                    if cost.value is not None
+                    else {}
+                )
                 coverage_facts = KnowledgeFactContext(
                     facts={
-                        path: value
-                        for path, value in facts.facts.items()
-                        if path not in {"Receipt.covered_amount", "Receipt.confirmed_amount"}
+                        **{
+                            path: value
+                            for path, value in facts.facts.items()
+                            if path not in RECEIPT_FIELDS
+                        },
+                        **receipt_facts,
                     },
                     audit_conflicts=facts.audit_conflicts,
                 )
-            try:
-                candidate, supported = self._coverage(
-                    event, coverage_facts, coverage, event_read=event_read
+                try:
+                    candidate, supported = self._coverage(
+                        event,
+                        coverage_facts,
+                        coverage,
+                        event_read=coverage_read,
+                        normalizer_code_scopes=context.normalizer_code_scopes,
+                        activity=activity,
+                        supporting_sources={path: cost.source_refs for path in receipt_facts},
+                        partial_costs=cost.partial,
+                    )
+                except ValueError, ArithmeticError:
+                    candidate, supported = None, False
+                    failures.append("GUIDANCE_COVERAGE_FAILED")
+                all_supported = all_supported and supported
+                if candidate is not None:
+                    if not source_coverage.cases:
+                        candidates.append(candidate)
+                    else:
+                        matches.append((source_coverage.cases[index], candidate))
+                        matched_views.append(coverage)
+            if matches:
+                candidates.append(
+                    combine_payout_cases(tuple(matches), source_case_relation(tuple(matched_views)))
                 )
-            except ValueError, ArithmeticError:
-                candidate, supported = None, False
-                failures.append("GUIDANCE_COVERAGE_FAILED")
-            if candidate is not None:
-                candidates.append(candidate)
-            unsupported += not supported
+            unsupported += not all_supported
         outcome: Literal[
             "CANDIDATES", "NO_RELEVANT_COVERAGE", "INPUT_UNRESOLVED", "KNOWLEDGE_PENDING"
         ] = "NO_RELEVANT_COVERAGE"
@@ -190,7 +219,7 @@ class LocalGuidanceEngine:
         elif not any(
             item.value is not None
             and path not in {"MedicalEvent.event_date", "MedicalEvent.visit_date"}
-            for path, item in normalized.facts.items()
+            for path, item in event_read.context.facts.items()
         ):
             outcome = "INPUT_UNRESOLVED"
         return LocalGuidanceResponse(
@@ -202,6 +231,7 @@ class LocalGuidanceEngine:
             outcome=outcome,
             versions=context.versions.model_copy(update={"engine": "local-guidance-v2"}),
             candidates=tuple(candidates),
+            expenses=expense_summary(context.expenses, event),
             support=GuidanceSupport(
                 total_coverages=len(context.coverages),
                 evaluated_coverages=len(context.coverages) - unsupported,
@@ -216,7 +246,11 @@ class LocalGuidanceEngine:
         facts: KnowledgeFactContext,
         coverage: GuidanceCoverageInput,
         *,
-        event_read: EventFactRead | None = None,
+        event_read: EventFactRead,
+        normalizer_code_scopes: Mapping[str, CodeScope],
+        activity: Activity | None,
+        supporting_sources: Mapping[str, tuple[CalculationSourceRef, ...]],
+        partial_costs: bool,
     ) -> tuple[GuidanceCandidate | None, bool]:
         if (
             coverage.disposition == "NOT_APPLICABLE"
@@ -256,23 +290,41 @@ class LocalGuidanceEngine:
             current_confirmed_status="active" if freshness == "CONFIRMED_AT_EVENT" else None,
             current_confirmation_decision="MATCH" if freshness == "CONFIRMED_AT_EVENT" else None,
         )
+        # A known subset can price that subset, but cannot settle a predicate
+        # about the full expense total (including a decisive upper/lower bound).
+        rule_facts = KnowledgeFactContext(
+            facts={
+                path: replace(fact, value=None, provenance="UNCONFIRMED")
+                if partial_costs and path in RECEIPT_FIELDS
+                else fact
+                for path, fact in facts.facts.items()
+            },
+            audit_conflicts=facts.audit_conflicts,
+        )
         outcomes = tuple(
-            self.rule_runtime._evaluate_rule(facts, effective_coverage, rule, event_read=event_read)
+            self.rule_runtime._evaluate_rule(
+                rule_facts, effective_coverage, rule, event_read=event_read
+            )
             for rule in coverage.rules
         )
         evaluations = tuple(item[0] for item in outcomes)
-        relevant = any(
-            rule.rule_kind in _RELEVANCE_KINDS and evaluation.result == "MATCH"
-            for rule, evaluation in zip(coverage.rules, evaluations, strict=True)
-        )
-        if not relevant:
-            return None, not any(failed for _, failed in outcomes)
         required = tuple(item for item in evaluations if item.required)
         if any(item.result == "NO_MATCH" for item in required):
             return None, True
+        relevance = find_relevance(
+            rule_facts,
+            effective_coverage,
+            event_read,
+            normalizer_code_scopes=normalizer_code_scopes,
+            activity=activity,
+        )
+        if not relevance:
+            return None, not any(failed for _, failed in outcomes)
         conditions: Literal["MATCH", "UNKNOWN"] = (
             "UNKNOWN"
-            if coverage.knowledge_incomplete or any(item.result == "UNKNOWN" for item in required)
+            if coverage.knowledge_incomplete
+            or not any(item.kind == "CONFIRMED_EVENT" for item in relevance)
+            or any(item.result == "UNKNOWN" for item in required)
             else "MATCH"
         )
         assumptions = []
@@ -289,8 +341,15 @@ class LocalGuidanceEngine:
             or event.event_date is None
             else "PRIMARY"
         )
-        estimate = self._estimate(
-            facts, effective_coverage, conditions=conditions, assumptions=assumptions
+        estimate = estimate_coverage(
+            event,
+            facts,
+            effective_coverage,
+            event_read,
+            conditions=conditions,
+            assumptions=assumptions,
+            supporting_sources=supporting_sources,
+            partial_costs=partial_costs,
         )
         question_paths = _unique(
             [
@@ -305,6 +364,7 @@ class LocalGuidanceEngine:
             if coverage.canonical_identity is not None
             else coverage.ref,
             canonical_identity=coverage.canonical_identity,
+            contract_amount=coverage.contract_amount,
             contract_label=coverage.contract_label,
             coverage_label=coverage.coverage_label,
             benefit_kind=coverage.benefit_type,
@@ -315,11 +375,41 @@ class LocalGuidanceEngine:
                 ["DOCUMENTED_RELEVANT_COVERAGE"]
                 + (["OPERATIONAL_SOURCE_FIELD_CONFLICT"] if field_conflicts else [])
                 + (["SEMANTIC_KNOWLEDGE_PARTIAL"] if coverage.knowledge_incomplete else [])
+                + [
+                    "PLANNED_EVENT_RELEVANCE"
+                    if item.kind == "PLANNED_EVENT"
+                    else "LOCAL_TOPIC_RELEVANCE"
+                    for item in relevance
+                    if item.kind != "CONFIRMED_EVENT"
+                ]
                 + [item.reason_code for item in required if item.result != "MATCH"]
             ),
             assumptions=tuple(assumptions),
             conditions=tuple(self._condition(item) for item in evaluations),
+            relevance=tuple(
+                GuidanceRelevance(
+                    kind=item.kind,
+                    field_path=item.field_path,
+                    publication_id=item.publication_id,
+                    rule_key=item.rule_key,
+                    source_kind=item.source_kind,
+                    semantic_node_id=item.semantic_node_id,
+                    spans=tuple(GuidanceEventSpan(start=s.start, end=s.end) for s in item.spans),
+                    normalizer_key=item.normalizer_key,
+                    evidence=_evidence(item.citations, item.publication_id),
+                )
+                for item in relevance
+            ),
             estimate=estimate,
+            scenarios=planned_care_scenarios(
+                event,
+                facts,
+                effective_coverage,
+                event_read,
+                assumptions=assumptions,
+            )
+            if any(item.kind == "PLANNED_EVENT" for item in relevance)
+            else (),
             questions=tuple(
                 GuidanceQuestion(field_path=path, reason_code="EVENT_FACT_NEEDED")
                 for path in question_paths
@@ -337,100 +427,4 @@ class LocalGuidanceEngine:
             result=value.result,
             reason_code=value.reason_code,
             evidence=_evidence(value.citations, value.rule_publication_id),
-        )
-
-    @staticmethod
-    def _estimate(
-        facts: KnowledgeFactContext,
-        coverage: GuidanceCoverageInput,
-        *,
-        conditions: Literal["MATCH", "UNKNOWN"],
-        assumptions: list[str],
-    ) -> GuidanceEstimate:
-        publication = coverage.calculation
-        if publication is None:
-            return GuidanceEstimate(kind="UNAVAILABLE", reason_code="CALCULATION_NOT_PUBLISHED")
-        if not publication.citations or any(
-            not item.lineage_valid for item in publication.citations
-        ):
-            return GuidanceEstimate(kind="UNAVAILABLE", reason_code="CALCULATION_CITATION_INVALID")
-        try:
-            validated = validate_rule_document(
-                publication.calculation_document,
-                tuple(item.citation_key for item in publication.citations),
-            )
-            calculation = validated.calculation
-            if (
-                calculation is None
-                or publication.calculation_kind != coverage.benefit_type
-                or validated.result_reason_code != publication.result_reason_code
-            ):
-                raise ValueError("calculation metadata mismatch")
-            formula = _formula(calculation)
-        except RuleValidationError, ValueError:
-            return GuidanceEstimate(kind="UNAVAILABLE", reason_code="CALCULATION_UNSUPPORTED")
-        legacy = _legacy_fact_context(facts, coverage)
-        missing = tuple(
-            path
-            for path in validated.input_field_paths
-            if (fact := legacy.get(path)) is None
-            or fact.value is None
-            or not fact.is_confirmed
-            or fact.evidence_stale
-            or (
-                path == "Rider.insured_amount"
-                and (
-                    coverage.certificate_amount_decision != "MATCH"
-                    or coverage.certificate_amount_evidence_state != "DIRECT"
-                )
-            )
-        )
-        estimate_assumptions = _unique(
-            [*assumptions, *(["CONDITIONS_REMAIN"] if conditions == "UNKNOWN" else [])]
-        )
-        evidence = _evidence(publication.citations, publication.publication_id)
-        if (
-            publication.source_currency is not None
-            and publication.source_currency != coverage.currency
-        ):
-            return GuidanceEstimate(
-                kind="FORMULA",
-                currency=publication.source_currency,
-                formula=formula,
-                missing_inputs=("Rider.currency",),
-                assumptions=estimate_assumptions,
-                reason_code="CALCULATION_CURRENCY_MISMATCH",
-                evidence=evidence,
-            )
-        if missing or coverage.currency is None:
-            return GuidanceEstimate(
-                kind="FORMULA",
-                currency=coverage.currency,
-                formula=formula,
-                missing_inputs=missing,
-                assumptions=estimate_assumptions,
-                reason_code="CALCULATION_INPUT_NEEDED",
-                evidence=evidence,
-            )
-        try:
-            amount = _CalculationState(legacy, coverage.currency).evaluate(calculation)
-            if amount < 0 or not amount.is_finite():
-                raise ValueError("invalid calculated amount")
-        except _CalculationInputUnavailable, ArithmeticError, ValueError:
-            return GuidanceEstimate(
-                kind="FORMULA",
-                currency=coverage.currency,
-                formula=formula,
-                assumptions=estimate_assumptions,
-                reason_code="CALCULATION_INPUT_NEEDED",
-                evidence=evidence,
-            )
-        return GuidanceEstimate(
-            kind="POINT",
-            currency=coverage.currency,
-            amount=_money(amount),
-            formula=formula,
-            assumptions=estimate_assumptions,
-            reason_code="DOCUMENT_BASED_ESTIMATE",
-            evidence=evidence,
         )

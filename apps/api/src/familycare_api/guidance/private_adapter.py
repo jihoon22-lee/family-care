@@ -12,7 +12,14 @@ from familycare_api.guidance.domain import (
     GuidanceCoverageInput,
     GuidanceRuleInput,
 )
-from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
+from familycare_api.guidance.models import (
+    GuidanceContractAmount,
+    GuidanceEvidence,
+    GuidancePrivateCertificate,
+    GuidanceSourceReference,
+    GuidanceVersions,
+)
+from familycare_api.guidance.trace_projection import decimal_text
 
 
 def _citations(
@@ -41,7 +48,15 @@ def adapt_private_guidance(context: KnowledgeDecisionContext) -> GuidanceContext
         common = {
             item.name: getattr(coverage, item.name)
             for item in fields(GuidanceCoverageInput)
-            if item.name not in {"ref", "rules", "calculation", "knowledge_incomplete"}
+            if item.name
+            not in {
+                "ref",
+                "rules",
+                "calculation",
+                "knowledge_incomplete",
+                "contract_amount",
+                "cases",
+            }
         }
         rules = tuple(
             GuidanceRuleInput(
@@ -80,6 +95,43 @@ def adapt_private_guidance(context: KnowledgeDecisionContext) -> GuidanceContext
                 ),
                 rules=rules,
                 calculation=calculation,
+                contract_amount=GuidanceContractAmount(
+                    amount=decimal_text(coverage.insured_amount),
+                    currency=coverage.currency,
+                    amount_authority=(
+                        "DOCUMENT_REVIEWED"
+                        if coverage.certificate_amount_decision == "MATCH"
+                        and coverage.certificate_amount_evidence_state == "DIRECT"
+                        and coverage.certificate_evidence
+                        else "UNCONFIRMED"
+                    ),
+                    # Currency is a separately reviewed catalog field; an unresolved
+                    # certificate amount must not erase a known currency.
+                    currency_authority="DOCUMENT_REVIEWED" if coverage.currency else "UNCONFIRMED",
+                    source_refs=(
+                        GuidanceSourceReference(
+                            source_kind="PRIVATE_COVERAGE",
+                            source_id=str(coverage.knowledge_coverage_id),
+                            version=str(context.knowledge_import_run_id),
+                            digest_sha256=context.status_projection_digest_sha256,
+                        ),
+                        GuidanceSourceReference(
+                            source_kind="PRIVATE_IMPORT",
+                            source_id=str(context.knowledge_import_run_id),
+                        ),
+                    ),
+                    evidence=tuple(
+                        GuidancePrivateCertificate(
+                            catalog_import_run_id=context.knowledge_import_run_id,
+                            coverage_id=coverage.knowledge_coverage_id,
+                            document_alias=item.document_alias,
+                            page_start=page,
+                            page_end=page,
+                        )
+                        for item in coverage.certificate_evidence
+                        for page in item.evidence_pages
+                    ),
+                ),
             )
         )
     return GuidanceContext(

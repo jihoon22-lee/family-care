@@ -118,6 +118,7 @@ _PLANNED = re.compile(
     r"\b(?:planned|planning|scheduled|will|tomorrow|next\s+(?:week|month)|going\s+to)\b",
     re.IGNORECASE,
 )
+_CANCELLED = re.compile(r"취소|철회|\b(?:cancelled|canceled|withdrawn)\b", re.IGNORECASE)
 _UNCERTAIN = re.compile(
     r"모르|몰라|여부|인지|불확실|의심|가능성|만약|가정|(?:필요|권유)|"
     r"(?:했|하였|받았)(?:으면|나요|습니까|는지|을까)|"
@@ -377,6 +378,8 @@ def _guard(text: str, span: SourceSpan, clauses: tuple[_Clause, ...]) -> MatchSc
         re.IGNORECASE,
     ):
         return MatchScope("UNKNOWN", ("LOCAL_ACTIVITY_UNRESOLVED",), span)
+    if _CANCELLED.search(body):
+        return MatchScope("UNKNOWN", ("LOCAL_PLAN_CANCELLED",), span)
     if _UNCERTAIN.search(body) or "?" in body or "？" in body:
         return MatchScope("UNKNOWN", ("LOCAL_STATEMENT_UNCERTAIN",), span)
     if _DOCUMENT.search(body):

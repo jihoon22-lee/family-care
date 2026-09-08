@@ -58,6 +58,31 @@ def connect(url):
     return connection
 
 
+def test_actual_analysis_snapshots_costs_and_marks_receipt_edits_stale(receipts):
+    url, seeded, event, service = receipts
+    original_line = create(service, event.id, "50000")
+    create(service, event.id, "20000", coverage="unknown")
+    decisions = _service(url, seeded.scope_a)
+    original = decisions.analyze_medical_event(event.id)
+    guidance = original.local_guidance
+    assert guidance is not None
+    assert guidance.expenses.currencies[0].covered.known_cost == "50000"
+    assert guidance.expenses.currencies[0].coverage_review.known_cost == "20000"
+    assert decisions.get_decision_result(event.id, event.version).local_guidance_stale is False
+    service.update_receipt_line(
+        event.id,
+        original_line.line_id,
+        ReceiptLineUpdateRequest(expected_version=1, amount="60000"),
+    )
+    historical = decisions.get_decision_result(event.id, event.version)
+    assert historical.local_guidance_stale is True
+    assert historical.local_guidance == guidance
+    fresh = decisions.analyze_medical_event(event.id).local_guidance
+    assert fresh.expenses.currencies[0].covered.known_cost == "60000"
+    assert fresh.versions.status_digest != guidance.versions.status_digest
+    assert guidance.expenses.currencies[0].covered.known_cost == "50000"
+
+
 def test_real_receipt_rows_preserve_partitions_and_multiple_currencies(receipts):
     url, seeded, event, service = receipts
     created = [

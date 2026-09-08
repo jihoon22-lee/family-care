@@ -393,6 +393,498 @@
       "title": "ConditionalFixedSubtotalResponse",
       "type": "object"
     },
+    "GuidanceCalculatedComponent": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "parent_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Parent Path",
+          "type": "string"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 162,
+          "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "parent_path",
+        "expression_path",
+        "value",
+        "unit"
+      ],
+      "title": "GuidanceCalculatedComponent",
+      "type": "object"
+    },
+    "GuidanceCalculationOperand": {
+      "additionalProperties": false,
+      "properties": {
+        "child_path": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Child Path"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "field_path": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field Path"
+        },
+        "kind": {
+          "enum": [
+            "FIELD",
+            "LITERAL",
+            "CHILD"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provenance"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "stale": {
+          "default": false,
+          "title": "Stale",
+          "type": "boolean"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "supplied_value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Supplied Value"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "expression_path",
+        "kind",
+        "unit",
+        "status"
+      ],
+      "title": "GuidanceCalculationOperand",
+      "type": "object"
+    },
+    "GuidanceCalculationStep": {
+      "additionalProperties": false,
+      "properties": {
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "expression_path": {
+          "maxLength": 512,
+          "pattern": "^/calculation(?:/args/[0-9]{1,2})*$",
+          "title": "Expression Path",
+          "type": "string"
+        },
+        "operands": {
+          "items": {
+            "$ref": "#/$defs/GuidanceCalculationOperand"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Operands",
+          "type": "array"
+        },
+        "operation": {
+          "enum": [
+            "add",
+            "subtract",
+            "multiply",
+            "min",
+            "max",
+            "round"
+          ],
+          "title": "Operation",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "rounding_rule": {
+          "anyOf": [
+            {
+              "enum": [
+                "half_up",
+                "half_even",
+                "up",
+                "down"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rounding Rule"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "step_number": {
+          "maximum": 256,
+          "minimum": 1,
+          "title": "Step Number",
+          "type": "integer"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "unit_source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Unit Source Refs",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "step_number",
+        "expression_path",
+        "operation",
+        "operands",
+        "unit",
+        "status"
+      ],
+      "title": "GuidanceCalculationStep",
+      "type": "object"
+    },
+    "GuidanceCalculationTrace": {
+      "additionalProperties": false,
+      "properties": {
+        "calculated_components": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceCalculatedComponent"
+          },
+          "maxItems": 256,
+          "title": "Calculated Components",
+          "type": "array"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "formula_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Formula Digest Sha256",
+          "type": "string"
+        },
+        "missing_paths": {
+          "default": [],
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Missing Paths",
+          "type": "array"
+        },
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "reason_codes": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "runtime_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Runtime Revision",
+          "type": "string"
+        },
+        "source_digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Digest Sha256",
+          "type": "string"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "source_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Source Revision",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "COMPLETE",
+            "PARTIAL",
+            "UNAVAILABLE",
+            "FAILED"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "steps": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceCalculationStep"
+          },
+          "maxItems": 256,
+          "title": "Steps",
+          "type": "array"
+        },
+        "unit": {
+          "enum": [
+            "MONEY",
+            "DAYS",
+            "COUNT",
+            "RATIO",
+            "NUMBER",
+            "UNKNOWN"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "maxLength": 162,
+              "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "publication_id",
+        "source_revision",
+        "source_digest_sha256",
+        "formula_digest_sha256",
+        "runtime_revision",
+        "status",
+        "unit"
+      ],
+      "title": "GuidanceCalculationTrace",
+      "type": "object"
+    },
     "GuidanceCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -428,6 +920,24 @@
           ],
           "default": null
         },
+        "case_relation": {
+          "default": "UNRESOLVED",
+          "enum": [
+            "MUTUALLY_EXCLUSIVE",
+            "UNRESOLVED"
+          ],
+          "title": "Case Relation",
+          "type": "string"
+        },
+        "cases": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidancePayoutCase"
+          },
+          "maxItems": 32,
+          "title": "Cases",
+          "type": "array"
+        },
         "condition_result": {
           "enum": [
             "MATCH",
@@ -444,6 +954,17 @@
           "maxItems": 128,
           "title": "Conditions",
           "type": "array"
+        },
+        "contract_amount": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidanceContractAmount"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "contract_label": {
           "maxLength": 800,
@@ -506,6 +1027,24 @@
         },
         "ref": {
           "$ref": "#/$defs/CanonicalCoverageRef"
+        },
+        "relevance": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceRelevance"
+          },
+          "maxItems": 64,
+          "title": "Relevance",
+          "type": "array"
+        },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceScenario"
+          },
+          "maxItems": 32,
+          "title": "Scenarios",
+          "type": "array"
         }
       },
       "required": [
@@ -605,6 +1144,202 @@
       "title": "GuidanceCondition",
       "type": "object"
     },
+    "GuidanceContractAmount": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount"
+        },
+        "amount_authority": {
+          "enum": [
+            "PROGRAM_VERIFIED",
+            "USER_CONFIRMED",
+            "DOCUMENT_REVIEWED",
+            "UNCONFIRMED"
+          ],
+          "title": "Amount Authority",
+          "type": "string"
+        },
+        "currency": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Currency"
+        },
+        "currency_authority": {
+          "enum": [
+            "PROGRAM_VERIFIED",
+            "USER_CONFIRMED",
+            "DOCUMENT_REVIEWED",
+            "UNCONFIRMED"
+          ],
+          "title": "Currency Authority",
+          "type": "string"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/GuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/GuidancePrivateCertificate"
+              }
+            ]
+          },
+          "maxItems": 128,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "source_refs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "amount_authority",
+        "currency_authority"
+      ],
+      "title": "GuidanceContractAmount",
+      "type": "object"
+    },
+    "GuidanceCostGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "known_cost": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Known Cost"
+        },
+        "known_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Known Line Ids",
+          "type": "array"
+        },
+        "line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Line Ids",
+          "type": "array"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "total_cost": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Total Cost"
+        },
+        "unit": {
+          "const": "COST",
+          "default": "COST",
+          "title": "Unit",
+          "type": "string"
+        },
+        "unknown_amount_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Unknown Amount Line Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "line_ids",
+        "known_line_ids",
+        "unknown_amount_line_ids",
+        "known_cost",
+        "total_cost",
+        "source_refs"
+      ],
+      "title": "GuidanceCostGroup",
+      "type": "object"
+    },
+    "GuidanceCurrencyCosts": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage_review": {
+          "$ref": "#/$defs/GuidanceCostGroup"
+        },
+        "covered": {
+          "$ref": "#/$defs/GuidanceCostGroup"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "excluded": {
+          "$ref": "#/$defs/GuidanceCostGroup"
+        },
+        "unconfirmed": {
+          "$ref": "#/$defs/GuidanceCostGroup"
+        }
+      },
+      "required": [
+        "currency",
+        "covered",
+        "excluded",
+        "coverage_review",
+        "unconfirmed"
+      ],
+      "title": "GuidanceCurrencyCosts",
+      "type": "object"
+    },
     "GuidanceEstimate": {
       "additionalProperties": false,
       "properties": {
@@ -633,6 +1368,18 @@
           "maxItems": 32,
           "title": "Assumptions",
           "type": "array"
+        },
+        "basis": {
+          "default": "DOCUMENT_FORMULA",
+          "enum": [
+            "DOCUMENT_FORMULA",
+            "REGISTERED_COSTS",
+            "CONFIRMED_COST_SUBSET",
+            "USER_SCENARIO",
+            "SOURCE_ALTERNATIVES"
+          ],
+          "title": "Basis",
+          "type": "string"
         },
         "currency": {
           "anyOf": [
@@ -711,12 +1458,37 @@
           "title": "Missing Inputs",
           "type": "array"
         },
+        "partial_amount": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partial Amount"
+        },
         "reason_code": {
           "maxLength": 80,
           "minLength": 1,
           "pattern": "^[A-Z][A-Z0-9_]*$",
           "title": "Reason Code",
           "type": "string"
+        },
+        "trace": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidanceCalculationTrace"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "upper": {
           "anyOf": [
@@ -738,6 +1510,29 @@
         "reason_code"
       ],
       "title": "GuidanceEstimate",
+      "type": "object"
+    },
+    "GuidanceEventSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "End",
+          "type": "integer"
+        },
+        "start": {
+          "maximum": 2000,
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ],
+      "title": "GuidanceEventSpan",
       "type": "object"
     },
     "GuidanceEvidence": {
@@ -804,6 +1599,294 @@
       "title": "GuidanceEvidence",
       "type": "object"
     },
+    "GuidanceExpenses": {
+      "additionalProperties": false,
+      "properties": {
+        "currencies": {
+          "items": {
+            "$ref": "#/$defs/GuidanceCurrencyCosts"
+          },
+          "maxItems": 256,
+          "title": "Currencies",
+          "type": "array"
+        },
+        "digest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Digest Sha256",
+          "type": "string"
+        },
+        "event_id": {
+          "format": "uuid",
+          "title": "Event Id",
+          "type": "string"
+        },
+        "event_version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Event Version"
+        },
+        "reader_revision": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Reader Revision",
+          "type": "string"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "AVAILABLE",
+            "EMPTY",
+            "PARTIAL",
+            "UNAVAILABLE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "unassigned_line_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 256,
+          "title": "Unassigned Line Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "event_version",
+        "status",
+        "reader_revision",
+        "digest_sha256",
+        "currencies",
+        "unassigned_line_ids",
+        "reason_codes"
+      ],
+      "title": "GuidanceExpenses",
+      "type": "object"
+    },
+    "GuidanceHypothesis": {
+      "additionalProperties": false,
+      "properties": {
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "provenance": {
+          "const": "SCENARIO_ASSUMPTION",
+          "default": "SCENARIO_ASSUMPTION",
+          "title": "Provenance",
+          "type": "string"
+        },
+        "source_refs": {
+          "items": {
+            "$ref": "#/$defs/GuidanceSourceReference"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Source Refs",
+          "type": "array"
+        },
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/GuidanceEventSpan"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Spans",
+          "type": "array"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "field_path",
+        "value",
+        "spans",
+        "source_refs"
+      ],
+      "title": "GuidanceHypothesis",
+      "type": "object"
+    },
+    "GuidancePayoutCase": {
+      "additionalProperties": false,
+      "properties": {
+        "assumptions": {
+          "default": [],
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Assumptions",
+          "type": "array"
+        },
+        "benefit_kind": {
+          "enum": [
+            "FIXED",
+            "INDEMNITY",
+            "UNKNOWN"
+          ],
+          "title": "Benefit Kind",
+          "type": "string"
+        },
+        "case_key": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Case Key",
+          "type": "string"
+        },
+        "condition_result": {
+          "enum": [
+            "MATCH",
+            "UNKNOWN"
+          ],
+          "title": "Condition Result",
+          "type": "string"
+        },
+        "conditions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceCondition"
+          },
+          "maxItems": 128,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "estimate": {
+          "$ref": "#/$defs/GuidanceEstimate"
+        },
+        "questions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceQuestion"
+          },
+          "maxItems": 64,
+          "title": "Questions",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        },
+        "relevance": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceRelevance"
+          },
+          "maxItems": 64,
+          "title": "Relevance",
+          "type": "array"
+        },
+        "scenarios": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceScenario"
+          },
+          "maxItems": 32,
+          "title": "Scenarios",
+          "type": "array"
+        }
+      },
+      "required": [
+        "case_key",
+        "benefit_kind",
+        "condition_result",
+        "reason_codes",
+        "estimate"
+      ],
+      "title": "GuidancePayoutCase",
+      "type": "object"
+    },
+    "GuidancePrivateCertificate": {
+      "additionalProperties": false,
+      "properties": {
+        "catalog_import_run_id": {
+          "format": "uuid",
+          "title": "Catalog Import Run Id",
+          "type": "string"
+        },
+        "coverage_id": {
+          "format": "uuid",
+          "title": "Coverage Id",
+          "type": "string"
+        },
+        "document_alias": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Document Alias",
+          "type": "string"
+        },
+        "kind": {
+          "const": "PRIVATE_CERTIFICATE",
+          "default": "PRIVATE_CERTIFICATE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page_end": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page End",
+          "type": "integer"
+        },
+        "page_start": {
+          "maximum": 500,
+          "minimum": 1,
+          "title": "Page Start",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "catalog_import_run_id",
+        "coverage_id",
+        "document_alias",
+        "page_start",
+        "page_end"
+      ],
+      "title": "GuidancePrivateCertificate",
+      "type": "object"
+    },
     "GuidanceQuestion": {
       "additionalProperties": false,
       "properties": {
@@ -826,6 +1909,144 @@
         "reason_code"
       ],
       "title": "GuidanceQuestion",
+      "type": "object"
+    },
+    "GuidanceRelevance": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/GuidanceEvidence"
+              },
+              {
+                "$ref": "#/$defs/GuidanceSemanticEvidence"
+              }
+            ]
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "field_path": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Field Path",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "CONFIRMED_EVENT",
+            "LOCAL_TOPIC",
+            "PLANNED_EVENT"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "normalizer_key": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Normalizer Key"
+        },
+        "publication_id": {
+          "format": "uuid",
+          "title": "Publication Id",
+          "type": "string"
+        },
+        "rule_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Rule Key",
+          "type": "string"
+        },
+        "semantic_node_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Semantic Node Id"
+        },
+        "source_kind": {
+          "enum": [
+            "PRIVATE_RULE_PUBLICATION",
+            "OPERATIONAL_RULE_VERSION",
+            "SEMANTIC_NODE"
+          ],
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "spans": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/GuidanceEventSpan"
+          },
+          "maxItems": 128,
+          "title": "Spans",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "field_path",
+        "publication_id",
+        "rule_key",
+        "source_kind",
+        "evidence"
+      ],
+      "title": "GuidanceRelevance",
+      "type": "object"
+    },
+    "GuidanceScenario": {
+      "additionalProperties": false,
+      "properties": {
+        "estimate": {
+          "$ref": "#/$defs/GuidanceEstimate"
+        },
+        "hypotheses": {
+          "items": {
+            "$ref": "#/$defs/GuidanceHypothesis"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Hypotheses",
+          "type": "array"
+        },
+        "kind": {
+          "const": "PLANNED_CARE",
+          "title": "Kind",
+          "type": "string"
+        },
+        "scenario_key": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Scenario Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scenario_key",
+        "kind",
+        "hypotheses",
+        "estimate"
+      ],
+      "title": "GuidanceScenario",
       "type": "object"
     },
     "GuidanceSemanticEvidence": {
@@ -955,6 +2176,61 @@
         "manifest_sha256"
       ],
       "title": "GuidanceSemanticEvidence",
+      "type": "object"
+    },
+    "GuidanceSourceReference": {
+      "additionalProperties": false,
+      "properties": {
+        "digest_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Digest Sha256"
+        },
+        "source_id": {
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "source_kind": {
+          "maxLength": 80,
+          "minLength": 1,
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "source_kind",
+        "source_id"
+      ],
+      "title": "GuidanceSourceReference",
       "type": "object"
     },
     "GuidanceSupport": {
@@ -1502,6 +2778,17 @@
           "minimum": 1,
           "title": "Event Version",
           "type": "integer"
+        },
+        "expenses": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuidanceExpenses"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "family_member_id": {
           "format": "uuid",
