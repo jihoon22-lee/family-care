@@ -361,3 +361,262 @@ def test_money_output_bound_does_not_round_or_truncate_a_large_sum():
     result = fixed_subtotal_projection(response(*values))
     assert result["fixed_subtotals"] == []
     assert reasons(result) == {"SUBTOTAL_AMOUNT_LIMIT_EXCEEDED"}
+
+
+def planned_candidate(number, *, days=5):
+    from apps.api.tests.test_guidance_local_event_engine import context
+
+    semantic = context().coverages[0]
+    base = adapt_private_guidance(_context(_coverage(number, "100")))
+    coverage = replace(
+        base.coverages[0],
+        rules=semantic.rules,
+        calculation=semantic.calculation,
+        canonical_identity=candidate(number).canonical_identity,
+    )
+    event = replace(
+        _event(),
+        facts={},
+        situation=f"{days}일 입원 예정입니다.",
+        structured_facts=(
+            {
+                "field_id": "condition_class",
+                "value": "class-a",
+                "source": "user",
+                "state": "confirmed",
+                "confidence": "high",
+                "evidence_ids": (),
+                "code_system": "synthetic-classification",
+                "code_version": "edition-1",
+            },
+        ),
+    )
+    result = (
+        LocalGuidanceEngine()
+        .evaluate(
+            HouseholdScope(HOUSEHOLD_ID),
+            event,
+            replace(base, coverages=(coverage,)),
+        )
+        .candidates[0]
+    )
+    # The subtotal consumes required outcomes, even when the public aggregate
+    # remains conditional because the care itself is still a planned scenario.
+    return result.model_copy(update={"condition_result": "UNKNOWN", "group": "CONDITIONAL"})
+
+
+def test_same_explicit_plan_has_separate_conditional_subtotal_without_actual_fact_promotion():
+    first, second = planned_candidate(1), planned_candidate(2)
+    assert first.condition_result == "UNKNOWN"
+    assert all(condition.result == "MATCH" for condition in first.conditions if condition.required)
+    original = response(first, second)
+    unchanged = original.model_dump_json()
+    result = fixed_subtotal_projection(original)
+    assert amounts(result) == [("KRW", "600")]
+    subtotal = result["fixed_subtotals"][0]
+    scenario = first.scenarios[0]
+    assert subtotal["scenario_key"] == scenario.scenario_key == second.scenarios[0].scenario_key
+    assert subtotal["hypotheses"] == [
+        hypothesis.model_dump(mode="json") for hypothesis in scenario.hypotheses
+    ]
+    assert subtotal["conditional"] is True and subtotal["basis"] == "ASSUMED_COMBINATION"
+    assert subtotal["partial"] is False
+    assert all(item["scenario_key"] == scenario.scenario_key for item in subtotal["items"])
+    planned = next(
+        item for item in subtotal["scoped_assumptions"] if item["code"] == "PLANNED_CARE_ASSUMED"
+    )
+    assert len(planned["applies_to"]) == 2
+    assert all(item["scenario_key"] == scenario.scenario_key for item in planned["applies_to"])
+    assert original.model_dump_json() == unchanged
+    assert all(candidate.estimate.amount is None for candidate in original.candidates)
+    assert all(
+        candidate.scenarios[0].estimate.basis == "USER_SCENARIO"
+        for candidate in original.candidates
+    )
+
+
+@pytest.mark.parametrize("condition_case", ["required_unknown", "no_match", "incomplete"])
+def test_plan_does_not_bypass_required_or_incomplete_source_conditions(condition_case):
+    first = planned_candidate(1)
+    conditions = list(first.conditions)
+    if condition_case == "incomplete":
+        first = first.model_copy(
+            update={"reason_codes": (*first.reason_codes, "SEMANTIC_KNOWLEDGE_PARTIAL")}
+        )
+    else:
+        selected = next(index for index, condition in enumerate(conditions) if condition.required)
+        conditions[selected] = conditions[selected].model_copy(
+            update={"result": "UNKNOWN" if condition_case == "required_unknown" else "NO_MATCH"}
+        )
+        first = first.model_copy(update={"conditions": tuple(conditions)})
+    result = fixed_subtotal_projection(response(first, planned_candidate(2), planned_candidate(3)))
+    assert amounts(result) == [("KRW", "600")]
+    assert result["fixed_subtotals"][0]["partial"] is True
+    assert any(
+        item["ref"]["coverage_id"] == str(first.ref.coverage_id)
+        and item["scenario_key"] == first.scenarios[0].scenario_key
+        for item in result["subtotal_omissions"]
+    )
+
+
+def test_different_plans_and_actual_points_never_form_one_subtotal():
+    result = fixed_subtotal_projection(
+        response(
+            planned_candidate(1, days=5),
+            planned_candidate(2, days=6),
+            candidate(3),
+            candidate(4),
+        )
+    )
+    assert amounts(result) == [("KRW", "200")]
+    subtotal = result["fixed_subtotals"][0]
+    assert subtotal["scenario_key"] is None and subtotal["hypotheses"] == []
+
+
+def test_same_scenario_key_with_conflicting_hypotheses_is_rejected_for_every_contract():
+    first, second = planned_candidate(1), planned_candidate(2)
+    scenario = second.scenarios[0]
+    hypotheses = tuple(
+        h.model_copy(update={"value": 6}) if h.field_path == "MedicalEvent.admission_days" else h
+        for h in scenario.hypotheses
+    )
+    second = second.model_copy(
+        update={"scenarios": (scenario.model_copy(update={"hypotheses": hypotheses}),)}
+    )
+    result = fixed_subtotal_projection(response(first, second, planned_candidate(3)))
+    assert result["fixed_subtotals"] == []
+    assert "SCENARIO_HYPOTHESES_CONFLICT" in reasons(result)
+
+
+@pytest.mark.parametrize("mutation", ["event", "version", "digest", "provenance", "value"])
+def test_scenario_trace_must_use_the_exact_hypothesis_source(mutation):
+    first = planned_candidate(1)
+    scenario = first.scenarios[0]
+    trace = scenario.estimate.trace
+    steps = []
+    for step in trace.steps:
+        operands = []
+        for operand in step.operands:
+            if operand.provenance == "SCENARIO_ASSUMPTION":
+                if mutation == "provenance":
+                    operand = operand.model_copy(update={"provenance": "USER_CONFIRMED"})
+                elif mutation == "value":
+                    operand = operand.model_copy(update={"value": "6"})
+                else:
+                    ref = operand.source_refs[0]
+                    change = (
+                        {"source_id": str(UUID(int=999))}
+                        if mutation == "event"
+                        else {"version": 2}
+                        if mutation == "version"
+                        else {"digest_sha256": "f" * 64}
+                    )
+                    operand = operand.model_copy(
+                        update={"source_refs": (ref.model_copy(update=change),)}
+                    )
+            operands.append(operand)
+        steps.append(step.model_copy(update={"operands": tuple(operands)}))
+    scenario = scenario.model_copy(
+        update={
+            "estimate": scenario.estimate.model_copy(
+                update={"trace": trace.model_copy(update={"steps": tuple(steps)})}
+            )
+        }
+    )
+    first = first.model_copy(update={"scenarios": (scenario,)})
+    result = fixed_subtotal_projection(response(first, planned_candidate(2), planned_candidate(3)))
+    assert amounts(result) == [("KRW", "600")]
+    assert "CALCULATION_CONTEXT_MISMATCH" in reasons(result)
+
+
+def test_planned_alias_is_counted_once_and_distinct_plan_contexts_stay_separate():
+    first, second = planned_candidate(1), planned_candidate(2)
+    alias = first.model_copy(update={"ref": first.canonical_identity.source_refs[0]})
+    result = fixed_subtotal_projection(
+        response(alias, first, second, planned_candidate(3, days=6), planned_candidate(4, days=6))
+    )
+    assert sorted(amounts(result)) == [("KRW", "600"), ("KRW", "800")]
+    assert len({subtotal["scenario_key"] for subtotal in result["fixed_subtotals"]}) == 2
+    assert all(
+        len(subtotal["items"]) == 2 and subtotal["partial"]
+        for subtotal in result["fixed_subtotals"]
+    )
+
+
+@pytest.mark.parametrize("restriction", ["same_contract", "multiple_cases", "indemnity"])
+def test_planned_points_keep_existing_contract_case_and_benefit_exclusions(restriction):
+    first, second = planned_candidate(1), planned_candidate(2)
+    if restriction == "same_contract":
+        first = first.model_copy(
+            update={
+                "ref": first.ref.model_copy(update={"contract_id": second.ref.contract_id}),
+                "canonical_identity": None,
+            }
+        )
+    elif restriction == "multiple_cases":
+        first = first.model_copy(
+            update={"cases": (payout_case(first, "a"), payout_case(first, "b"))}
+        )
+    else:
+        first = first.model_copy(update={"benefit_kind": "INDEMNITY"})
+    result = fixed_subtotal_projection(
+        response(first, second, planned_candidate(3), planned_candidate(4))
+    )
+    assert amounts(result) == [("KRW", "600" if restriction == "same_contract" else "900")]
+    expected = {
+        "same_contract": "SAME_CONTRACT_COMBINATION_UNRESOLVED",
+        "multiple_cases": "MULTIPLE_PAYOUT_CASES",
+        "indemnity": "NON_FIXED_BENEFIT",
+    }[restriction]
+    assert expected in reasons(result)
+
+
+def test_single_case_plan_and_absent_plan_have_explicit_scope_without_invented_zero():
+    first = planned_candidate(1)
+    source_case = payout_case(first, "synthetic-plan-case").model_copy(
+        update={"scenarios": first.scenarios}
+    )
+    first = first.model_copy(update={"cases": (source_case,)})
+    missing = candidate(3).model_copy(
+        update={
+            "estimate": candidate(3).estimate.model_copy(update={"kind": "FORMULA", "amount": None})
+        }
+    )
+    result = fixed_subtotal_projection(response(first, planned_candidate(2), missing))
+    assert amounts(result) == [("KRW", "600")]
+    assert result["fixed_subtotals"][0]["partial"] is True
+    assert result["fixed_subtotals"][0]["items"][0]["case_key"] == "synthetic-plan-case"
+    assert len(result["subtotal_omissions"]) <= 3
+
+
+@pytest.mark.parametrize(
+    "limit", ["MAX_SCENARIO_CONTEXTS", "MAX_SCENARIO_SELECTIONS", "MAX_SCENARIO_RECORDS"]
+)
+def test_scenario_budget_failure_keeps_actual_subtotal_and_bounded_omissions(monkeypatch, limit):
+    from familycare_api.guidance import subtotals
+
+    monkeypatch.setattr(subtotals, limit, 1)
+    result = fixed_subtotal_projection(
+        response(planned_candidate(1), planned_candidate(2, days=6), candidate(3), candidate(4))
+    )
+    assert amounts(result) == [("KRW", "200")]
+    assert result["fixed_subtotals"][0]["scenario_key"] is None
+    assert "SCENARIO_SUBTOTAL_BUDGET_EXCEEDED" in reasons(result)
+    assert len(result["subtotal_omissions"]) <= 8
+
+
+def test_plan_subtotal_key_is_order_independent_and_rejects_old_event_version():
+    first, second = planned_candidate(1), planned_candidate(2)
+    original = response(first, second)
+    result = fixed_subtotal_projection(original)
+    reordered = fixed_subtotal_projection(response(second, first))
+    assert (
+        result["fixed_subtotals"][0]["subtotal_key"]
+        == reordered["fixed_subtotals"][0]["subtotal_key"]
+    )
+    assert (
+        fixed_subtotal_projection(
+            original.model_copy(update={"event_version": original.event_version + 1})
+        )["fixed_subtotals"]
+        == []
+    )
