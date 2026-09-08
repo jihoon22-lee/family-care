@@ -154,7 +154,10 @@ def _certificate_pages(coverages: list[dict[str, Any]]) -> dict[str, set[int]]:
 
 
 def _proposals(
-    connection: psycopg.Connection[dict[str, Any]], scope: HouseholdScope
+    connection: psycopg.Connection[dict[str, Any]],
+    scope: HouseholdScope,
+    *,
+    import_run_id: UUID | None = None,
 ) -> tuple[CanonicalCoverageLink, ...]:
     coverages = connection.execute(
         """
@@ -163,7 +166,9 @@ def _proposals(
         FROM private_knowledge_coverages c
         JOIN household_spaces h ON h.id=c.household_space_id AND h.deleted_at IS NULL
         JOIN private_knowledge_import_runs run ON run.id=c.import_run_id
-          AND run.household_space_id=c.household_space_id AND run.is_current AND run.state='APPLIED'
+          AND run.household_space_id=c.household_space_id
+          AND ((%s::uuid IS NULL AND run.is_current AND run.state='APPLIED')
+            OR (run.id=%s AND run.state IN ('APPLIED','SUPERSEDED')))
         JOIN private_knowledge_contracts k ON k.id=c.knowledge_contract_id
           AND k.import_run_id=c.import_run_id
         JOIN private_knowledge_subjects s ON s.id=k.subject_id AND s.import_run_id=k.import_run_id
@@ -175,7 +180,7 @@ def _proposals(
           AND c.component_classification='BENEFIT_COVERAGE'
         ORDER BY c.id LIMIT 10001
     """,
-        (scope.household_space_id,),
+        (import_run_id, import_run_id, scope.household_space_id),
     ).fetchall()
     if len(coverages) > 10000:
         raise CanonicalLinkError
