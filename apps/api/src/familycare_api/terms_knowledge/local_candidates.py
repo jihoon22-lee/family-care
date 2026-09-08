@@ -17,6 +17,7 @@ from familycare_api.clauses.source_regions import ClauseSourceSpan
 from familycare_api.terms_knowledge.core import SemanticKnowledgeError, parse_knowledge
 from familycare_api.terms_knowledge.source_layout import SemanticSourceRegion
 from familycare_api.terms_knowledge.source_meaning import observe_statement
+from familycare_api.terms_knowledge.source_tables import observe_classification_table
 from familycare_api.terms_knowledge.source_verification import (
     _OVERRIDE,
     SourceSnapshot,
@@ -130,7 +131,21 @@ def _region_plan(
     if plan.excluded:
         return plan
     plan.unresolved = not region.complete or region.kind == "unresolved"
+    table = observe_classification_table(region)
+    if table is not None:
+        bundled = _node(
+            snapshot, plan, table.spans[0], region.body_spans.index(table.spans[0]), table.payload
+        )
+        bundled["statement"] = table.statement
+        bundled["citation_ids"] = []
+        for span in table.spans:
+            citation = _citation(snapshot, span)
+            plan.citations[citation["citation_id"]] = citation
+            bundled["citation_ids"].append(citation["citation_id"])
+        plan.nodes.append(bundled)
     for ordinal, span in enumerate(region.body_spans):
+        if table is not None and span in table.spans:
+            continue
         reference, override = _reference(span.text), _OVERRIDE.fullmatch(span.text.strip())
         if reference or override:
             citation = _citation(snapshot, span)

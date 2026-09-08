@@ -53,6 +53,16 @@ _TERMS_TITLE = re.compile(r"^(?:보험\s*약관|약관|Policy\s+terms)$", re.I)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class SemanticTableRow:
+    """Original table provenance retained only after row/header validation."""
+
+    node_id: str
+    row_role: Literal["header", "data"]
+    column_indices: tuple[int, ...]
+    header_node_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class SemanticSourceRegion:
     region_id: str
     label: str
@@ -61,6 +71,7 @@ class SemanticSourceRegion:
     spans: tuple[ClauseSourceSpan, ...]
     complete: bool
     reason_codes: tuple[str, ...] = ()
+    table_rows: tuple[SemanticTableRow, ...] = ()
 
     @property
     def body_spans(self) -> tuple[ClauseSourceSpan, ...]:
@@ -506,6 +517,16 @@ def observe_semantic_regions(
             raise _InvalidSource("SEMANTIC_SOURCE_IDENTITY_INVALID")
         nodes = _validated_nodes(projection, component_page_start, component_page_end)
         drafts = _parse(nodes)
+        table_rows = {
+            node["node_id"]: SemanticTableRow(
+                node["node_id"],
+                node["row_role"],
+                tuple(cell["column_index"] for cell in node["cells"]),
+                tuple(node.get("context_node_ids", [])),
+            )
+            for node in nodes
+            if node["kind"] == "TABLE_ROW"
+        }
         if not drafts or len(drafts) > 4096:
             raise _InvalidSource("SEMANTIC_SOURCE_REGIONS_UNRESOLVED")
         regions = tuple(
@@ -530,6 +551,12 @@ def observe_semantic_regions(
                 tuple(draft.spans),
                 draft.complete,
                 tuple(sorted(draft.reasons)),
+                tuple(
+                    table_rows[key]
+                    for key in dict.fromkeys(
+                        span.node_id for span in draft.spans if span.node_id in table_rows
+                    )
+                ),
             )
             for draft in drafts
         )

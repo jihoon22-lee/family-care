@@ -27,6 +27,7 @@ from familycare_api.terms_knowledge.generated_contracts import (
 )
 from familycare_api.terms_knowledge.source_layout import SemanticSourceLayout, SemanticSourceRegion
 from familycare_api.terms_knowledge.source_meaning import MEANING_REVISION, observe_statement
+from familycare_api.terms_knowledge.source_tables import observe_classification_table
 
 VERIFIER_REVISION = "terms-semantic-source-v1"
 _REFERENCE = re.compile(
@@ -109,9 +110,9 @@ def _node_proofs(
     citations: set[str],
     locations: dict[str, tuple[str, ClauseSourceSpan]],
     regions: dict[str, SemanticSourceRegion],
-) -> tuple[set[str], dict[str, tuple[str, ClauseSourceSpan]]]:
+) -> tuple[set[str], dict[str, tuple[str, tuple[ClauseSourceSpan, ...]]]]:
     verified: set[str] = set()
-    meanings: dict[str, tuple[str, ClauseSourceSpan]] = {}
+    meanings: dict[str, tuple[str, tuple[ClauseSourceSpan, ...]]] = {}
     by_citation = {c.citation_id: c for c in graph.citations}
     for node in graph.nodes:
         if not set(node.citation_ids) <= citations or len(node.region_ids) != 1:
@@ -119,6 +120,40 @@ def _node_proofs(
         region = regions.get(node.region_ids[0])
         if region is None or not region.complete or region.kind == "unresolved":
             continue
+        table = observe_classification_table(region)
+        if (
+            table is not None
+            and table.payload == node.payload.model_dump(mode="json")
+            and table.statement == node.statement
+        ):
+            original_spans = []
+            exact = True
+            for citation_id in node.citation_ids:
+                region_id, span = locations[citation_id]
+                citation = by_citation[citation_id]
+                if (
+                    region_id != region.region_id
+                    or span not in region.body_spans
+                    or citation.start != span.start
+                    or citation.end != span.end
+                ):
+                    exact = False
+                    break
+                original_spans.append(span)
+            witnessed = [span for span in original_spans if span in table.spans]
+            extras = [span for span in original_spans if span not in table.spans]
+            if (
+                exact
+                and tuple(witnessed) == table.spans
+                and all(
+                    _reference(span.text) is not None
+                    or _OVERRIDE.fullmatch(span.text.strip()) is not None
+                    for span in extras
+                )
+            ):
+                verified.add(node.node_id)
+                meanings[node.node_id] = (region.region_id, table.spans)
+                continue
         matching = []
         extras_valid = True
         for citation_id in node.citation_ids:
@@ -138,7 +173,7 @@ def _node_proofs(
                 extras_valid = False
         if extras_valid and len(matching) == 1:
             verified.add(node.node_id)
-            meanings[node.node_id] = (region.region_id, matching[0])
+            meanings[node.node_id] = (region.region_id, (matching[0],))
     return verified, meanings
 
 
@@ -178,7 +213,7 @@ def _edge_proofs(
 def _covered_roots(
     graph: TermsSemanticKnowledge,
     verified_nodes: set[str],
-    meanings: dict[str, tuple[str, ClauseSourceSpan]],
+    meanings: dict[str, tuple[str, tuple[ClauseSourceSpan, ...]]],
     regions: dict[str, SemanticSourceRegion],
     region_editions: dict[str, str | None],
 ) -> set[str]:
@@ -190,8 +225,9 @@ def _covered_roots(
         region_ids = {region for key in closure if key in nodes for region in nodes[key].region_ids}
         represented = {
             (region_id, _address(span))
-            for key, (region_id, span) in meanings.items()
+            for key, (region_id, spans) in meanings.items()
             if key in closure and key in verified_nodes
+            for span in spans
         }
         valid = True
         for region_id in region_ids:
@@ -269,8 +305,9 @@ def verify_and_compile(
     expected = {r for snapshot in sources.values() for r in snapshot.layout.expected_region_ids}
     represented = {
         (region_id, _address(span))
-        for key, (region_id, span) in meanings.items()
+        for key, (region_id, spans) in meanings.items()
         if key in node_ids
+        for span in spans
     }
     fully_represented = {
         region_id

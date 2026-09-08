@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-MEANING_REVISION = "terms-source-meaning-v1"
+MEANING_REVISION = "terms-source-meaning-v2"
 _NUMBER = r"(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,12})?"
 _INTEGER = r"(?:0|[1-9][0-9]{0,4})"
 _CURRENCY = r"[A-Z]{3}"
