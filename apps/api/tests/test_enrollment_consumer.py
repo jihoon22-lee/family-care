@@ -4,6 +4,7 @@ from threading import Event
 
 from familycare_api.clauses.component_editions import ComponentTermsProjector
 from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
+from familycare_api.clauses.terms_change_repository import TermsChangeProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.main import create_app
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
@@ -19,6 +20,7 @@ def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(DocumentMetadataProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsChangeProjector, "refresh_pending", lambda *args, **kwargs: 0)
 
 
 def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPatch) -> None:
@@ -145,3 +147,29 @@ def test_enabled_api_assesses_terms_after_component_registration(monkeypatch: Mo
     with TestClient(create_app()):
         assert called.wait(timeout=1)
     assert order[:2] == ["editions", "applicability"]
+
+
+def test_enabled_api_assesses_changes_after_base_terms_without_http(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    called = Event()
+    order: list[str] = []
+
+    def base(self: object, **kwargs: object) -> int:
+        order.append("base")
+        return 0
+
+    def changes(self: object, **kwargs: object) -> int:
+        order.append("changes")
+        assert callable(kwargs["stop_requested"])
+        called.set()
+        return 0
+
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", base)
+    monkeypatch.setattr(TermsChangeProjector, "refresh_pending", changes)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert order[:2] == ["base", "changes"]

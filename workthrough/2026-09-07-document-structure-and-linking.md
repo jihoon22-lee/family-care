@@ -836,3 +836,58 @@ component로 분류되지 않는 경우를 확인했다. 목차 다음 정상 �
 문서 **50개**·안전 **841 paths**·diff를 통과했다. 위 기본 pytest·mypy·생성 계약도 같은 코드
 입력의 증거다. Web/HTTP 입력은 바뀌지 않아 `634a37a`의 Web 172개/build와 전체 CI 7/7 결과를
 이전 증거로 유지했다. B02 PR 완료 전에는 전체 필수 검사와 통합 수용을 다시 확인한다.
+해당 변경은 `af23953`으로 push했고 [CI 34174997830](https://github.com/jihoon22-lee/family-care/actions/runs/34174997830)
+필수 7/7이 통과했다. 정확히 이 소스의 보관 추출 집계는 읽기 전용으로 완료했으나 이 변경만으로
+약관/보험사 신원 수용을 확보하지 못했다. 중간 소스의 본문 관찰과 구분하며 이후 원문 연결·
+구조화 경로에서 계속 보완한다. 실제 provider·운영 쓰기·태그·배포는 실행하지 않았다.
+
+## Source-bound amendment assessments
+
+`0045_terms_changes`와 `clauses/terms_change_*`는 원문 변경/갱신 정보를 기존 계약·담보와
+정확한 약관 코드/판본 코드에 연결한다. native 담보명 필드의 원래 좌표와 가입 publication,
+피보험자 fingerprint를 확인하며 다른 열·푸터·예시 표·잘못된 줄 계보의 값은 차용하지 않는다.
+원문에 없는 날짜·가입·유지 상태를 만들지 않고 불완전한 대상 ID도 보존한다. API의 기존
+로컬 소비 루프에서 기반 약관 평가 뒤에 실행하며 외부 호출이나 HTTP 읽기에 의존하지 않는다.
+
+불변 이력은 적용 범위, ADD/REPLACE, 기간, 원문 component/publication/generation/hash와
+필드 span, 입력 revision/digest를 보존한다. 사건일 선택은 관련 범위만 합성하며 이전 판본이
+확인되지 않은 교체·복수 후보·순환 관계는 UNKNOWN이다. 현재 입력으로 돌아온 문서 복원은
+이전의 같은 평가를 재사용한다. 원문·상품 교정은 재평가에 반영하고 표시명 교정은 원래
+담보 연결을 유지한다. 좌표를 문자열로 보존해 JSON 왕복의 소수 자릿수 차이가 digest를
+바꾸지 않게 했다. PostgreSQL guard는 필드 모양·원문 범위·날짜/종류 일치와 가정/대상 FK를
+확인하며, 계약·담보 의미 검증은 API projector가 소유한다.
+
+모듈 부재와 원문 영역·blank 종료일·예시 문맥·원문 교정/복원·빈 근거 INSERT를 RED로
+재현한 뒤 수정했다. 현재 관련 pure/소비 루프 **114개**가 통과했다. 전용 합성 PostgreSQL에서
+기본/교정 guard **10개**, 표시명/상품 교정 **2개**, scope·동시 실행·취소·원자적 실패/재시도
+**7개**를 각각 검증했다. 최종 전체 suite와 코드 입력을 연결한 결과는 후속으로 기록한다.
+빈 별도 합성 DB의 head 적용과 `0045 → 0044 → head` 전환도 확인했다. 공유 기존 test DB와
+별도로 만든 합성 DB를 사용했으며 운영 DB·archive·키는 접근/변경하지 않았다.
+
+현재 자동 대상 검증은 계약/담보까지다. 조항별 target, 판정·계산의 사건일 소비와 불변 선택
+snapshot은 아직 연결 전이며 B02 완료로 표시하지 않는다. 실제 자료/외부 provider 수용과
+운영 전환도 미실행이다. source/selector/target/합성 native seed는 독립 worktree에서 받은
+구현을 root가 통합하고, 정적 리뷰의 원문 교정·복원·DB guard 지적을 합성 PG로 검증했다.
+
+최종 리뷰의 동일 bytes 재가져오기 회귀도 PG RED 후 수정했다. 원래 계약의 party 근거를
+보존하면서 새 Rider CE의 같은 bytes·계약 locator를 확인한다. 새 검증 근거로 연결을 교정해도
+원래 담보 ID는 유지하며 다른 원문으로의 교체는 거부한다. 전체 DB 검사 첫 실행은
+**451 passed / 1 failed**였다. 실패는 앞선 in-process migration이 logger를 비활성화한 뒤
+로그를 확인한 테스트의 환경 의존성이었다. 해당 테스트가 logger 설정을 격리하도록 수정한
+뒤 재가져오기/잘못된 교체/실패 복구 **4개**와 전체 DB를 다시 실행했다.
+
+2026-09-08 KST, `af23953` 위의 최종 0045/terms-change/로컬 소비 루프 변경으로 다음을
+직렬 검증했다. Web/HTTP 계약 입력은 후속 Python 교정에서 바뀌지 않았다.
+
+- `corepack pnpm@11.22.0 web:check`: **172 tests + build**, exit 0.
+- `TMPDIR=/tmp uv run ruff format --check .` / `ruff check .`: **659 files**, lint exit 0.
+- `TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts`: **267 sources**, exit 0.
+- `TMPDIR=/tmp uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **2,439 passed / 454 deselected / 3 subtests** (22.21초).
+- 전용 합성 DB guard를 사용한 `uv run pytest -m integration apps/api/tests workers/analyzer/tests -q`:
+  **453 passed / 2,157 deselected** (390.79초). 신규 변경서 PG **20개**가 포함된다.
+- `check_contracts.py`, `check_containers.py`, `check_workflows.py`: 모두 exit 0.
+  container 검사는 정적 정책이며 새 로컬 이미지 빌드로 보고하지 않는다.
+
+위 신규 범위는 API 내부 처리와 DB 계약이다. HTTP/생성 계약은 유지되며 실제 자료·provider·
+운영 데이터 적용·태그·배포 및 조항별/판정·계산 소비의 남은 범위는 그대로 미완료다.
