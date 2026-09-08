@@ -307,6 +307,9 @@ class GuidanceScenario(GuidanceModel):
 
 class GuidancePayoutCase(GuidanceModel):
     case_key: Annotated[str, Field(min_length=1, max_length=256)]
+    source_ref: CanonicalCoverageRef | None = None
+    contract_amount: GuidanceContractAmount | None = None
+    freshness: Freshness | None = None
     benefit_kind: Literal["FIXED", "INDEMNITY", "UNKNOWN"]
     condition_result: Literal["MATCH", "UNKNOWN"]
     reason_codes: tuple[Code, ...] = Field(min_length=1, max_length=32)

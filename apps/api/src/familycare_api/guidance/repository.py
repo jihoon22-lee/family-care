@@ -416,37 +416,23 @@ def combine_guidance_contexts(
         private.family_member_id,
     ):
         raise ValueError("GUIDANCE_SCOPE_MISMATCH")
-    # Preserve the existing verified private calculation until a canonical source-specific
-    # selection can replace it. One canonical coverage must never appear twice.
-    preferred = {
-        (c.canonical_identity.ref.kind, c.canonical_identity.ref.coverage_id)
-        if c.canonical_identity
-        else (c.ref.kind, c.ref.coverage_id): c
-        for c in private.coverages
+    # Canonical identity joins sources, not their amount, status or rule authority.
+    # Keep the full source inputs; the engine groups only their evaluated cases.
+    identities = {
+        coverage.canonical_identity.ref: coverage.canonical_identity
+        for coverage in private.coverages
+        if coverage.canonical_identity is not None
     }
+    coverages = list(private.coverages)
     for coverage in operational.coverages:
-        key = (coverage.ref.kind, coverage.ref.coverage_id)
-        previous = preferred.get(key)
-        if previous is None:
-            preferred[key] = coverage
-        elif (
-            (not (previous.rules or previous.cases) or previous.disposition == "BLOCKED")
-            and (coverage.rules or coverage.cases)
-            and coverage.disposition == "PUBLISHED"
-            and "NO_MATCH"
-            not in (
-                previous.enrollment_decision,
-                previous.subject_binding_decision,
-                previous.document_identity_decision,
-                previous.edition_applicability_decision,
-                previous.section_mapping_decision,
-                previous.overall_mapping_decision,
-            )
-        ):
-            preferred[key] = replace(coverage, canonical_identity=previous.canonical_identity)
+        identity = identities.get(coverage.ref)
+        coverages.append(
+            replace(coverage, canonical_identity=identity) if identity is not None else coverage
+        )
     digest = hashlib.sha256(
         json.dumps(
             {
+                "source_selection": "canonical-source-variants-v1",
                 "private": private.versions.model_dump(mode="json"),
                 "operational": operational.versions.model_dump(mode="json"),
             },
@@ -456,7 +442,7 @@ def combine_guidance_contexts(
     ).hexdigest()
     return replace(
         private,
-        coverages=tuple(preferred.values()),
+        coverages=tuple(coverages),
         selected_subject_terms=operational.selected_subject_terms,
         other_subject_terms=operational.other_subject_terms,
         expenses=operational.expenses,

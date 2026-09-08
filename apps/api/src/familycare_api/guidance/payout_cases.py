@@ -23,6 +23,44 @@ from familycare_api.guidance.semantic_binding import BoundSemanticRoot
 MAX_PAYOUT_CASES = 32
 
 
+def source_payout_case(
+    coverage: GuidanceCoverageInput,
+    case: GuidancePayoutCaseInput | None = None,
+    *,
+    namespace: bool = False,
+) -> GuidancePayoutCaseInput:
+    """Identify a case without transplanting its source coverage's facts."""
+    source_key = (
+        case.case_key
+        if case is not None
+        else [
+            str(coverage.calculation.publication_id) if coverage.calculation else None,
+            [(str(rule.publication_id), rule.rule_key) for rule in coverage.rules],
+        ]
+    )
+    key = (
+        hashlib.sha256(
+            json.dumps(
+                [coverage.ref.model_dump(mode="json"), source_key],
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        if namespace or case is None
+        else case.case_key
+    )
+    if case is not None:
+        return replace(case, case_key=key, source_ref=coverage.ref)
+    return GuidancePayoutCaseInput(
+        case_key=key,
+        rules=coverage.rules,
+        calculation=coverage.calculation,
+        benefit_type=coverage.benefit_type,
+        knowledge_incomplete=coverage.knowledge_incomplete,
+        source_ref=coverage.ref,
+    )
+
+
 def case_coverage(
     coverage: GuidanceCoverageInput, case: GuidancePayoutCaseInput
 ) -> GuidanceCoverageInput:
@@ -138,6 +176,9 @@ def combine_payout_cases(
     cases = tuple(
         GuidancePayoutCase(
             case_key=case.case_key,
+            source_ref=case.source_ref,
+            contract_amount=candidate.contract_amount,
+            freshness=candidate.freshness,
             benefit_kind=candidate.benefit_kind,
             condition_result=candidate.condition_result,
             reason_codes=candidate.reason_codes,
@@ -188,6 +229,20 @@ def combine_payout_cases(
             "estimate": estimate,
             "condition_result": "UNKNOWN",
             "group": "CONDITIONAL",
+            "contract_amount": first.contract_amount
+            if all(candidate.contract_amount == first.contract_amount for _, candidate in results)
+            else None,
+            "freshness": first.freshness
+            if all(candidate.freshness == first.freshness for _, candidate in results)
+            else "STATUS_UNRESOLVED",
+            "benefit_kind": first.benefit_kind
+            if all(candidate.benefit_kind == first.benefit_kind for _, candidate in results)
+            else "UNKNOWN",
+            "assumptions": tuple(
+                assumption
+                for assumption in first.assumptions
+                if all(assumption in candidate.assumptions for _, candidate in results)
+            ),
             "scenarios": (),
             "conditions": (),
             "questions": tuple(dict.fromkeys(q for case in cases for q in case.questions))[:64],

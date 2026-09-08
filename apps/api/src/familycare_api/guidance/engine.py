@@ -7,6 +7,7 @@ from dataclasses import replace
 from typing import Literal
 from uuid import UUID
 
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
@@ -48,6 +49,7 @@ from familycare_api.guidance.payout_cases import (
     MAX_PAYOUT_CASES,
     case_coverage,
     combine_payout_cases,
+    source_payout_case,
 )
 from familycare_api.guidance.private_adapter import adapt_private_guidance
 from familycare_api.guidance.relevance import find_relevance
@@ -124,22 +126,35 @@ class LocalGuidanceEngine:
         unsupported = 0
         expense_error = expense_failure(context.expenses, event)
         failures: list[str] = [expense_error] if expense_error else []
+        groups: dict[CanonicalCoverageRef, list[GuidanceCoverageInput]] = {}
         for source_coverage in sorted(
             context.coverages, key=lambda item: (item.ref.kind, str(item.ref.coverage_id))
         ):
-            if len(source_coverage.cases) > MAX_PAYOUT_CASES:
+            canonical_ref = (
+                source_coverage.canonical_identity.ref
+                if source_coverage.canonical_identity is not None
+                else source_coverage.ref
+            )
+            groups.setdefault(canonical_ref, []).append(source_coverage)
+        for variants in groups.values():
+            if sum(len(source.cases) or 1 for source in variants) > MAX_PAYOUT_CASES:
                 failures.append("GUIDANCE_PAYOUT_CASE_LIMIT_EXCEEDED")
                 unsupported += 1
                 continue
-            views = (
-                tuple(case_coverage(source_coverage, case) for case in source_coverage.cases)
-                if source_coverage.cases
-                else (source_coverage,)
-            )
+            views = [
+                (
+                    case_coverage(source, case) if case is not None else source,
+                    source_payout_case(source, case, namespace=len(variants) > 1)
+                    if case is not None or len(variants) > 1
+                    else None,
+                )
+                for source in variants
+                for case in (source.cases or (None,))
+            ]
             matches: list[tuple[GuidancePayoutCaseInput, GuidanceCandidate]] = []
             matched_views: list[GuidanceCoverageInput] = []
             all_supported = True
-            for index, coverage in enumerate(views):
+            for coverage, case in views:
                 activity = source_activity(coverage)
                 if activity not in activity_reads:
                     activity_reads[activity] = build_event_facts(
@@ -199,10 +214,10 @@ class LocalGuidanceEngine:
                     failures.append("GUIDANCE_COVERAGE_FAILED")
                 all_supported = all_supported and supported
                 if candidate is not None:
-                    if not source_coverage.cases:
+                    if case is None:
                         candidates.append(candidate)
                     else:
-                        matches.append((source_coverage.cases[index], candidate))
+                        matches.append((case, candidate))
                         matched_views.append(coverage)
             if matches:
                 candidates.append(
@@ -233,8 +248,8 @@ class LocalGuidanceEngine:
             candidates=tuple(candidates),
             expenses=expense_summary(context.expenses, event),
             support=GuidanceSupport(
-                total_coverages=len(context.coverages),
-                evaluated_coverages=len(context.coverages) - unsupported,
+                total_coverages=len(groups),
+                evaluated_coverages=len(groups) - unsupported,
                 unsupported_coverages=unsupported,
                 failure_codes=_unique(failures),
             ),

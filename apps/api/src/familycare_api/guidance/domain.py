@@ -71,6 +71,7 @@ class GuidancePayoutCaseInput:
     calculation: GuidanceCalculationInput | None
     benefit_type: KnowledgeBenefitType
     knowledge_incomplete: bool = False
+    source_ref: CanonicalCoverageRef | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.case_key, str) or not 1 <= len(self.case_key) <= 256:
@@ -146,7 +147,12 @@ class GuidanceContext:
         if not self.household_space_id.int or not self.family_member_id.int:
             raise ValueError("GUIDANCE_SCOPE_INVALID")
         keys = [(item.ref.kind, item.ref.coverage_id) for item in self.coverages]
-        if len(keys) != len(set(keys)) or len(keys) > 1000:
+        canonical_refs = {
+            item.canonical_identity.ref if item.canonical_identity is not None else item.ref
+            for item in self.coverages
+        }
+        # Each admitted canonical coverage may retain its private and operational input.
+        if len(keys) != len(set(keys)) or len(keys) > 2000 or len(canonical_refs) > 1000:
             raise ValueError("GUIDANCE_COVERAGE_SET_INVALID")
 
 
