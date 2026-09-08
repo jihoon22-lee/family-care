@@ -16,6 +16,7 @@ from familycare_api.decisions.repository import DecisionRepository
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from apps.api.tests.terms_change_seed import legacy_metadata_v4 as legacy_metadata_v4
 from apps.api.tests.test_terms_change_integration import (
     _psycopg_url,
     _sources,
@@ -31,7 +32,9 @@ from apps.api.tests.test_terms_change_integration import (
 pytestmark = pytest.mark.integration
 
 
-def test_downgrade_cannot_remove_existing_selection_history(changes_database: Any) -> None:
+def test_downgrade_cannot_remove_existing_selection_history(
+    changes_database: Any, legacy_metadata_v4: None
+) -> None:
     url, job = changes_database
     _sources(url, job)
     # Exercise the original decision-snapshot guard without newer amendment

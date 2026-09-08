@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Any
 from uuid import UUID, uuid4
 
+import pytest
 from familycare_worker.ai.range_structurer import PolicyRangeBatch
 from familycare_worker.ai.schemas import (
     CandidateField,
@@ -22,6 +23,21 @@ from familycare_worker.policy_range_repository import PolicyRangeRepository, Pol
 from apps.api.tests.test_native_range_enrollment_integration import _store_words
 from workers.analyzer.tests.test_document_text_lines import _words
 from workers.analyzer.tests.test_policy_range_repository import WORKER, _no_facts
+
+
+@pytest.fixture()
+def legacy_metadata_v4(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prepare pre-0049 history through its original API validator.
+
+    Historical migration fixtures use simple explicit headers supported by v4.
+    Pin only their producer identities so newer metadata history does not stop
+    a downgrade before the historical guard under test can be exercised.
+    """
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v4")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v4")
+
 
 _POLICY_LINES = (
     "보험증권",

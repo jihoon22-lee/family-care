@@ -17,6 +17,7 @@ from familycare_api.common.scope import HouseholdScope
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
+from apps.api.tests.terms_change_seed import legacy_metadata_v4 as legacy_metadata_v4
 from apps.api.tests.test_clause_change_integration import (
     _native_link,
     _native_rule,
@@ -98,7 +99,9 @@ def _insert_with_current_input(
     ).fetchone()["value"]
 
 
-def test_downgrade_refuses_v2_clause_history_before_changing_any_row(changes_database: Any) -> None:
+def test_downgrade_refuses_v2_clause_history_before_changing_any_row(
+    changes_database: Any, legacy_metadata_v4: None
+) -> None:
     url, job = changes_database
     _paired_sources(url, job)
     assert TermsChangeProjector(url).refresh_pending() == 1
@@ -139,6 +142,7 @@ def test_downgrade_refuses_v2_clause_history_before_changing_any_row(changes_dat
 
 def test_upgrade_preserves_every_legacy_change_field_and_adds_only_null_pair_refs(
     changes_database: Any,
+    legacy_metadata_v4: None,
 ) -> None:
     url, job = changes_database
     _paired_sources(url, job, change_scope="특약")

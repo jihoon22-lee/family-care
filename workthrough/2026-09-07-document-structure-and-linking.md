@@ -1070,3 +1070,11 @@ workflow 정책, 문서 **50**·안전 **876 paths**·diff도 통과했다. 전�
 완료됐으나 이 지원 목차 형식이 실제 자료의 약관/신원 분류를 개선하지는 못했다.
 합성 수정 성공을 보호된 수용 성공으로 확대하지 않는다. 문서 경계·신원 후보의 제한적
 구조화와 독립 원문 검증 경로가 남아 있다. 실제 외부 AI 호출과 운영 쓰기는 없었다.
+
+`0f18c07`의 [CI 34208302242](https://github.com/jihoon22-lee/family-care/actions/runs/34208302242)는
+6개 작업이 통과했고 PostgreSQL에서 **513 passed / 4 failed / 2545 deselected**
+(569.18초)였다. 과거 0046~0048 migration 회귀의 준비가 최신 v5 metadata를 만들면서
+0049 이력 보호가 먼저 작동했다. 해당 네 사례에만 v4 producer identity를 고정하고 원래
+v4 API 검증을 거치도록 했다. 이력이 있는 downgrade 보호는 유지하며 수정한 PG
+**4 passed / 30 deselected** (18.71초)를 확인했다. 이전 전체 CI를 성공으로 표현하지 않는다.
+같은 모듈의 최신 v5 사례와 함께 실행한 관련 PG **34 passed** (131.25초)도 통과했다.

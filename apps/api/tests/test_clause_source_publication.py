@@ -15,6 +15,7 @@ from familycare_api.clauses.source_repository import (
 from familycare_api.common.scope import HouseholdScope
 from psycopg.rows import dict_row
 
+from apps.api.tests.terms_change_seed import legacy_metadata_v4 as legacy_metadata_v4
 from apps.api.tests.test_terms_change_integration import (
     _psycopg_url,
     _sources,
@@ -409,7 +410,9 @@ def test_source_publication_rejects_temporary_evidence_change_returning_to_old_i
         )
 
 
-def test_downgrade_preserves_existing_clause_source_history(changes_database: Any) -> None:
+def test_downgrade_preserves_existing_clause_source_history(
+    changes_database: Any, legacy_metadata_v4: None
+) -> None:
     import os
     import subprocess
     import sys
