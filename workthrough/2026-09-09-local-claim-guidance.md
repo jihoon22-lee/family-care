@@ -460,3 +460,27 @@ alias SQL 조회 실패는 savepoint에서 격리하고 이력 횟수를 UNKNOWN
 **3398 passed / 644 deselected / 3 subtests passed**(32.61초)였다. 이 시점의 644개 integration은
 다음 전체 PG 실행 대상이다. 별도 읽기 전용 재검토에서도 두 발견 사항의 수정 경로를 확인했으며
 새 구체적 회귀를 찾지 못했다. 해당 재검토는 동적 검증으로 계산하지 않았다.
+
+07:35~07:51 KST `a9f904d`의 전체 PG 실행:
+`python -m pytest apps/api/tests workers/analyzer/tests scripts/tests -m integration -q
+--tb=short --junitxml=/tmp/familycare-b04-integration-results.xml -o junit_logging=all`은
+**640 passed / 4 failed / 3398 deselected**(952.88초)였다. 실패는 event terms downgrade 1개와
+metadata navigation의 과거 schema 준비 3개였다. 새 v2 안내 이력 보호가 이전 guard보다 먼저
+동작했고, local guidance 테스트 fixture가 남긴 안내 이력이 뒤의 metadata 테스트를 막았다.
+
+제품 migration의 이력 보호는 변경하지 않았다. 해당 guidance fixture를 yield/finally 정리로
+바꾸고, event terms의 역사적 fixture는 최초 INSERT 때부터 local_guidance 없는 시기의 합성
+스냅샷을 작성하도록 했다. 이미 저장한 스냅샷을 수정하거나 삭제해 guard를 우회하지 않는다.
+08:00 KST `a9f904d` + 이 테스트 2개 파일 수정에서
+`python -m pytest apps/api/tests/test_event_terms_guards.py
+apps/api/tests/test_local_guidance_integration.py apps/api/tests/test_metadata_navigation_publication.py
+-m integration -q --tb=short`는 **19 passed**(60.79초)였다. 실패했던 4개와 fixture 정리의 실제
+후속 순서를 함께 검증했다. 관련 Ruff lint/format 및 30개 커밋의 Git convention 검사도 통과했다.
+이 보완은 전체 PG를 다시 실행한 결과로 표현하지 않으며 CI에서 전체를 다시 확인한다.
+
+위 전체 실행의 실제 runtime 측정 테스트는 통과했다. `a9f904d`의 최초 POST/GET은
+**997.923 / 682.578ms**, 유휴 후속 10쌍의 POST p50/p95 **929.174 / 1045.411ms**, GET
+**730.814 / 928.542ms**였다. 별도 Worker transaction 중 10쌍은 POST **895.792 / 1128.514ms**,
+GET **709.116 / 882.858ms**였다. 42개 API 응답, HTTP/provider 호출 0/0·새 외부 AI 작업 0과
+로컬 bookkeeping 1을 다시 확인했다. 소규모 ASGI/PG·작업 행 잠금 공존이라는 측정 범위와
+DB 캐시·전체 자료·CPU/OCR·실기기 미검증 경계는 앞선 측정과 같다.

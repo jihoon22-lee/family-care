@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import NoReturn
@@ -34,10 +35,15 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
-def database_url() -> str:
+def database_url() -> Iterator[str]:
     value = os.environ["FAMILYCARE_TEST_DATABASE_URL"]
     _reset_database(value)
-    return value
+    try:
+        yield value
+    finally:
+        # Do not leave new guidance history in the shared synthetic test DB:
+        # later historical-schema tests must reach their own downgrade guard.
+        _reset_database(value)
 
 
 def test_api_returns_and_preserves_document_guidance_without_ai_or_latest_status(
