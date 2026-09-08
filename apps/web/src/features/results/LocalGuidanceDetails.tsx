@@ -8,6 +8,7 @@ import type {
   GuidanceEstimate,
   GuidanceEvidence,
   GuidanceExpenses,
+  GuidancePayoutCase,
   GuidanceScenario,
   GuidanceSemanticEvidence,
   GuidanceSourceReference,
@@ -371,6 +372,31 @@ function Scenarios({
   ));
 }
 
+function CaseContractDetails({
+  sourceCase,
+  showAmount,
+}: {
+  sourceCase: GuidancePayoutCase;
+  showAmount: boolean;
+}) {
+  return (
+    <>
+      {showAmount && sourceCase.contract_amount ? (
+        <ContractAmount value={sourceCase.contract_amount} />
+      ) : null}
+      {sourceCase.freshness === "DOCUMENT_CONTINUITY" ? (
+        <p>이 경우는 문서상 계약 유지 가정에 따른 안내입니다.</p>
+      ) : null}
+      {sourceCase.freshness === "CONFIRMED_AT_EVENT" ? (
+        <p>이 경우는 사건일의 계약 상태가 확인되었습니다.</p>
+      ) : null}
+      {sourceCase.freshness === "STATUS_UNRESOLVED" ? (
+        <p>이 경우는 사건일의 계약 상태에 따라 달라질 수 있습니다.</p>
+      ) : null}
+    </>
+  );
+}
+
 export function CandidateAmounts({
   candidate,
   inputLabel,
@@ -383,6 +409,12 @@ export function CandidateAmounts({
   if (cases.length < 2)
     return (
       <>
+        {cases[0] ? (
+          <CaseContractDetails
+            sourceCase={cases[0]}
+            showAmount={!candidate.contract_amount}
+          />
+        ) : null}
         {cases[0]?.conditions?.length ? (
           <ul>
             {cases[0].conditions.map((condition, index) => (
@@ -437,6 +469,10 @@ export function CandidateAmounts({
               ? "입력한 사건이 이 경우의 확인된 조건과 일치합니다."
               : "이 경우의 적용 조건에 추가 확인이 필요합니다."}
           </p>
+          <CaseContractDetails
+            sourceCase={sourceCase}
+            showAmount={!candidate.contract_amount}
+          />
           {sourceCase.conditions?.length ? (
             <ul>
               {sourceCase.conditions.map((condition, conditionIndex) => (

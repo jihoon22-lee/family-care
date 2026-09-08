@@ -2,13 +2,17 @@ import { useEffect, useRef, useState } from "react";
 
 import { getEvidence } from "../../api/results";
 import { createClaimCase } from "../../api/claims";
+import { ApiError } from "../../api/errors";
 import type {
   BenefitCalculationsResponse,
+  CanonicalCoverageRef,
+  ClaimCreateRequest,
   EvidenceDetailResponse,
 } from "../../api/generated";
 import { focusHeading } from "../../app/focus";
 import { EvidenceDrawer } from "../../components/EvidenceDrawer";
 import { useMedicalEvent } from "../events/useMedicalEvent";
+import { authStore } from "../identity/authStore";
 import { useBenefitCalculations, useEventResult } from "./useEventResult";
 import { ActionFirstResult } from "./ActionFirstResult";
 import styles from "./Results.module.css";
@@ -19,6 +23,7 @@ export function EventResultPage({
   onOpenEvidence,
   onReanalyze,
   onStartClaim,
+  onOpenClaim,
   riderLabels,
   version,
 }: {
@@ -27,19 +32,56 @@ export function EventResultPage({
   onOpenEvidence?: (evidenceIds: string[]) => void;
   onReanalyze?: () => void | Promise<void>;
   onStartClaim?: (riderId: string) => void;
+  onOpenClaim?: (claimId: string) => void;
   riderLabels?: Record<string, string>;
   version: number;
 }) {
   const headingRef = useRef<HTMLHeadingElement>(null);
   const claimStartingRef = useRef(false);
+  const claimRequestRef = useRef<AbortController | null>(null);
+  const pageEpoch = useRef(0);
   const [evidence, setEvidence] = useState<EvidenceDetailResponse[]>([]);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [evidenceUnavailable, setEvidenceUnavailable] = useState(false);
   const [claimStarting, setClaimStarting] = useState(false);
   const [claimStartError, setClaimStartError] = useState<"request" | "stale">();
+  const [sessionExpired, setSessionExpired] = useState(false);
   const eventResource = useMedicalEvent(eventId);
   const resultResource = useEventResult(eventId, version);
   const calculationResource = useBenefitCalculations(eventId);
+
+  useEffect(() => {
+    claimStartingRef.current = false;
+    setClaimStarting(false);
+    setClaimStartError(undefined);
+    setEvidence([]);
+    setEvidenceOpen(false);
+    return () => {
+      pageEpoch.current += 1;
+      claimRequestRef.current?.abort();
+      claimRequestRef.current = null;
+    };
+  }, [
+    eventId,
+    version,
+    eventResource.data?.version,
+    resultResource.data?.run_id,
+  ]);
+
+  useEffect(
+    () =>
+      authStore.registerCacheClearer(() => {
+        pageEpoch.current += 1;
+        claimRequestRef.current?.abort();
+        claimRequestRef.current = null;
+        claimStartingRef.current = false;
+        setClaimStarting(false);
+        setEvidence([]);
+        setEvidenceOpen(false);
+        setSessionExpired(true);
+      }),
+    [],
+  );
 
   useEffect(() => {
     if (eventResource.data && resultResource.data) {
@@ -47,6 +89,15 @@ export function EventResultPage({
     }
   }, [eventResource.data, resultResource.data]);
 
+  if (sessionExpired) {
+    return (
+      <main className={styles.page}>
+        <p className={styles.error} role="alert">
+          로그인이 필요합니다. 다시 로그인한 뒤 청구 준비를 이어가세요.
+        </p>
+      </main>
+    );
+  }
   if (eventResource.loading || resultResource.loading) {
     return (
       <main className={styles.page}>
@@ -78,6 +129,14 @@ export function EventResultPage({
   const event = eventResource.data;
   const result = resultResource.data;
   const resultMatchesCurrentEvent = event.version === result.event_version;
+  const guidance = result.local_guidance;
+  const guidanceMatchesCurrentEvent = Boolean(
+    guidance &&
+    resultMatchesCurrentEvent &&
+    result.medical_event_id === eventId &&
+    guidance.medical_event_id === eventId &&
+    guidance.event_version === event.version,
+  );
   const visibleCalculations = resultMatchesCurrentEvent
     ? (calculations ?? calculationResource.data)
     : undefined;
@@ -99,40 +158,75 @@ export function EventResultPage({
       return;
     }
     setEvidenceUnavailable(false);
+    const current = pageEpoch.current;
     try {
       const items = await Promise.all(
         evidenceIds.slice(0, 16).map((evidenceId) => getEvidence(evidenceId)),
       );
+      if (current !== pageEpoch.current) return;
       setEvidence(items);
     } catch {
+      if (current !== pageEpoch.current) return;
       setEvidence([]);
       setEvidenceUnavailable(true);
     }
     setEvidenceOpen(true);
   }
 
+  const submitClaim = (input: ClaimCreateRequest) => {
+    if (claimStartingRef.current) return;
+    const controller = new AbortController();
+    claimRequestRef.current = controller;
+    claimStartingRef.current = true;
+    setClaimStarting(true);
+    setClaimStartError(undefined);
+    void createClaimCase(eventId, input, controller.signal)
+      .then((claim) => {
+        if (controller.signal.aborted || claimRequestRef.current !== controller)
+          return;
+        if (onOpenClaim) onOpenClaim(claim.id);
+        else
+          window.location.assign(`/app/claims/${encodeURIComponent(claim.id)}`);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || claimRequestRef.current !== controller)
+          return;
+        claimStartingRef.current = false;
+        setClaimStarting(false);
+        setClaimStartError(
+          error instanceof ApiError && error.status === 409
+            ? "stale"
+            : "request",
+        );
+      });
+  };
+
   const startClaim = (riderId: string) => {
-    if (!resultMatchesCurrentEvent) {
+    if (!resultMatchesCurrentEvent || result.stale) {
       setClaimStartError("stale");
       return;
     }
     if (claimStartingRef.current) return;
-    if (onStartClaim) {
-      onStartClaim(riderId);
+    if (onStartClaim) onStartClaim(riderId);
+    else submitClaim({ rider_id: riderId });
+  };
+
+  const startGuidanceClaim = (coverage: CanonicalCoverageRef) => {
+    if (
+      !guidance ||
+      !guidanceMatchesCurrentEvent ||
+      (result.local_guidance_stale ?? result.stale)
+    ) {
+      setClaimStartError("stale");
       return;
     }
-    claimStartingRef.current = true;
-    setClaimStarting(true);
-    setClaimStartError(undefined);
-    void createClaimCase(eventId, { rider_id: riderId })
-      .then((claim) => {
-        window.location.assign(`/app/claims/${encodeURIComponent(claim.id)}`);
-      })
-      .catch(() => {
-        claimStartingRef.current = false;
-        setClaimStarting(false);
-        setClaimStartError("request");
-      });
+    submitClaim({
+      guidance: {
+        run_id: result.run_id,
+        expected_event_version: guidance.event_version,
+        coverage,
+      },
+    });
   };
 
   return (
@@ -165,6 +259,11 @@ export function EventResultPage({
         }}
         onReanalyze={reanalyze}
         onStartClaim={startClaim}
+        onStartGuidanceClaim={startGuidanceClaim}
+        claimStarting={claimStarting}
+        claimStartDisabled={
+          !guidanceMatchesCurrentEvent || claimStartError === "stale"
+        }
         result={result}
         riderLabels={riderLabels}
       />

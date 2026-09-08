@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import type {
   BenefitCalculationsResponse,
   ClaimCandidateResponse,
   CoverageDecisionResponse,
+  GuidanceCandidate,
   KnowledgeBenefitCalculationResponse,
   MedicalEventResponse,
   OperationalEvaluationResponse,
@@ -340,20 +341,26 @@ function jsonResponse(body: unknown, status = 200): Response {
 function installFetch(
   event: MedicalEventResponse = EVENT,
   decision: CoverageDecisionResponse = result(),
-): ReturnType<typeof vi.fn> {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = new URL(String(input), window.location.origin);
-    if (url.pathname === `/api/v1/medical-events/${EVENT_ID}`) {
-      return jsonResponse(event);
-    }
-    if (url.pathname === `/api/v1/medical-events/${EVENT_ID}/results/2`) {
-      return jsonResponse(decision);
-    }
-    if (url.pathname === `/api/v1/medical-events/${EVENT_ID}/calculations`) {
-      return jsonResponse(CALCULATIONS);
-    }
-    return jsonResponse({ error_code: "NOT_FOUND", message: "not found" }, 404);
-  });
+) {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      void init;
+      const url = new URL(String(input), window.location.origin);
+      if (url.pathname === `/api/v1/medical-events/${EVENT_ID}`) {
+        return jsonResponse(event);
+      }
+      if (url.pathname === `/api/v1/medical-events/${EVENT_ID}/results/2`) {
+        return jsonResponse(decision);
+      }
+      if (url.pathname === `/api/v1/medical-events/${EVENT_ID}/calculations`) {
+        return jsonResponse(CALCULATIONS);
+      }
+      return jsonResponse(
+        { error_code: "NOT_FOUND", message: "not found" },
+        404,
+      );
+    },
+  );
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
@@ -361,6 +368,191 @@ function installFetch(
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+function localResult(): CoverageDecisionResponse {
+  const local: GuidanceCandidate = {
+    ref: {
+      kind: "OPERATIONAL_RIDER",
+      contract_id: PRIVATE_CONTRACT,
+      coverage_id: RIDER_A,
+    },
+    contract_label: "Sample Local Policy",
+    coverage_label: "Sample Local Coverage",
+    benefit_kind: "FIXED",
+    group: "CONDITIONAL",
+    freshness: "DOCUMENT_CONTINUITY",
+    condition_result: "UNKNOWN",
+    reason_codes: ["DOCUMENTED_RELEVANT_COVERAGE"],
+    assumptions: ["DOCUMENT_CONTINUITY_ASSUMED"],
+    estimate: {
+      kind: "FORMULA",
+      formula: "가입금액 × 입원 일수",
+      reason_code: "MISSING_DAYS",
+    },
+  };
+  return result({
+    candidates: [],
+    evaluations: [],
+    local_guidance_stale: false,
+    local_guidance: {
+      candidates: [local],
+      event_date: EVENT.event_date,
+      event_version: EVENT.version,
+      medical_event_id: EVENT_ID,
+      family_member_id: EVENT.family_member_id,
+      outcome: "CANDIDATES",
+      support: {
+        evaluated_coverages: 1,
+        total_coverages: 1,
+        unsupported_coverages: 0,
+      },
+      versions: {},
+    },
+  });
+}
+
+function installClaimFetch(
+  decision: CoverageDecisionResponse,
+  post: () => Promise<Response>,
+) {
+  const fetchMock = installFetch(EVENT, decision);
+  const read = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation(
+    (input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(input) === `/api/v1/medical-events/${EVENT_ID}/claims` &&
+        init?.method === "POST"
+      )
+        return post();
+      return read(input, init);
+    },
+  );
+  return fetchMock;
+}
+
+describe("local guidance claim creation", () => {
+  it("sends only the saved run selector, prevents duplicate clicks and opens the returned claim", async () => {
+    const decision = localResult();
+    let finish!: (response: Response) => void;
+    const post = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const fetchMock = installClaimFetch(decision, post);
+    const onOpenClaim = vi.fn();
+    renderWithProviders(
+      <EventResultPage
+        eventId={EVENT_ID}
+        version={2}
+        onOpenClaim={onOpenClaim}
+      />,
+    );
+    const button = await screen.findByRole("button", {
+      name: "Sample Local Coverage 청구 준비",
+    });
+    const user = userEvent.setup();
+    await user.click(button);
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(post).toHaveBeenCalledTimes(1);
+    const request = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "POST",
+    );
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      guidance: {
+        run_id: decision.run_id,
+        expected_event_version: 2,
+        coverage: decision.local_guidance!.candidates[0]!.ref,
+      },
+    });
+    expect(request?.[1]).toMatchObject({
+      cache: "no-store",
+      credentials: "include",
+    });
+    finish(jsonResponse({ id: "synthetic-created-claim" }, 201));
+    await waitFor(() =>
+      expect(onOpenClaim).toHaveBeenCalledWith("synthetic-created-claim"),
+    );
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes("/analyze")),
+    ).toHaveLength(0);
+  });
+
+  it("disables a local snapshot whose event version differs from the displayed event", async () => {
+    const decision = localResult();
+    decision.local_guidance!.event_version = 1;
+    const post = vi.fn();
+    installClaimFetch(decision, post);
+    renderWithProviders(<EventResultPage eventId={EVENT_ID} version={2} />);
+    expect(
+      await screen.findByRole("button", {
+        name: "Sample Local Coverage 청구 준비",
+      }),
+    ).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("keeps the formula after a conflict and requires a current result before retry", async () => {
+    installClaimFetch(localResult(), async () =>
+      jsonResponse({ error_code: "VERSION_CONFLICT" }, 409),
+    );
+    renderWithProviders(<EventResultPage eventId={EVENT_ID} version={2} />);
+    const button = await screen.findByRole("button", {
+      name: "Sample Local Coverage 청구 준비",
+    });
+    await userEvent.setup().click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("다시 분석");
+    expect(screen.getByText("가입금액 × 입원 일수")).toBeInTheDocument();
+    expect(button).toBeDisabled();
+  });
+
+  it("clears local results when claim creation reports session expiry", async () => {
+    installClaimFetch(localResult(), async () =>
+      jsonResponse({ error_code: "AUTHENTICATION_REQUIRED" }, 401),
+    );
+    renderWithProviders(<EventResultPage eventId={EVENT_ID} version={2} />);
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "Sample Local Coverage 청구 준비",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("로그인");
+    expect(
+      screen.queryByRole("heading", { name: "Sample Local Coverage" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("가입금액 × 입원 일수")).not.toBeInTheDocument();
+  });
+
+  it("does not navigate when an old request completes after leaving the page", async () => {
+    let finish!: (response: Response) => void;
+    installClaimFetch(
+      localResult(),
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const onOpenClaim = vi.fn();
+    const view = renderWithProviders(
+      <EventResultPage
+        eventId={EVENT_ID}
+        version={2}
+        onOpenClaim={onOpenClaim}
+      />,
+    );
+    await userEvent.setup().click(
+      await screen.findByRole("button", {
+        name: "Sample Local Coverage 청구 준비",
+      }),
+    );
+    view.unmount();
+    finish(jsonResponse({ id: "synthetic-late-claim" }, 201));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onOpenClaim).not.toHaveBeenCalled();
+  });
 });
 
 describe("action-first event results", () => {

@@ -135,20 +135,131 @@ function result(
   };
 }
 
-function show(response: CoverageDecisionResponse) {
+function show(response: CoverageDecisionResponse, claimStarting = false) {
   const onReanalyze = vi.fn();
   const onOpenEvidence = vi.fn();
   const onStartClaim = vi.fn();
+  const onStartGuidanceClaim = vi.fn();
   render(
     <ActionFirstResult
       result={response}
       onReanalyze={onReanalyze}
       onOpenEvidence={onOpenEvidence}
       onStartClaim={onStartClaim}
+      onStartGuidanceClaim={onStartGuidanceClaim}
+      claimStarting={claimStarting}
     />,
   );
-  return { onReanalyze, onOpenEvidence, onStartClaim };
+  return { onReanalyze, onOpenEvidence, onStartClaim, onStartGuidanceClaim };
 }
+
+describe("local candidate claim preparation", () => {
+  it("retains each source case's contract amount and event-time assumption", () => {
+    const value = candidate("Sample Source Cases", {
+      kind: "UNAVAILABLE",
+      reason_code: "MULTIPLE_PAYOUT_CASES",
+    });
+    value.freshness = "STATUS_UNRESOLVED";
+    value.contract_amount = null;
+    value.cases = [
+      {
+        case_key: "synthetic-source-a",
+        benefit_kind: "FIXED",
+        condition_result: "UNKNOWN",
+        reason_codes: [],
+        freshness: "DOCUMENT_CONTINUITY",
+        contract_amount: {
+          amount: "100",
+          currency: "KRW",
+          amount_authority: "PROGRAM_VERIFIED",
+          currency_authority: "PROGRAM_VERIFIED",
+        },
+        estimate: {
+          kind: "POINT",
+          amount: "300",
+          currency: "KRW",
+          reason_code: "SOURCE_A",
+        },
+      },
+      {
+        case_key: "synthetic-source-b",
+        benefit_kind: "FIXED",
+        condition_result: "UNKNOWN",
+        reason_codes: [],
+        freshness: "CONFIRMED_AT_EVENT",
+        contract_amount: {
+          amount: "200",
+          currency: "KRW",
+          amount_authority: "USER_CONFIRMED",
+          currency_authority: "USER_CONFIRMED",
+        },
+        estimate: {
+          kind: "POINT",
+          amount: "400",
+          currency: "KRW",
+          reason_code: "SOURCE_B",
+        },
+      },
+    ];
+    show(result(guidance([value])));
+    const first = within(screen.getByRole("region", { name: "원문 조건 1" }));
+    const second = within(screen.getByRole("region", { name: "원문 조건 2" }));
+    expect(first.getByText("100원")).toBeInTheDocument();
+    expect(first.getByText("300원")).toBeInTheDocument();
+    expect(first.getByText(/계약 유지 가정/)).toBeInTheDocument();
+    expect(second.getByText("200원")).toBeInTheDocument();
+    expect(second.getByText("400원")).toBeInTheDocument();
+    expect(second.getByText(/사건일의 계약 상태가 확인/)).toBeInTheDocument();
+    expect(first.queryByText("200원")).not.toBeInTheDocument();
+  });
+
+  it("allows a conditional formula candidate without confirming payment", async () => {
+    const value = candidate("Sample Conditional", {
+      kind: "FORMULA",
+      formula: "가입금액 × 입원 일수",
+      reason_code: "MISSING_DAYS",
+    });
+    value.group = "CONDITIONAL";
+    value.condition_result = "UNKNOWN";
+    const handlers = show(result(guidance([value])));
+    const button = screen.getByRole("button", {
+      name: "Sample Conditional 청구 준비",
+    });
+    button.focus();
+    await userEvent.setup().keyboard("{Enter}");
+    expect(handlers.onStartGuidanceClaim).toHaveBeenCalledWith(value.ref);
+    expect(handlers.onStartClaim).not.toHaveBeenCalled();
+    expect(screen.getByText("가입금액 × 입원 일수")).toBeInTheDocument();
+  });
+
+  it.each(["stale", "pending"])(
+    "disables preparation while %s and keeps the candidate visible",
+    async (state) => {
+      const value = result(guidance());
+      value.local_guidance_stale = state === "stale";
+      const handlers = show(value, state === "pending");
+      const button = screen.getByRole("button", {
+        name: "Sample Coverage A 청구 준비",
+      });
+      expect(button).toBeDisabled();
+      await userEvent.setup().click(button);
+      expect(handlers.onStartGuidanceClaim).not.toHaveBeenCalled();
+      expect(
+        screen.getByRole("heading", { name: "Sample Coverage A" }),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("keeps a current local claim action independent of stale legacy results", () => {
+    const value = result(guidance());
+    value.stale = true;
+    value.local_guidance_stale = false;
+    show(value);
+    expect(
+      screen.getByRole("button", { name: "Sample Coverage A 청구 준비" }),
+    ).toBeEnabled();
+  });
+});
 
 describe("local guidance result", () => {
   it("shows semantic original citations as terms and preserves distinct source references", () => {
@@ -266,7 +377,10 @@ describe("local guidance result", () => {
       screen.queryByText(/현재 바로 시작할 청구 검토 대상이 없습니다/),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /청구|근거/ }),
+      screen.getByRole("button", { name: "Sample Coverage A 청구 준비" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /청구 검토|근거/ }),
     ).not.toBeInTheDocument();
     expect(onOpenEvidence).not.toHaveBeenCalled();
   });

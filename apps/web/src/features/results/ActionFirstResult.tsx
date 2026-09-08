@@ -1,5 +1,6 @@
 import type {
   BenefitCalculationsResponse,
+  CanonicalCoverageRef,
   CoverageDecisionResponse,
   OperationalCandidateResponse,
 } from "../../api/generated";
@@ -25,6 +26,9 @@ export function ActionFirstResult({
   onOpenEvidence,
   onReanalyze,
   onStartClaim,
+  onStartGuidanceClaim,
+  claimStarting = false,
+  claimStartDisabled = false,
   result,
   riderLabels,
 }: {
@@ -32,6 +36,9 @@ export function ActionFirstResult({
   onOpenEvidence: (evidenceIds: string[]) => void;
   onReanalyze: () => void;
   onStartClaim: (riderId: string) => void;
+  onStartGuidanceClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStarting?: boolean;
+  claimStartDisabled?: boolean;
   result: CoverageDecisionResponse;
   riderLabels?: Record<string, string>;
 }) {
@@ -49,6 +56,12 @@ export function ActionFirstResult({
           guidance={result.local_guidance}
           onRetry={onReanalyze}
           showEmpty={operationalCandidates.length === 0}
+          onStartClaim={onStartGuidanceClaim}
+          claimStartDisabled={
+            claimStarting ||
+            claimStartDisabled ||
+            (result.local_guidance_stale ?? result.stale)
+          }
         />
         <PartialResultBanner
           count={partialFailureCount(

@@ -15,7 +15,12 @@ function safeErrorMessage(): string {
 }
 
 function claimTitle(claim: ClaimCaseResponse): string {
-  return `${claim.insurer_key} · ${claim.policy_contract_id.slice(0, 8)}`;
+  const insurer =
+    claim.insurer_display ?? claim.insurer_key ?? "보험사 정보 확인 필요";
+  const coverage = claim.snapshot.local_guidance?.candidate.coverage_label;
+  const contract =
+    coverage ?? claim.policy_contract_id?.slice(0, 8) ?? "청구 준비 기록";
+  return `${insurer} · ${contract}`;
 }
 
 export function ClaimListPage({

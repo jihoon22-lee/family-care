@@ -1,5 +1,6 @@
 import { useId } from "react";
 import type {
+  CanonicalCoverageRef,
   GuidanceCandidate,
   GuidanceEvidence,
   GuidanceSemanticEvidence,
@@ -39,12 +40,12 @@ const inputLabels: Record<string, string> = {
   "Rider.insured_amount": "가입금액",
 };
 
-function inputLabel(path: string): string {
+export function guidanceInputLabel(path: string): string {
   return inputLabels[path] ?? "추가 사건 정보";
 }
 
 function questionCopy(path: string): string {
-  const label = inputLabel(path);
+  const label = guidanceInputLabel(path);
   const lastCharacter = label.charCodeAt(label.length - 1);
   const particle = (lastCharacter - 0xac00) % 28 === 0 ? "를" : "을";
   return `${label}${particle} 알려주세요.`;
@@ -58,7 +59,15 @@ function evidenceKey(item: GuidanceEvidence | GuidanceSemanticEvidence) {
   return `${item.kind}:${source}:${item.page_start}:${item.page_end}`;
 }
 
-function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
+function Candidate({
+  candidate,
+  onStartClaim,
+  claimStartDisabled,
+}: {
+  candidate: GuidanceCandidate;
+  onStartClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStartDisabled?: boolean;
+}) {
   const titleId = useId();
   const evidence = [
     ...new Map(
@@ -112,7 +121,7 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
       {candidate.contract_amount ? (
         <ContractAmount value={candidate.contract_amount} />
       ) : null}
-      <CandidateAmounts candidate={candidate} inputLabel={inputLabel} />
+      <CandidateAmounts candidate={candidate} inputLabel={guidanceInputLabel} />
       {candidate.freshness === "STATUS_UNRESOLVED" ? (
         <p className={styles.cardCopy}>
           사건일의 계약 상태에 따라 이 후보가 달라질 수 있습니다.
@@ -142,6 +151,17 @@ function Candidate({ candidate }: { candidate: GuidanceCandidate }) {
           </ul>
         </div>
       ) : null}
+      {onStartClaim ? (
+        <button
+          type="button"
+          className={styles.primaryButton}
+          disabled={claimStartDisabled}
+          aria-label={`${candidate.coverage_label} 청구 준비`}
+          onClick={() => onStartClaim(candidate.ref)}
+        >
+          청구 준비
+        </button>
+      ) : null}
     </article>
   );
 }
@@ -150,10 +170,14 @@ export function LocalGuidancePanel({
   guidance,
   onRetry,
   showEmpty = true,
+  onStartClaim,
+  claimStartDisabled = false,
 }: {
   guidance: LocalGuidanceResponse;
   onRetry: () => void;
   showEmpty?: boolean;
+  onStartClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStartDisabled?: boolean;
 }) {
   const id = useId();
   const questions = [
@@ -210,6 +234,8 @@ export function LocalGuidancePanel({
                 <Candidate
                   key={`${candidate.ref.kind}:${candidate.ref.contract_id}:${candidate.ref.coverage_id}`}
                   candidate={candidate}
+                  onStartClaim={onStartClaim}
+                  claimStartDisabled={claimStartDisabled}
                 />
               ))}
             </div>
