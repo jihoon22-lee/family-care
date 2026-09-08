@@ -950,3 +950,39 @@ cutoff를 함께 확인하도록 수정한 뒤 두 PG 회귀가 통과했다. �
 
 실제 자료·외부 provider·운영 schema/data·태그·배포는 실행하지 않았다. 조항별 양쪽 원문과
 변경 판본의 링크/게시 경계, 보호된 수용은 계속 진행하며 B02 완료로 확대하지 않는다.
+
+위 변경은 `67e7cde`로 push했고 [CI 34188662259](https://github.com/jihoon22-lee/family-care/actions/runs/34188662259)
+필수 **7/7**(합성 PostgreSQL과 이미지 3개 포함)이 통과했다. 다음 작업은 조항별 전체 원문
+영역·페이지 manifest 대조와 변경 전후 조항 연결이며, 해당 새 범위의 수용은 별도로 검증한다.
+
+### Whole-Clause source replay
+
+`67e7cde` 위 0047 변경은 기존 Clause와 정규화 본문을 유지하며 명시 article의 전체 원문
+구간을 별도 불변 평가에 연결한다. `clauses/source_regions.py`, `source_projection.py`,
+`source_repository.py`가 원문 주소·페이지 manifest·근거를 대조하고 API 자동 소비가 변경
+평가 전에 실행한다. 저장 `MATCH`는 감사 후보이며 후속 authority는 전체 원문을 재생하는
+`read_verified_clause_source`만 사용한다. 한 페이지를 넘는 조항은 아직 `UNKNOWN`이다.
+
+새 모듈/reader 부재와 API 처리 순서 부재의 RED를 확인했다. JSONB 좌표 숫자 표기 때문에
+첫 저장이 실패한 것을 DB JSON 표현 보존으로 수정했다. 불일치 출처를 가진 UNKNOWN 저장과
+Evidence가 일시 변경 후 원복될 때 잘못된 MATCH가 저장되는 회귀도 RED로 재현했다.
+DB 출처 묶음 검사와 하나의 SQL snapshot에서 읽는 변경 가능 입력으로 보완했다.
+정적 리뷰는 원문 재생 경계와 동시성에 한정했으며 실제 자료를 검사한 것으로 표현하지 않는다.
+
+2026-09-08 KST, `67e7cde` 위 최종 0047 변경으로 검증했다. 합성 조항·API 소비 테스트
+**39개**, 원문 저장·현재성·변조 후보 거부·동시 실행·rollback/retry·downgrade·페이지
+projection PG **25개**가 통과했다. 임의 substring이 DB에 남을 수 있는 경우에도 실제
+조회는 전체 재생으로 거부되는지 확인했으며, 수정하지 않은 정상 후보는 조회된다.
+
+- `corepack pnpm@11.22.0 web:check`: **172 tests + build**, exit 0.
+- `TMPDIR=/tmp uv run ruff format --check .` / `ruff check .`: **673 files**, lint exit 0.
+- `TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts`: **272 sources**, exit 0.
+- 기본 `uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **2,495 passed / 499 deselected / 3 subtests** (22.99초).
+- 전용 합성 DB guard를 사용한 전체 `uv run pytest -m integration apps/api/tests workers/analyzer/tests -q`:
+  **498 passed / 2,213 deselected** (523.20초).
+- `check_contracts.py`, `check_containers.py`, `check_workflows.py`: exit 0.
+  container 검사는 정적 정책이며 새 로컬 이미지 빌드가 아니다.
+
+실제 provider 호출·자료 처리·운영 변경·태그·배포는 없었다. 원문 평가는 변경 전후 조항
+연결의 선행 단계이며 B02 완료로 확대하지 않는다.

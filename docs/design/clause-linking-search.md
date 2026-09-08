@@ -67,6 +67,28 @@ component에는 표시명 완전 일치와 별도 날짜 중복 gate를 적용�
 
 목차의 표시 page와 PDF physical page를 분리하고 Evidence는 항상 PDF 1-based physical page를 사용한다.
 
+### Original Clause source
+
+`0047_clause_sources`는 기존 Clause를 수정하지 않고 원문 구간 평가를 불변 이력으로
+보존한다. 현재 지원하는 원문 주소는 한 페이지의 명시된 article 제목부터 다음 제목 또는
+검증된 component 끝까지다. 전체 페이지 manifest·읽기 순서·표 문맥·본문과 Evidence를
+대조하며, 번호만 같거나 다른 조항 본문을 가져온 경우는 `UNKNOWN`이다. 검색용 정규화는
+후보 선택에만 사용하고 실제 주소는 원래 node·문자 범위·좌표·본문·경계와 해시로 남긴다.
+여러 페이지에 걸친 조항과 미지원 경계는 완결된 원문으로 확정하지 않는다.
+
+DB guard는 출처 관계·원문 주소·입력 digest와 불변성을 검사한다. current view의 `MATCH`는
+감사 후보이며 조항 적용 권한이 아니다. API의 `read_verified_clause_source`가 현재 원문
+전체를 다시 구성하고 저장 구간과 정확히 대조한 결과만 후속 연결에서 사용할 수 있다.
+변경 가능한 Clause·component·Evidence와 그 입력 context는 한 SQL snapshot에서 읽고,
+이후 조회는 불변 generation을 지정한다. 일시 변경 후 원복으로 전후 context만 같아지는
+경우도 다른 시점의 근거를 섞지 않는다. JSONB context는 DB 표현 그대로 전달하여 좌표의
+소수점 표기 차이가 digest를 바꾸지 않게 한다.
+
+Clause·Evidence·component 입력 변경은 현재 평가를 제외하고 이력을 보존한다. 같은 입력
+재시도는 중복을 만들지 않으며, 기록이 있는 downgrade는 거부한다. 잘못된 저장 후보는
+전체 원문 재생에서 거부하며 같은 revision의 이력을 덮어쓰지 않는다. 조항별 변경 전후
+대상 연결과 사건일 적용은 별도 소비 경계이며 원문 평가만으로 완료되지 않는다.
+
 ## Search
 
 v0.1은 PostgreSQL만 사용한다.

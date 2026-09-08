@@ -3,6 +3,7 @@
 from threading import Event
 
 from familycare_api.clauses.component_editions import ComponentTermsProjector
+from familycare_api.clauses.source_repository import ClauseSourceProjector
 from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
 from familycare_api.clauses.terms_change_repository import TermsChangeProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
@@ -21,6 +22,7 @@ def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsChangeProjector, "refresh_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", lambda *args, **kwargs: 0)
 
 
 def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPatch) -> None:
@@ -173,3 +175,29 @@ def test_enabled_api_assesses_changes_after_base_terms_without_http(
     with TestClient(create_app()):
         assert called.wait(timeout=1)
     assert order[:2] == ["base", "changes"]
+
+
+def test_enabled_api_replays_clause_sources_before_assessing_changes(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    called = Event()
+    order: list[str] = []
+
+    def sources(self: object, **kwargs: object) -> int:
+        order.append("sources")
+        assert callable(kwargs["stop_requested"])
+        return 0
+
+    def changes(self: object, **kwargs: object) -> int:
+        order.append("changes")
+        called.set()
+        return 0
+
+    monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", sources)
+    monkeypatch.setattr(TermsChangeProjector, "refresh_pending", changes)
+    with TestClient(create_app()):
+        assert called.wait(timeout=1)
+    assert order[:2] == ["sources", "changes"]

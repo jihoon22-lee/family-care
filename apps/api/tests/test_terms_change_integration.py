@@ -117,7 +117,9 @@ def _add_document(url: str, job: Any, text: str, *, kind: str, digest: str) -> N
     assert DocumentMetadataProjector(url).project_pending() == 1
 
 
-def _sources(url: str, job: Any, *, missing_date: bool = False) -> dict[str, Any]:
+def _sources(
+    url: str, job: Any, *, missing_date: bool = False, terms_body: str = "제1조 목적"
+) -> dict[str, Any]:
     retain_terms_change_policy(url, job)
     assert RangeEnrollmentProjector(url).project_pending() == 3
     assert DocumentMetadataRunner(url).run_once("synthetic-worker")
@@ -128,7 +130,7 @@ def _sources(url: str, job: Any, *, missing_date: bool = False) -> dict[str, Any
             job,
             (
                 "보험약관\n보험사: Sample Insurer\n상품명: Sample Plan\n상품코드: SAMPLE-P\n"
-                f"약관코드: TERMS-{code}\n판본코드: EDITION-{code}\n제1조 목적"
+                f"약관코드: TERMS-{code}\n판본코드: EDITION-{code}\n{terms_body}"
             ),
             kind="terms",
             digest=digest,
