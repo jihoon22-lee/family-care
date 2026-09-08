@@ -60,7 +60,9 @@ def _errors(proposal: dict[str, Any]) -> list[str]:
     return validate_schema_instance(schema, proposal)
 
 
-@pytest.mark.parametrize("revision", ["document-metadata-v3", "document-metadata-v4"])
+@pytest.mark.parametrize(
+    "revision", ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5"]
+)
 def test_body_proposal_carries_source_addressed_range_evidence(revision) -> None:
     proposal = _proposal()
     proposal["revision"] = revision

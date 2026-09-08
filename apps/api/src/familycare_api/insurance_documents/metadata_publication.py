@@ -60,7 +60,7 @@ class DocumentMetadataProjector:
                     WHERE proposal.state='PREPARED' AND g.is_current
                       AND proposal.revision IN (
                         'document-metadata-v1','document-metadata-v2','document-metadata-v3',
-                        'document-metadata-v4')
+                        'document-metadata-v4','document-metadata-v5')
                       AND item.state='succeeded' AND member.deleted_at IS NULL
                       AND document.deleted_at IS NULL
                       AND (item.processed_document_version_id IS NULL
@@ -133,7 +133,8 @@ class DocumentMetadataProjector:
             MetadataSourceContext(
                 source["lineage"], load_page, revision=source["metadata_revision"]
             )
-            if source["metadata_revision"] in {"document-metadata-v3", "document-metadata-v4"}
+            if source["metadata_revision"]
+            in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}
             else None
         )
         for component in source["proposal_json"]["components"]:

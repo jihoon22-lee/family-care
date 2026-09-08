@@ -7,7 +7,7 @@ from typing import Any
 import psycopg
 import pytest
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
-from familycare_worker.document_metadata import metadata_proposal
+from familycare_worker.document_metadata import REVISION, metadata_proposal
 from familycare_worker.document_metadata_repository import DocumentMetadataRunner
 from familycare_worker.document_structure import build_document_structure, plan_structure_chunks
 from familycare_worker.document_structure_repository import DocumentStructureRepository
@@ -173,7 +173,13 @@ def test_body_range_refines_a_v2_cover_and_preserves_the_original_edition(
             "WHERE c.superseded_by_component_id IS NULL"
         ).fetchall()
         assert current == [
-            {"page_start": 1, "page_end": 2, "validator_revision": "document-metadata-api-v4"}
+            {
+                "page_start": 1,
+                "page_end": 2,
+                "validator_revision": REVISION.replace(
+                    "document-metadata-", "document-metadata-api-"
+                ),
+            }
         ]
         assert connection.execute("SELECT count(*) AS n FROM terms_editions").fetchone()["n"] == 2
     assert projector.project_pending() == 0

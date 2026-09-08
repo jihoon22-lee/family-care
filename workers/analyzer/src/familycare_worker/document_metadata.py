@@ -29,10 +29,11 @@ from familycare_worker.generated_metadata import (
     DocumentMetadataProposal,
     DocumentMetadataRole,
 )
+from familycare_worker.navigation_page import is_navigation_page
 from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v4"
+REVISION = "document-metadata-v5"
 
 
 class DocumentMetadataError(ValueError):
@@ -484,6 +485,10 @@ def analyze_metadata_pages(
     payload_bytes = 0
     reference_context = False
     for page, nodes in pages:
+        if is_navigation_page(nodes):
+            # Navigation lists do not start or end an earlier reference document.
+            unresolved.append(page.page_number)
+            continue
         source_nodes = {node.node_id: node for node in nodes}
         body_observation = observe_terms_body(page.page_number, nodes, require_local_contexts=True)
         body_available = body_observation.status == "SUPPORTED" and all(

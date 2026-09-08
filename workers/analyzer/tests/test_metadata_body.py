@@ -15,7 +15,7 @@ SECOND = "제8조 (가상 제외 조건)\n회사는 보험금을 지급하지 �
 def test_body_provisions_continue_without_repeated_role_or_product_labels() -> None:
     source = _structure(FIRST, SECOND)
     result = analyze_document_metadata(source)
-    assert result.revision == "document-metadata-v4"
+    assert result.revision == "document-metadata-v5"
     assert [(c.role, c.page_start, c.page_end) for c in result.components] == [("terms", 1, 2)]
     payload = metadata_proposal(source, UUID(int=905), "c" * 64)
     evidence = payload["components"][0]["range_evidence"]

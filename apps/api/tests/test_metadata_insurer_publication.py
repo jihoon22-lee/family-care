@@ -6,7 +6,7 @@ import psycopg
 import pytest
 from familycare_api.clauses.component_editions import ComponentTermsProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
-from familycare_worker.document_metadata import metadata_proposal
+from familycare_worker.document_metadata import REVISION, metadata_proposal
 from familycare_worker.document_metadata_repository import DocumentMetadataRunner
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -75,6 +75,6 @@ def test_insurer_caption_refines_v3_without_rewriting_the_deferred_edition_decis
         assert current["insurer_display"] == "Sample Assurance"
         assert current["product_display"] == "Sample Policy"
         assert connection.execute(
-            "SELECT outcome FROM document_metadata_publications "
-            "WHERE validator_revision='document-metadata-api-v4'"
+            "SELECT outcome FROM document_metadata_publications WHERE validator_revision=%s",
+            (REVISION.replace("document-metadata-", "document-metadata-api-"),),
         ).fetchone() == {"outcome": "APPLIED"}

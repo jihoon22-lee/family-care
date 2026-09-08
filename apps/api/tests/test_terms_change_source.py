@@ -7,7 +7,7 @@ from uuid import UUID
 
 import pytest
 from familycare_api.clauses.terms_change_source import ChangeMember, observe_terms_change
-from familycare_worker.document_metadata import metadata_proposal
+from familycare_worker.document_metadata import REVISION, metadata_proposal
 
 from workers.analyzer.tests.test_document_metadata import _structure
 
@@ -40,7 +40,7 @@ def _observe(text=TEXT, *, members=None, mutate=None):
     return observe_terms_change(
         component,
         source.to_dict(),
-        metadata_revision="document-metadata-v4",
+        metadata_revision=REVISION,
         household_space_id=HOUSEHOLD,
         family_member_id=MEMBER,
         members=members or (ChangeMember(HOUSEHOLD, MEMBER, "Family Member A", "Member A", 1),),
@@ -169,7 +169,7 @@ def test_example_table_does_not_supply_the_missing_effective_date() -> None:
     observed = observe_terms_change(
         component,
         source.to_dict(),
-        metadata_revision="document-metadata-v4",
+        metadata_revision=REVISION,
         household_space_id=HOUSEHOLD,
         family_member_id=MEMBER,
         members=(ChangeMember(HOUSEHOLD, MEMBER, "Family Member A", "Member A", 1),),
@@ -182,7 +182,7 @@ def _observe_structure(source):
     return observe_terms_change(
         component,
         source.to_dict(),
-        metadata_revision="document-metadata-v4",
+        metadata_revision=REVISION,
         household_space_id=HOUSEHOLD,
         family_member_id=MEMBER,
         members=(ChangeMember(HOUSEHOLD, MEMBER, "Family Member A", "Member A", 1),),

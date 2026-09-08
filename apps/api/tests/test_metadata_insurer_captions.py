@@ -89,7 +89,10 @@ def test_v3_proof_keeps_its_original_caption_semantics() -> None:
     _legacy_identity(component, source.to_dict(), revision="document-metadata-v3")
     assert validate_component_metadata(component, source.to_dict(), revision="document-metadata-v3")
     _legacy_identity(component, source.to_dict(), revision="document-metadata-v4")
-    assert validate_component_metadata(component, source.to_dict()) is None
+    assert (
+        validate_component_metadata(component, source.to_dict(), revision="document-metadata-v4")
+        is None
+    )
 
 
 @pytest.mark.parametrize("placement", ["footer_first", "distant_above"])

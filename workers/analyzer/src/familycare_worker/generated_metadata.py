@@ -68,6 +68,7 @@ class DocumentMetadataProposal(TypedDict):
         "document-metadata-v2",
         "document-metadata-v3",
         "document-metadata-v4",
+        "document-metadata-v5",
     ]
     schema_version: Literal["1"]
     structure_identity_sha256: str

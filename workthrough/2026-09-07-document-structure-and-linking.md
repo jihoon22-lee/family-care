@@ -1033,3 +1033,40 @@ RED로 재현했다. 내부 `scope_relation_ids`에 검증된 조항 연결 근�
 
 실제 자료 처리·외부 provider·운영 schema/data 쓰기·태그·배포는 이 구현에서 실행하지
 않았다. 추가 원문 형식·metadata와 보호된 수용, B02 통합 검토/merge는 남아 있다.
+
+위 변경은 `c5d173d`로 push했고 [CI 34203968955](https://github.com/jihoon22-lee/family-care/actions/runs/34203968955)
+필수 **7/7**(최종 전체 PostgreSQL **516 passed / 2530 deselected**, 708.40초와 이미지
+3개 포함)이 통과했다. 이후 승인된 기존
+보관 추출을 읽기 전용·메모리 내 adapter로 진단했다. 원문/신원/경로를 출력하지 않은
+집계에서 로컬 본문 조건을 통과한 페이지도 이전 설명 문맥으로 제외되는 것을 확인했다.
+이 진단은 metadata 신원 수용 성공이나 운영 전환을 의미하지 않는다.
+
+### Verified navigation pages
+
+목차의 `상품설명서 .... 9`와 `Example clauses .... 9` 항목이 실제 설명 문서의 시작으로
+처리되어 다음 본문까지 막히는 합성 RED **2개**를 확인했다. v5는 전체 페이지의 명시
+목차 제목·페이지 번호를 가진 항목과 원문 위치를 검사한다. 실제 문장·불명확한 흐름·
+미지원 표가 섞이면 기존 제한을 유지한다. 유효 native 줄에 대표된 단어는 전체 원문과
+좌표를 확인한 뒤 중복에서 제외하며, 줄 밖에 숨겨진 문장은 버리지 않는다.
+
+Worker와 API의 별도 판독은 원래 예시 문맥을 지우지 않고 목차 자체의 component 주장을
+거부한다. 새 문맥 cache가 이전 revision 검증을 바꾸는 사례도 RED **1개**로 확인하여
+lineage뿐 아니라 revision 일치도 검사한다. 0049는 v5 validator를 추가하고 기존 v4의
+준비 JSON을 보존한다. 새 이력이 있으면 downgrade를 거부하며 준비·등록 재시도는 중복을
+만들지 않는다. 판독 revision은 보호된 로컬 DTO만 확장하며 HTTP 계약은 바꾸지 않는다.
+
+새 helper 부재와 bool/int 페이지 주소 혼용의 RED 후 Worker **8개**가 통과했다.
+API/Worker metadata·원문/캐시·과거 revision·변경서 관련 pure **169개**와 v4 보존→v5
+재처리/판본 등록·downgrade 거부 PG **1개**, 관련 metadata PG **38개**가 통과했다.
+2026-09-08 17:49~18:01 KST, `c5d173d` 위 v5 API/Worker·neutral schema·0049와 관련
+테스트 변경으로 추가 검증했다. 기본 Python **2,545 passed / 517 deselected / 3 subtests**
+(24.12초), metadata와 약관 변경/조항 게시 PG **51 passed** (97.41초)가 통과했다.
+Ruff format **682 files**/lint, mypy **275 sources**, generated contracts, 정적 container/
+workflow 정책, 문서 **50**·안전 **876 paths**·diff도 통과했다. 전용 합성 PostgreSQL URL과
+파괴적 검사 guard, `TMPDIR=/tmp`를 사용했다. 이 B02 중간 변경에서 Web/전체 PostgreSQL을
+다시 실행한 것으로 표현하지 않으며 최종 소스 CI와 B02 완료 검증을 별도로 확인한다.
+
+같은 v5 소스를 승인된 기존 보관 추출에 읽기 전용·메모리 내 adapter로 적용한 집계는
+완료됐으나 이 지원 목차 형식이 실제 자료의 약관/신원 분류를 개선하지는 못했다.
+합성 수정 성공을 보호된 수용 성공으로 확대하지 않는다. 문서 경계·신원 후보의 제한적
+구조화와 독립 원문 검증 경로가 남아 있다. 실제 외부 AI 호출과 운영 쓰기는 없었다.

@@ -17,6 +17,7 @@ from familycare_api.documents.generated_metadata import (
     DocumentMetadataComponent,
     DocumentMetadataFact,
 )
+from familycare_api.insurance_documents.navigation_page_validation import is_navigation_page
 from familycare_api.insurance_documents.terms_body_validation import (
     body_evidence,
     reference_context_present,
@@ -548,7 +549,13 @@ class MetadataSourceContext:
             self.remember(
                 page,
                 nodes,
-                set(_observe(nodes, issuer_captions=self.revision == "document-metadata-v4").roles),
+                set(
+                    _observe(
+                        nodes,
+                        issuer_captions=self.revision
+                        in {"document-metadata-v4", "document-metadata-v5"},
+                    ).roles
+                ),
             )
         return self.states[number - 1]
 
@@ -556,12 +563,16 @@ class MetadataSourceContext:
         if number in self.states:
             return
         restricted = self.before(number)
+        if self.revision == "document-metadata-v5" and is_navigation_page(nodes):
+            self.states[number] = restricted
+            self.last_page = number
+            return
         if formal_roles == {"terms"}:
             restricted = False
         elif formal_roles:
             restricted = True
         self.states[number] = restricted or reference_context_present(
-            nodes, persistent_only=self.revision == "document-metadata-v4"
+            nodes, persistent_only=self.revision in {"document-metadata-v4", "document-metadata-v5"}
         )
         self.last_page = number
 
@@ -571,7 +582,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v4",
+    revision: str = "document-metadata-v5",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -597,10 +608,11 @@ def _validate(
         "document-metadata-v2",
         "document-metadata-v3",
         "document-metadata-v4",
+        "document-metadata-v5",
     }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
-    if revision in {"document-metadata-v3", "document-metadata-v4"}:
+    if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
         return None
@@ -650,7 +662,7 @@ def _validate(
         node_ids.add(node["node_id"])
         if start <= node["page_number"] <= end:
             pages.setdefault(node["page_number"], []).append(node)
-    if revision in {"document-metadata-v3", "document-metadata-v4"}:
+    if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}:
 
         def context_page(number: int) -> dict[str, Any]:
             if page_loader is not None:
@@ -663,7 +675,7 @@ def _validate(
         source_context = source_context or MetadataSourceContext(
             lineage, context_page, revision=revision
         )
-        if source_context.lineage != lineage:
+        if source_context.lineage != lineage or source_context.revision != revision:
             return None
     observed = _Observed()
     scalar_summary: dict[str, str] = {}
@@ -672,9 +684,9 @@ def _validate(
         json.dumps(span, sort_keys=True): index
         for index, span in enumerate(component["role_spans"])
     }
-    if revision in {"document-metadata-v3", "document-metadata-v4"} and len(span_indices) != len(
-        component["role_spans"]
-    ):
+    if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"} and len(
+        span_indices
+    ) != len(component["role_spans"]):
         return None
     previous_numbers: tuple[int, ...] = ()
     previous_sequence = False
@@ -689,10 +701,12 @@ def _validate(
             identifiers = [node["node_id"] for node in page_nodes]
             if len(set(identifiers)) != len(identifiers):
                 return None
+        if revision == "document-metadata-v5" and is_navigation_page(page_nodes):
+            return None
         page = _observe(
             page_nodes,
             legacy=revision == "document-metadata-v1",
-            issuer_captions=revision == "document-metadata-v4",
+            issuer_captions=revision in {"document-metadata-v4", "document-metadata-v5"},
         )
         restricted = False
         if source_context is not None:
@@ -704,7 +718,7 @@ def _validate(
             source_context.remember(number, page_nodes, set(page.roles))
         body = (
             body_evidence(number, page_nodes)
-            if revision in {"document-metadata-v3", "document-metadata-v4"}
+            if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}
             else None
         )
         basis = "FORMAL_METADATA"
@@ -713,7 +727,7 @@ def _validate(
             basis = "CONTRACTUAL_PROVISIONS"
         if set(page.roles) != {role}:
             return None
-        if revision == "document-metadata-v4":
+        if revision in {"document-metadata-v4", "document-metadata-v5"}:
             _bind_insurer_captions(page, page_nodes)
         numbers = body[0] if body is not None and role == "terms" else ()
         sequence_verified = bool(body is not None and role == "terms" and body[2])
@@ -721,7 +735,7 @@ def _validate(
         if number > start:
             common = scalar_summary.keys() & scalars.keys()
             body_continues = (
-                revision in {"document-metadata-v3", "document-metadata-v4"}
+                revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}
                 and role == "terms"
                 and bool(numbers)
                 and sequence_verified
@@ -746,7 +760,7 @@ def _validate(
                 or any(scalar_summary[name] != scalars[name] for name in common)
             ):
                 return None
-        if revision in {"document-metadata-v3", "document-metadata-v4"}:
+        if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}:
             range_evidence.append(
                 {
                     "page_number": number,
@@ -764,7 +778,7 @@ def _validate(
         observed.unresolved.update(page.unresolved)
         for key, spans in page.facts.items():
             observed.facts.setdefault(key, set()).update(spans)
-    if revision in {"document-metadata-v3", "document-metadata-v4"}:
+    if revision in {"document-metadata-v3", "document-metadata-v4", "document-metadata-v5"}:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:
             return None
