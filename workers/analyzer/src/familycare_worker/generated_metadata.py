@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 __all__ = [
     "DocumentMetadataComponent",
     "DocumentMetadataFact",
     "DocumentMetadataField",
     "DocumentMetadataProposal",
+    "DocumentMetadataRangeEvidence",
     "DocumentMetadataRole",
     "DocumentMetadataSpan",
 ]
@@ -47,6 +48,7 @@ class DocumentMetadataComponent(TypedDict):
     identity: str
     page_end: int
     page_start: int
+    range_evidence: NotRequired[list[DocumentMetadataRangeEvidence]]
     role: DocumentMetadataRole
     role_spans: list[DocumentMetadataSpan]
     unresolved_fields: list[DocumentMetadataField]
@@ -61,10 +63,21 @@ class DocumentMetadataFact(TypedDict):
 class DocumentMetadataProposal(TypedDict):
     components: list[DocumentMetadataComponent]
     generation_id: str
-    revision: Literal["document-metadata-v1", "document-metadata-v2"]
+    revision: Literal["document-metadata-v1", "document-metadata-v2", "document-metadata-v3"]
     schema_version: Literal["1"]
     structure_identity_sha256: str
     unresolved_pages: list[int]
+
+
+class DocumentMetadataRangeEvidence(TypedDict):
+    article_numbers: list[int]
+    article_sequence_verified: bool
+    basis: Literal[
+        "ARTICLE_CONTINUATION", "CONTRACTUAL_PROVISIONS", "FORMAL_METADATA", "TABLE_CONTINUATION"
+    ]
+    page_number: int
+    previous_page: int | None
+    role_span_indices: list[int]
 
 
 class DocumentMetadataSpan(TypedDict):

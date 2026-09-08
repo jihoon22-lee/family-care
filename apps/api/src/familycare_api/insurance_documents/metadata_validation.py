@@ -17,6 +17,10 @@ from familycare_api.documents.generated_metadata import (
     DocumentMetadataComponent,
     DocumentMetadataFact,
 )
+from familycare_api.insurance_documents.terms_body_validation import (
+    body_evidence,
+    reference_context_present,
+)
 
 _DATES = frozenset(
     {
@@ -400,12 +404,43 @@ class ValidatedComponent:
     unresolved_fields: tuple[str, ...]
 
 
+class MetadataSourceContext:
+    """Small server-owned context cache shared across a generation's components."""
+
+    def __init__(self, lineage: dict[str, Any], load_page: Callable[[int], dict[str, Any]]) -> None:
+        self.lineage = dict(lineage)
+        self.load_page = load_page
+        self.states = {0: False}
+        self.last_page = 0
+
+    def before(self, number: int) -> bool:
+        for page in range(self.last_page + 1, number):
+            source = self.load_page(page)
+            if source["lineage"] != self.lineage:
+                raise ValueError("metadata context lineage mismatch")
+            nodes = [node for node in source["nodes"] if node["page_number"] == page]
+            self.remember(page, nodes, set(_observe(nodes).roles))
+        return self.states[number - 1]
+
+    def remember(self, number: int, nodes: list[dict[str, Any]], formal_roles: set[str]) -> None:
+        if number in self.states:
+            return
+        restricted = self.before(number)
+        if formal_roles == {"terms"}:
+            restricted = False
+        elif formal_roles:
+            restricted = True
+        self.states[number] = restricted or reference_context_present(nodes)
+        self.last_page = number
+
+
 def validate_component_metadata(
     component: dict[str, Any],
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v2",
+    revision: str = "document-metadata-v3",
+    source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
 
@@ -413,7 +448,7 @@ def validate_component_metadata(
     Metadata classification confers neither enrollment nor edition applicability.
     """
     try:
-        return _validate(component, projection, page_loader, revision)
+        return _validate(component, projection, page_loader, revision, source_context)
     except KeyError, TypeError, ValueError, AttributeError, OverflowError:
         return None
 
@@ -423,10 +458,14 @@ def _validate(
     projection: dict[str, Any],
     page_loader: Callable[[int], dict[str, Any]] | None,
     revision: str,
+    source_context: MetadataSourceContext | None,
 ) -> ValidatedComponent | None:
-    if revision not in {"document-metadata-v1", "document-metadata-v2"}:
+    if revision not in {"document-metadata-v1", "document-metadata-v2", "document-metadata-v3"}:
         return None
-    if set(component) != DocumentMetadataComponent.__required_keys__:
+    component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
+    if revision == "document-metadata-v3":
+        component_fields.add("range_evidence")
+    if set(component) != component_fields:
         return None
     for name, limit in (
         ("facts", 10000),
@@ -474,8 +513,31 @@ def _validate(
         node_ids.add(node["node_id"])
         if start <= node["page_number"] <= end:
             pages.setdefault(node["page_number"], []).append(node)
+    if revision == "document-metadata-v3":
+
+        def context_page(number: int) -> dict[str, Any]:
+            if page_loader is not None:
+                return page_loader(number)
+            return {
+                "lineage": lineage,
+                "nodes": [node for node in projection["nodes"] if node["page_number"] == number],
+            }
+
+        source_context = source_context or MetadataSourceContext(lineage, context_page)
+        if source_context.lineage != lineage:
+            return None
     observed = _Observed()
     scalar_summary: dict[str, str] = {}
+    range_evidence: list[dict[str, Any]] = []
+    span_indices = {
+        json.dumps(span, sort_keys=True): index
+        for index, span in enumerate(component["role_spans"])
+    }
+    if revision == "document-metadata-v3" and len(span_indices) != len(component["role_spans"]):
+        return None
+    previous_numbers: tuple[int, ...] = ()
+    previous_sequence = False
+    previous_basis: str | None = None
     for number in range(start, end + 1):
         page_nodes = pages.get(number, [])
         if page_loader is not None:
@@ -487,24 +549,97 @@ def _validate(
             if len(set(identifiers)) != len(identifiers):
                 return None
         page = _observe(page_nodes, legacy=revision == "document-metadata-v1")
+        restricted = False
+        if source_context is not None:
+            restricted = source_context.before(number)
+            if set(page.roles) == {"terms"}:
+                restricted = False
+            elif page.roles:
+                restricted = True
+            source_context.remember(number, page_nodes, set(page.roles))
+        body = body_evidence(number, page_nodes) if revision == "document-metadata-v3" else None
+        basis = "FORMAL_METADATA"
+        if not page.roles and body is not None and not restricted:
+            page.roles["terms"] = {json.dumps(span, sort_keys=True) for span in body[1]}
+            basis = "CONTRACTUAL_PROVISIONS"
         if set(page.roles) != {role}:
             return None
+        numbers = body[0] if body is not None and role == "terms" else ()
+        sequence_verified = bool(body is not None and role == "terms" and body[2])
         scalars = {name: _key(value) for name, value in page.facts if name not in _MULTIPLE}
         if number > start:
             common = scalar_summary.keys() & scalars.keys()
+            body_continues = (
+                revision == "document-metadata-v3"
+                and role == "terms"
+                and bool(numbers)
+                and sequence_verified
+                and (
+                    (
+                        bool(previous_numbers)
+                        and previous_sequence
+                        and numbers[0] == previous_numbers[-1] + 1
+                    )
+                    or (
+                        not previous_numbers
+                        and previous_basis == "FORMAL_METADATA"
+                        and numbers[0] == 1
+                    )
+                )
+            )
             if (
                 role in {"policy", "application", "amendment"}
                 or _conflicts(page.facts)
                 or _conflicts(observed.facts)
-                or not common & _IDENTITY
+                or (not common & _IDENTITY and not body_continues)
                 or any(scalar_summary[name] != scalars[name] for name in common)
             ):
                 return None
+        if revision == "document-metadata-v3":
+            range_evidence.append(
+                {
+                    "page_number": number,
+                    "basis": basis,
+                    "previous_page": None if number == start else number - 1,
+                    "article_numbers": list(numbers),
+                    "article_sequence_verified": sequence_verified,
+                    "role_span_indices": sorted(span_indices[span] for span in page.roles[role]),
+                }
+            )
+        previous_numbers, previous_basis = numbers, basis
+        previous_sequence = sequence_verified
         scalar_summary.update(scalars)
         observed.roles.setdefault(role, set()).update(page.roles[role])
         observed.unresolved.update(page.unresolved)
         for key, spans in page.facts.items():
             observed.facts.setdefault(key, set()).update(spans)
+    if revision == "document-metadata-v3":
+        supplied = component["range_evidence"]
+        if not isinstance(supplied, list) or len(supplied) != end - start + 1:
+            return None
+        for claimed_range, expected in zip(supplied, range_evidence, strict=True):
+            if not isinstance(claimed_range, dict) or set(claimed_range) != set(expected):
+                return None
+            indices = claimed_range["role_span_indices"]
+            articles = claimed_range["article_numbers"]
+            if (
+                type(claimed_range["page_number"]) is not int
+                or (
+                    claimed_range["previous_page"] is not None
+                    and type(claimed_range["previous_page"]) is not int
+                )
+                or type(claimed_range["article_sequence_verified"]) is not bool
+                or not isinstance(indices, list)
+                or not 1 <= len(indices) <= 10000
+                or any(type(index) is not int for index in indices)
+                or len(set(indices)) != len(indices)
+                or not isinstance(articles, list)
+                or any(type(number) is not int for number in articles)
+            ):
+                return None
+            normalized = dict(claimed_range, role_span_indices=sorted(indices))
+            if normalized != expected:
+                return None
     claimed_roles = {json.dumps(span, sort_keys=True) for span in component["role_spans"]}
     if claimed_roles != observed.roles[role]:
         return None

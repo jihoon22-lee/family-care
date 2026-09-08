@@ -29,9 +29,10 @@ from familycare_worker.generated_metadata import (
     DocumentMetadataProposal,
     DocumentMetadataRole,
 )
+from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v2"
+REVISION = "document-metadata-v3"
 
 
 class DocumentMetadataError(ValueError):
@@ -58,6 +59,16 @@ class DocumentFact:
 
 
 @dataclass(frozen=True, repr=False)
+class RangeEvidence:
+    page_number: int
+    basis: str
+    previous_page: int | None
+    article_numbers: tuple[int, ...]
+    spans: tuple[MetadataSpan, ...]
+    article_sequence_verified: bool = False
+
+
+@dataclass(frozen=True, repr=False)
 class ComponentProposal:
     identity: str
     role: ComponentRole
@@ -68,6 +79,7 @@ class ComponentProposal:
     conflicting_fields: tuple[str, ...]
     unresolved_fields: tuple[str, ...]
     authority: str = "CONTENT_CLASSIFICATION_ONLY"
+    range_evidence: tuple[RangeEvidence, ...] = ()
 
 
 @dataclass(frozen=True, repr=False)
@@ -227,7 +239,26 @@ def _compatible(left: ComponentProposal, right: ComponentProposal) -> bool:
     left_values = {f.field: _key(f.value) for f in left.facts if f.field not in _MULTIPLE}
     right_values = {f.field: _key(f.value) for f in right.facts if f.field not in _MULTIPLE}
     common = left_values.keys() & right_values.keys()
-    return bool(common & _IDENTITY) and all(
+    body_continues = False
+    if left.role == "terms" and left.range_evidence and right.range_evidence:
+        previous, current = left.range_evidence[-1], right.range_evidence[0]
+        body_continues = (
+            bool(current.article_numbers)
+            and current.article_sequence_verified
+            and (
+                (
+                    bool(previous.article_numbers)
+                    and previous.article_sequence_verified
+                    and current.article_numbers[0] == previous.article_numbers[-1] + 1
+                )
+                or (
+                    not previous.article_numbers
+                    and previous.basis == "FORMAL_METADATA"
+                    and current.article_numbers[0] == 1
+                )
+            )
+        )
+    return (bool(common & _IDENTITY) or body_continues) and all(
         left_values[field] == right_values[field] for field in common
     )
 
@@ -255,6 +286,18 @@ def _merge_components(pages: list[ComponentProposal]) -> list[ComponentProposal]
                 page_end=group[-1].page_end,
                 facts=facts,
                 role_spans=tuple(span for page in group for span in page.role_spans),
+                range_evidence=tuple(
+                    replace(
+                        evidence,
+                        previous_page=(
+                            None
+                            if evidence.page_number == group[0].page_start
+                            else evidence.page_number - 1
+                        ),
+                    )
+                    for page in group
+                    for evidence in page.range_evidence
+                ),
                 conflicting_fields=_conflicts(facts),
                 unresolved_fields=tuple(
                     sorted({field for page in group for field in page.unresolved_fields})
@@ -346,7 +389,14 @@ def analyze_metadata_pages(
     components: list[ComponentProposal] = []
     unresolved: list[int] = []
     payload_bytes = 0
+    reference_context = False
     for page, nodes in pages:
+        body_observation = observe_terms_body(page.page_number, nodes, require_local_contexts=True)
+        body_available = body_observation.status == "SUPPORTED" and all(
+            set(context.context_node_ids) <= set(context.header_node_ids)
+            for context in body_observation.table_contexts
+        )
+        has_reference = reference_context_present(nodes)
         nodes, positioned = _layout_nodes(nodes)
         line_blocks = {span.block_node_id for node in nodes for span in node.source_spans}
         tables = [node for node in nodes if node.kind == "TABLE_ROW"]
@@ -530,6 +580,26 @@ def analyze_metadata_pages(
                             )
                         )
                 offset += len(line)
+        basis = "FORMAL_METADATA"
+        if set(roles) == {"terms"}:
+            reference_context = False
+        elif roles:
+            reference_context = True
+        if not roles and not reference_context and body_available:
+            roles["terms"] = [
+                MetadataSpan(
+                    span.node_id,
+                    span.page_number,
+                    span.start,
+                    span.end,
+                    span.text,
+                    span.start,
+                    span.end,
+                )
+                for span in role_witness(body_observation)
+            ]
+            basis = "CONTRACTUAL_PROVISIONS"
+        reference_context = reference_context or has_reference
         if len(roles) != 1 or page.active_layer == "unavailable":
             unresolved.append(page.page_number)
             continue
@@ -544,8 +614,24 @@ def analyze_metadata_pages(
             page_facts,
             _conflicts(page_facts),
             tuple(sorted(unresolved_fields)),
+            range_evidence=(
+                RangeEvidence(
+                    page.page_number,
+                    basis,
+                    None,
+                    tuple(provision.article_number for provision in body_observation.provisions)
+                    if role == "terms" and body_available
+                    else (),
+                    tuple(role_spans),
+                    article_sequence_verified=(
+                        role == "terms"
+                        and body_available
+                        and "INDEPENDENT_BODY_REGIONS" not in body_observation.reason_codes
+                    ),
+                ),
+            ),
         )
-        payload_bytes += len(json.dumps(asdict(component), ensure_ascii=False).encode())
+        payload_bytes += len(json.dumps(_component_payload(component), ensure_ascii=False).encode())
         if payload_bytes > 8 * 1024 * 1024:
             raise DocumentMetadataError
         components.append(component)
@@ -568,6 +654,20 @@ def analyze_metadata_pages(
         ).hexdigest()
         components[index] = replace(component, identity=identity)
     return DocumentMetadata(tuple(components), tuple(unresolved))
+
+
+def _component_payload(component: ComponentProposal) -> dict[str, object]:
+    payload = asdict(component)
+    addresses = {
+        (span.node_id, span.start, span.end): index
+        for index, span in enumerate(component.role_spans)
+    }
+    for raw, evidence in zip(payload["range_evidence"], component.range_evidence, strict=True):
+        raw.pop("spans")
+        raw["role_span_indices"] = [
+            addresses[(span.node_id, span.start, span.end)] for span in evidence.spans
+        ]
+    return payload
 
 
 def metadata_proposal(
@@ -597,7 +697,7 @@ def metadata_proposal(
             "revision": REVISION,
             "generation_id": str(generation_id),
             "structure_identity_sha256": structure_identity_sha256,
-            "components": [asdict(item) for item in metadata.components],
+            "components": [_component_payload(item) for item in metadata.components],
             "unresolved_pages": metadata.unresolved_pages,
         },
         ensure_ascii=False,

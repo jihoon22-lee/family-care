@@ -27,12 +27,15 @@ def _inputs(
     }
 
 
-def _legacy_identity(component: dict[str, Any], source: dict[str, Any]) -> None:
+def _legacy_identity(
+    component: dict[str, Any], source: dict[str, Any], *, revision: str = "document-metadata-v1"
+) -> None:
+    component.pop("range_evidence", None)
     lineage = source["lineage"]
     component["identity"] = hashlib.sha256(
         json.dumps(
             [
-                "document-metadata-v1",
+                revision,
                 lineage["document_version_id"],
                 lineage["extraction_id"],
                 lineage["source_payload_sha256"],

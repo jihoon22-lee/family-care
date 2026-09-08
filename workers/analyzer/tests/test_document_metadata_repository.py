@@ -47,8 +47,8 @@ def test_malformed_prepared_component_cannot_stall_the_publisher(
             connection.execute(
                 "INSERT INTO document_metadata_proposals("
                 "generation_id,revision,state,attempts,proposal_json) "
-                "VALUES(%s,'document-metadata-v2','PREPARED',1,%s)",
-                (generation, Jsonb(payload)),
+                "VALUES(%s,%s,'PREPARED',1,%s)",
+                (generation, payload["revision"], Jsonb(payload)),
             )
 
 

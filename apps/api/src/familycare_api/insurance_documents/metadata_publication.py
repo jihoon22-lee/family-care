@@ -13,10 +13,13 @@ from familycare_api.insurance_documents.metadata_publication_store import (
     record_component_publication,
 )
 from familycare_api.insurance_documents.metadata_supersession import refine_component
-from familycare_api.insurance_documents.metadata_validation import validate_component_metadata
+from familycare_api.insurance_documents.metadata_validation import (
+    MetadataSourceContext,
+    validate_component_metadata,
+)
 from familycare_api.insurance_documents.repository import _database_url
 
-VALIDATOR_REVISION = "document-metadata-api-v2"
+VALIDATOR_REVISION = "document-metadata-api-v3"
 
 
 class DocumentMetadataProjector:
@@ -55,7 +58,8 @@ class DocumentMetadataProjector:
                       AND version.document_id=item.document_id
                     JOIN documents document ON document.id=version.document_id
                     WHERE proposal.state='PREPARED' AND g.is_current
-                      AND proposal.revision IN ('document-metadata-v1','document-metadata-v2')
+                      AND proposal.revision IN (
+                        'document-metadata-v1','document-metadata-v2','document-metadata-v3')
                       AND item.state='succeeded' AND member.deleted_at IS NULL
                       AND document.deleted_at IS NULL
                       AND (item.processed_document_version_id IS NULL
@@ -114,6 +118,21 @@ class DocumentMetadataProjector:
         stop_requested: Callable[[], bool] | None,
     ) -> None:
         validator_revision = source["validator_revision"]
+
+        def load_page(number: int) -> dict[str, Any]:
+            projection = connection.execute(
+                "SELECT document_structure_projection(%s,%s,%s) AS source",
+                (source["generation_id"], source["household_space_id"], [number]),
+            ).fetchone()
+            if projection is None or projection["source"] is None:
+                raise ValueError("metadata page unavailable")
+            return dict(projection["source"])
+
+        source_context = (
+            MetadataSourceContext(source["lineage"], load_page)
+            if source["metadata_revision"] == "document-metadata-v3"
+            else None
+        )
         for component in source["proposal_json"]["components"]:
             if stop_requested and stop_requested():
                 break
@@ -124,20 +143,12 @@ class DocumentMetadataProjector:
             ).fetchone():
                 continue
 
-            def load_page(number: int) -> dict[str, Any]:
-                projection = connection.execute(
-                    "SELECT document_structure_projection(%s,%s,%s) AS source",
-                    (source["generation_id"], source["household_space_id"], [number]),
-                ).fetchone()
-                if projection is None or projection["source"] is None:
-                    raise ValueError("metadata page unavailable")
-                return dict(projection["source"])
-
             valid = validate_component_metadata(
                 component,
                 {"lineage": source["lineage"], "nodes": []},
                 page_loader=load_page,
                 revision=source["metadata_revision"],
+                source_context=source_context,
             )
             outcome = "APPLIED" if valid else "INVALID"
             if valid:

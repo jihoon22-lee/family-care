@@ -10,7 +10,7 @@
       "const": "1"
     },
     "revision": {
-      "enum": ["document-metadata-v1", "document-metadata-v2"]
+      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3"]
     },
     "generation_id": {
       "type": "string",
@@ -47,7 +47,45 @@
     "components",
     "unresolved_pages"
   ],
+  "anyOf": [
+    { "properties": { "revision": { "enum": ["document-metadata-v1", "document-metadata-v2"] } } },
+    {
+      "properties": {
+        "revision": { "const": "document-metadata-v3" },
+        "components": { "items": { "required": ["range_evidence"] } }
+      }
+    }
+  ],
   "$defs": {
+    "DocumentMetadataRangeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "page_number": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "basis": {
+          "enum": ["FORMAL_METADATA", "CONTRACTUAL_PROVISIONS", "ARTICLE_CONTINUATION", "TABLE_CONTINUATION"]
+        },
+        "previous_page": {
+          "anyOf": [
+            { "type": "integer", "minimum": 1, "maximum": 499 },
+            { "type": "null" }
+          ]
+        },
+        "article_numbers": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1, "maximum": 10000 },
+          "maxItems": 500
+        },
+        "article_sequence_verified": { "type": "boolean" },
+        "role_span_indices": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0, "maximum": 9999 },
+          "minItems": 1,
+          "maxItems": 10000
+        }
+      },
+      "required": ["page_number", "basis", "previous_page", "article_numbers", "article_sequence_verified", "role_span_indices"]
+    },
     "DocumentMetadataSpan": {
       "type": "object",
       "additionalProperties": false,
@@ -176,6 +214,12 @@
         },
         "authority": {
           "const": "CONTENT_CLASSIFICATION_ONLY"
+        },
+        "range_evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DocumentMetadataRangeEvidence" },
+          "minItems": 1,
+          "maxItems": 500
         }
       },
       "required": [

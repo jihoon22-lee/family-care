@@ -14,6 +14,7 @@ from familycare_api.common.scope import HouseholdScope
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.insurance_documents.repository import InsuranceDocumentRepository
 from familycare_api.policies.errors import PolicyStateConflict
+from familycare_worker.document_metadata import REVISION
 from psycopg.rows import dict_row
 
 from apps.api.tests import test_metadata_supersession_integration as refinement_fixtures
@@ -56,8 +57,8 @@ def _refinement_publications(url: str, job: Any) -> list[dict[str, Any]]:
             "JOIN document_metadata_proposals proposal ON proposal.id=publication.proposal_id "
             "JOIN document_structure_generations generation "
             "ON generation.id=proposal.generation_id "
-            "WHERE generation.batch_item_id=%s AND proposal.revision='document-metadata-v2'",
-            (job.batch_item_id,),
+            "WHERE generation.batch_item_id=%s AND proposal.revision=%s",
+            (job.batch_item_id, REVISION),
         ).fetchall()
 
 

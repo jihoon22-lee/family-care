@@ -755,3 +755,50 @@ container 정의·workflow 정책·diff가 통과했다. 전체 PG는 API/Worker
 포함한다. 컨테이너 정의 검사는 이미지 build가 아니다.
 이 변경에서는 실제 자료·외부 provider·운영 schema/data·Windows/모바일·태그·배포를 실행하지
 않았다. 더 넓은 metadata/본문 범위와 변경·갱신 적용, 보호된 수용과 B02 merge는 남아 있다.
+
+## Contractual body and source regions
+
+`0043_metadata_body_revision`와 `document-metadata-v3`는 제목/라벨이 없는 조항 본문에서도
+역할을 검증한다. Worker `terms_body.py`와 API `terms_body_validation.py`가 원문 단어·줄의
+위치와 문장 관계를 독립 확인한다. 계약 당사자·지급 의무·제외·정의에 관한 번호 있는 조항을
+관찰하며 이 결과로 가입·적용 판본·지급 조건을 만들지 않는다. 표지의 v1/v2 검증 규칙과
+publication은 그대로 보존한다. 새 본문 범위가 이전 표지보다 강한 근거이면 기존 successor
+경계를 사용해 새 component/판본을 등록하고 원래 판본과 검증 이력은 유지한다.
+
+페이지 전체를 검사하되 역할 증명에는 첫 유효 조항의 최소 원문 문장만 보존한다.
+`range_evidence.role_span_indices`는 기존 `role_spans`를 참조해 중복 JSON을 피한다.
+보존 IR의 본문은 줄이거나 변경하지 않는다. 여러 독립 열의 순서는 확정하지 않으며,
+열을 가로질러 주어와 술어를 조립하지 않는다. 국소적인 각주·표·열 문제는 다른 명확한
+본문을 지우지 않는다. 불명확한 영역·큰 간격·겹침·위조된 원문 위치는 연결 근거가 아니다.
+확인하지 못한 외부 표 header는 metadata에 게시하지 않는다.
+
+조항 번호만으로 예시의 다음 페이지나 다른 문서를 합치는 회귀를 Worker/API 양쪽에서
+RED로 재현했다. source 전체의 앞선 문맥을 확인하고 새 약관 경계까지 설명/인용 문맥을
+유지하도록 수정했다. API의 작은 generation 문맥 캐시는 앞 페이지를 반복 로드하지 않는다.
+큰 합성 문서의 metadata 8 MiB 초과도 RED로 확인하고, 500페이지·페이지당 64개 조항의
+전체 IR을 보존하면서 metadata를 2 MiB 미만으로 생성하는 검사를 통과했다.
+
+독립 worktree의 Worker `e62b09d`/`4a6c464`/`339690b`와 API `8e366e0` 변경을 root에서
+검토·통합했다. 각 에이전트는 소유한 모듈/테스트만 수정했고 실제 자료·DB·provider를 사용하지
+않았다. Worker 59개, API 43개 focused test와 해당 Ruff/type 검사가 통과했다. API의 합성
+576단어→60줄 사례는 단일 helper 호출 0.003948초였으며 일반 처리량을 의미하지 않는다.
+root의 관련 pure **197개**와 Worker→API 지역별 metadata **4개**도 통과했다. 앞서 실행한
+metadata/publication PostgreSQL **27개**는 이후 영역·문맥·witness 변경 전 결과이므로 최종
+DB 검증을 대신하지 않는다.
+
+승인된 기존 보관 추출은 읽기 전용 transaction과 메모리 내 adapter로 확인하고 집계만
+출력했다. 첫 전체 페이지 배치 gate는 실제 본문을 인식하지 못했으며, 원인을 집계한 뒤
+영역별 검증으로 보완해 일부 약관 본문 분류를 확인했다. 보험사·상품·판본 metadata는 여전히
+충분하지 않아 자동 적용 연결이나 보호된 전환 완료로 보고하지 않는다. 실제 원문·개인 값·
+경로·키는 저장소/fixture/로그에 남기지 않았고 외부 provider·운영 쓰기·태그·배포는 미실행이다.
+
+`3e1897d` 위의 최종 본문/metadata/0043 변경으로 2026-09-08 08:53~09:22 KST Web 전체
+**172개/build**, 기본 Python **2,300 passed / 433 deselected / 3 subtests**, mypy **263 sources**,
+Ruff format **643 files**/lint, 생성 계약·container/workflow 정책을 통과했다. 본문 제목의 괄호와
+빈 원문 block도 RED 후 보완했다. API/Worker 전체 PostgreSQL의 첫 실행은 새 revision을
+생성하면서 publication 조회가 v2에 고정된 기존 테스트 14개가 실패했다. 조회를 실제 producer
+revision에 바인딩한 뒤 관련 **26개**, 전체 **432 passed / 2,018 deselected** (339.48초)를
+통과했다. 사용자 결정·동시성·원본 판본/검증 이력 보존 assertion은 유지했다. UI/HTTP 변경이
+없으므로 기존 Chromium mock 17개 결과는 이전 검증으로 구분하며 반복하지 않았다.
+별도 빈 합성 DB의 `head → 0039 → head` migration 왕복도 통과했다. 실제 자료 수용과
+운영 전환은 위의 읽기 전용 관찰만으로 완료한 것으로 처리하지 않는다.
