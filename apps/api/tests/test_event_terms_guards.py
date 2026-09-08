@@ -34,7 +34,8 @@ pytestmark = pytest.mark.integration
 def test_downgrade_cannot_remove_existing_selection_history(changes_database: Any) -> None:
     url, job = changes_database
     _sources(url, job)
-    assert TermsChangeProjector(url).refresh_pending() == 1
+    # Exercise the original decision-snapshot guard without newer amendment
+    # history stopping the downgrade at an earlier migration.
     repository = DecisionRepository(url)
     scope = HouseholdScope(job.household_space_id)
     event = repository.create_medical_event(

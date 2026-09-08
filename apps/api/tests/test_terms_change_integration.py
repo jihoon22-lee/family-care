@@ -118,19 +118,27 @@ def _add_document(url: str, job: Any, text: str, *, kind: str, digest: str) -> N
 
 
 def _sources(
-    url: str, job: Any, *, missing_date: bool = False, terms_body: str = "제1조 목적"
+    url: str,
+    job: Any,
+    *,
+    missing_date: bool = False,
+    terms_body: str = "제1조 목적",
+    new_terms_body: str | None = None,
+    change_scope: str = "특약",
+    change_fields: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     retain_terms_change_policy(url, job)
     assert RangeEnrollmentProjector(url).project_pending() == 3
     assert DocumentMetadataRunner(url).run_once("synthetic-worker")
     assert DocumentMetadataProjector(url).project_pending() == 1
     for code, digest in (("A", "b" * 64), ("B", "c" * 64)):
+        body = new_terms_body if code == "B" and new_terms_body is not None else terms_body
         _add_document(
             url,
             job,
             (
                 "보험약관\n보험사: Sample Insurer\n상품명: Sample Plan\n상품코드: SAMPLE-P\n"
-                f"약관코드: TERMS-{code}\n판본코드: EDITION-{code}\n{terms_body}"
+                f"약관코드: TERMS-{code}\n판본코드: EDITION-{code}\n{body}"
             ),
             kind="terms",
             digest=digest,
@@ -148,13 +156,14 @@ def _sources(
                 "보험사: Sample Insurer",
                 "변경구분: 조건변경",
                 "변경방식: 교체",
-                "적용범위: 특약",
+                f"적용범위: {change_scope}",
                 "대상특약명: Sample Rider",
                 "변경전약관코드: TERMS-A",
                 "변경전판본코드: EDITION-A",
                 "변경후약관코드: TERMS-B",
                 "변경후판본코드: EDITION-B",
                 "변경적용일:" if missing_date else "변경적용일: 2025-07-01",
+                *change_fields,
             )
         ),
         kind="amendment",

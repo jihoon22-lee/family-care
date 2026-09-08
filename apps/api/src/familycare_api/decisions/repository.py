@@ -14,7 +14,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_api.clauses.rules import CoverageRuleVersion
-from familycare_api.clauses.terms_change_repository import read_event_terms
+from familycare_api.clauses.terms_change_repository import ReplayedChange, read_event_terms
 from familycare_api.clauses.terms_change_selection import (
     TermsEventSelection,
     TermsSelectionScope,
@@ -921,8 +921,11 @@ class DecisionRepository:
             return RulesForEvent(
                 tuple(_coverage_rule(row, evidence) for row, evidence in grouped.values())
             )
+        change_cache: dict[tuple[UUID, str], ReplayedChange | None] = {}
         selections: dict[UUID | None, TermsEventSelection] = {
-            None: read_event_terms(connection, selection_scope, event_date)
+            None: read_event_terms(
+                connection, selection_scope, event_date, change_cache=change_cache
+            )
         }
         versions = []
         judgments: list[tuple[UUID, TermsStatus]] = []
@@ -933,6 +936,7 @@ class DecisionRepository:
                     connection,
                     replace(selection_scope, clause_id=clause_id),
                     event_date,
+                    change_cache=change_cache,
                 )
             status: TermsStatus = next(
                 (

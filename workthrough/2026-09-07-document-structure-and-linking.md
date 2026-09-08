@@ -986,3 +986,50 @@ projection PG **25개**가 통과했다. 임의 substring이 DB에 남을 수 �
 
 실제 provider 호출·자료 처리·운영 변경·태그·배포는 없었다. 원문 평가는 변경 전후 조항
 연결의 선행 단계이며 B02 완료로 확대하지 않는다.
+
+위 변경은 `10ff8a1`로 push했고 [CI 34193936083](https://github.com/jihoon22-lee/family-care/actions/runs/34193936083)
+필수 **7/7**(이미지 3개 포함)이 통과했다.
+
+### Original-Clause change pairs
+
+`10ff8a1` 위 0048은 변경서가 지정한 양쪽 원래 Clause ID와 0047 원문 평가를 불변
+`terms-change-v2` 관계로 저장한다. 기존 v1 이력은 그대로 남기며 현재 평가를 다시 만들고,
+새 관계가 존재하면 downgrade를 거부한다. HTTP 계약은 바꾸지 않는다.
+`terms_change_clauses.py`의 사전 검증은 정확한 가입 담보·판본·후보 승인·근거를 확인한다.
+링크 확인/규칙 게시와 사건일 조회는 변경서 원문 및 양쪽 조항을 다시 읽어 저장된 대상과
+비교한다. 검증된 새 조항만 게시할 수 있고 적용일 이전에는 기존 판본을 유지한다.
+
+관련 조항의 연속 변경과 새 조항 기준 조회가 같은 관계를 소비하고, 인접 조항은 유지한다.
+상위 조항이 변경됐지만 하위 항 대응이 확인되지 않으면 그 항은 적용일 이후 UNKNOWN이다.
+근거가 사라진 이전 주소는 불확실성에만 사용하고 새 게시 권한으로 사용하지 않는다.
+거부된 링크의 재확인 실패는 거부 상태를 되돌리지 않는다. 실제 분석 저장은 양쪽 조항
+관계와 적용 관계 그래프를 검증하며 기존 snapshot을 수정하지 않는다.
+
+원문과 다른 대상의 저장 MATCH가 게시를 통과한 경우, 상위 조항 변경 후 하위 항이 기존
+MATCH로 남는 경우, 링크 재확인 실패가 거부 상태를 바꾸는 경우를 각각 RED로 재현한 뒤
+수정했다. 새 조항 선택의 실제 분석 저장 실패도 확인하여 snapshot 검증을 보완했다.
+추가 리뷰에서 A→B 시행 후 B→C 시행 전의 C 조항을 포함한 실제 분석 저장 실패를
+RED로 재현했다. 내부 `scope_relation_ids`에 검증된 조항 연결 근거를 보존하고 실제 적용
+관계와 구분하여, 시행 전/후 분석·저장·재조회 **2개**와 관련 pure **100개**를 통과했다.
+과거 JSON은 기본 빈 연결로 읽고 연결이 없는 새 JSON의 기존 형식도 유지한다.
+2026-09-08 17:06~17:19 KST, `10ff8a1` 위 최종 0048 API/migration/codec와 합성
+테스트 변경으로 검증했다. 전용 PostgreSQL 18 test DB에 명시 URL/파괴적 검사 guard와
+`TMPDIR=/tmp`를 사용했고 운영 DB는 사용하지 않았다.
+
+- `corepack pnpm@11.22.0 web:check`: **172 tests + build**, exit 0.
+- `TMPDIR=/tmp uv run ruff format --check .` / `ruff check .`: **677 files**, lint exit 0.
+- `TMPDIR=/tmp uv run mypy apps/api/src workers/analyzer/src scripts`: **273 sources**, exit 0.
+- 기본 `uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **2,530 passed / 516 deselected / 3 subtests** (25.17초).
+- 조항 변경/guard/원문/기존 게시 PG **41 passed** (125.55초).
+- 전체 `uv run pytest -m integration apps/api/tests workers/analyzer/tests -q`:
+  **514 passed / 1 failed / 2,248 deselected** (621.30초). 새 v2 변경 이력이 먼저
+  downgrade를 거부하여, 기존 0046 회귀가 기대한 오류 메시지까지 도달하지 못했다.
+  `test_event_terms_guards.py`의 해당 준비에서 새 변경 이력을 생성하지 않도록 고친 뒤
+  그 PG **1 passed / 11 deselected** (4.11초)를 확인했다. 전체 실행을 로컬 515개
+  일괄 통과로 표현하지 않으며 최종 커밋의 전체 CI 결과를 별도로 연결한다.
+- `check_contracts.py`, `check_containers.py`, `check_workflows.py`: exit 0.
+  container 검사는 정적 정책이며 새 로컬 이미지 빌드가 아니다.
+
+실제 자료 처리·외부 provider·운영 schema/data 쓰기·태그·배포는 이 구현에서 실행하지
+않았다. 추가 원문 형식·metadata와 보호된 수용, B02 통합 검토/merge는 남아 있다.

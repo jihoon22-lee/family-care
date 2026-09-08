@@ -6,9 +6,10 @@ In particular, rider aliases must come from original policy evidence or verified
 publication evidence; a current display name is not an alias proof. This module
 performs no IO, source verification, enrollment, status or date selection.
 
-CLAUSE remains unresolved until a separate resolver verifies original clause
-aliases and the edition-to-contract relationship. Never adapt an unresolved
-RIDER/CLAUSE scope to a contract-wide selection merely because its ID is None.
+Clause candidates must carry an API-verified whole-source assessment and an
+independently verified Rider/contract link. Merely supplying a display label or
+assessment UUID does not verify that proof. Never adapt an unresolved RIDER/CLAUSE
+scope to a broader selection merely because one of its IDs is None.
 """
 
 from collections.abc import Sequence
@@ -40,6 +41,7 @@ class TermsChangeTargetRequest:
     new_terms_code: str | None = None
     new_edition_code: str | None = None
     reason_codes: tuple[str, ...] = ()
+    new_clause_label_key: str | None = None
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -70,6 +72,20 @@ class VerifiedEditionCandidate:
 
 
 @dataclass(frozen=True, slots=True, repr=False)
+class VerifiedClauseCandidate:
+    """Caller-verified source identity and exact enrolled Rider relationship."""
+
+    clause_id: UUID
+    terms_edition_id: UUID
+    household_space_id: UUID
+    family_member_id: UUID
+    policy_contract_id: UUID
+    rider_id: UUID
+    source_label_key: str
+    source_assessment_id: UUID
+
+
+@dataclass(frozen=True, slots=True, repr=False)
 class ResolvedTermsChangeTargets:
     status: TargetStatus
     reason_codes: tuple[str, ...]
@@ -82,6 +98,8 @@ class ResolvedTermsChangeTargets:
     clause_id: UUID | None = None
     previous_edition_id: UUID | None = None
     new_edition_id: UUID | None = None
+    previous_clause_id: UUID | None = None
+    new_clause_id: UUID | None = None
 
 
 class TermsChangeTargetError(ValueError):
@@ -116,6 +134,7 @@ def _validate(
     contracts: Sequence[VerifiedContractCandidate],
     riders: Sequence[VerifiedRiderCandidate],
     editions: Sequence[VerifiedEditionCandidate],
+    clauses: Sequence[VerifiedClauseCandidate],
 ) -> None:
     if (
         not isinstance(request, TermsChangeTargetRequest)
@@ -147,10 +166,11 @@ def _validate(
         request.previous_edition_code,
         request.new_terms_code,
         request.new_edition_code,
+        request.new_clause_label_key,
     )
     if any(value is not None and not _text(value) for value in request_text):
         raise TermsChangeTargetError
-    for candidates in (contracts, riders, editions):
+    for candidates in (contracts, riders, editions, clauses):
         if not isinstance(candidates, Sequence) or len(candidates) > _MAX_CANDIDATES:
             raise TermsChangeTargetError
     texts = [value for value in request_text if value is not None]
@@ -193,6 +213,22 @@ def _validate(
         ):
             raise TermsChangeTargetError
         texts.extend((edition.insurer_key, edition.terms_code, edition.edition_code))
+    for clause in clauses:
+        if (
+            not isinstance(clause, VerifiedClauseCandidate)
+            or not _ids(
+                clause.clause_id,
+                clause.terms_edition_id,
+                clause.household_space_id,
+                clause.family_member_id,
+                clause.policy_contract_id,
+                clause.rider_id,
+                clause.source_assessment_id,
+            )
+            or not _text(clause.source_label_key)
+        ):
+            raise TermsChangeTargetError
+        texts.append(clause.source_label_key)
     if alias_count > _MAX_TOTAL_ALIASES or sum(len(text) for text in texts) > _MAX_TEXT:
         raise TermsChangeTargetError
 
@@ -227,19 +263,53 @@ def _edition(
     return _unique(identifiers, prefix, issues)
 
 
+def _clause(
+    request: TermsChangeTargetRequest,
+    policy_id: UUID | None,
+    rider_id: UUID | None,
+    edition_id: UUID | None,
+    label_key: str | None,
+    candidates: Sequence[VerifiedClauseCandidate],
+    prefix: str,
+    issues: set[str],
+) -> UUID | None:
+    label = _key(label_key)
+    identifiers = {
+        candidate.clause_id
+        for candidate in candidates
+        if policy_id is not None
+        and rider_id is not None
+        and edition_id is not None
+        and label is not None
+        and candidate.household_space_id == request.household_space_id
+        and candidate.family_member_id == request.family_member_id
+        and candidate.policy_contract_id == policy_id
+        and candidate.rider_id == rider_id
+        and candidate.terms_edition_id == edition_id
+        and _key(candidate.source_label_key) == label
+    }
+    return _unique(identifiers, prefix, issues)
+
+
 def resolve_terms_change_targets(
     request: TermsChangeTargetRequest,
     contracts: Sequence[VerifiedContractCandidate],
     riders: Sequence[VerifiedRiderCandidate],
     editions: Sequence[VerifiedEditionCandidate],
+    *,
+    clauses: Sequence[VerifiedClauseCandidate] = (),
 ) -> ResolvedTermsChangeTargets:
     """Return unique IDs and partial uncertainty, without creating any targets.
 
     An empty candidate set is UNKNOWN, not proof that a referenced target cannot
     exist. Input limits fail explicitly, never silently selecting a truncated
     candidate set. Date/interval composition belongs to terms_change_selection.
+    CLAUSE requires an independently resolved explicit Rider. A verified old or
+    new side preserves that exact scope even when its counterpart is unresolved.
+    ``clause_id`` prefers the predecessor for REPLACE, falling back to a known
+    successor; ADD binds only the successor. Explicit side IDs retain that distinction.
     """
-    _validate(request, contracts, riders, editions)
+    _validate(request, contracts, riders, editions, clauses)
     if request.status == "NO_MATCH":
         return ResolvedTermsChangeTargets(
             "NO_MATCH",
@@ -264,9 +334,7 @@ def resolve_terms_change_targets(
     }
     policy_id = _unique(contract_ids, "CONTRACT", issues)
     rider_id = None
-    if request.scope_kind in {"RIDER", "CLAUSE"} and (
-        request.scope_kind == "RIDER" or request.rider_name_key is not None
-    ):
+    if request.scope_kind in {"RIDER", "CLAUSE"}:
         rider_ids = {
             candidate.rider_id
             for candidate in riders
@@ -282,13 +350,14 @@ def resolve_terms_change_targets(
     scope_resolved = policy_id is not None and (
         request.scope_kind == "CONTRACT" or (request.scope_kind == "RIDER" and rider_id is not None)
     )
-    if request.scope_kind == "CLAUSE":
-        issues.add("CLAUSE_TARGET_UNRESOLVED")
-    elif request.scope_kind not in {"CONTRACT", "RIDER"}:
+    if request.scope_kind not in {"CONTRACT", "RIDER", "CLAUSE"}:
         issues.add("CHANGE_SCOPE_UNRESOLVED")
     if (
-        request.scope_kind == "CONTRACT" and (request.rider_name_key or request.clause_label_key)
-    ) or (request.scope_kind == "RIDER" and request.clause_label_key):
+        request.scope_kind == "CONTRACT"
+        and (request.rider_name_key or request.clause_label_key or request.new_clause_label_key)
+    ) or (
+        request.scope_kind == "RIDER" and (request.clause_label_key or request.new_clause_label_key)
+    ):
         issues.add("CHANGE_SCOPE_CONFLICT")
         scope_resolved = False
     previous_id = None
@@ -308,6 +377,37 @@ def resolve_terms_change_targets(
     new_id = _edition(
         request, request.new_terms_code, request.new_edition_code, editions, "NEW_EDITION", issues
     )
+    previous_clause_id = new_clause_id = clause_id = None
+    if request.scope_kind == "CLAUSE":
+        if request.operation != "ADD":
+            previous_clause_id = _clause(
+                request,
+                policy_id,
+                rider_id,
+                previous_id,
+                request.clause_label_key,
+                clauses,
+                "PREVIOUS_CLAUSE",
+                issues,
+            )
+        new_clause_id = _clause(
+            request,
+            policy_id,
+            rider_id,
+            new_id,
+            request.new_clause_label_key
+            if request.new_clause_label_key is not None
+            else request.clause_label_key,
+            clauses,
+            "NEW_CLAUSE",
+            issues,
+        )
+        clause_id = previous_clause_id or new_clause_id
+        scope_resolved = policy_id is not None and rider_id is not None and clause_id is not None
+        if clause_id is None:
+            issues.add("CLAUSE_TARGET_UNRESOLVED")
+        if previous_clause_id is not None and previous_clause_id == new_clause_id:
+            issues.add("CHANGE_CLAUSE_TARGET_CONFLICT")
     if request.operation not in {"ADD", "REPLACE"}:
         issues.add("CHANGE_OPERATION_UNRESOLVED")
     if request.operation == "ADD" and (
@@ -327,6 +427,9 @@ def resolve_terms_change_targets(
         scope_resolved=scope_resolved,
         policy_contract_id=policy_id,
         rider_id=rider_id,
+        clause_id=clause_id,
         previous_edition_id=previous_id,
         new_edition_id=new_id,
+        previous_clause_id=previous_clause_id,
+        new_clause_id=new_clause_id,
     )

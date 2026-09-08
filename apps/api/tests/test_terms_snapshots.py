@@ -1,5 +1,6 @@
 """Only bounded, typed event selections can become retained decision metadata."""
 
+from dataclasses import replace
 from datetime import date
 from uuid import UUID
 
@@ -38,6 +39,7 @@ def _selection():
 def test_selection_snapshot_roundtrip_preserves_partial_target_and_provenance() -> None:
     selections = (_selection(),)
     encoded = encode_selections(selections)
+    assert "scope_relation_ids" not in encoded[0]
     decoded = decode_selections(encoded)
     assert decoded == selections
     assert decoded[0].scope_uncertainties and decoded[0].uncertain_relation_ids
@@ -67,3 +69,12 @@ def test_invalid_snapshot_shape_cannot_be_reused_as_calculation_authority(mutati
 def test_legacy_run_has_no_invented_terms_selection() -> None:
     assert decode_selections(None) == ()
     assert decode_selections([]) == ()
+
+
+def test_scope_lineage_is_retained_separately_from_event_application() -> None:
+    selection = replace(_selection(), scope_relation_ids=(UUID(int=93),))
+    encoded = encode_selections((selection,))
+    assert decode_selections(encoded) == (selection,)
+    assert UUID(int=93) not in selection.applied_relation_ids
+    encoded[0].pop("scope_relation_ids")
+    assert decode_selections(encoded)[0].scope_relation_ids == ()

@@ -54,6 +54,7 @@ class _Selection(_SnapshotModel):
     uncertain_relation_ids: _Relations
     scope_uncertainties: Annotated[tuple[_Uncertainty, ...], Field(max_length=128)]
     base_assessment_ids: Annotated[tuple[UUID, ...], Field(max_length=512)] = ()
+    scope_relation_ids: _Relations = ()
 
     def domain(self) -> TermsEventSelection:
         if (
@@ -72,6 +73,7 @@ class _Selection(_SnapshotModel):
             self.uncertain_relation_ids,
             tuple(TermsScopeUncertainty(**u.model_dump()) for u in self.scope_uncertainties),
             self.base_assessment_ids,
+            self.scope_relation_ids,
         )
 
 
@@ -97,6 +99,10 @@ def encode_selections(selections: tuple[TermsEventSelection, ...]) -> list[dict[
         result = [
             _Selection.model_validate(asdict(item)).model_dump(mode="json") for item in selections
         ]
+        for item in result:
+            # Preserve the legacy JSON shape when there is no Clause lineage.
+            if not item["scope_relation_ids"]:
+                item.pop("scope_relation_ids")
         decode_selections(result)
         return result
     except TypeError, ValueError, ValidationError:

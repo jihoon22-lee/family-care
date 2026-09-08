@@ -28,7 +28,7 @@ from familycare_api.insurance_documents.terms_body_validation import (
     reference_context_present,
 )
 
-REVISION = "terms-change-source-v1"
+REVISION = "terms-change-source-v2"
 _LABELS = {
     "contract_number": ("대상계약번호", "계약번호", "증권번호", "contract number", "policy number"),
     "insured": ("대상피보험자", "피보험자", "피보험자 성명", "insured", "insured name"),
@@ -37,7 +37,8 @@ _LABELS = {
     "operation": ("변경방식", "change operation"),
     "scope_kind": ("적용범위", "change scope"),
     "rider_name": ("대상특약명", "대상담보명", "target rider"),
-    "clause_label": ("대상조항", "target clause"),
+    "clause_label": ("대상조항", "변경전조항", "target clause", "previous clause"),
+    "new_clause_label": ("변경후조항", "new clause"),
     "previous_terms_code": ("변경전약관코드", "previous terms code"),
     "previous_edition_code": ("변경전판본코드", "previous edition code"),
     "new_terms_code": ("변경후약관코드", "적용약관코드", "new terms code"),
@@ -78,6 +79,8 @@ class ObservedTermsChange:
     scope_kind: str | None = None
     rider_name_key: str | None = None
     clause_label_key: str | None = None
+    new_clause_label_key: str | None = None
+    new_clause_label_declared: bool = False
     operation: str | None = None
     change_kind: str | None = None
     effective_from: date | None = None
@@ -411,7 +414,7 @@ def observe_terms_change(
         required += ["previous_terms_code", "previous_edition_code"]
     if scope == "RIDER":
         required.append("rider_name")
-    if scope == "CLAUSE":
+    if scope == "CLAUSE" and (operation != "ADD" or scalar("new_clause_label") is None):
         required.append("clause_label")
     if (
         any(scalar(name) is None for name in required)
@@ -420,10 +423,14 @@ def observe_terms_change(
         or scope is None
     ):
         reasons.append("CHANGE_TARGET_OR_OPERATION_UNRESOLVED")
-    if scope == "CONTRACT" and (scalar("rider_name") or scalar("clause_label")):
+    if scope == "CONTRACT" and (
+        scalar("rider_name") or scalar("clause_label") or scalar("new_clause_label")
+    ):
         reasons.append("CHANGE_SCOPE_CONFLICT")
-    if scope == "RIDER" and scalar("clause_label"):
+    if scope == "RIDER" and (scalar("clause_label") or scalar("new_clause_label")):
         reasons.append("CHANGE_SCOPE_CONFLICT")
+    if "new_clause_label" in declared and scalar("new_clause_label") is None:
+        reasons.append("NEW_CLAUSE_LABEL_UNRESOLVED")
     start, end = _date(scalar("effective_from")), _date(scalar("effective_through"))
     if start is None:
         reasons.append("EFFECTIVE_DATE_UNRESOLVED")
@@ -442,6 +449,8 @@ def observe_terms_change(
         scope_kind=scope,
         rider_name_key=scalar("rider_name"),
         clause_label_key=scalar("clause_label"),
+        new_clause_label_key=scalar("new_clause_label"),
+        new_clause_label_declared="new_clause_label" in declared,
         operation=operation,
         change_kind=change_kind,
         effective_from=start,

@@ -998,6 +998,9 @@ class RiderClauseLinkRepository:
                 )
                 if link_row is None:
                     raise ClauseVersionConflict
+                if link_row["review_state"] == "rejected":
+                    # A failed attempt must preserve the user's explicit rejection.
+                    raise RiderClauseLinkInvalid("LINK_NOT_ACTIVE")
                 try:
                     context = self._validation_context(connection, scope, link_row)
                     validate_rider_clause_link(scope, context)
@@ -1094,6 +1097,9 @@ class RiderClauseLinkRepository:
         connection: psycopg.Connection[dict[str, Any]],
         scope: HouseholdScope,
         link_row: dict[str, Any],
+        *,
+        include_change_gate: bool = True,
+        lock_source: bool = True,
     ) -> RiderClauseLinkValidationContext:
         policy_row = connection.execute(
             """
@@ -1160,13 +1166,15 @@ class RiderClauseLinkRepository:
             ),
         )
 
-        _lock_terms_source(connection, scope, link_row["terms_edition_id"])
+        if lock_source:
+            _lock_terms_source(connection, scope, link_row["terms_edition_id"])
+        source_lock = "FOR SHARE" if lock_source else ""
         edition_row = connection.execute(
             f"""
             SELECT {_TERMS_COLUMNS}
             FROM terms_editions
             WHERE id = %s AND household_space_id = %s AND deleted_at IS NULL
-            FOR SHARE
+            {source_lock}
             """,
             (link_row["terms_edition_id"], scope.household_space_id),
         ).fetchone()
@@ -1178,6 +1186,22 @@ class RiderClauseLinkRepository:
             (policy_row["policy_contract_id"], edition.id, scope.household_space_id),
         ).fetchone()
         assert applicability is not None
+        if (
+            include_change_gate
+            and applicability["state"] != "MATCH"
+            and edition.source_component_id is not None
+        ):
+            from familycare_api.clauses.terms_change_clauses import change_allows_clause_publication
+
+            if change_allows_clause_publication(
+                connection,
+                scope.household_space_id,
+                policy_row["policy_contract_id"],
+                link_row["rider_id"],
+                link_row["clause_id"],
+                edition.id,
+            ):
+                applicability = {"state": "MATCH"}
         clauses = ClauseRepository._hierarchy_with_connection(
             ClauseRepository(self.database_url),
             connection,

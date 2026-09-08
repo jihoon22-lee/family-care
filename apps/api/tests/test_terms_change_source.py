@@ -64,6 +64,37 @@ def test_amendment_header_preserves_target_and_temporal_semantics() -> None:
     assert "Family Member A" not in repr(observed)
 
 
+def test_clause_change_preserves_distinct_original_labels_for_both_editions() -> None:
+    observed = _observe(
+        TEXT.replace("적용범위: 특약", "적용범위: 조항") + "\n변경전조항: 제7조\n변경후조항: 제9조"
+    )
+    assert observed.status == "MATCH"
+    assert observed.clause_label_key == "제7조"
+    assert observed.new_clause_label_key == "제9조"
+    fields = {field.name: field for field in observed.source_fields}
+    assert fields["clause_label"].spans[0]["text"] == "제7조"
+    assert fields["new_clause_label"].spans[0]["text"] == "제9조"
+
+
+def test_clause_add_can_name_only_the_new_original_clause() -> None:
+    text = TEXT.replace("적용범위: 특약", "적용범위: 조항").replace(
+        "변경방식: 교체", "변경방식: 추가"
+    )
+    text = "\n".join(line for line in text.splitlines() if not line.startswith("변경전"))
+    observed = _observe(text + "\n변경후조항: 제9조")
+    assert observed.status == "MATCH" and observed.clause_label_key is None
+    assert observed.new_clause_label_key == "제9조"
+
+
+@pytest.mark.parametrize("scope", ["특약", "계약전체"])
+def test_a_new_clause_label_cannot_silently_widen_the_declared_scope(scope: str) -> None:
+    text = TEXT.replace("적용범위: 특약", f"적용범위: {scope}")
+    if scope == "계약전체":
+        text = text.replace("대상특약명: Sample Daily Rider\n", "")
+    observed = _observe(text + "\n변경후조항: 제9조")
+    assert observed.status == "UNKNOWN" and "CHANGE_SCOPE_CONFLICT" in observed.reason_codes
+
+
 @pytest.mark.parametrize("replacement", ["不明", "2025-02-30", ""])
 def test_unknown_effective_date_preserves_the_identified_target(replacement: str) -> None:
     observed = _observe(TEXT.replace("2025-07-01", replacement))

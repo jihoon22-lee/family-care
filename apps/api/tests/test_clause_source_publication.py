@@ -34,7 +34,9 @@ _BODY_8 = "회사는 합성 제외 조건에 해당하면 보험금을 지급하
 _TERMS = f"제7조 (합성 지급 조건)\n{_BODY_7}\n제8조 (합성 제외 조건)\n{_BODY_8}"
 
 
-def _clause(url: str, job: Any, edition: UUID, *, body: str = _BODY_7) -> UUID:
+def _clause(
+    url: str, job: Any, edition: UUID, *, body: str = _BODY_7, label: str = "제7조"
+) -> UUID:
     evidence = uuid4()
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         source = connection.execute(
@@ -62,7 +64,7 @@ def _clause(url: str, job: Any, edition: UUID, *, body: str = _BODY_7) -> UUID:
             terms_edition_id=edition,
             parent_clause_id=None,
             clause_type="article",
-            label="제7조",
+            label=label,
             normalized_title=normalize_clause_text("합성 지급 조건"),
             normalized_text=normalize_clause_text(body),
             physical_page_start=1,
@@ -422,6 +424,10 @@ def test_downgrade_preserves_existing_clause_source_history(changes_database: An
         "TMPDIR": "/tmp",
     }
     command = [sys.executable, "-m", "alembic", "-c", "apps/api/alembic.ini"]
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        starting_revision = connection.execute(
+            "SELECT version_num FROM alembic_version"
+        ).fetchone()["version_num"]
     attempted = subprocess.run(
         command + ["downgrade", "0046_event_terms_snapshots"],
         env=environment,
@@ -434,7 +440,7 @@ def test_downgrade_preserves_existing_clause_source_history(changes_database: An
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         assert (
             connection.execute("SELECT version_num FROM alembic_version").fetchone()["version_num"]
-            == "0047_clause_sources"
+            == starting_revision
         )
         assert (
             read_verified_clause_source(connection, job.household_space_id, clause_id) is not None

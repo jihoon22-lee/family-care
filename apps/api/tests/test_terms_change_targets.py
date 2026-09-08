@@ -6,6 +6,7 @@ from uuid import UUID
 import pytest
 from familycare_api.clauses.terms_change_targets import (
     TermsChangeTargetRequest,
+    VerifiedClauseCandidate,
     VerifiedContractCandidate,
     VerifiedEditionCandidate,
     VerifiedRiderCandidate,
@@ -20,6 +21,23 @@ OLD_SOURCE = VerifiedEditionCandidate(
 )
 NEW_SOURCE = VerifiedEditionCandidate(
     NEW, HOUSEHOLD, "sample assurance", "sample-terms", "edition-b"
+)
+OLD_CLAUSE, NEW_CLAUSE = UUID(int=201), UUID(int=202)
+OLD_CLAUSE_SOURCE = VerifiedClauseCandidate(
+    clause_id=OLD_CLAUSE,
+    terms_edition_id=OLD,
+    household_space_id=HOUSEHOLD,
+    family_member_id=MEMBER,
+    policy_contract_id=POLICY,
+    rider_id=RIDER,
+    source_label_key="제7조",
+    source_assessment_id=UUID(int=301),
+)
+NEW_CLAUSE_SOURCE = replace(
+    OLD_CLAUSE_SOURCE,
+    clause_id=NEW_CLAUSE,
+    terms_edition_id=NEW,
+    source_assessment_id=UUID(int=302),
 )
 
 
@@ -48,8 +66,11 @@ def _resolve(
     contracts=(CONTRACT,),
     riders=(RIDER_SOURCE,),
     editions=(OLD_SOURCE, NEW_SOURCE),
+    clauses=(),
 ):
-    return resolve_terms_change_targets(request or _request(), contracts, riders, editions)
+    return resolve_terms_change_targets(
+        request or _request(), contracts, riders, editions, clauses=clauses
+    )
 
 
 def test_exact_existing_contract_rider_and_editions_are_resolved() -> None:
@@ -272,3 +293,249 @@ def test_candidate_input_order_does_not_change_the_unique_or_ambiguous_result() 
     assert _resolve(editions=(OLD_SOURCE, NEW_SOURCE)) == _resolve(
         editions=(NEW_SOURCE, OLD_SOURCE)
     )
+
+
+@pytest.mark.parametrize("new_label", [None, "제7조", "제9조"])
+def test_clause_replacement_resolves_both_original_labels_in_their_exact_editions(
+    new_label,
+) -> None:
+    request = _request(
+        scope_kind="CLAUSE", clause_label_key="제7조", new_clause_label_key=new_label
+    )
+    selected = _resolve(
+        request,
+        clauses=(
+            OLD_CLAUSE_SOURCE,
+            replace(NEW_CLAUSE_SOURCE, source_label_key=new_label or "제7조"),
+        ),
+    )
+    assert selected.status == "MATCH" and selected.scope_resolved
+    assert selected.policy_contract_id == POLICY and selected.rider_id == RIDER
+    assert selected.previous_edition_id == OLD and selected.new_edition_id == NEW
+    assert selected.clause_id == selected.previous_clause_id == OLD_CLAUSE
+    assert selected.new_clause_id == NEW_CLAUSE
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "household_space_id",
+        "family_member_id",
+        "policy_contract_id",
+        "rider_id",
+        "terms_edition_id",
+    ],
+)
+def test_same_clause_label_in_another_exact_scope_cannot_supply_the_new_side(field) -> None:
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조"),
+        clauses=(OLD_CLAUSE_SOURCE, replace(NEW_CLAUSE_SOURCE, **{field: UUID(int=999)})),
+    )
+    assert selected.status == "UNKNOWN" and selected.scope_resolved
+    assert selected.scope_kind == "CLAUSE"
+    assert selected.clause_id == selected.previous_clause_id == OLD_CLAUSE
+    assert selected.new_clause_id is None
+    assert "NEW_CLAUSE_TARGET_UNRESOLVED" in selected.reason_codes
+
+
+def test_current_display_clause_label_cannot_replace_the_original_source_label() -> None:
+    selected = _resolve(
+        _request(
+            scope_kind="CLAUSE", clause_label_key="제7조", new_clause_label_key="현재 표시 제목"
+        ),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and selected.previous_clause_id == OLD_CLAUSE
+    assert selected.new_clause_id is None and selected.scope_resolved
+
+
+@pytest.mark.parametrize("side", ["previous", "new"])
+def test_missing_clause_side_preserves_the_other_exact_scope(side) -> None:
+    candidate = NEW_CLAUSE_SOURCE if side == "previous" else OLD_CLAUSE_SOURCE
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조"), clauses=(candidate,)
+    )
+    assert selected.status == "UNKNOWN" and selected.scope_resolved
+    assert selected.scope_kind == "CLAUSE" and selected.rider_id == RIDER
+    assert selected.clause_id == candidate.clause_id
+    assert selected.previous_clause_id == (None if side == "previous" else OLD_CLAUSE)
+    assert selected.new_clause_id == (NEW_CLAUSE if side == "previous" else None)
+
+
+@pytest.mark.parametrize("side", ["previous", "new"])
+def test_ambiguous_clause_side_preserves_the_other_exact_scope(side) -> None:
+    ambiguous = OLD_CLAUSE_SOURCE if side == "previous" else NEW_CLAUSE_SOURCE
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조"),
+        clauses=(
+            OLD_CLAUSE_SOURCE,
+            NEW_CLAUSE_SOURCE,
+            replace(ambiguous, clause_id=UUID(int=999), source_assessment_id=UUID(int=998)),
+        ),
+    )
+    assert selected.status == "UNKNOWN" and selected.scope_resolved
+    assert selected.clause_id == (NEW_CLAUSE if side == "previous" else OLD_CLAUSE)
+    assert selected.previous_clause_id == (None if side == "previous" else OLD_CLAUSE)
+    assert selected.new_clause_id == (NEW_CLAUSE if side == "previous" else None)
+    assert f"{side.upper()}_CLAUSE_TARGET_AMBIGUOUS" in selected.reason_codes
+
+
+@pytest.mark.parametrize("side", ["previous", "new"])
+def test_unresolved_edition_cannot_be_recovered_from_a_clause_candidate(side) -> None:
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조", **{f"{side}_edition_code": None}),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and selected.scope_resolved
+    assert selected.previous_clause_id == (None if side == "previous" else OLD_CLAUSE)
+    assert selected.new_clause_id == (NEW_CLAUSE if side == "previous" else None)
+    assert getattr(selected, f"{side}_edition_id") is None
+
+
+@pytest.mark.parametrize("rider_source", [None, "missing_alias", "ambiguous_alias"])
+def test_clause_candidates_cannot_invent_or_disambiguate_an_explicit_rider(rider_source) -> None:
+    riders = (
+        (RIDER_SOURCE, replace(RIDER_SOURCE, rider_id=UUID(int=999)))
+        if rider_source == "ambiguous_alias"
+        else (replace(RIDER_SOURCE, source_alias_keys=()),)
+        if rider_source == "missing_alias"
+        else (RIDER_SOURCE,)
+    )
+    selected = _resolve(
+        _request(
+            scope_kind="CLAUSE",
+            clause_label_key="제7조",
+            rider_name_key=None if rider_source is None else "original sample rider",
+        ),
+        riders=riders,
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and not selected.scope_resolved
+    assert selected.rider_id is None and selected.clause_id is None
+    assert selected.previous_clause_id is None and selected.new_clause_id is None
+    assert selected.policy_contract_id == POLICY and selected.scope_kind == "CLAUSE"
+
+
+def test_ambiguous_contract_is_not_disambiguated_by_a_clause_candidate() -> None:
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조"),
+        contracts=(CONTRACT, replace(CONTRACT, policy_contract_id=UUID(int=999))),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and not selected.scope_resolved
+    assert selected.policy_contract_id is None and selected.rider_id is None
+    assert selected.previous_clause_id is None and selected.new_clause_id is None
+
+
+@pytest.mark.parametrize("explicit_label", [False, True])
+def test_clause_addition_binds_only_the_new_side(explicit_label: bool) -> None:
+    selected = _resolve(
+        _request(
+            scope_kind="CLAUSE",
+            operation="ADD",
+            clause_label_key=None if explicit_label else "제7조",
+            new_clause_label_key="제7조" if explicit_label else None,
+            previous_terms_code=None,
+            previous_edition_code=None,
+        ),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "MATCH" and selected.scope_resolved
+    assert selected.previous_clause_id is None and selected.previous_edition_id is None
+    assert selected.clause_id == selected.new_clause_id == NEW_CLAUSE
+
+
+def test_addition_with_conflicting_previous_codes_does_not_bind_an_old_clause() -> None:
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", operation="ADD", clause_label_key="제7조"),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and selected.scope_resolved
+    assert selected.previous_clause_id is None
+    assert selected.new_clause_id == selected.clause_id == NEW_CLAUSE
+    assert "CHANGE_OPERATION_TARGET_CONFLICT" in selected.reason_codes
+
+
+def test_replace_does_not_approve_the_same_edition_or_same_clause_as_both_sides() -> None:
+    same_edition = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조", new_edition_code="edition-a"),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert same_edition.status == "UNKNOWN"
+    assert same_edition.previous_edition_id == same_edition.new_edition_id == OLD
+    same_clause = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조"),
+        clauses=(OLD_CLAUSE_SOURCE, replace(NEW_CLAUSE_SOURCE, clause_id=OLD_CLAUSE)),
+    )
+    assert same_clause.status == "UNKNOWN"
+    assert same_clause.previous_clause_id == same_clause.new_clause_id == OLD_CLAUSE
+    assert "CHANGE_CLAUSE_TARGET_CONFLICT" in same_clause.reason_codes
+
+
+@pytest.mark.parametrize("scope", ["CONTRACT", "RIDER"])
+def test_new_clause_label_cannot_be_silently_consumed_as_a_broader_scope(scope) -> None:
+    selected = _resolve(
+        _request(
+            scope_kind=scope,
+            rider_name_key=None if scope == "CONTRACT" else "original sample rider",
+            new_clause_label_key="제7조",
+        ),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == "UNKNOWN" and not selected.scope_resolved
+    assert selected.previous_clause_id is None and selected.new_clause_id is None
+    assert "CHANGE_SCOPE_CONFLICT" in selected.reason_codes
+
+
+def test_repeated_source_assessments_of_one_clause_do_not_create_ambiguity() -> None:
+    request = _request(scope_kind="CLAUSE", clause_label_key="제7조")
+    selected = _resolve(request, clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE))
+    assert selected.status == "MATCH"
+    assert selected == _resolve(
+        request,
+        clauses=(
+            NEW_CLAUSE_SOURCE,
+            OLD_CLAUSE_SOURCE,
+            replace(OLD_CLAUSE_SOURCE, source_assessment_id=UUID(int=998)),
+            NEW_CLAUSE_SOURCE,
+        ),
+    )
+
+
+@pytest.mark.parametrize("status", ["UNKNOWN", "NO_MATCH"])
+def test_clause_proofs_do_not_override_the_change_source_status(status) -> None:
+    selected = _resolve(
+        _request(scope_kind="CLAUSE", clause_label_key="제7조", status=status),
+        clauses=(OLD_CLAUSE_SOURCE, NEW_CLAUSE_SOURCE),
+    )
+    assert selected.status == status
+    if status == "UNKNOWN":
+        assert selected.previous_clause_id == OLD_CLAUSE and selected.new_clause_id == NEW_CLAUSE
+        assert selected.scope_resolved
+    else:
+        assert selected.previous_clause_id is None and selected.new_clause_id is None
+        assert not selected.scope_resolved
+
+
+def test_clause_candidates_are_bounded_typed_and_require_a_source_assessment_reference() -> None:
+    from familycare_api.clauses.terms_change_targets import TermsChangeTargetError
+
+    for candidates in (
+        (OLD_CLAUSE_SOURCE,) * 513,
+        (replace(OLD_CLAUSE_SOURCE, source_assessment_id=None),),
+        (replace(OLD_CLAUSE_SOURCE, source_label_key=""),),
+        (replace(OLD_CLAUSE_SOURCE, source_label_key="x" * 241),),
+        ({"clause_id": OLD_CLAUSE},),
+        iter((OLD_CLAUSE_SOURCE,)),
+    ):
+        with pytest.raises(TermsChangeTargetError, match="^TERMS_CHANGE_TARGET_INPUT_INVALID$"):
+            _resolve(clauses=candidates)
+    with pytest.raises(TermsChangeTargetError, match="^TERMS_CHANGE_TARGET_INPUT_INVALID$"):
+        _resolve(_request(new_clause_label_key=""))
+
+
+def test_clause_candidate_proof_fields_are_immutable_and_do_not_print_source_keys() -> None:
+    with pytest.raises(FrozenInstanceError):
+        OLD_CLAUSE_SOURCE.source_label_key = "another synthetic label"
+    assert "제7조" not in repr(OLD_CLAUSE_SOURCE)
+    assert str(OLD_CLAUSE_SOURCE.source_assessment_id) not in repr(OLD_CLAUSE_SOURCE)
