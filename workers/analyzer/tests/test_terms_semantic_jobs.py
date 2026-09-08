@@ -256,3 +256,56 @@ def test_lease_expiry_during_completion_rolls_back_candidate_and_job_change(term
                 "DROP TRIGGER synthetic_expire_terms_completion ON terms_semantic_candidates"
             )
             connection.execute("DROP FUNCTION synthetic_expire_terms_completion()")
+
+
+def test_explicit_retryable_failure_waits_and_permanent_failure_is_terminal(terms_jobs):
+    url, _, _, _ = terms_jobs
+    queue = TermsSemanticJobQueue(url)
+    job, other = queue.claim("worker-a"), queue.claim("worker-b")
+    queue.pause(other, "worker-b", "TERMS_PROVIDER_DOCUMENT_BUDGET")
+    with pytest.raises(TermsSemanticWorkConflict):
+        queue.fail(job, "worker-b", "TERMS_PROVIDER_RETRYABLE", retryable=True)
+    queue.fail(job, "worker-a", "TERMS_PROVIDER_RETRYABLE", retryable=True)
+    waiting = queue.get_job(job.id)
+    assert waiting.state == "retryable_failed" and waiting.attempts == 1
+    assert waiting.lease_token is None and waiting.available_at > datetime.now(UTC)
+    assert queue.claim("worker-a") is None
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE terms_semantic_jobs SET available_at=clock_timestamp() WHERE id=%s", (job.id,)
+        )
+    retry = queue.claim("worker-a")
+    assert retry.attempts == 2 and retry.lease_token != job.lease_token
+    queue.fail(retry, "worker-a", "TERMS_PROVIDER_FAILED")
+    assert queue.get_job(job.id).state == "failed"
+    assert queue.claim("worker-a", include_paused_configuration=True) is None
+
+
+def test_privacy_set_beyond_sixteen_terms_fails_before_any_claim(terms_jobs):
+    url, scope, edition, _ = terms_jobs
+    extra_ids = [uuid4() for _ in range(9)]
+    try:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            for index, member_id in enumerate(extra_ids):
+                connection.execute(
+                    "INSERT INTO family_members(id,household_space_id,display_name,internal_alias) "
+                    "VALUES(%s,%s,%s,%s)",
+                    (
+                        member_id,
+                        scope.household_space_id,
+                        f"Synthetic Extra Member {index}",
+                        f"synthetic-extra-alias-{index}",
+                    ),
+                )
+        plan = TermsSemanticRepository(url).source_plan(scope, edition)
+        primary = next(r.region_id for r in plan.snapshot.layout.regions if r.label == "Article 1")
+        request = TermsSemanticWorkRepository(url).enqueue(scope, edition, (primary,))
+        queue = TermsSemanticJobQueue(url)
+        assert queue.claim("worker-a") is None
+        rejected = queue.get_job(request.job_id)
+        assert rejected.state == "failed" and rejected.error_code == "TERMS_PRIVACY_UNAVAILABLE"
+        assert rejected.attempts == 0 and rejected.lease_token is None
+        assert count_candidates(url) == 0
+    finally:
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute("DELETE FROM family_members WHERE id=ANY(%s)", (extra_ids,))

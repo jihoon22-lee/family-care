@@ -220,3 +220,33 @@ def test_invalid_provider_response_cannot_enter_success_cache(terms_context, fau
     with pytest.raises(ProviderValidationError):
         run(wrapper(url, job, FakeProvider(mutate)), job)
     assert counts(url) == {"FAILED": 1}
+
+
+def test_daily_budget_signal_can_pause_without_spending_processing_retry(terms_context):
+    url, _, _, _ = terms_context
+    queue = TermsSemanticJobQueue(url)
+    first, second = queue.claim("worker-a"), queue.claim("worker-a")
+    run(wrapper(url, first, daily=1), first)
+    exhausted = wrapper(url, second, daily=1)
+    with pytest.raises(ProviderRateLimitError):
+        run(exhausted, second)
+    assert exhausted.exhausted_scope == "daily"
+    queue.pause(second, "worker-a", "TERMS_PROVIDER_DAILY_BUDGET", daily=True)
+    paused = queue.get_job(second.id)
+    assert paused.state == "paused" and paused.attempts == 0
+    assert queue.claim("worker-a") is None
+    assert counts(url) == {"SUCCEEDED": 1}
+
+
+def test_failed_policy_reservation_consumes_the_same_terms_document_limit(terms_context):
+    url, _, _, _ = terms_context
+    terms_job = TermsSemanticJobQueue(url).claim("worker-a")
+    policy_job = PolicyStructuringJobQueue(url).claim_next_job("policy-worker")
+    assert policy_job.document_version_id == terms_job.document_version_id
+    policy_budget = PolicyRequestBudget(url, per_document=1)
+    reservation = policy_budget.reserve(policy_job, "policy-worker", "f" * 64)
+    policy_budget.finish(reservation, None)
+    with pytest.raises(TermsBudgetExhausted) as failure:
+        TermsRequestBudget(url, per_document=1).reserve(terms_job, "worker-a", "a" * 64)
+    assert failure.value.scope == "document"
+    assert counts(url) == {"FAILED": 1}
