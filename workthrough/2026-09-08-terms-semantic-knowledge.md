@@ -99,6 +99,30 @@ malformed audit row와 위조 상태를 포함한 PostgreSQL 검사는 전용 �
   별도 RED 후 관련 PostgreSQL **3 passed** (5.08초), 위 26개 전체에 포함했다.
 - 0053의 빈 합성 DB downgrade/upgrade가 통과했다. 운영 migration은 실행하지 않았다.
 
+### Original tables and queued work
+
+- `1176a77`은 실제 TABLE_ROW·헤더 연결·열 index를 검증한 단일 Code 열을 하나의 복수 span
+  classification 근거로 묶는다. 원문 선언·헤더·모든 행이 필요하며 산문/추가 열/잘못된 연결은
+  같은 권위를 얻지 않는다. 의미 검증기는 v2다. 독립 작업의 집중 pure **101개**, 전용 합성
+  DB(0053)의 통합 **2개**(3.98초), Ruff/mypy가 통과했다. 새 불변 문서·generation의 표와
+  각주 변경 후 400, 이전 저장 결과 300 및 무관한 담보의 semantic hash 보존을 확인했다.
+  표 문법은 64행까지 보존하지만 기존 인용 한도는 유지했다. 대표 일당 경로는 N+7≤16으로
+  9행까지 금액을 계산하며 그 이상은 원문을 잘라서 계산하지 않는다.
+- `45e026e`는 Worker 입력에서 전체 전달 구역의 개인정보 표시 범위를 먼저 찾고 인용별로
+  최소화한다. 기존 SourceWindowMinimizer와 active household 이름/별칭 전달용 인자를
+  재사용한다. 기본 호출도 형식/label 개인정보를 가리고, 실제 원문은 비공개 복원에만 쓴다.
+  독립 RED 후 합성 **51개**(1.00초), Ruff/mypy가 통과했다. 실제 provider 호출은 없었다.
+- `0054`는 source/privacy revision에 묶인 작업, 영역별 시도, 후보 projection 기록을 정의한다.
+  요청 예약 표는 policy 또는 terms job 중 하나만 소유하도록 확장해 두 경로의 문서/일일
+  소비량을 공유한다. API 작업 준비는 알려진 로컬 규칙을 다시 예약하지 않고, 미지원 원문
+  문맥은 별도 기록한다. primary와 필요한 원문 참조만 bounded envelope로 만든다.
+  Worker claim/budget/소비자 연결은 다음 구현 범위다.
+- 2026-09-08 22:48 KST, `1176a77` + 0054/work_repository/전용 테스트에서
+  `pytest apps/api/tests/test_terms_semantic_work.py workers/analyzer/tests/test_policy_request_budget.py
+  -m integration -q` **12 passed** (7.13초), 관련 Ruff/mypy와 빈 합성 DB의 0053
+  downgrade→0054 upgrade가 통과했다. 신규 API 준비 4개와 기존 policy 예산 8개의 증거이며,
+  아직 새 Worker 예산·lease 경로의 검증은 아니다.
+
 실제 자료·식별자·provider 결과를 코드/fixture/로그에 넣지 않았다. 이 B03 단계에서 실제
 자료 접근·OpenAI 호출·운영 쓰기·태그·배포·실제 Windows/모바일 검증은 수행하지 않았다.
 B02의 보호된 수용과 전체 기존 자료 cutover는 #62/#63/#69의 열린 범위로 유지한다.
