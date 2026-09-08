@@ -545,3 +545,129 @@ def test_generated_union_members_enforce_neutral_schema_constraints() -> None:
     graph["sources"][0]["terms_edition_id"] = "invalid-edition-identity"
     with pytest.raises(SemanticKnowledgeError):
         parse_knowledge(graph)
+
+
+def deductible_graph(*, root_id: str = "daily", deduction: str = "50") -> dict[str, Any]:
+    graph = synthetic_graph()
+    citation = {
+        **deepcopy(graph["citations"][2]),
+        "citation_id": "00000000-0000-4000-8000-000000000016",
+        "node_id": "source-deductible",
+    }
+    graph["citations"].append(citation)
+    graph["nodes"].append(
+        {
+            "node_id": "deductible",
+            "source_id": "terms",
+            "region_ids": ["deductible"],
+            "statement": "Synthetic monetary deductible",
+            "citation_ids": [citation["citation_id"]],
+            "payload": {
+                "kind": "deductible",
+                "amount": deduction,
+                "currency": "KRW",
+                "stage": "before_amount_cap_and_rounding",
+            },
+        }
+    )
+    graph["edges"].append(
+        {"from_node_id": root_id, "to_node_id": "deductible", "relation": "DEPENDS_ON"}
+    )
+    graph["processing"]["expected_region_ids"].append("deductible")
+    graph["processing"]["consumed_region_ids"].append("deductible")
+    return graph
+
+
+@pytest.mark.parametrize("deduction,expected", [("50", "250"), ("0", "300"), ("400", "0")])
+def test_fixed_deductible_follows_daily_exclusions_limits_and_zero_floor(
+    deduction: str, expected: str
+) -> None:
+    root = compiled(deductible_graph(deduction=deduction)).roots[0]
+    assert amount(root) == Decimal(expected)
+    assert root.rules and root.explanations
+
+
+def test_deductible_currency_conflict_preserves_independent_conditions_and_explanation() -> None:
+    graph = deductible_graph()
+    graph["nodes"][-1]["payload"]["currency"] = "USD"
+    root = compiled(graph).roots[0]
+    assert root.calculation is None
+    assert root.rules and any(item.kind == "deductible" for item in root.explanations)
+    assert "CALCULATION_CURRENCY_MISMATCH" in {d.code for d in root.diagnostics}
+
+
+@pytest.mark.parametrize(
+    "fault", ["missing_stage", "wrong_stage", "days_unit", "negative", "nonfinite"]
+)
+def test_deductible_stage_unit_and_decimal_must_be_explicit(fault: str) -> None:
+    from familycare_api.terms_knowledge.core import SemanticKnowledgeError
+
+    graph = deductible_graph()
+    payload = graph["nodes"][-1]["payload"]
+    if fault == "missing_stage":
+        del payload["stage"]
+    elif fault == "wrong_stage":
+        payload["stage"] = "after_rounding"
+    elif fault == "days_unit":
+        payload["unit"] = "days"
+    elif fault == "negative":
+        payload["amount"] = "-1"
+    else:
+        payload["amount"] = "Infinity"
+    with pytest.raises(SemanticKnowledgeError):
+        parse_knowledge(graph)
+
+
+def test_deductible_override_is_scoped_and_competing_deductions_are_not_added() -> None:
+    graph = deductible_graph()
+    successor = deepcopy(graph["nodes"][-1])
+    successor["node_id"] = "new-deductible"
+    successor["payload"]["amount"] = "25"
+    graph["nodes"].append(successor)
+    graph["edges"].append(
+        {"from_node_id": "daily", "to_node_id": "new-deductible", "relation": "DEPENDS_ON"}
+    )
+    result = compiled(graph)
+    assert result.roots[0].calculation is None
+    assert "CALCULATION_CONFLICT" in {d.code for d in result.roots[0].diagnostics}
+    graph["edges"].append(
+        {"from_node_id": "new-deductible", "to_node_id": "deductible", "relation": "OVERRIDES"}
+    )
+    result = compiled(graph)
+    assert amount(result.roots[0]) == Decimal("275")
+    assert amount(result.roots[1]) == Decimal("50")
+    assert affected_roots(parse_knowledge(graph), frozenset({"new-deductible"})) == ("daily",)
+
+
+def test_deductible_precedes_amount_cap_and_final_rounding_of_fractional_gross() -> None:
+    graph = deductible_graph(root_id="unrelated", deduction="0.5")
+    graph["nodes"][4]["payload"]["amount"] = "100.6"
+    cap = deepcopy(graph["nodes"][2])
+    cap["node_id"] = "amount-cap"
+    cap["payload"] = {
+        "kind": "limit",
+        "measure": "maximum_amount",
+        "value": "99.5",
+        "unit": "amount",
+        "currency": "KRW",
+    }
+    graph["nodes"].append(cap)
+    graph["edges"].append(
+        {"from_node_id": "unrelated", "to_node_id": "amount-cap", "relation": "DEPENDS_ON"}
+    )
+    root = compiled(graph).roots[1]
+    assert amount(root) == Decimal("100")  # round(min(max(100.6 - 0.5, 0), 99.5))
+    expression = root.calculation["calculation"]
+    assert expression["op"] == "round"
+    assert expression["args"][0]["op"] == "min"
+    assert expression["args"][0]["args"][0]["op"] == "max"
+    assert expression["args"][0]["args"][0]["args"][0]["op"] == "subtract"
+    graph["edges"].pop()  # Without a cap, pre-deduction rounding would give 101, not 100.
+    assert amount(compiled(graph).roots[1]) == Decimal("100")
+
+
+def test_fixed_deductible_applies_once_after_the_payable_day_cap() -> None:
+    graph = deductible_graph(deduction="50")
+    graph["nodes"][2]["payload"]["value"] = "2"
+    root = compiled(graph).roots[0]
+    assert amount(root) == Decimal("150")  # 100 * min(5 - 2, 2) - 50

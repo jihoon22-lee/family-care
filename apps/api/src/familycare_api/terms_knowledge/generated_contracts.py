@@ -111,6 +111,16 @@ class SemanticDailyCalculation(SemanticContract):
     rounding: Literal["half_up", "half_even", "up", "down"]
 
 
+class SemanticDeductible(SemanticContract):
+    amount: Annotated[
+        str,
+        Field(min_length=1, max_length=64, pattern="^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$"),
+    ]
+    currency: Annotated[str, Field(min_length=1, max_length=3, pattern="^[A-Z]{3}$")]
+    kind: Literal["deductible"]
+    stage: Literal["before_amount_cap_and_rounding"]
+
+
 class SemanticDefinition(SemanticContract):
     effect: Literal["explanation_only"]
     kind: Literal["definition"]
@@ -192,6 +202,7 @@ class SemanticNode(SemanticContract):
         | SemanticDefinition
         | SemanticInformation
         | SemanticCodeDefinition
+        | SemanticDeductible
     )
     region_ids: Annotated[
         list[
@@ -317,6 +328,7 @@ SemanticClassification.model_rebuild()
 SemanticCodeDefinition.model_rebuild()
 SemanticCondition.model_rebuild()
 SemanticDailyCalculation.model_rebuild()
+SemanticDeductible.model_rebuild()
 SemanticDefinition.model_rebuild()
 SemanticEdge.model_rebuild()
 SemanticFixedCalculation.model_rebuild()

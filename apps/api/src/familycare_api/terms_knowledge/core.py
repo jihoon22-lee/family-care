@@ -20,6 +20,7 @@ from familycare_api.terms_knowledge.generated_contracts import (
     SemanticCodeDefinition,
     SemanticCondition,
     SemanticDailyCalculation,
+    SemanticDeductible,
     SemanticFixedCalculation,
     SemanticFootnote,
     SemanticInformation,
@@ -288,12 +289,19 @@ def _calculation(nodes: list[SemanticNode], evidence: tuple[str, ...]) -> dict[s
     formula = formulas[0]
     exclusions = [n.payload for n in nodes if isinstance(n.payload, SemanticFootnote)]
     limits = [n.payload for n in nodes if isinstance(n.payload, SemanticLimit)]
-    if len(exclusions) > 1 or len({p.measure for p in limits}) != len(limits):
+    deductibles = [n.payload for n in nodes if isinstance(n.payload, SemanticDeductible)]
+    if (
+        len(exclusions) > 1
+        or len({p.measure for p in limits}) != len(limits)
+        or len(deductibles) > 1
+    ):
         raise SemanticKnowledgeError("CALCULATION_CONFLICT")
     if any(
         p.measure == "maximum_amount" and (p.currency != formula.currency or p.unit != "amount")
         for p in limits
     ):
+        raise SemanticKnowledgeError("CALCULATION_CURRENCY_MISMATCH")
+    if any(deduction.currency != formula.currency for deduction in deductibles):
         raise SemanticKnowledgeError("CALCULATION_CURRENCY_MISMATCH")
     for limit in limits:
         if limit.measure == "payable_days" and (
@@ -327,6 +335,10 @@ def _calculation(nodes: list[SemanticNode], evidence: tuple[str, ...]) -> dict[s
                 raise SemanticKnowledgeError("CALCULATION_RATE_INVALID")
             expression = _op("multiply", {"field": "Rider.insured_amount"}, _operand(formula.ratio))
             kind = "rate_amount"
+    if deductibles:
+        expression = _op(
+            "max", _op("subtract", expression, _operand(deductibles[0].amount)), _operand(0)
+        )
     for limit in limits:
         if limit.measure == "maximum_amount":
             expression = _op("min", expression, _operand(limit.value))

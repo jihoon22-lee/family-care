@@ -310,6 +310,39 @@
       ],
       "type": "object"
     },
+    "SemanticDeductible": {
+      "additionalProperties": false,
+      "description": "Fixed monetary deduction from gross benefit. Apply a zero floor before the monetary cap and final rounding; it is not an admission-day deduction.",
+      "properties": {
+        "amount": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "deductible",
+          "type": "string"
+        },
+        "stage": {
+          "const": "before_amount_cap_and_rounding",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "amount",
+        "currency",
+        "stage"
+      ],
+      "type": "object"
+    },
     "SemanticDefinition": {
       "additionalProperties": false,
       "properties": {
@@ -566,6 +599,9 @@
             },
             {
               "$ref": "#/$defs/SemanticCodeDefinition"
+            },
+            {
+              "$ref": "#/$defs/SemanticDeductible"
             }
           ]
         },
