@@ -1010,17 +1010,19 @@ export interface ClaimCaseResponse {
   >;
   checklist: Array<ClaimChecklistItemResponse>;
   claimed_amount: string | null;
+  coverage?: CanonicalCoverageRef | null;
   currency: string | null;
   deleted: boolean;
   family_member_id: string;
   id: string;
-  insurer_key: string;
+  insurer_display?: string | null;
+  insurer_key: string | null;
   medical_event_id: string;
   outcome_reason_code: string | null;
   paid_amount: string | null;
-  policy_contract_id: string;
+  policy_contract_id: string | null;
   receipt_number: string | null;
-  rider_id: string;
+  rider_id: string | null;
   schema_version?: "1";
   snapshot: ClaimSnapshotResponse;
   status:
@@ -1050,7 +1052,8 @@ export interface ClaimChecklistItemResponse {
 }
 
 export interface ClaimCreateRequest {
-  rider_id: string;
+  guidance?: GuidanceClaimSelection | null;
+  rider_id?: string | null;
 }
 
 export interface ClaimErrorResponse {
@@ -1067,10 +1070,23 @@ export interface ClaimErrorResponse {
   message: string;
 }
 
+export interface ClaimLocalGuidanceSnapshot {
+  candidate: GuidanceCandidate;
+  event_date: string | null;
+  event_version: number;
+  expenses: GuidanceExpenses | null;
+  family_member_id: string;
+  medical_event_id: string;
+  run_id: string;
+  schema_version?: "claim-local-guidance-snapshot-v1";
+  versions: GuidanceVersions;
+}
+
 export interface ClaimSnapshotResponse {
   calculation: CalculationSnapshotResponse;
   candidate: CandidateSnapshotResponse;
   evidence: EvidenceSnapshotResponse;
+  local_guidance?: ClaimLocalGuidanceSnapshot | null;
   policy: PolicySnapshotResponse;
   rules: RuleSnapshotResponse;
   snapshot_sha256: string;
@@ -1539,6 +1555,12 @@ export interface GuidanceCandidate {
   ref: CanonicalCoverageRef;
   relevance?: Array<GuidanceRelevance>;
   scenarios?: Array<GuidanceScenario>;
+}
+
+export interface GuidanceClaimSelection {
+  coverage: CanonicalCoverageRef;
+  expected_event_version: number;
+  run_id: string;
 }
 
 export interface GuidanceCondition {
@@ -2404,7 +2426,7 @@ export interface PolicyReviewItem {
 
 export interface PolicySnapshotResponse {
   captured_at?: string | null;
-  policy_contract_id: string;
+  policy_contract_id: string | null;
   rider_ids?: Array<string>;
   status_codes?: Array<string>;
 }

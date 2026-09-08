@@ -1710,6 +1710,16 @@
             ],
             "title": "Claimed Amount"
           },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalCoverageRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "currency": {
             "anyOf": [
               {
@@ -1736,9 +1746,29 @@
             "title": "Id",
             "type": "string"
           },
+          "insurer_display": {
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
           "insurer_key": {
-            "title": "Insurer Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Key"
           },
           "medical_event_id": {
             "format": "uuid",
@@ -1769,9 +1799,16 @@
             "title": "Paid Amount"
           },
           "policy_contract_id": {
-            "format": "uuid",
-            "title": "Policy Contract Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
           },
           "receipt_number": {
             "anyOf": [
@@ -1785,9 +1822,16 @@
             "title": "Receipt Number"
           },
           "rider_id": {
-            "format": "uuid",
-            "title": "Rider Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rider Id"
           },
           "schema_version": {
             "const": "1",
@@ -1952,15 +1996,29 @@
       "ClaimCreateRequest": {
         "additionalProperties": false,
         "properties": {
+          "guidance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceClaimSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "rider_id": {
-            "format": "uuid",
-            "title": "Rider Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rider Id"
           }
         },
-        "required": [
-          "rider_id"
-        ],
         "title": "ClaimCreateRequest",
         "type": "object"
       },
@@ -2007,6 +2065,77 @@
         "title": "ClaimErrorResponse",
         "type": "object"
       },
+      "ClaimLocalGuidanceSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/GuidanceCandidate"
+          },
+          "event_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Date"
+          },
+          "event_version": {
+            "minimum": 1.0,
+            "title": "Event Version",
+            "type": "integer"
+          },
+          "expenses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceExpenses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "family_member_id": {
+            "format": "uuid",
+            "title": "Family Member Id",
+            "type": "string"
+          },
+          "medical_event_id": {
+            "format": "uuid",
+            "title": "Medical Event Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "const": "claim-local-guidance-snapshot-v1",
+            "default": "claim-local-guidance-snapshot-v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "versions": {
+            "$ref": "#/components/schemas/GuidanceVersions"
+          }
+        },
+        "required": [
+          "run_id",
+          "medical_event_id",
+          "family_member_id",
+          "event_version",
+          "event_date",
+          "versions",
+          "candidate",
+          "expenses"
+        ],
+        "title": "ClaimLocalGuidanceSnapshot",
+        "type": "object"
+      },
       "ClaimSnapshotResponse": {
         "additionalProperties": false,
         "properties": {
@@ -2018,6 +2147,16 @@
           },
           "evidence": {
             "$ref": "#/components/schemas/EvidenceSnapshotResponse"
+          },
+          "local_guidance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimLocalGuidanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "policy": {
             "$ref": "#/components/schemas/PolicySnapshotResponse"
@@ -4672,6 +4811,32 @@
           "estimate"
         ],
         "title": "GuidanceCandidate",
+        "type": "object"
+      },
+      "GuidanceClaimSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/CanonicalCoverageRef"
+          },
+          "expected_event_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Event Version",
+            "type": "integer"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "expected_event_version",
+          "coverage"
+        ],
+        "title": "GuidanceClaimSelection",
         "type": "object"
       },
       "GuidanceCondition": {
@@ -9640,9 +9805,16 @@
             "title": "Captured At"
           },
           "policy_contract_id": {
-            "format": "uuid",
-            "title": "Policy Contract Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Policy Contract Id"
           },
           "rider_ids": {
             "items": {

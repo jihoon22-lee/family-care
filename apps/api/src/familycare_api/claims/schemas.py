@@ -11,6 +11,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from familycare_api.claims.domain import ClaimStatus
+from familycare_api.claims.guidance_snapshot import ClaimLocalGuidanceSnapshot
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
 
 _REASON_CODE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
@@ -40,8 +42,21 @@ class ClaimErrorResponse(StrictModel):
     fields: list[str] | None = None
 
 
+class GuidanceClaimSelection(StrictModel):
+    run_id: UUID
+    expected_event_version: Annotated[int, Field(ge=1, le=2_147_483_647)]
+    coverage: CanonicalCoverageRef
+
+
 class ClaimCreateRequest(StrictModel):
-    rider_id: UUID
+    rider_id: UUID | None = None
+    guidance: GuidanceClaimSelection | None = None
+
+    @model_validator(mode="after")
+    def one_selection(self) -> Self:
+        if (self.rider_id is None) == (self.guidance is None):
+            raise ValueError("exactly one claim selection is required")
+        return self
 
 
 class ClaimUpdateRequest(StrictModel):
@@ -155,7 +170,7 @@ class RuleSnapshotResponse(StrictModel):
 
 
 class PolicySnapshotResponse(StrictModel):
-    policy_contract_id: UUID
+    policy_contract_id: UUID | None
     rider_ids: list[UUID] = Field(default_factory=list, max_length=64)
     status_codes: list[str] = Field(default_factory=list, max_length=64)
     captured_at: datetime | None = None
@@ -184,6 +199,7 @@ class ClaimSnapshotResponse(StrictModel):
     policy: PolicySnapshotResponse
     evidence: EvidenceSnapshotResponse
     calculation: CalculationSnapshotResponse
+    local_guidance: ClaimLocalGuidanceSnapshot | None = None
 
 
 class ClaimChecklistItemResponse(StrictModel):
@@ -211,9 +227,11 @@ class ClaimCaseResponse(StrictModel):
     id: UUID
     medical_event_id: UUID
     family_member_id: UUID
-    policy_contract_id: UUID
-    rider_id: UUID
-    insurer_key: str
+    policy_contract_id: UUID | None
+    rider_id: UUID | None
+    insurer_key: str | None
+    coverage: CanonicalCoverageRef | None = None
+    insurer_display: Annotated[str, Field(min_length=1, max_length=240)] | None = None
     status: ClaimStatus
     receipt_number: str | None
     submitted_at: datetime | None
@@ -227,6 +245,29 @@ class ClaimCaseResponse(StrictModel):
     snapshot: ClaimSnapshotResponse
     checklist: list[ClaimChecklistItemResponse] = Field(max_length=128)
     status_events: list[ClaimStatusEventResponse] = Field(max_length=256)
+
+    @model_validator(mode="after")
+    def source_identity(self) -> Self:
+        if self.policy_contract_id is not None and self.rider_id is not None:
+            if not self.insurer_key:
+                raise ValueError("operational insurer key required")
+            if self.coverage is not None and self.coverage != CanonicalCoverageRef(
+                kind="OPERATIONAL_RIDER",
+                contract_id=self.policy_contract_id,
+                coverage_id=self.rider_id,
+            ):
+                raise ValueError("inconsistent operational claim source")
+        elif self.policy_contract_id is None and self.rider_id is None:
+            if (
+                self.coverage is None
+                or self.coverage.kind != "PRIVATE_KNOWLEDGE_COVERAGE"
+                or self.insurer_key is not None
+                or not self.insurer_display
+            ):
+                raise ValueError("complete private claim source required")
+        else:
+            raise ValueError("complete claim source required")
+        return self
 
     @field_serializer("claimed_amount", "paid_amount")
     def serialize_amount(self, value: Decimal | None) -> str | None:

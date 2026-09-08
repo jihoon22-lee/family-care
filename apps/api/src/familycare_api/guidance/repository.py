@@ -17,7 +17,7 @@ from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
-from familycare_api.decisions.knowledge_domain import KnowledgeStatusInterval
+from familycare_api.decisions.knowledge_domain import KnowledgeFact, KnowledgeStatusInterval
 from familycare_api.guidance.amount_projection import operational_contract_amount
 from familycare_api.guidance.amount_source import read_operational_amount_source
 from familycare_api.guidance.domain import (
@@ -29,6 +29,7 @@ from familycare_api.guidance.domain import (
 )
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
 from familycare_api.guidance.semantic_repository import SemanticGuidanceReader
+from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 
 if TYPE_CHECKING:
     from familycare_api.decisions.repository import DecisionRepository
@@ -166,7 +167,33 @@ def read_operational_guidance(
     subjects = read_subject_guidance(connection, scope, event)
     versions: list[object] = [{"subject_scope": subjects.versions.status_digest}]
     semantics = SemanticGuidanceReader(connection, scope, event, repository.database_url)
+    links = tuple(
+        link
+        for link in CanonicalLinkRepository.read_in_transaction(connection, scope)
+        if link.family_member_id == event.family_member_id
+    )
     for snapshot in snapshots:
+        history = connection.execute(
+            """
+            SELECT count(*)::integer AS count FROM claim_history
+            WHERE household_space_id=%s AND family_member_id=%s
+              AND medical_event_id<>%s AND payment_date<=%s AND counted_occurrence
+              AND (rider_id=%s OR private_coverage_id=ANY(%s))
+            """,
+            (
+                scope.household_space_id,
+                event.family_member_id,
+                event.id,
+                event.event_date,
+                snapshot.rider_id,
+                [
+                    link.knowledge_coverage_id
+                    for link in links
+                    if link.rider_id == snapshot.rider_id
+                ],
+            ),
+        ).fetchone()
+        history_count = int(history["count"]) if history else 0
         row = connection.execute(
             "SELECT p.product_display,p.source_evidence_id AS policy_evidence,"
             "p.version AS policy_version,"
@@ -322,6 +349,11 @@ def read_operational_guidance(
                 )
                 else None,
                 status_intervals=intervals,
+                claim_history_counted_occurrence=(
+                    KnowledgeFact(value=history_count, provenance="DERIVED_CONFIRMED")
+                    if history_count > 0
+                    else None
+                ),
                 # Each replayed original root owns its referenced conditions.
                 # Legacy aggregate rules remain the fallback when none is available.
                 rules=() if cases else tuple(rules),
@@ -341,6 +373,7 @@ def read_operational_guidance(
                 "snapshot": asdict(snapshot),
                 "amount_source": amount_source.digest_sha256,
                 "status": status_rows,
+                "claim_history_counted_occurrence": history_count or None,
                 "rules": [
                     {
                         "id": str(rule.id),

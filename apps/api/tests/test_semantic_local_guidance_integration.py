@@ -2,10 +2,13 @@
 
 from datetime import date
 from typing import NoReturn
+from uuid import uuid4
 
 import httpx2
 import psycopg
 import pytest
+from familycare_api.claims.errors import ClaimInvalid
+from familycare_api.claims.repository import ClaimRepository
 from familycare_api.clauses.repository import RiderClauseLinkRepository
 from familycare_api.clauses.source_repository import ClauseSourceProjector
 from familycare_api.clauses.terms_change_repository import TermsChangeProjector
@@ -137,6 +140,41 @@ def test_native_enrollment_and_original_semantic_clause_calculate_without_privat
     assert candidate.estimate.evidence
     assert all(c.kind == "SEMANTIC_CITATION" for c in candidate.estimate.evidence)
     assert service.get_decision_result(event.id, 1).local_guidance == result.local_guidance
+    claims = ClaimRepository(url)
+    for selected_scope, selected_event, selected_version, selected_ref in (
+        (HouseholdScope(uuid4()), event.id, 1, candidate.ref),
+        (scope, other_event.id, 1, candidate.ref),
+        (scope, event.id, 2, candidate.ref),
+        (scope, event.id, 1, candidate.ref.model_copy(update={"contract_id": uuid4()})),
+    ):
+        with pytest.raises(ClaimInvalid):
+            claims.create_guidance_claim_case(
+                selected_scope,
+                selected_event,
+                run_id=result.run_id,
+                expected_event_version=selected_version,
+                coverage=selected_ref,
+            )
+    claim = claims.create_guidance_claim_case(
+        scope,
+        event.id,
+        run_id=result.run_id,
+        expected_event_version=1,
+        coverage=candidate.ref,
+    )
+    assert claim["status"] == "preparing" and claim["paid_amount"] is None
+    assert claim["snapshot"]["local_guidance"]["candidate"]["estimate"]["amount"] == "300"
+    snapshot_hash = claim["snapshot"]["snapshot_sha256"]
+    assert (
+        claims.create_guidance_claim_case(
+            scope,
+            event.id,
+            run_id=result.run_id,
+            expected_event_version=1,
+            coverage=candidate.ref,
+        )["id"]
+        == claim["id"]
+    )
     service.update_medical_event(
         event.id,
         MedicalEventUpdateRequest(expected_version=event.version, event_date=date(2025, 7, 15)),
@@ -163,6 +201,17 @@ def test_native_enrollment_and_original_semantic_clause_calculate_without_privat
         historical = client.get(f"/api/v1/medical-events/{event.id}/results/1")
         assert historical.json()["local_guidance"] == result.local_guidance.model_dump(mode="json")
         assert historical.json()["local_guidance_stale"] is True
+        saved_claim = claims.get_claim_case(scope, claim["id"])
+        assert saved_claim["snapshot"]["snapshot_sha256"] == snapshot_hash
+        assert saved_claim["snapshot"]["local_guidance"]["candidate"]["estimate"]["amount"] == "300"
+        with pytest.raises(ClaimInvalid):
+            claims.create_guidance_claim_case(
+                scope,
+                event.id,
+                run_id=result.run_id,
+                expected_event_version=1,
+                coverage=candidate.ref,
+            )
         current = client.get(f"/api/v1/medical-events/{event.id}/results/2")
         assert current.json()["local_guidance_stale"] is False
         with psycopg.connect(_psycopg_url(url)) as connection:

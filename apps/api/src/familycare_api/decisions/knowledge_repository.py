@@ -468,20 +468,25 @@ class PostgresKnowledgeDecisionRepository:
         history_rows = connection.execute(
             """
             /* private-knowledge:claim-history */
-            SELECT rider_id,
+            SELECT rider_id, private_coverage_id,
                    count(*) FILTER (WHERE counted_occurrence)::integer
                      AS counted_occurrence
             FROM claim_history
             WHERE household_space_id = %(household)s
               AND family_member_id = %(member)s
-              AND rider_id = ANY(%(riders)s)
-            GROUP BY rider_id
-            ORDER BY rider_id
+              AND (rider_id = ANY(%(riders)s) OR private_coverage_id = ANY(%(coverages)s))
+              AND medical_event_id <> %(event)s
+              AND payment_date <= %(event_date)s
+            GROUP BY rider_id, private_coverage_id
+            ORDER BY rider_id, private_coverage_id
             """,
             {
                 "household": scope.household_space_id,
                 "member": event.family_member_id,
                 "riders": list(rider_ids),
+                "coverages": list(coverage_ids),
+                "event": event.id,
+                "event_date": event.event_date,
             },
         ).fetchall()
         receipt_rows = connection.execute(
@@ -533,6 +538,12 @@ class PostgresKnowledgeDecisionRepository:
         history = {
             cast(UUID, row["rider_id"]): int(row.get("counted_occurrence") or 0)
             for row in history_rows
+            if row.get("rider_id") is not None
+        }
+        private_history = {
+            cast(UUID, row["private_coverage_id"]): int(row.get("counted_occurrence") or 0)
+            for row in history_rows
+            if row.get("private_coverage_id") is not None
         }
         rules = self._rules(rule_rows)
         calculations, calculation_errors = self._calculations(calculation_rows)
@@ -554,13 +565,14 @@ class PostgresKnowledgeDecisionRepository:
                 identity.ref.coverage_id if identity else cast(UUID | None, row.get("rider_id"))
             )
             history_fact = None
+            count = private_history.get(coverage_id, 0)
             if (
-                (row.get("operational_binding_decision") == "MATCH" or identity is not None)
-                and rider_id is not None
-                and history.get(rider_id, 0) > 0
-            ):
+                row.get("operational_binding_decision") == "MATCH" or identity is not None
+            ) and rider_id is not None:
+                count += history.get(rider_id, 0)
+            if count > 0:
                 history_fact = KnowledgeFact(
-                    value=history[rider_id],
+                    value=count,
                     provenance="DERIVED_CONFIRMED",
                 )
             (

@@ -1,5 +1,7 @@
 """Retain private publication authority and actual IDs in the common guidance input."""
 
+import hashlib
+import json
 from dataclasses import fields
 from uuid import UUID
 
@@ -144,6 +146,24 @@ def adapt_private_guidance(context: KnowledgeDecisionContext) -> GuidanceContext
         versions=GuidanceVersions(
             catalog_import_run_id=context.knowledge_import_run_id,
             rule_import_run_id=context.rule_import_run_id,
-            status_digest=context.status_projection_digest_sha256,
+            status_digest=hashlib.sha256(
+                json.dumps(
+                    {
+                        "status": context.status_projection_digest_sha256,
+                        "history": [
+                            (
+                                str(coverage.knowledge_coverage_id),
+                                coverage.claim_history_counted_occurrence.value
+                                if coverage.claim_history_counted_occurrence is not None
+                                else None,
+                            )
+                            for coverage in context.coverages
+                        ],
+                    },
+                    sort_keys=True,
+                    default=str,
+                    separators=(",", ":"),
+                ).encode()
+            ).hexdigest(),
         ),
     )

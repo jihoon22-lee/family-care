@@ -226,3 +226,71 @@ AST 주소는 public `expression_path`로 이름을 명확히 하고 제한된 `
   새 trace/부분 비용/시나리오/case 표시의 구현·검증을 대신하지 않는다.
 - 문서 **50 files**, 안전 **969 paths**, diff 검사 통과. 실제 문서·외부 provider·운영 환경을
   사용하지 않았다. B04의 상세 UI·청구 bridge·합계·품질/성능·전체 필수 검사와 CI는 남아 있다.
+
+## 안내 보존과 private 청구 출처
+
+`claims/guidance_snapshot.py`와 `guidance_repository.py`는 run·사건 버전·canonical 담보
+선택만 받아 저장된 후보의 조건/금액/원문별 경우/예정 시나리오/trace/비용/버전을 복사한다.
+새 청구는 `preparing`이며 FORMULA·조건부 후보도 준비할 수 있다. legacy 전역 판정 성공을
+새 전제조건으로 사용하지 않는다. 실제 지급은 기존 수동 상태 전환과 별도 금액에 남긴다.
+SERIALIZABLE 생성은 사건을 잠그고 현재 소스 digest를 재조회한다. 같은 사건/담보의 반복·동시
+요청은 기존 청구를 반환하며 스냅샷 저장 실패는 청구와 상태 기록까지 롤백한다.
+
+migration 0057은 기존 operational FK를 nullable로 바꾸고 실제 private 계약/담보 FK를
+추가한다. 두 출처 중 하나의 완전한 쌍만 허용하고 private insurer 표시를 운영 key로 만들지
+않는다. 가정/대상자/계약/import의 일치는 DB trigger에서도 확인한다. 대상자 교정 후 기존
+청구의 상태 변경·휴지통 이동은 원래 출처/가족/스냅샷을 보존한다. 새 출처로 바꾸거나 역사적
+JSON/hash를 다시 쓰지 않는다. 새 청구가 남은 downgrade는 거부한다.
+
+연결 전 private 청구는 현재 원문 identity proof를 재생한 canonical 연결을 통해 새 경로와
+legacy Rider 요청 모두에서 재사용한다. 수동 지급 후 미래의 operational/private 계산은
+같은 이력을 읽으며, 지급 전·동일 사건·다른 가족은 제외한다. 기록 부재는 0으로 확정하지
+않는다. 지급 이력 digest가 바뀌면 이전 안내는 stale로 표시되고 원래 청구 금액은 유지된다.
+HTTP/neutral 계약은 실제 출처와 불완전/혼합 참조 거부를 유지하며, 새 local snapshot 부분은
+Pydantic 원본에서 `--write-claim-schema`로 생성한다. 기존 neutral 예시는 변경하지 않았다.
+
+2026-09-09 03:40~04:10 KST, `6dd7108`→`3af20ed`와 claims/migration 0057/history reader/
+API·neutral schema 및 관련 테스트의 미커밋 변경에서 선택 검증했다. B04 PYTHONPATH,
+`TMPDIR=/tmp`, 전용 합성 PostgreSQL과 destructive-test guard를 사용했고 Web 검사는 직렬이었다.
+
+- 처음 새 claim 메서드/스냅샷 계약 부재를 RED로 확인했다. legacy stale 전제조건과 적용 전
+  schema 때문에 실패한 중간 PG 실행은 수정 뒤 재검증했다. private 미래 지급 이력 누락과
+  대상자 교정 후 휴지통 이동 503도 각각 RED→GREEN으로 확인했다. 전용 DB의 0056↔0057
+  migration은 새 private 기록이 없는 합성 상태에서 왕복했다.
+- `python -m pytest apps/api/tests/test_guidance_claim_concurrency_integration.py
+  -m integration -q --tb=short`: 처음 5개 **5 passed**(11.96초). 실제 잠금 대기 중인 두 생성
+  transaction, 두 출처의 snapshot INSERT trigger 실패/재시도와 canonical 재사용을 검증했다.
+  테스트 커밋 `af6dda7`의 원 커밋은 `f939a10`이다.
+- 후속 `3af20ed`(원 `7f7e120`)의 지급 이력 테스트는 operational None/private 1 RED 후
+  reader 수정으로 GREEN이었다. 별도 worktree의 같은 root reader/claims 미커밋 소스에서
+  전체 **6 passed**(16.41초), 같은 사건 날짜를 지급일 뒤로 교정한 추가 조건도 해당 테스트
+  **1 passed / 5 deselected**(7.08초)였다. 두 context의 count/digest와 과거 JSON/hash를 검증했다.
+- `python -m pytest apps/api/tests/unit/claims apps/api/tests/test_claim_workflow_api.py
+  apps/api/tests/test_claim_history.py apps/api/tests/test_claim_state_machine.py -q --tb=short`:
+  응답의 불완전/혼합 출처 4개 RED 후 **79 passed**(3.32초). private 도메인·neutral 계약의
+  성공/거부, 선택된 안내의 깊은 불변성과 legacy API/상태/지급 회귀를 포함한다.
+- `python -m mypy apps/api/src/familycare_api/claims
+  apps/api/src/familycare_api/guidance/repository.py
+  apps/api/src/familycare_api/guidance/private_adapter.py
+  apps/api/src/familycare_api/decisions/knowledge_repository.py`: **14 source files passed**.
+  생성된 claim schema/OpenAPI/Web에 대한 `python scripts/check_contracts.py`도 통과했다.
+  이후 추가한 실제 HTTP private 청구 경로와 canonical source 병합의 검증은 별도 후속 증거다.
+
+상세 금액 UI `6b1e2d8`(원 `df21ff2`)는 계약금액 권한·네 비용 그룹·부분 계산·시나리오·지급
+경우·접힌 trace를 표시한다. 별도 worktree의 해당 변경에서 신규 6개 RED 후 panel **23 passed**,
+Web typecheck·ESLint·format/diff 통과했다. jsdom 검증이며 실제 브라우저의 native Enter와
+320px 화면 검증은 남아 있다. `6dd7108`의 정액 합산 helper는 순수 **35 passed**와 Ruff/mypy를
+통과했으나 아직 주 엔진/계약/UI에 연결되지 않았다. 청구 UI bridge, canonical 출처 병합,
+합계·dev/holdout 품질/성능, B04 전체 필수 검사/CI는 진행 중이다. 실제 자료·외부 AI·운영
+환경·Windows/모바일·태그·릴리스·배포는 이 단계에서 수행하지 않았다.
+
+04:11~04:14 KST 후속 검증은 같은 `3af20ed` + 위 미커밋 변경 및 실제 private HTTP 테스트에서
+`python -m pytest apps/api/tests/test_local_guidance_integration.py
+apps/api/tests/test_semantic_local_guidance_integration.py
+apps/api/tests/test_guidance_claim_concurrency_integration.py
+apps/api/tests/test_claim_workflow_integration.py -m integration -q --tb=short`를 실행해
+**24 passed**(51.35초)였다. private 청구 생성 201/no-store·클라이언트 금액 422를 확인했다.
+private 청구가 남은 downgrade 거부와 기존 스냅샷 보존 assertion 추가 후 해당 파일의
+`-k 'not storage and not upgrade and not fallback'` 재실행도 **1 passed / 3 deselected**
+(3.15초)였다. 최초 `-k default`는 선택된 테스트가 없어 결과 없음이다. 관련 Ruff lint와
+format **19 files**가 통과했고 문서 **50 files**, 저장소 안전 **977 paths**, diff도 통과했다.

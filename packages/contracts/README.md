@@ -34,6 +34,14 @@ Regenerate its neutral schema with `TMPDIR=/tmp uv run python scripts/check_cont
 snapshots without `local_guidance` retain their prior meaning; new guidance carries its own version,
 document-based assumptions, evidence, candidate relevance and independent estimate readiness.
 
+Claim preparation accepts either the legacy Rider selector or a stored local-guidance run,
+event version and canonical coverage reference. The API copies the selected candidate, cases,
+scenarios, calculation trace and versions into `ClaimLocalGuidanceSnapshot`; recorded payment
+remains separate. Regenerate the embedded neutral snapshot contract with
+`TMPDIR=/tmp uv run python scripts/check_contracts.py --write-claim-schema`, then OpenAPI and the
+Web consumer. Claim and payment history require exactly one complete operational or private
+coverage source. Historical operational snapshots and hashes remain unchanged.
+
 To regenerate only the document TypedDict consumers, run
 `TMPDIR=/tmp uv run python scripts/generate_document_contract_types.py`; to regenerate encrypted
 batch consumers, run `TMPDIR=/tmp uv run python scripts/generate_batch_contract_types.py`. Generate

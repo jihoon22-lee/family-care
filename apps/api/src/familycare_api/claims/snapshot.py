@@ -25,6 +25,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
+from familycare_api.claims.guidance_snapshot import ClaimLocalGuidanceSnapshot
+from familycare_api.common.coverage_identity import CanonicalCoverageRef
+from familycare_api.guidance.models import LocalGuidanceResponse
+
 _MISSING = object()
 
 # These names are intentionally conservative.  ``input_field_paths`` and
@@ -732,11 +736,48 @@ def build_claim_snapshot(
     )
 
 
+def build_guidance_claim_snapshot(
+    guidance: LocalGuidanceResponse,
+    coverage: CanonicalCoverageRef,
+    *,
+    run_id: UUID,
+) -> ClaimCaseSnapshot:
+    """Copy the server-selected candidate without rerunning a different calculator."""
+
+    selected = tuple(candidate for candidate in guidance.candidates if candidate.ref == coverage)
+    if guidance.schema_version != "2" or len(selected) != 1:
+        raise SnapshotValidationError("GUIDANCE_CLAIM_SELECTION_INVALID")
+    local = ClaimLocalGuidanceSnapshot(
+        run_id=run_id,
+        medical_event_id=guidance.medical_event_id,
+        family_member_id=guidance.family_member_id,
+        event_version=guidance.event_version,
+        event_date=guidance.event_date,
+        versions=guidance.versions,
+        candidate=selected[0],
+        expenses=guidance.expenses,
+    ).model_dump(mode="json")
+    _reject_forbidden_keys(local)
+    baseline = build_claim_snapshot({})
+    candidate = {**baseline.candidate_snapshot, "local_guidance": local}
+    payload = {**baseline.payload(), "candidate_snapshot": candidate}
+    return ClaimCaseSnapshot(
+        snapshot_version=1,
+        candidate_snapshot=candidate,
+        rule_snapshot=baseline.rule_snapshot,
+        policy_snapshot=baseline.policy_snapshot,
+        evidence_snapshot=baseline.evidence_snapshot,
+        calculation_snapshot=baseline.calculation_snapshot,
+        snapshot_sha256=snapshot_sha256(payload),
+    )
+
+
 __all__ = [
     "ClaimCaseSnapshot",
     "SnapshotPrivacyError",
     "SnapshotValidationError",
     "build_claim_snapshot",
+    "build_guidance_claim_snapshot",
     "canonical_json",
     "snapshot_sha256",
 ]
