@@ -4,7 +4,9 @@
 DSL 경로를 구현 중이다. B02 기반은 PR #76 merge `bc727928a0030332452fb7b3bf639beba6b9e60e`다.
 원문 검증/저장과 로컬 영역 처리, Worker 입력·작업 큐·공유 예산·API inbox 및 legacy adapter를
 구현했다. B04의 실제 Rider 연결에는 원문 manifest·계산·분류 판본을 인계한다.
-전체 필수 검증과 CI·보호된 수용은 별도 추적한다.
+전체 필수 검증과 CI 7/7 후 [PR #78](https://github.com/jihoon22-lee/family-care/pull/78)을
+merge `3f4a47cc2d1b4e649d202850020b94882dc4adfe`로 2026-09-09 KST 통합했다.
+실제 자료·운영 수용은 #69에서 계속한다.
 
 ## Changes
 
@@ -48,7 +50,8 @@ Python 명령에는 `TMPDIR=/tmp`를 적용했다. 아래 기록 이후 변경�
   branch와 22개 commit 제목 통과. `git diff --check` 통과.
 - 전체 DB suite 이후 빈 작업 상태에서 0055→0054→head migration 왕복 통과.
 
-현재 GitHub CI 결과는 PR #78에서 확인한다. 이 로컬 증거는 실제 이미지 build·운영 배포,
+[CI 34241313296](https://github.com/jihoon22-lee/family-care/actions/runs/34241313296)는
+source `4ad8a91`의 필수 7개 검사와 이미지 3개 build를 모두 통과했다. 이 로컬 증거는 실제 이미지 build·운영 배포,
 외부 provider·실제 문서 판독·Windows/실제 모바일 PWA 검증을 의미하지 않는다.
 
 ## Verification to date

@@ -13,7 +13,7 @@ from decimal import (
     ROUND_HALF_UP,
     Decimal,
 )
-from typing import cast
+from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from familycare_api.clauses.dsl import (
@@ -670,9 +670,28 @@ def _fact_value(value: KnowledgeFact) -> FactValue:
     )
 
 
+class _CoverageFactSource(Protocol):
+    """Only facts needed by the shared operator/calculation bridge, without storage IDs."""
+
+    @property
+    def contract_start(self) -> date | None: ...
+    @property
+    def contract_end(self) -> date | None: ...
+    @property
+    def insured_amount(self) -> Decimal | None: ...
+    @property
+    def certificate_amount_decision(self) -> str: ...
+    @property
+    def certificate_amount_evidence_state(self) -> str: ...
+    @property
+    def current_confirmed_status(self) -> str | None: ...
+    @property
+    def claim_history_counted_occurrence(self) -> KnowledgeFact | None: ...
+
+
 def _legacy_fact_context(
     facts: KnowledgeFactContext,
-    coverage: KnowledgeCoverageContext,
+    coverage: _CoverageFactSource,
 ) -> FactContext:
     medical: dict[str, FactValue] = {}
     policy: dict[str, FactValue] = {}

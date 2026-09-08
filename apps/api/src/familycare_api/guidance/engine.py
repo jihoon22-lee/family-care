@@ -13,23 +13,24 @@ from familycare_api.clauses.dsl import (
     RuleValidationError,
     validate_rule_document,
 )
-from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
 from familycare_api.decisions.domain import MedicalEvent
 from familycare_api.decisions.knowledge_domain import (
-    KnowledgeCitation,
-    KnowledgeCoverageContext,
     KnowledgeDecisionContext,
     KnowledgeFactContext,
-    KnowledgeRuleEvaluation,
 )
 from familycare_api.decisions.knowledge_engine import (
-    DeterministicKnowledgeDecisionEngine,
     _CalculationInputUnavailable,
     _CalculationState,
     _legacy_fact_context,
 )
 from familycare_api.decisions.knowledge_facts import normalize_private_event_facts
+from familycare_api.guidance.domain import (
+    GuidanceCitation,
+    GuidanceContext,
+    GuidanceCoverageInput,
+    GuidanceRuleEvaluation,
+)
 from familycare_api.guidance.models import (
     Freshness,
     GuidanceCandidate,
@@ -38,9 +39,10 @@ from familycare_api.guidance.models import (
     GuidanceEvidence,
     GuidanceQuestion,
     GuidanceSupport,
-    GuidanceVersions,
     LocalGuidanceResponse,
 )
+from familycare_api.guidance.private_adapter import adapt_private_guidance
+from familycare_api.guidance.rule_runtime import GuidanceRuleRuntime
 
 _RELEVANCE_KINDS = frozenset({"eligibility", "classification", "indemnity_eligibility"})
 _FIELD_LABELS = {
@@ -81,24 +83,14 @@ def _formula(node: CompiledCalculation) -> str:
 
 
 def _evidence(
-    citations: tuple[KnowledgeCitation, ...],
+    citations: tuple[GuidanceCitation, ...],
     publication_id: UUID,
 ) -> tuple[GuidanceEvidence, ...]:
-    return tuple(
-        GuidanceEvidence(
-            kind="TERMS_SECTION",
-            evidence_id=item.terms_section_id,
-            page_start=item.page_start,
-            page_end=item.page_end,
-            publication_id=publication_id,
-            source_sha256=item.source_text_sha256,
-        )
-        for item in citations
-        if item.lineage_valid
-    )
+    del publication_id
+    return tuple(item.evidence for item in citations if item.lineage_valid)
 
 
-def _event_status(event: MedicalEvent, coverage: KnowledgeCoverageContext) -> Freshness | None:
+def _event_status(event: MedicalEvent, coverage: GuidanceCoverageInput) -> Freshness | None:
     if event.event_date is not None and (
         (coverage.contract_start is not None and event.event_date < coverage.contract_start)
         or (coverage.contract_end is not None and event.event_date > coverage.contract_end)
@@ -128,14 +120,16 @@ class LocalGuidanceEngine:
     def __init__(self) -> None:
         # Reuse the existing bounded DSL evaluator and Decimal calculation runtime.
         # Its aggregate legacy policy and insured-amount fallback are not used here.
-        self.rule_runtime = DeterministicKnowledgeDecisionEngine()
+        self.rule_runtime = GuidanceRuleRuntime()
 
     def evaluate(
         self,
         scope: HouseholdScope,
         event: MedicalEvent,
-        context: KnowledgeDecisionContext,
+        context: GuidanceContext | KnowledgeDecisionContext,
     ) -> LocalGuidanceResponse:
+        if isinstance(context, KnowledgeDecisionContext):
+            context = adapt_private_guidance(context)
         if (
             event.household_space_id != scope.household_space_id
             or context.household_space_id != scope.household_space_id
@@ -150,7 +144,9 @@ class LocalGuidanceEngine:
         candidates: list[GuidanceCandidate] = []
         unsupported = 0
         failures: list[str] = []
-        for coverage in sorted(context.coverages, key=lambda item: str(item.knowledge_coverage_id)):
+        for coverage in sorted(
+            context.coverages, key=lambda item: (item.ref.kind, str(item.ref.coverage_id))
+        ):
             coverage_facts = facts
             if (
                 context.receipt_currency is None
@@ -195,11 +191,7 @@ class LocalGuidanceEngine:
             event_version=event.version,
             event_date=event.event_date,
             outcome=outcome,
-            versions=GuidanceVersions(
-                catalog_import_run_id=context.knowledge_import_run_id,
-                rule_import_run_id=context.rule_import_run_id,
-                status_digest=context.status_projection_digest_sha256,
-            ),
+            versions=context.versions,
             candidates=tuple(candidates),
             support=GuidanceSupport(
                 total_coverages=len(context.coverages),
@@ -213,7 +205,7 @@ class LocalGuidanceEngine:
         self,
         event: MedicalEvent,
         facts: KnowledgeFactContext,
-        coverage: KnowledgeCoverageContext,
+        coverage: GuidanceCoverageInput,
     ) -> tuple[GuidanceCandidate | None, bool]:
         if (
             coverage.disposition == "NOT_APPLICABLE"
@@ -298,11 +290,7 @@ class LocalGuidanceEngine:
         return GuidanceCandidate(
             ref=coverage.canonical_identity.ref
             if coverage.canonical_identity is not None
-            else CanonicalCoverageRef(
-                kind="PRIVATE_KNOWLEDGE_COVERAGE",
-                contract_id=coverage.knowledge_contract_id,
-                coverage_id=coverage.knowledge_coverage_id,
-            ),
+            else coverage.ref,
             canonical_identity=coverage.canonical_identity,
             contract_label=coverage.contract_label,
             coverage_label=coverage.coverage_label,
@@ -326,7 +314,7 @@ class LocalGuidanceEngine:
         ), not any(failed for _, failed in outcomes)
 
     @staticmethod
-    def _condition(value: KnowledgeRuleEvaluation) -> GuidanceCondition:
+    def _condition(value: GuidanceRuleEvaluation) -> GuidanceCondition:
         return GuidanceCondition(
             rule_id=value.rule_publication_id,
             result=value.result,
@@ -337,7 +325,7 @@ class LocalGuidanceEngine:
     @staticmethod
     def _estimate(
         facts: KnowledgeFactContext,
-        coverage: KnowledgeCoverageContext,
+        coverage: GuidanceCoverageInput,
         *,
         conditions: Literal["MATCH", "UNKNOWN"],
         assumptions: list[str],

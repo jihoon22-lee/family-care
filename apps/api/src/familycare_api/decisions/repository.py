@@ -61,6 +61,8 @@ from familycare_api.decisions.terms import RulesForEvent
 from familycare_api.decisions.terms_snapshots import decode_selections, encode_selections
 from familycare_api.guidance.engine import LocalGuidanceEngine
 from familycare_api.guidance.models import LocalGuidanceResponse
+from familycare_api.guidance.private_adapter import adapt_private_guidance
+from familycare_api.guidance.repository import combine_guidance_contexts, read_operational_guidance
 from familycare_api.policies.errors import EvidenceInvalid, VersionConflict
 
 
@@ -476,6 +478,23 @@ class DecisionRepository:
                             )
                 except psycopg.Error, ValueError, ArithmeticError:
                     knowledge_failures = ("KNOWLEDGE_SOURCE_UNAVAILABLE",)
+                try:
+                    with connection.transaction():
+                        operational = read_operational_guidance(connection, scope, event, self)
+                        shared_context = combine_guidance_contexts(
+                            operational,
+                            adapt_private_guidance(knowledge_read.context)
+                            if knowledge_read.context is not None
+                            else None,
+                        )
+                        local_guidance = LocalGuidanceEngine().evaluate(
+                            scope, event, shared_context
+                        )
+                except psycopg.Error, ValueError, ArithmeticError:
+                    knowledge_failures = (
+                        *knowledge_failures,
+                        "OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE",
+                    )
                 source_failures = tuple(
                     dict.fromkeys(
                         (
