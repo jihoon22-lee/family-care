@@ -12,6 +12,7 @@ import {
   Expenses,
 } from "./LocalGuidanceDetails";
 import { pageLabel } from "./resultPresentation";
+import { LocalGuidanceSubtotals } from "./LocalGuidanceSubtotals";
 import styles from "./Results.module.css";
 import panelStyles from "./LocalGuidancePanel.module.css";
 
@@ -212,6 +213,10 @@ export function LocalGuidancePanel({
       {showEmpty && guidance.candidates.length === 0 ? (
         <p className={styles.emptyGroup}>{emptyCopy[guidance.outcome]}</p>
       ) : null}
+      <LocalGuidanceSubtotals
+        guidance={guidance}
+        inputLabel={guidanceInputLabel}
+      />
       {(["PRIMARY", "CONDITIONAL"] as const).map((group) => {
         const candidates = guidance.candidates.filter(
           (candidate) => candidate.group === group,
