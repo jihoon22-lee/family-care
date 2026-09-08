@@ -26,6 +26,7 @@ from pydantic_core import PydanticSerializationError
 
 MAX_SECTION_CLAUSES = 4096
 MAX_SECTION_FACTS = 128
+MAX_RETAINED_BYTES = 16 * 1024 * 1024
 
 
 class LegacyAdapterError(ValueError):
@@ -76,7 +77,19 @@ class LegacyFactIdentity:
     source_fact_id: str
 
 
-def _record_json[Record: BaseModel](value: Record, model: type[Record]) -> str:
+@dataclass(slots=True)
+class _RetainedBudget:
+    remaining_bytes: int
+
+    def consume(self, size: int) -> None:
+        if size > self.remaining_bytes:
+            raise LegacyAdapterError("LEGACY_ADAPTER_LIMIT_EXCEEDED")
+        self.remaining_bytes -= size
+
+
+def _record_json[Record: BaseModel](
+    value: Record, model: type[Record], *, budget: _RetainedBudget
+) -> str:
     if not isinstance(value, model):
         raise LegacyAdapterError()
     try:
@@ -87,8 +100,10 @@ def _record_json[Record: BaseModel](value: Record, model: type[Record]) -> str:
             ensure_ascii=False,
             allow_nan=False,
         )
-        if len(encoded.encode("utf-8")) > MAX_JSONL_LINE_BYTES:
+        encoded_size = len(encoded.encode("utf-8"))
+        if encoded_size > MAX_JSONL_LINE_BYTES:
             raise LegacyAdapterError("LEGACY_ADAPTER_LIMIT_EXCEEDED")
+        budget.consume(encoded_size)
         model.model_validate_json(encoded, strict=True)
     except LegacyAdapterError:
         raise
@@ -215,6 +230,8 @@ def adapt_legacy_review(
     Missing historical clause/fact mappings remain visible. Extra or duplicate
     identities and rows from another scope are rejected rather than silently lost.
     All mutable model inputs are revalidated and copied to immutable JSON strings.
+    Their cumulative UTF-8 bytes, including retained review/fact copies, are bounded
+    incrementally without serializing the complete adaptation a second time.
     """
     if not isinstance(context, LegacyReviewContext):
         raise LegacyAdapterError("LEGACY_IDENTITY_INVALID")
@@ -231,8 +248,9 @@ def adapt_legacy_review(
         raise LegacyAdapterError()
     if len(clauses) > MAX_SECTION_CLAUSES or len(fact_ids) > MAX_SECTION_FACTS:
         raise LegacyAdapterError("LEGACY_ADAPTER_LIMIT_EXCEEDED")
-    section_json = _record_json(section, TermsSectionRecord)
-    review_json = _record_json(review, SemanticReviewRecord)
+    budget = _RetainedBudget(MAX_RETAINED_BYTES)
+    section_json = _record_json(section, TermsSectionRecord, budget=budget)
+    review_json = _record_json(review, SemanticReviewRecord, budget=budget)
     section = _restore(section_json, TermsSectionRecord)
     review = _restore(review_json, SemanticReviewRecord)
     source_key = (section.terms_alias, section.section_id)
@@ -251,7 +269,7 @@ def adapt_legacy_review(
             raise LegacyAdapterError()
         _scope(context, row)
         _identity(row.clause_id)
-        encoded = _record_json(row.record, ClauseRecord)
+        encoded = _record_json(row.record, ClauseRecord, budget=budget)
         clause = _restore(encoded, ClauseRecord)
         if (clause.terms_alias, clause.section_id) != source_key:
             raise LegacyAdapterError("LEGACY_SECTION_MISMATCH")
@@ -267,6 +285,8 @@ def adapt_legacy_review(
             raise LegacyAdapterError()
         _scope(context, identity_row)
         _identity(identity_row.fact_id)
+        if type(identity_row.source_fact_id) is not str:
+            raise LegacyAdapterError("LEGACY_FACT_IDENTITY_MISMATCH")
         if (
             identity_row.source_fact_id not in source_fact_ids
             or identity_row.source_fact_id in mapped_facts
@@ -291,7 +311,7 @@ def adapt_legacy_review(
             LegacyFact(
                 mapped_facts.get(fact.fact_id),
                 fact.fact_id,
-                _record_json(fact, SemanticFactRecord),
+                _record_json(fact, SemanticFactRecord, budget=budget),
                 citations,
                 tuple(reasons),
             )

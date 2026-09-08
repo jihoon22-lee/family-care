@@ -288,3 +288,82 @@ def test_declared_counts_are_retained_and_mismatch_is_diagnostic() -> None:
     assert result.counts.fact_count == 1
     assert result.restore_section().semantic_fact_count == 4
     assert "LEGACY_COUNT_MISMATCH" in result.reason_codes
+
+
+def test_total_retained_record_budget_counts_review_and_fact_copies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_api.terms_knowledge import legacy_adapter
+
+    context, section, review, clause, fact = fixture()
+    review = SemanticReviewRecord.model_validate(
+        {**review.model_dump(), "section_summary_ko": "합성 요약 정보."}
+    )
+    original = adapt_legacy_review(
+        context, section=section, review=review, clauses=(clause,), fact_ids=(fact,)
+    )
+    retained = (
+        original.section_record_json,
+        original.review_record_json,
+        *(item.record_json for item in original.clauses),
+        *(item.record_json for item in original.facts),
+    )
+    total_bytes = sum(len(value.encode("utf-8")) for value in retained)
+    monkeypatch.setattr(legacy_adapter, "MAX_RETAINED_BYTES", total_bytes, raising=False)
+    assert (
+        adapt_legacy_review(
+            context, section=section, review=review, clauses=(clause,), fact_ids=(fact,)
+        )
+        .restore_review()
+        .model_dump()
+        == review.model_dump()
+    )
+    monkeypatch.setattr(legacy_adapter, "MAX_RETAINED_BYTES", total_bytes - 1)
+    with pytest.raises(LegacyAdapterError, match="^LEGACY_ADAPTER_LIMIT_EXCEEDED$"):
+        adapt_legacy_review(
+            context, section=section, review=review, clauses=(clause,), fact_ids=(fact,)
+        )
+
+
+class _UnhashableMatchingList(list):
+    def __eq__(self, other: object) -> bool:
+        return other == "synthetic-fact-001"
+
+
+@pytest.mark.parametrize("source_key", [[], {}, 42, None, _UnhashableMatchingList()])
+def test_malformed_fact_source_key_always_uses_fixed_identity_error(source_key: object) -> None:
+    context, section, review, clause, fact = fixture()
+    fact = replace(fact, source_fact_id=source_key)
+    with pytest.raises(LegacyAdapterError, match="^LEGACY_FACT_IDENTITY_MISMATCH$"):
+        adapt_legacy_review(
+            context, section=section, review=review, clauses=(clause,), fact_ids=(fact,)
+        )
+
+
+def test_aggregate_limit_stops_before_reading_later_clause_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_api.terms_knowledge import legacy_adapter
+
+    context, section, review, clause, fact = fixture()
+    original = adapt_legacy_review(
+        context, section=section, review=review, clauses=(clause,), fact_ids=(fact,)
+    )
+    first_record_bytes = sum(
+        len(value.encode("utf-8"))
+        for value in (
+            original.section_record_json,
+            original.review_record_json,
+            original.clauses[0].record_json,
+        )
+    )
+    monkeypatch.setattr(legacy_adapter, "MAX_RETAINED_BYTES", first_record_bytes - 1)
+    invalid_later = replace(clause, clause_id=UUID(int=888), record=None)
+    with pytest.raises(LegacyAdapterError, match="^LEGACY_ADAPTER_LIMIT_EXCEEDED$"):
+        adapt_legacy_review(
+            context,
+            section=section,
+            review=review,
+            clauses=(clause, invalid_later),
+            fact_ids=(fact,),
+        )
