@@ -363,3 +363,8 @@ global 잠금을 쓰므로 기본 문서당 4회·하루 8회 한도를 두 경�
 확인해 PUBLISHED/STALE/REJECTED receipt를 남긴다. 의미 검증/compiler revision 변경 시
 기존 후보를 재검증하므로 provider를 다시 호출할 필요가 없다. 이러한 성공은 해당 구역의
 지식화이며 전체 상품·실제 문서 판독 품질·Rider 가입 사실을 자동으로 확정하지 않는다.
+
+범위 구조화 지시는 각 disposition의 candidate마다 해당 primary evidence를 실제 근거가
+있는 field에 인용하도록 요구한다. 여러 범위에 배정된 후보는 각 범위의 인용을 따로
+충족해야 하며, 맞추기 위한 근거 없는 field/인용 추가는 금지한다. 프로그램 검증은 그대로
+유지하고 지시 변경은 기존 request fingerprint로 구분한다.

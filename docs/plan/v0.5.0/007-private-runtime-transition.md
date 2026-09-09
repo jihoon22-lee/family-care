@@ -26,7 +26,8 @@ Task 5 후속 구현은 보관 구조의 피보험자 복합 필드와 명시적
 metadata v9와 독립 API/후속 source 검증을 연결하고, 개인정보 migration 0066 뒤의 0067로
 과거 v1–v8 이력을 보존한 동일 원문 재처리를 진행한다. 최소화 v3와 retained 처리 v2는
 유지한다. PR84 변경 통합과 migration 순서 정리는 진행 중인 Task 5 범위이며, 통합된
-0067의 전체 검사·전용 PostgreSQL 검증은 아직 실행하지 않았다. 실제 약관 지원률·판본
+0067 통합 소스의 기본 Python 3716건/3 subtests, Web 238건/build와 관련 PostgreSQL
+21건·계약·정적 정책 검사를 통과했다. 전체 PG/이미지 CI와 실제 약관 지원률·판본
 등록·의미 지식 수용은 별도로 확인한다.
 
 ## Decisions and boundaries

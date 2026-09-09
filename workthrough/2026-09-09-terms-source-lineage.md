@@ -28,13 +28,39 @@ PR84 개인정보 변경 `7372592`·`caf2f2f`를 PR85 기준 `f880ab5` 위에 �
 metadata/검증기 v9는 유지한다. readiness fixture는 과거 0066 privacy와 미래 합성 0068을
 거부하며, metadata 이력 downgrade 테스트는 바로 앞선 0066 privacy를 대상으로 한다.
 
-이번 통합에서는 수정 코드·migration 연결·revision 참조를 정적으로 검토하고
-`git diff --check` 및 `git diff --cached --check`를 실행했다. 기준은 개인정보 커밋을
-통합한 `8b576ef`와 migration·runtime fence·readiness/metadata 테스트·설계·007·이 문서의
-후속 미커밋 변경이다. 이는 앞서 기록한 단위 검사나 PostgreSQL 결과를 다시 실행한 것이
-아니다. 공유 합성 DB가 0066 privacy인 상태이므로 이번에는 Python/PG/전체 검사와 실제
-자료·외부 provider 접근을 실행하지 않았다. 병합 전 0067 upgrade, MR9 이력 보존과
-downgrade 거부, API/Worker readiness, retained 개인정보 회귀 및 전체 필수 검사가 남는다.
+증권 범위의 실제 제한 요청은 HTTP 200이었지만 한 범위/후보 쌍의 primary 인용이
+빠져 전체 응답이 REVIEW로 보존됐다. 이 결과를 후보 게시 성공으로 집계하지 않는다.
+`764a195`(통합 `3efa54c`)는 각 쌍의 exact primary를 실제 근거가 있는 field에 인용하도록
+prompt를 명확히 한다. 다중 범위 배정과 반환 전 self-check도 명시했다. validator/schema는
+유지하며, 새 지시는 요청 fingerprint에 포함되어 과거 prompt의 응답 캐시와 구분된다.
+추가 4개 다중-primary 경계 사례는 기존 validator에서도 통과하므로 RED로 기록하지 않는다.
+변경 전 15건/변경 후 관련 23건과 Ruff를 통과했다. 실제 prompt 효과는 별도 수용 대상이다.
 
-전체 필수 검사·통합 API/약관 source 검증·보호된 재처리·릴리스/운영 전환은 진행 중이다.
+## 통합 검증
+
+2026-09-09, 전용 합성 PostgreSQL·Python 3.14 환경에서 수행했다.
+
+- `413a3ed`의 문서 50개·안전 1095개 경로와 `corepack pnpm web:check`:
+  Web 238건/31개 파일(50.11초), format/lint/type/build 통과. 이후 Web 입력 변경은 없다.
+- 최초 전체 Python은 과거 revision을 암묵적으로 가정하던 테스트 2건 실패/3709건 통과였다.
+  navigation context는 v8/v9 각각의 명시 revision으로 확인하고, body의 현재 producer는
+  v9로 검증한다. 관련 44건 통과(4.43초) 후 전체 검사를 다시 실행했다.
+- 0066→0067 합성 DB upgrade 통과. 최초 PG 명령의 잘못된 파일명은 수집 전 거부되어
+  결과가 없다. 수정된 실행은 과거 v8 producer를 고정하지 않은 navigation 3건 실패/
+  18건 통과였다. 해당 역사적 테스트에 v8 producer를 명시한 뒤 아래 6개 모듈의
+  PostgreSQL 21건을 함께 통과했다(42.47초): `test_metadata_lineage_revision`,
+  `test_terms_lineage_publication`, `test_metadata_prefix_publication`,
+  `test_terms_semantic_projector`, `test_metadata_navigation_publication`,
+  `test_retained_privacy_revision`. v9 append/이력 보존·반복 처리·downgrade 거부와
+  native IR→metadata→판본→의미/조항 source 읽기를 포함한다.
+- `57a4a76` clean source의 전체 Python/계약 검사: Ruff format 879개 파일/check,
+  mypy 354개 파일, 기본 pytest 3716건/3 subtests(33.99초; integration 803건 제외),
+  계약·컨테이너 정적 정책·workflow 정책·diff를 통과했다. 명령은
+  [필수 완료 검사](../docs/design/test-strategy.md#required-completion-commands)를 사용했다.
+  전체 PostgreSQL·빈 DB 왕복·이미지 빌드는 최신 CI에서 추가 확인한다.
+- 독립 읽기 전용 리뷰에서 Worker 생성기 기준, v1–v8 API 재현, immutable publication의
+  revision 전달과 household 경계, downgrade guard, prompt/cache 경계를 확인했다.
+  수정할 finding은 없었으며 동적 검증이나 실제 자료 검토로 표현하지 않는다.
+
+보호된 0067 재처리·실제 약관 지원 범위·최종 전환 수용과 릴리스는 진행 중이다.
 보호 진단의 실제 본문·개인정보·수치는 저장소 밖에만 보존한다.
