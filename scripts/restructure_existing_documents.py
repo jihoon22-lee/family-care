@@ -136,6 +136,7 @@ class SourceProgress:
     pending_publications: int = 0
     identity_unresolved: int = 0
     semantic_unresolved: int = 0
+    unprocessed_ranges: int = 0
 
 
 @dataclass(frozen=True)
@@ -150,6 +151,8 @@ class ReconstructionReport:
     pending_publications: int = 0
     identity_unresolved: int = 0
     semantic_unresolved: int = 0
+    partial_sources: int = 0
+    unprocessed_ranges: int = 0
 
 
 class ReconstructionAdapter(Protocol):
@@ -209,7 +212,7 @@ def reconstruct(
                 check(source=source)
                 progress = observe(source)
             if (
-                progress.preparation == "PREPARED"
+                progress.preparation in {"PREPARED", "PARTIAL"}
                 and progress.generation_id is not None
                 and progress.metadata in {"MISSING", "RETRYABLE_FAILED"}
             ):
@@ -232,11 +235,13 @@ def reconstruct(
         observed = [observe(source) for source in plan.sources]
         check()
         unavailable = sum(
-            p.preparation != "PREPARED" or p.metadata != "PREPARED" or p.components == 0
+            p.generation_id is None or p.metadata != "PREPARED" or p.components == 0
             for p in observed
         )
         incomplete = unavailable or any(
-            p.unresolved_pages
+            p.preparation == "PARTIAL"
+            or p.unprocessed_ranges
+            or p.unresolved_pages
             or p.pending_publications
             or p.identity_unresolved
             or p.semantic_unresolved
@@ -256,7 +261,7 @@ def reconstruct(
         steps,
         prepared=sum(p.preparation == "PREPARED" for p in observed),
         source_unavailable=sum(
-            p.preparation != "PREPARED" or p.metadata != "PREPARED" or p.components == 0
+            p.generation_id is None or p.metadata != "PREPARED" or p.components == 0
             for p in observed
         ),
         metadata_components=sum(p.components for p in observed),
@@ -264,6 +269,8 @@ def reconstruct(
         pending_publications=sum(p.pending_publications for p in observed),
         identity_unresolved=sum(p.identity_unresolved for p in observed),
         semantic_unresolved=sum(p.semantic_unresolved for p in observed),
+        partial_sources=sum(p.preparation == "PARTIAL" for p in observed),
+        unprocessed_ranges=sum(p.unprocessed_ranges for p in observed),
     )
 
 
@@ -455,7 +462,8 @@ class PostgresReconstructionAdapter:
             approved = {
                 p.generation_id
                 for s in self.plan.sources
-                if (p := self.observe(s)).preparation == "PREPARED"
+                if (p := self.observe(s)).preparation in {"PREPARED", "PARTIAL"}
+                and p.generation_id is not None
             }
             if len(current) > _MAX_SOURCES or any(r["id"] not in approved for r in current):
                 raise TransitionError("UNAPPROVED_SOURCE")
@@ -499,8 +507,9 @@ class PostgresReconstructionAdapter:
         with _connect(self.database_url) as connection:
             connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             row = connection.execute(
-                "SELECT p.state,p.generation_id,g.is_current,m.id AS proposal_id,"
+                "SELECT p.state,p.generation_id,g.is_current,g.cancelled,m.id AS proposal_id,"
                 "m.state AS metadata, "
+                "jsonb_array_length(g.plan_json->'unprocessed') AS unprocessed_ranges, "
                 "jsonb_array_length(m.proposal_json->'components') AS components, "
                 "jsonb_array_length(m.proposal_json->'unresolved_pages') AS unresolved_pages "
                 "FROM document_structure_preparations p LEFT JOIN document_structure_generations g "
@@ -518,8 +527,16 @@ class PostgresReconstructionAdapter:
             ).fetchone()
             if row is None:
                 return SourceProgress("MISSING")
-            if row["state"] != "PREPARED" or not row["is_current"]:
-                return SourceProgress(row["state"] if row["state"] != "PREPARED" else "PARTIAL")
+            omissions = row["unprocessed_ranges"] or 0
+            if (
+                row["state"] not in {"PREPARED", "PARTIAL"}
+                or not row["is_current"]
+                or row["cancelled"]
+            ):
+                return SourceProgress(
+                    row["state"] if row["state"] != "PREPARED" else "PARTIAL",
+                    unprocessed_ranges=omissions,
+                )
             counts = connection.execute(
                 "SELECT count(*) FILTER(WHERE p.outcome='APPLIED') AS applied, "
                 "count(*) FILTER(WHERE c.role='terms' AND (t.id IS NULL OR t.outcome<>'APPLIED')) "
@@ -551,6 +568,7 @@ class PostgresReconstructionAdapter:
                 max(0, components - counts["applied"]),
                 counts["identity_unresolved"],
                 counts["semantic_unresolved"],
+                omissions,
             )
 
 

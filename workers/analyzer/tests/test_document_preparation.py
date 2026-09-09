@@ -283,3 +283,90 @@ def test_transient_local_failure_retries_without_reprocessing_success(
         assert connection.execute(
             "SELECT state, attempts, error_code FROM document_structure_preparations"
         ).fetchone() == ("PREPARED", 2, None)
+
+
+def test_initial_partial_from_previous_revision_resumes_once_without_rewriting_history(
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_worker import document_preparation as module
+    from familycare_worker.document_metadata_repository import DocumentMetadataRunner
+
+    url, job = request.getfixturevalue("structure_database")
+    _seed_page(url, job)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE document_versions SET page_count=2 WHERE id=%s", (job.document_version_id,)
+        )
+    current_revision = module.PREPARATION_REVISION
+    old_revision = "stored-structure-geometry-v3-ch4096-context4096-max16384"
+    monkeypatch.setattr(module, "PREPARATION_REVISION", old_revision)
+    runner = DocumentPreparationRunner(url, batch_item_id=job.batch_item_id)
+    assert runner.run_once("synthetic-worker")
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        old = connection.execute("SELECT * FROM document_structure_preparations").fetchone()
+        assert old["state"] == "PARTIAL"
+        generation = old["generation_id"]
+        connection.execute(
+            "UPDATE document_structure_generations SET is_current=false WHERE id=%s", (generation,)
+        )
+    monkeypatch.setattr(module, "PREPARATION_REVISION", current_revision)
+    assert runner.run_once("synthetic-worker")
+    assert not runner.run_once("synthetic-worker")
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        assert (
+            connection.execute(
+                "SELECT * FROM document_structure_preparations WHERE id=%s", (old["id"],)
+            ).fetchone()
+            == old
+        )
+        rows = connection.execute(
+            "SELECT state,generation_id FROM document_structure_preparations"
+        ).fetchall()
+        assert rows == [{"state": "PARTIAL", "generation_id": generation}] * 2
+        assert connection.execute(
+            "SELECT is_current,range_plan_complete FROM document_structure_generations WHERE id=%s",
+            (generation,),
+        ).fetchone() == {"is_current": True, "range_plan_complete": False}
+    assert DocumentMetadataRunner(url, generation_id=generation).run_once("synthetic-worker")
+
+
+def test_coordinator_accepts_only_approved_current_partial_and_reports_omissions(
+    request: pytest.FixtureRequest,
+) -> None:
+    from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+
+    from scripts.restructure_existing_documents import PostgresReconstructionAdapter, capture_plan
+
+    url, job = request.getfixturevalue("structure_database")
+    _, _, job_ids, _ = request.getfixturevalue("seeded_policy_database")
+    jobs = [PolicyStructuringJobQueue(url).get_job(item) for item in job_ids]
+    assert all(item is not None for item in jobs)
+    _seed_page(url, job)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE document_versions SET page_count=2 WHERE id=%s", (job.document_version_id,)
+        )
+        connection.execute(
+            "UPDATE extraction_blocks SET text='보험약관\n보험사: "
+            "Sample Assurance\n상품코드: 001-SAMPLE', "
+            "bbox='[10,10,400,80]' WHERE page_id IN "
+            "(SELECT id FROM extraction_pages WHERE extraction_id=%s)",
+            (job.extraction_id,),
+        )
+    plan = capture_plan(url, [item.batch_item_id for item in jobs])
+    adapter = PostgresReconstructionAdapter(url)
+    adapter.verify(plan)
+    approved = next(item for item in plan.sources if item.batch_item_id == job.batch_item_id)
+    adapter.prepare(approved)
+    adapter.verify(plan, source=approved)
+    progress = adapter.observe(approved)
+    assert progress.preparation == "PARTIAL" and progress.generation_id is not None
+    assert progress.unprocessed_ranges > 0
+    adapter.metadata(progress.generation_id)
+    adapter.verify(plan)
+    assert adapter.project("metadata") == 1
+    progress = adapter.observe(approved)
+    assert progress.preparation == "PARTIAL" and progress.metadata == "PREPARED"
+    assert progress.components == 1 and progress.unresolved_pages == 1
+    assert progress.pending_publications == 0 and progress.unprocessed_ranges > 0

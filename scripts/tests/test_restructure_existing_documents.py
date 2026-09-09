@@ -413,3 +413,23 @@ def test_bounded_run_keeps_already_observed_progress_without_extra_reads(
     assert result.status == "BOUNDED"
     assert result.prepared == 1
     assert len(observed) == 2  # Initial state and the existing post-preparation read.
+
+
+def test_current_partial_runs_metadata_but_retains_partial_status_and_omissions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter = Adapter()
+    generation = UUID(int=50)
+    adapter.progress = SourceProgress("PARTIAL", generation, unprocessed_ranges=3)
+
+    def metadata(current: UUID) -> None:
+        assert current == generation
+        adapter.calls.append("metadata_prepare")
+        adapter.progress = replace(adapter.progress, metadata="PREPARED", components=1)
+
+    monkeypatch.setattr(adapter, "metadata", metadata)
+    result = reconstruct(plan(adapter), adapter=adapter)
+    assert "metadata_prepare" in adapter.calls
+    assert result.status == "PARTIAL"
+    assert result.partial_sources == 1 and result.unprocessed_ranges == 3
+    assert result.metadata_components == 1 and result.source_unavailable == 0

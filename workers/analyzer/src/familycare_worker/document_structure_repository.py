@@ -227,15 +227,32 @@ class DocumentStructureRepository:
             raise StructureScopeError
         existing = connection.execute(
             """
-            SELECT id FROM document_structure_generations
+            SELECT id,cancelled FROM document_structure_generations
             WHERE household_space_id = %s AND family_member_id = %s
               AND batch_item_id = %s AND identity_sha256 = %s
             """,
             (household_space_id, family_member_id, batch_item_id, identity),
         ).fetchone()
+        current = connection.execute(
+            "SELECT id FROM document_structure_generations WHERE household_space_id=%s "
+            "AND family_member_id=%s AND batch_item_id=%s AND is_current",
+            (household_space_id, family_member_id, batch_item_id),
+        ).fetchone()
+        # Current selects an available source, not completion of all scheduled
+        # ranges. A first partial source can support independent anchored metadata.
+        has_source = any(node.schedulable and node.text.strip() for node in structure.nodes)
         if existing is not None:
+            if not plan.complete and has_source and current is None and not existing["cancelled"]:
+                # Re-entry after the preparation policy revision: the canonical
+                # source/plan identity was replayed above under the same item lock.
+                connection.execute(
+                    "UPDATE document_structure_generations SET is_current=true,"
+                    "updated_at=clock_timestamp() WHERE id=%s AND NOT cancelled",
+                    (existing["id"],),
+                )
             return cast(UUID, existing["id"])
-        if plan.complete:
+        make_current = has_source and (plan.complete or current is None)
+        if make_current and plan.complete:
             connection.execute(
                 """
                 UPDATE document_structure_generations SET is_current = false,
@@ -264,7 +281,7 @@ class DocumentStructureRepository:
                 Jsonb(structure_json),
                 Jsonb(plan_json),
                 plan.complete,
-                plan.complete,
+                make_current,
             ),
         ).fetchone()
         if generation is None:
