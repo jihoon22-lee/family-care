@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0066_metadata_lineage"
+REVISION = "0066_provider_privacy_revision"
 
 
 class Result:

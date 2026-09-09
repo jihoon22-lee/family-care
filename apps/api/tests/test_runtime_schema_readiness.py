@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0066_metadata_lineage"
+REVISION = "0066_provider_privacy_revision"
 
 
 class Result:
