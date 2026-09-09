@@ -1,0 +1,50 @@
+.panel {
+  margin-block: 1.5rem;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+  border: 1px solid #bfccd8;
+  border-radius: 1rem;
+  background: #fff;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.panel h2,
+.panel h3 {
+  margin-top: 0;
+}
+.panel p,
+.panel li {
+  line-height: 1.65;
+}
+.panel button,
+.panel summary {
+  min-height: 44px;
+  cursor: pointer;
+}
+.panel button {
+  padding: 0.65rem 1rem;
+  max-width: 100%;
+  white-space: normal;
+}
+.panel summary {
+  padding-block: 0.65rem;
+  font-weight: 650;
+}
+.panel button:focus-visible,
+.panel summary:focus-visible {
+  outline: 3px solid #246db3;
+  outline-offset: 3px;
+}
+.panel details {
+  margin-block: 1rem;
+}
+.panel article {
+  margin-block: 1rem;
+  padding-block: 0.5rem;
+  border-top: 1px solid #dce4ec;
+}
+.panel blockquote {
+  margin-inline: 0;
+  padding-inline-start: 0.75rem;
+  border-left: 3px solid #bfccd8;
+}
