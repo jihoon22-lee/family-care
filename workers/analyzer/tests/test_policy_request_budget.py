@@ -37,7 +37,8 @@ def budget_database(request: pytest.FixtureRequest) -> Any:
         yield database_url, job
     finally:
         with psycopg.connect(_psycopg_url(database_url)) as connection:
-            connection.execute("TRUNCATE policy_provider_requests")
+            # Clear the synthetic receipt child together with its request parent.
+            connection.execute("TRUNCATE policy_range_replay_sources, policy_provider_requests")
 
 
 class Provider:

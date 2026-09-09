@@ -259,7 +259,7 @@ def test_worker_uses_complete_ranges_and_pauses_without_repeating_saved_ranges(
             )
     finally:
         with psycopg.connect(_psycopg_url(url)) as connection:
-            connection.execute("TRUNCATE policy_provider_requests")
+            connection.execute("TRUNCATE policy_range_replay_sources, policy_provider_requests")
 
 
 def test_failed_range_is_retained_and_next_range_can_still_run(ranges_database: Any) -> None:
@@ -390,7 +390,7 @@ def test_range_verifier_timeout_reuses_the_structurer_response(ranges_database: 
             assert saved["result"]["candidates"][0]["status"] == "NEEDS_REVIEW"
     finally:
         with psycopg.connect(_psycopg_url(url)) as connection:
-            connection.execute("TRUNCATE policy_provider_requests")
+            connection.execute("TRUNCATE policy_range_replay_sources, policy_provider_requests")
 
 
 def test_unknown_primary_role_cannot_create_an_ai_verified_contract(ranges_database: Any) -> None:
