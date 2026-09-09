@@ -33,10 +33,15 @@
   잠금 보강 후 29건(36.39초), 범위 없는 runner 거부 보강 후 unit 50건/PG 3건을 통과했다.
   기능 부재와 과거 경로 오호출 실패를 먼저 확인했으며 provider는 합성 응답만 사용했다.
   0065→0064→0065 왕복과 재처리 이력의 downgrade 거부, mypy 354개 파일을 통과했다.
-  통합 후 전체 필수 검사는 진행 중이다.
+  아래 통합 후 검증과 실행 소스를 구분한다.
 - 통합 `8737170`에서 native range enrollment·retained publication·retained resubmission의
   PostgreSQL 세 모듈을 함께 실행해 64건 통과(79.49초)했다. 복합 인물 필드 세 형식의
   가입 게시와 원문 위치, 새 재처리의 교정 보존·실행 격리·오래된 세대 거부를 포함한다.
+- `03cd1ec`의 전체 필수 검사: 문서 50개/안전 1086개 경로, `pnpm web:check`의 Web
+  238건/build, Ruff 870개 파일, mypy 354개 파일, 기본 pytest 3659건/3 subtests
+  (43.84초; integration 798건 제외), 계약·컨테이너 정적 정책·workflow 정책·diff를 통과했다.
+  잠금 파일을 유지한 pnpm 설치를 사용했다. 전체 PG·빈 DB migration·이미지 빌드는 CI로
+  추가 확인하며, 로컬 관련 PG 64건과 구분한다.
 - 2026-09-09, `355d15e` + API/Worker 테스트와 계획 문서 변경에서
   `TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_native_range_enrollment_integration.py -k compound_insured -q`:
   전용 합성 PostgreSQL에서 1 passed, 32 deselected(1.81초).
@@ -44,7 +49,7 @@
   직전 잘못된 전용 DB URL 시도는 fixture 실행 전 guard가 거부했다. 통과로 집계하지 않는다.
 - 합성 문서 통과는 실제 보관 문서 전체 연결·분석 품질이나 외부 AI 실행 성공을 뜻하지 않는다.
   보호 진단의 원문·값·식별자와 수치는 저장소 밖에 보존하며, 전체 필수 검사와 재처리
-  통합 검증은 진행 중이다.
+  보호된 전체 재처리와 최종 전환 수용은 진행 중이다.
 
 보호된 대표 증권의 읽기 전용 검사에서 직접 원문 가입 연결과 최소화된 입력 범위의
 전제조건을 확인했다. 이 검사는 외부 AI·가입 게시·DB 변경을 수행하지 않았으며 전량 성공으로
