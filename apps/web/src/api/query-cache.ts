@@ -89,7 +89,7 @@ export class QueryCache {
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
           entry.snapshot = {
-            data: undefined,
+            data: entry.snapshot.data,
             error: isApiError(error) ? error : undefined,
             loading: false,
           };

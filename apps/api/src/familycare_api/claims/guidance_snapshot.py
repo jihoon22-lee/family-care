@@ -14,6 +14,13 @@ from familycare_api.guidance.models import (
 )
 
 
+class ClaimReviewProvenance(GuidanceModel):
+    review_job_id: UUID
+    original_decision_run_id: UUID
+    source_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    result_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ClaimLocalGuidanceSnapshot(GuidanceModel):
     schema_version: Literal["claim-local-guidance-snapshot-v1"] = "claim-local-guidance-snapshot-v1"
     run_id: UUID
@@ -24,3 +31,4 @@ class ClaimLocalGuidanceSnapshot(GuidanceModel):
     versions: GuidanceVersions
     candidate: GuidanceCandidate
     expenses: GuidanceExpenses | None
+    review: ClaimReviewProvenance | None = None

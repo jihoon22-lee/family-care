@@ -628,6 +628,25 @@ export async function mockSyntheticEventApi(
     const path = url.pathname;
     const method = request.method();
 
+    if (method === "GET" && path === "/api/v1/family-members") {
+      await fulfillJson(route, [
+        {
+          id: MEMBER_ID,
+          display_name: "Family Member A",
+          internal_alias: "Synthetic Member A",
+          version: 1,
+          deleted: false,
+        },
+      ]);
+      return;
+    }
+    if (
+      method === "GET" &&
+      path === `/api/v1/medical-events/${EVENT_ID}/guidance-reviews/current`
+    ) {
+      await fulfillJson(route, null);
+      return;
+    }
     if (method === "POST" && path === "/api/v1/medical-events") {
       const body = requestBody(route);
       savedEvent = currentEvent(
@@ -1204,5 +1223,7 @@ export async function mockLocalGuidanceClaimApi(
     runId: RESULT_ID,
     claimId: savedClaim.id,
     coverage: selected.ref,
+    result: response,
+    claim: savedClaim,
   };
 }

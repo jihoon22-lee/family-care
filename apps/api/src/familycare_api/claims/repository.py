@@ -88,6 +88,7 @@ class ClaimRepository:
         run_id: UUID,
         expected_event_version: int,
         coverage: CanonicalCoverageRef,
+        review_job_id: UUID | None = None,
     ) -> dict[str, object]:
         from familycare_api.claims.guidance_repository import create_guidance_claim
 
@@ -103,6 +104,7 @@ class ClaimRepository:
                         run_id=run_id,
                         expected_event_version=expected_event_version,
                         coverage=coverage,
+                        review_job_id=review_job_id,
                     )
                 return self.get_claim_case(scope, claim_id)
             except psycopg.errors.SerializationFailure, psycopg.errors.DeadlockDetected:

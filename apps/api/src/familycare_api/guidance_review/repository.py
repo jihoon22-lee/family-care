@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
@@ -23,6 +22,7 @@ from familycare_api.decisions.errors import (
 )
 from familycare_api.decisions.repository import DecisionRepository, _medical_event
 from familycare_api.guidance.models import LocalGuidanceResponse
+from familycare_api.guidance_review.binding import read_review_input, require_review_match
 from familycare_api.guidance_review.models import GuidanceReviewJob, GuidanceReviewUsage
 from familycare_api.guidance_review.sources import read_review_sources
 from familycare_api.policies.errors import VersionConflict
@@ -36,12 +36,15 @@ class GuidanceReviewRepository:
     def __init__(self, database_url: str, *, model: str | None = None) -> None:
         self.decisions = DecisionRepository(database_url)
         self.database_url = self.decisions.database_url
-        self.model = model or os.getenv("FAMILYCARE_GUIDANCE_REVIEW_MODEL", DEFAULT_REVIEW_MODEL)
+        selected_model = model or os.getenv(
+            "FAMILYCARE_GUIDANCE_REVIEW_MODEL", DEFAULT_REVIEW_MODEL
+        )
         if (
-            not isinstance(self.model, str)
-            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", self.model) is None
+            not isinstance(selected_model, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", selected_model) is None
         ):
             raise DecisionInvalid
+        self.model = selected_model
 
     def enqueue(
         self,
@@ -98,23 +101,20 @@ class GuidanceReviewRepository:
                     is not False
                 ):
                     raise DecisionInvalid
-                sources = read_review_sources(connection, scope, event, self.decisions)
-                privacy_digest = _privacy_digest(connection, scope)
-                digest = hashlib.sha256(
-                    json.dumps(
-                        [
-                            event_row,
-                            guidance.model_dump(mode="json"),
-                            self.model,
-                            REVIEW_PROMPT_REVISION,
-                            sources.digest_sha256,
-                            privacy_digest,
-                        ],
-                        sort_keys=True,
-                        default=str,
-                        separators=(",", ":"),
-                    ).encode()
-                ).hexdigest()
+                requested = read_review_input(
+                    connection,
+                    scope,
+                    event_row,
+                    run_id,
+                    model=self.model,
+                    prompt_revision=REVIEW_PROMPT_REVISION,
+                    decisions=self.decisions,
+                )
+                sources, privacy_digest, digest = (
+                    requested.sources,
+                    requested.privacy_digest,
+                    requested.input_digest,
+                )
                 # The event lock serializes duplicate clicks before identity lookup.
                 job = connection.execute(
                     "SELECT * FROM guidance_review_jobs WHERE household_space_id=%s "
@@ -156,7 +156,7 @@ class GuidanceReviewRepository:
                         (job["id"], job["id"]),
                     )
                 assert job is not None
-                return _details(connection, job)
+                return _details(connection, job, matched_run_id=run_id)
         except ValidationError, ValueError:
             raise DecisionInvalid from None
         except psycopg.errors.SerializationFailure, psycopg.errors.UniqueViolation:
@@ -164,13 +164,63 @@ class GuidanceReviewRepository:
         except psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
-    def get_job(self, scope: HouseholdScope, job_id: UUID) -> GuidanceReviewJob:
+    def find_for_run(
+        self,
+        scope: HouseholdScope,
+        event_id: UUID,
+        *,
+        run_id: UUID,
+        expected_event_version: int,
+    ) -> GuidanceReviewJob | None:
+        try:
+            with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
+                connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+                event_row = self.decisions._event_row(connection, scope, event_id)
+                if event_row is None:
+                    raise MedicalEventNotFound
+                if event_row["version"] != expected_event_version:
+                    raise VersionConflict
+                requested = read_review_input(
+                    connection,
+                    scope,
+                    event_row,
+                    run_id,
+                    model=self.model,
+                    prompt_revision=REVIEW_PROMPT_REVISION,
+                    decisions=self.decisions,
+                )
+                row = connection.execute(
+                    "SELECT * FROM guidance_review_jobs WHERE household_space_id=%s "
+                    "AND medical_event_id=%s AND input_digest=%s",
+                    (scope.household_space_id, event_id, requested.input_digest),
+                ).fetchone()
+                if row is None:
+                    return None
+                require_review_match(
+                    connection, scope, event_row, run_id, row, decisions=self.decisions
+                )
+                return _details(connection, row, matched_run_id=run_id)
+        except ValidationError, ValueError, psycopg.Error:
+            raise DecisionRepositoryUnavailable from None
+
+    def get_job(
+        self,
+        scope: HouseholdScope,
+        job_id: UUID,
+        *,
+        run_id: UUID | None = None,
+    ) -> GuidanceReviewJob:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
                 row = _scoped_job(connection, scope, job_id)
                 event_row = self.decisions._event_row(connection, scope, row["medical_event_id"])
                 assert event_row is not None
+                if run_id is not None:
+                    require_review_match(
+                        connection, scope, event_row, run_id, row, decisions=self.decisions
+                    )
+                    return _details(connection, row, matched_run_id=run_id)
                 run = connection.execute(
                     "SELECT local_guidance_json FROM decision_runs WHERE id=%s",
                     (row["decision_run_id"],),
@@ -208,7 +258,13 @@ class GuidanceReviewRepository:
         except ValidationError, ValueError, psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
-    def cancel(self, scope: HouseholdScope, job_id: UUID) -> GuidanceReviewJob:
+    def cancel(
+        self,
+        scope: HouseholdScope,
+        job_id: UUID,
+        *,
+        run_id: UUID | None = None,
+    ) -> GuidanceReviewJob:
         try:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 row = _scoped_job(connection, scope, job_id)
@@ -217,6 +273,10 @@ class GuidanceReviewRepository:
                 )
                 if event is None:
                     raise MedicalEventNotFound
+                if run_id is not None:
+                    require_review_match(
+                        connection, scope, event, run_id, row, decisions=self.decisions
+                    )
                 cancelled = connection.execute(
                     "UPDATE guidance_review_jobs SET state='cancelled',"
                     "completed_at=clock_timestamp(),"
@@ -224,7 +284,11 @@ class GuidanceReviewRepository:
                     "AND household_space_id=%s AND state IN ('queued','running') RETURNING *",
                     (job_id, scope.household_space_id),
                 ).fetchone()
-                return _details(connection, cancelled or _scoped_job(connection, scope, job_id))
+                return _details(
+                    connection,
+                    cancelled or _scoped_job(connection, scope, job_id),
+                    matched_run_id=run_id,
+                )
         except psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
@@ -264,7 +328,11 @@ def _job(row: dict[str, Any], *, stale: bool = False) -> GuidanceReviewJob:
 
 
 def _details(
-    connection: psycopg.Connection[dict[str, Any]], row: dict[str, Any], *, stale: bool = False
+    connection: psycopg.Connection[dict[str, Any]],
+    row: dict[str, Any],
+    *,
+    stale: bool = False,
+    matched_run_id: UUID | None = None,
 ) -> GuidanceReviewJob:
     result = connection.execute(
         "SELECT result_json FROM guidance_review_results WHERE review_job_id=%s",
@@ -305,5 +373,6 @@ def _details(
         | {
             "result": result["result_json"] if result else None,
             "usage": usage,
+            "matched_decision_run_id": None if stale else matched_run_id or row["decision_run_id"],
         }
     )

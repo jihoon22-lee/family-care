@@ -28,6 +28,7 @@ class ClaimStore(Protocol):
         run_id: UUID,
         expected_event_version: int,
         coverage: CanonicalCoverageRef,
+        review_job_id: UUID | None = None,
     ) -> object: ...
 
     def create_claim_case(
@@ -109,6 +110,15 @@ class ClaimService:
 
     def create_claim_case(self, event_id: UUID, request: ClaimCreateRequest) -> object:
         if request.guidance is not None:
+            if request.guidance.review_job_id is not None:
+                return self.repository.create_guidance_claim_case(
+                    self.scope,
+                    event_id,
+                    run_id=request.guidance.run_id,
+                    expected_event_version=request.guidance.expected_event_version,
+                    coverage=request.guidance.coverage,
+                    review_job_id=request.guidance.review_job_id,
+                )
             return self.repository.create_guidance_claim_case(
                 self.scope,
                 event_id,

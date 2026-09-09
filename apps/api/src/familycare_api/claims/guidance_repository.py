@@ -7,11 +7,15 @@ import psycopg
 from psycopg.types.json import Jsonb
 
 from familycare_api.claims.errors import ClaimInvalid
-from familycare_api.claims.snapshot import build_guidance_claim_snapshot
+from familycare_api.claims.snapshot import (
+    build_guidance_claim_snapshot,
+    build_review_guidance_claim_snapshot,
+)
 from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.decisions.errors import DecisionInvalid, MedicalEventNotFound
 from familycare_api.decisions.repository import DecisionRepository, _medical_event
-from familycare_api.guidance.models import LocalGuidanceResponse
+from familycare_api.guidance_review.binding import resolve_guidance_source
 from familycare_api.insurance_reconciliation import claim_aliases
 from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 
@@ -114,28 +118,24 @@ def create_guidance_claim(
     run_id: UUID,
     expected_event_version: int,
     coverage: CanonicalCoverageRef,
+    review_job_id: UUID | None = None,
 ) -> UUID:
     event_row = repository._event_row(connection, scope, event_id, for_update=True)
     if event_row is None or event_row["version"] != expected_event_version:
         raise ClaimInvalid
     event = _medical_event(event_row)
-    run = connection.execute(
-        """
-        SELECT local_guidance_json FROM decision_runs
-        WHERE id=%s AND household_space_id=%s AND medical_event_id=%s
-          AND event_version=%s
-        """,
-        (run_id, scope.household_space_id, event_id, expected_event_version),
-    ).fetchone()
-    if run is None or run["local_guidance_json"] is None:
-        raise ClaimInvalid
-    guidance = LocalGuidanceResponse.model_validate(run["local_guidance_json"])
-    if (
-        guidance.medical_event_id != event.id
-        or guidance.family_member_id != event.family_member_id
-        or repository._local_guidance_is_stale(connection, scope, event, guidance) is not False
-    ):
-        raise ClaimInvalid
+    try:
+        source = resolve_guidance_source(
+            connection,
+            scope,
+            event_id,
+            decision_run_id=run_id,
+            expected_event_version=expected_event_version,
+            review_job_id=review_job_id,
+        )
+    except DecisionInvalid, MedicalEventNotFound:
+        raise ClaimInvalid from None
+    guidance = source.guidance
     candidates = tuple(item for item in guidance.candidates if item.ref == coverage)
     if len(candidates) != 1:
         raise ClaimInvalid
@@ -187,7 +187,11 @@ def create_guidance_claim(
     existing = lookup(connection, scope, event_id, event.family_member_id, coverage.coverage_id)
     if existing is not None:
         return existing
-    snapshot = build_guidance_claim_snapshot(guidance, coverage, run_id=run_id)
+    snapshot = (
+        build_review_guidance_claim_snapshot(source, coverage)
+        if review_job_id is not None
+        else build_guidance_claim_snapshot(guidance, coverage, run_id=run_id)
+    )
     claim_id = uuid4()
     connection.execute(
         """
@@ -214,8 +218,8 @@ def create_guidance_claim(
         """
         INSERT INTO claim_case_snapshots(id,claim_case_id,snapshot_version,
           candidate_snapshot_json,rule_snapshot_json,policy_snapshot_json,evidence_snapshot_json,
-          calculation_snapshot_json,snapshot_sha256)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+          calculation_snapshot_json,snapshot_sha256,review_job_id)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         """,
         (
             uuid4(),
@@ -227,6 +231,7 @@ def create_guidance_claim(
             Jsonb(values["evidence_snapshot"]),
             Jsonb(values["calculation_snapshot"]),
             values["snapshot_sha256"],
+            review_job_id,
         ),
     )
     connection.execute(

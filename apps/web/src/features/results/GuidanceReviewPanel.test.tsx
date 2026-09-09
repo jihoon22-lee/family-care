@@ -7,6 +7,7 @@ import {
   cancelGuidanceReview,
   createGuidanceReview,
   getGuidanceReview,
+  getCurrentGuidanceReview,
 } from "../../api/guidance-reviews";
 import { authStore } from "../identity/authStore";
 import { GuidanceReviewPanel } from "./GuidanceReviewPanel";
@@ -15,6 +16,7 @@ vi.mock("../../api/guidance-reviews", () => ({
   createGuidanceReview: vi.fn(),
   getGuidanceReview: vi.fn(),
   cancelGuidanceReview: vi.fn(),
+  getCurrentGuidanceReview: vi.fn(),
 }));
 const props = {
   eventId: "synthetic-event-001",
@@ -140,10 +142,58 @@ function reviewedJob(): GuidanceReviewJob {
     },
   };
 }
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(getCurrentGuidanceReview).mockResolvedValue(null);
+});
 afterEach(() => vi.useRealTimers());
 
 describe("optional guidance review", () => {
+  it("reopens a saved equivalent-input review without creating a new paid request", async () => {
+    vi.mocked(getCurrentGuidanceReview).mockResolvedValue({
+      ...reviewedJob(),
+      decision_run_id: "synthetic-earlier-run",
+      matched_decision_run_id: props.decisionRunId,
+    });
+    render(<GuidanceReviewPanel {...props} />);
+    expect(
+      await screen.findByText("일부 자료의 검수가 완료되었습니다."),
+    ).toBeVisible();
+    expect(createGuidanceReview).not.toHaveBeenCalled();
+    expect(getCurrentGuidanceReview).toHaveBeenCalledWith(
+      props.eventId,
+      {
+        decision_run_id: props.decisionRunId,
+        expected_event_version: props.eventVersion,
+      },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("pauses a long-running review and resumes with GET while preserving focus", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getCurrentGuidanceReview).mockResolvedValue(job("running"));
+    vi.mocked(getGuidanceReview).mockImplementation(async () => job("running"));
+    render(<GuidanceReviewPanel {...props} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const cancel = screen.getByRole("button", { name: "검수 취소" });
+    cancel.focus();
+    for (let poll = 0; poll < 40; poll += 1)
+      await act(async () => vi.advanceTimersByTimeAsync(1500));
+    const reads = vi.mocked(getGuidanceReview).mock.calls.length;
+    expect(reads).toBeGreaterThan(0);
+    expect(reads).toBeLessThan(60);
+    expect(cancel).toHaveFocus();
+    await act(async () => vi.advanceTimersByTimeAsync(5000));
+    expect(getGuidanceReview).toHaveBeenCalledTimes(reads);
+    fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+    await act(async () => vi.advanceTimersByTimeAsync(1500));
+    expect(getGuidanceReview).toHaveBeenCalledTimes(reads + 1);
+    expect(createGuidanceReview).not.toHaveBeenCalled();
+  });
+
   it("does not request anything on mount and submits the current run once on repeated clicks", async () => {
     let resolve!: (value: GuidanceReviewJob) => void;
     vi.mocked(createGuidanceReview).mockReturnValue(
@@ -181,6 +231,7 @@ describe("optional guidance review", () => {
     expect(getGuidanceReview).toHaveBeenCalledWith(
       "synthetic-review-001",
       expect.any(AbortSignal),
+      props.decisionRunId,
     );
     expect(screen.getByText(/이미 전송된 요청의 비용/)).toBeVisible();
     await act(async () =>

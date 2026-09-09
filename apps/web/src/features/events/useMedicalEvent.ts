@@ -27,8 +27,8 @@ export function useMedicalEvent(eventId: string) {
   }, [cache, key]);
 
   const update = useCallback(
-    async (input: UpdateMedicalEventRequest) => {
-      const event = await updateMedicalEvent(eventId, input);
+    async (input: UpdateMedicalEventRequest, signal?: AbortSignal) => {
+      const event = await updateMedicalEvent(eventId, input, signal);
       cache.invalidate(key);
       cache.invalidate(`medical-event-result:${eventId}:`);
       return event;
@@ -50,12 +50,15 @@ export function useMedicalEvent(eventId: string) {
     [],
   );
 
-  const analyze = useCallback(async () => {
-    const result = await analyzeMedicalEvent(eventId);
-    cache.invalidate(key);
-    cache.invalidate(`medical-event-result:${eventId}:`);
-    return result;
-  }, [cache, eventId, key]);
+  const analyze = useCallback(
+    async (signal?: AbortSignal) => {
+      const result = await analyzeMedicalEvent(eventId, signal);
+      cache.invalidate(key);
+      cache.invalidate(`medical-event-result:${eventId}:`);
+      return result;
+    },
+    [cache, eventId, key],
+  );
 
   return {
     ...resource,

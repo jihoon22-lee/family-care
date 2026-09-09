@@ -229,7 +229,7 @@ export function EventComposer({
     <main className={styles.composer} id="main-content">
       <header className={styles.heading}>
         <p className={styles.kicker}>Medical event</p>
-        <h1>새 사건 기록</h1>
+        <h1>{initialEvent ? "사건 정보 보완" : "새 사건 기록"}</h1>
         <p className={styles.intro}>
           짧은 상황부터 기록하고, 확인 가능한 정보만 다음 단계에 사용합니다.
         </p>

@@ -346,6 +346,24 @@ function installFetch(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       void init;
       const url = new URL(String(input), window.location.origin);
+      if (url.pathname === "/api/v1/family-members") {
+        return jsonResponse([
+          {
+            id: "synthetic-other-member",
+            display_name: "Family Member Other",
+            internal_alias: "Synthetic Other",
+            version: 1,
+            deleted: false,
+          },
+          {
+            id: event.family_member_id,
+            display_name: "Family Member A",
+            internal_alias: "Synthetic A",
+            version: 1,
+            deleted: false,
+          },
+        ]);
+      }
       if (url.pathname === `/api/v1/medical-events/${EVENT_ID}`) {
         return jsonResponse(event);
       }
@@ -355,6 +373,11 @@ function installFetch(
       if (url.pathname === `/api/v1/medical-events/${EVENT_ID}/calculations`) {
         return jsonResponse(CALCULATIONS);
       }
+      if (
+        url.pathname ===
+        `/api/v1/medical-events/${EVENT_ID}/guidance-reviews/current`
+      )
+        return jsonResponse(null);
       return jsonResponse(
         { error_code: "NOT_FOUND", message: "not found" },
         404,
@@ -432,6 +455,20 @@ function installClaimFetch(
 }
 
 describe("local guidance claim creation", () => {
+  it("identifies the exact family member, event dates and analysis source time", async () => {
+    const decision = localResult();
+    installFetch(EVENT, decision);
+    renderWithProviders(<EventResultPage eventId={EVENT_ID} version={2} />);
+    expect(await screen.findByText("Family Member A")).toBeVisible();
+    expect(screen.queryByText("Family Member Other")).toBeNull();
+    expect(screen.getByText(EVENT.event_date)).toBeVisible();
+    expect(screen.getByText(EVENT.visit_date)).toBeVisible();
+    expect(screen.getByText("자료 확인 기준")).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "사건 정보 보완" }),
+    ).toHaveAttribute("href", `/app/events/${EVENT_ID}`);
+  });
+
   it("sends only the saved run selector, prevents duplicate clicks and opens the returned claim", async () => {
     const decision = localResult();
     let finish!: (response: Response) => void;

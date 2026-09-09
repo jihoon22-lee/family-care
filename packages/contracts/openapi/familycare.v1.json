@@ -2108,6 +2108,16 @@
             "title": "Medical Event Id",
             "type": "string"
           },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimReviewProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "run_id": {
             "format": "uuid",
             "title": "Run Id",
@@ -2134,6 +2144,39 @@
           "expenses"
         ],
         "title": "ClaimLocalGuidanceSnapshot",
+        "type": "object"
+      },
+      "ClaimReviewProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "original_decision_run_id": {
+            "format": "uuid",
+            "title": "Original Decision Run Id",
+            "type": "string"
+          },
+          "result_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Result Digest",
+            "type": "string"
+          },
+          "review_job_id": {
+            "format": "uuid",
+            "title": "Review Job Id",
+            "type": "string"
+          },
+          "source_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_job_id",
+          "original_decision_run_id",
+          "source_digest",
+          "result_digest"
+        ],
+        "title": "ClaimReviewProvenance",
         "type": "object"
       },
       "ClaimSnapshotResponse": {
@@ -4825,6 +4868,18 @@
             "title": "Expected Event Version",
             "type": "integer"
           },
+          "review_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Job Id"
+          },
           "run_id": {
             "format": "uuid",
             "title": "Run Id",
@@ -5366,6 +5421,231 @@
           "page_end"
         ],
         "title": "GuidanceEvidence",
+        "type": "object"
+      },
+      "GuidanceEvidenceDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "maxItems": 4,
+                "minItems": 4,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "clause_label": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Clause Label"
+          },
+          "content_kind": {
+            "enum": [
+              "ORIGINAL",
+              "SUMMARY",
+              "UNAVAILABLE"
+            ],
+            "title": "Content Kind",
+            "type": "string"
+          },
+          "document_label": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Document Label",
+            "type": "string"
+          },
+          "document_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document Version Id"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceEvidence"
+              },
+              {
+                "$ref": "#/components/schemas/GuidanceSemanticEvidence"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "page_end": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "source_document_ref": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Document Ref"
+          },
+          "terms_edition_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Edition Id"
+          },
+          "terms_edition_label": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Terms Edition Label"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "evidence",
+          "content_kind",
+          "document_label",
+          "page_start",
+          "page_end"
+        ],
+        "title": "GuidanceEvidenceDetail",
+        "type": "object"
+      },
+      "GuidanceEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "coverage": {
+            "$ref": "#/components/schemas/CanonicalCoverageRef"
+          },
+          "decision_run_id": {
+            "format": "uuid",
+            "title": "Decision Run Id",
+            "type": "string"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceEvidence"
+              },
+              {
+                "$ref": "#/components/schemas/GuidanceSemanticEvidence"
+              }
+            ],
+            "title": "Evidence"
+          },
+          "expected_event_version": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Expected Event Version",
+            "type": "integer"
+          },
+          "review_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Job Id"
+          }
+        },
+        "required": [
+          "decision_run_id",
+          "expected_event_version",
+          "coverage",
+          "evidence"
+        ],
+        "title": "GuidanceEvidenceRequest",
         "type": "object"
       },
       "GuidanceExpenses": {
@@ -6152,6 +6432,18 @@
             "format": "uuid",
             "title": "Id",
             "type": "string"
+          },
+          "matched_decision_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Decision Run Id"
           },
           "medical_event_id": {
             "format": "uuid",
@@ -16464,6 +16756,23 @@
               "title": "Job Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision Run Id"
+            }
           }
         ],
         "responses": {
@@ -16551,6 +16860,23 @@
               "format": "uuid",
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision Run Id"
             }
           }
         ],
@@ -17708,6 +18034,104 @@
         ]
       }
     },
+    "/api/v1/medical-events/{event_id}/guidance-evidence": {
+      "post": {
+        "operationId": "get_guidance_evidence_api_v1_medical_events__event_id__guidance_evidence_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuidanceEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuidanceEvidenceDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Get Guidance Evidence",
+        "tags": [
+          "guidance evidence"
+        ]
+      }
+    },
     "/api/v1/medical-events/{event_id}/guidance-reviews": {
       "post": {
         "operationId": "request_guidance_review_api_v1_medical_events__event_id__guidance_reviews_post",
@@ -17801,6 +18225,122 @@
           }
         ],
         "summary": "Request Guidance Review",
+        "tags": [
+          "guidance review"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/guidance-reviews/current": {
+      "get": {
+        "operationId": "find_guidance_review_api_v1_medical_events__event_id__guidance_reviews_current_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Decision Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_event_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Event Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/GuidanceReviewJob"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Find Guidance Review Api V1 Medical Events  Event Id  Guidance Reviews Current Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Find Guidance Review",
         "tags": [
           "guidance review"
         ]

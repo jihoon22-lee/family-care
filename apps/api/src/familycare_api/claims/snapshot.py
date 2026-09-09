@@ -23,11 +23,18 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 
-from familycare_api.claims.guidance_snapshot import ClaimLocalGuidanceSnapshot
+from familycare_api.claims.guidance_snapshot import (
+    ClaimLocalGuidanceSnapshot,
+    ClaimReviewProvenance,
+)
 from familycare_api.common.coverage_identity import CanonicalCoverageRef
 from familycare_api.guidance.models import LocalGuidanceResponse
+
+if TYPE_CHECKING:
+    from familycare_api.guidance_review.binding import SavedGuidanceSource
 
 _MISSING = object()
 
@@ -769,6 +776,43 @@ def build_guidance_claim_snapshot(
             pending.extend(value.values())
         elif isinstance(value, list):
             pending.extend(value)
+    return _assemble_guidance_snapshot(local)
+
+
+def build_review_guidance_claim_snapshot(
+    source: SavedGuidanceSource,
+    coverage: CanonicalCoverageRef,
+) -> ClaimCaseSnapshot:
+    """Copy only the repository-resolved review, with explicit original-run provenance."""
+    if (
+        source.review_job_id is None
+        or source.review_source_digest is None
+        or source.review_result_digest is None
+    ):
+        raise SnapshotValidationError("GUIDANCE_REVIEW_CLAIM_SOURCE_REQUIRED")
+    selected = tuple(c for c in source.guidance.candidates if c.ref == coverage)
+    if source.guidance.schema_version != "2" or len(selected) != 1:
+        raise SnapshotValidationError("GUIDANCE_CLAIM_SELECTION_INVALID")
+    local = ClaimLocalGuidanceSnapshot(
+        run_id=source.decision_run_id,
+        medical_event_id=source.guidance.medical_event_id,
+        family_member_id=source.guidance.family_member_id,
+        event_version=source.guidance.event_version,
+        event_date=source.guidance.event_date,
+        versions=source.guidance.versions,
+        candidate=selected[0],
+        expenses=source.guidance.expenses,
+        review=ClaimReviewProvenance(
+            review_job_id=source.review_job_id,
+            original_decision_run_id=source.original_decision_run_id,
+            source_digest=source.review_source_digest,
+            result_digest=source.review_result_digest,
+        ),
+    ).model_dump(mode="json")
+    return _assemble_guidance_snapshot(local)
+
+
+def _assemble_guidance_snapshot(local: dict[str, object]) -> ClaimCaseSnapshot:
     _reject_forbidden_keys(local)
     baseline = build_claim_snapshot({})
     candidate = {**baseline.candidate_snapshot, "local_guidance": local}
@@ -790,6 +834,7 @@ __all__ = [
     "SnapshotValidationError",
     "build_claim_snapshot",
     "build_guidance_claim_snapshot",
+    "build_review_guidance_claim_snapshot",
     "canonical_json",
     "snapshot_sha256",
 ]

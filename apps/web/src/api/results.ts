@@ -2,6 +2,8 @@ import type {
   BenefitCalculationsResponse,
   CoverageDecisionResponse,
   EvidenceDetailResponse,
+  GuidanceEvidenceDetail,
+  GuidanceEvidenceRequest,
 } from "./generated";
 import { apiRequest } from "./http";
 
@@ -17,6 +19,17 @@ export function getEventResult(
   return apiRequest<EventResult>(
     `/api/v1/medical-events/${encodeURIComponent(eventId)}/results/${encodeURIComponent(String(version))}`,
     { method: "GET", signal },
+  );
+}
+
+export function getGuidanceEvidence(
+  eventId: string,
+  input: GuidanceEvidenceRequest,
+  signal?: AbortSignal,
+): Promise<GuidanceEvidenceDetail> {
+  return apiRequest<GuidanceEvidenceDetail>(
+    `/api/v1/medical-events/${encodeURIComponent(eventId)}/guidance-evidence`,
+    { method: "POST", body: JSON.stringify(input), signal },
   );
 }
 

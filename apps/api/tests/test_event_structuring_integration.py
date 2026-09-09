@@ -9,7 +9,7 @@ from uuid import UUID
 import psycopg
 import pytest
 from familycare_api.common.scope import HouseholdScope
-from familycare_api.decisions.errors import MedicalEventNotFound
+from familycare_api.decisions.errors import DecisionInvalid, MedicalEventNotFound
 from familycare_api.decisions.repository import DecisionRepository
 from familycare_api.decisions.schemas import MedicalEventUpdateRequest
 from familycare_api.decisions.service import DecisionService
@@ -231,3 +231,41 @@ def test_user_override_preserves_ai_version_and_wins_in_decision_facts(
         ).fetchone()
     assert versions == [("ai", "superseded", False), ("user", "applied", True)]
     assert audit == ("conflict_detected", "user", "USER_AI_CONFLICT")
+
+
+@pytest.mark.parametrize(("admission", "days"), [(True, 5), (False, 0), (None, 5)])
+def test_combined_admission_answers_preserve_explicit_days(
+    database_url: str, admission: bool | None, days: int
+) -> None:
+    event = _event(database_url)
+    service = DecisionService(HouseholdScope(HOUSEHOLD_A), DecisionRepository(database_url))
+    updated = service.update_medical_event(
+        event.id,
+        MedicalEventUpdateRequest.model_validate(
+            {
+                "expected_version": event.version,
+                "facts": {"MedicalEvent.admission_days": {"value": days, "confirmation": "user"}},
+                "structured_facts": [{"field_id": "admission", "value": admission}],
+            }
+        ),
+    )
+    assert updated.facts["MedicalEvent.admission_days"].value == days
+    assert updated.facts["MedicalEvent.admission_days"].confirmation == "user"
+
+
+def test_conflicting_combined_admission_answers_do_not_change_event(database_url: str) -> None:
+    event = _event(database_url)
+    scope = HouseholdScope(HOUSEHOLD_A)
+    repository = DecisionRepository(database_url)
+    with pytest.raises(DecisionInvalid):
+        DecisionService(scope, repository).update_medical_event(
+            event.id,
+            MedicalEventUpdateRequest.model_validate(
+                {
+                    "expected_version": event.version,
+                    "facts": {"MedicalEvent.admission_days": {"value": 5, "confirmation": "user"}},
+                    "structured_facts": [{"field_id": "admission", "value": False}],
+                }
+            ),
+        )
+    assert repository.get_medical_event(scope, event.id).version == event.version

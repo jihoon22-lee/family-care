@@ -524,6 +524,8 @@ def validate_openapi() -> list[str]:
         "/api/v1/medical-events/{event_id}/results/{version}",
         "/api/v1/medical-event-structuring-jobs/{job_id}",
         "/api/v1/medical-events/{event_id}/guidance-reviews",
+        "/api/v1/medical-events/{event_id}/guidance-reviews/current",
+        "/api/v1/medical-events/{event_id}/guidance-evidence",
         "/api/v1/guidance-reviews/{job_id}",
         "/api/v1/guidance-reviews/{job_id}/cancel",
         "/api/v1/medical-events/{event_id}/claims",

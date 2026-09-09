@@ -44,6 +44,7 @@ class ClaimErrorResponse(StrictModel):
 
 class GuidanceClaimSelection(StrictModel):
     run_id: UUID
+    review_job_id: UUID | None = None
     expected_event_version: Annotated[int, Field(ge=1, le=2_147_483_647)]
     coverage: CanonicalCoverageRef
 

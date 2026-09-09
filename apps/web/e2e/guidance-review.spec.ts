@@ -102,6 +102,11 @@ test("optional review exposes partial opinions and program changes with keyboard
   await page.route(/\/api\/v1\/.*guidance-reviews/, async (route) => {
     const request = route.request();
     requests.push({ method: request.method(), body: request.postDataJSON() });
+    if (new URL(request.url()).pathname.endsWith("/current")) {
+      requests.pop();
+      await route.fulfill({ json: null });
+      return;
+    }
     await route.fulfill({
       json: reviewJob(
         mock.eventId,
@@ -147,7 +152,7 @@ test("optional review exposes partial opinions and program changes with keyboard
     review.getByText("추가된 후보 · Sample Reviewed Coverage"),
   ).toBeVisible();
   await expect(review.getByRole("button", { name: /청구 준비/ })).toHaveCount(
-    0,
+    1,
   );
   expect(
     await page.evaluate(
@@ -184,7 +189,11 @@ test("review failure preserves local candidates and a retried running review can
   let cancelled = false;
   await page.route(/\/api\/v1\/.*guidance-reviews/, async (route) => {
     const request = route.request();
-    if (request.url().endsWith("/cancel")) {
+    if (new URL(request.url()).pathname.endsWith("/current")) {
+      await route.fulfill({ json: null });
+      return;
+    }
+    if (new URL(request.url()).pathname.endsWith("/cancel")) {
       cancelled = true;
       await route.fulfill({
         json: reviewJob(mock.eventId, mock.runId, "cancelled"),

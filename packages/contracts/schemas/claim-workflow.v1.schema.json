@@ -1865,6 +1865,39 @@
       "title": "CanonicalCoverageRef",
       "type": "object"
     },
+    "ClaimGuidanceClaimReviewProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "review_job_id": {
+          "format": "uuid",
+          "title": "Review Job Id",
+          "type": "string"
+        },
+        "original_decision_run_id": {
+          "format": "uuid",
+          "title": "Original Decision Run Id",
+          "type": "string"
+        },
+        "source_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Digest",
+          "type": "string"
+        },
+        "result_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Result Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "review_job_id",
+        "original_decision_run_id",
+        "source_digest",
+        "result_digest"
+      ],
+      "title": "ClaimReviewProvenance",
+      "type": "object"
+    },
     "ClaimGuidanceGuidanceCalculatedComponent": {
       "additionalProperties": false,
       "properties": {
@@ -3879,6 +3912,17 @@
               "type": "null"
             }
           ]
+        },
+        "review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimGuidanceClaimReviewProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

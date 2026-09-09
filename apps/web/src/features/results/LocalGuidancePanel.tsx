@@ -10,8 +10,12 @@ import {
   CandidateAmounts,
   ContractAmount,
   Expenses,
+  EvidencePages,
 } from "./LocalGuidanceDetails";
-import { pageLabel } from "./resultPresentation";
+import {
+  GuidanceEvidenceContext,
+  type GuidanceEvidenceReferences,
+} from "./GuidanceEvidenceContext";
 import { LocalGuidanceSubtotals } from "./LocalGuidanceSubtotals";
 import styles from "./Results.module.css";
 import panelStyles from "./LocalGuidancePanel.module.css";
@@ -64,10 +68,15 @@ function Candidate({
   candidate,
   onStartClaim,
   claimStartDisabled,
+  onOpenEvidence,
 }: {
   candidate: GuidanceCandidate;
   onStartClaim?: (coverage: CanonicalCoverageRef) => void;
   claimStartDisabled?: boolean;
+  onOpenEvidence?: (
+    coverage: CanonicalCoverageRef,
+    evidence: GuidanceEvidenceReferences,
+  ) => void;
 }) {
   const titleId = useId();
   const evidence = [
@@ -77,93 +86,104 @@ function Candidate({
           (condition) => condition.evidence,
         ),
         ...(candidate.estimate.evidence ?? []),
+        ...(candidate.relevance ?? []).flatMap((item) => item.evidence),
+        ...(candidate.scenarios ?? []).flatMap(
+          (scenario) => scenario.estimate.evidence ?? [],
+        ),
+        ...(candidate.cases ?? []).flatMap(
+          (item) => item.estimate.evidence ?? [],
+        ),
+        ...(candidate.contract_amount?.evidence ?? []).filter(
+          (item): item is GuidanceEvidence =>
+            item.kind === "OPERATIONAL_EVIDENCE" ||
+            item.kind === "TERMS_SECTION",
+        ),
       ].map((item) => [evidenceKey(item), item]),
     ).values(),
   ];
   return (
-    <article
-      className={`${styles.candidateCard} ${panelStyles.card}`}
-      aria-labelledby={titleId}
+    <GuidanceEvidenceContext.Provider
+      value={
+        onOpenEvidence
+          ? (refs) => onOpenEvidence(candidate.ref, refs)
+          : undefined
+      }
     >
-      <div className={styles.cardHeading}>
-        <div>
-          <span className={styles.contractLabel}>
-            {candidate.contract_label}
+      <article
+        className={`${styles.candidateCard} ${panelStyles.card}`}
+        aria-labelledby={titleId}
+      >
+        <div className={styles.cardHeading}>
+          <div>
+            <span className={styles.contractLabel}>
+              {candidate.contract_label}
+            </span>
+            <h3 id={titleId}>{candidate.coverage_label}</h3>
+          </div>
+          <span className={styles.benefitBadge}>
+            {candidate.benefit_kind === "FIXED"
+              ? "정액형"
+              : candidate.benefit_kind === "INDEMNITY"
+                ? "실손형"
+                : "보장 유형 확인 필요"}
           </span>
-          <h3 id={titleId}>{candidate.coverage_label}</h3>
         </div>
-        <span className={styles.benefitBadge}>
-          {candidate.benefit_kind === "FIXED"
-            ? "정액형"
-            : candidate.benefit_kind === "INDEMNITY"
-              ? "실손형"
-              : "보장 유형 확인 필요"}
-        </span>
-      </div>
-      <p className={styles.cardCopy}>
-        {candidate.condition_result === "MATCH"
-          ? "입력한 사건과 가입 문서의 보장 조건이 관련됩니다."
-          : "입력한 사건과 관련된 담보이며, 추가 사건 정보에 따라 적용 조건이 달라질 수 있습니다."}
-      </p>
-      {candidate.estimate.kind === "FORMULA" &&
-      candidate.canonical_identity?.field_conflicts?.includes(
-        "insured_amount",
-      ) ? (
         <p className={styles.cardCopy}>
-          가입 분석과 앱 원장의 금액이 달라 계산식만 안내합니다.
+          {candidate.condition_result === "MATCH"
+            ? "입력한 사건과 가입 문서의 보장 조건이 관련됩니다."
+            : "입력한 사건과 관련된 담보이며, 추가 사건 정보에 따라 적용 조건이 달라질 수 있습니다."}
         </p>
-      ) : null}
-      {candidate.estimate.kind === "FORMULA" &&
-      candidate.canonical_identity?.field_conflicts?.includes("currency") ? (
-        <p className={styles.cardCopy}>
-          가입 분석과 앱 원장의 통화가 달라 계산식만 안내합니다.
-        </p>
-      ) : null}
-      {candidate.contract_amount ? (
-        <ContractAmount value={candidate.contract_amount} />
-      ) : null}
-      <CandidateAmounts candidate={candidate} inputLabel={guidanceInputLabel} />
-      {candidate.freshness === "STATUS_UNRESOLVED" ? (
-        <p className={styles.cardCopy}>
-          사건일의 계약 상태에 따라 이 후보가 달라질 수 있습니다.
-        </p>
-      ) : null}
-      {candidate.assumptions?.includes("EVENT_DATE_REQUIRED") ? (
-        <p className={styles.cardCopy}>
-          사건일이 확인되면 계약 기간과 적용 조건을 다시 계산합니다.
-        </p>
-      ) : null}
-      {candidate.benefit_kind === "INDEMNITY" ? (
-        <p className={styles.cardCopy}>
-          실손형 예상액은 실제 지출과 자기부담 조건을 기준으로 하며 정액형과
-          별도로 봅니다.
-        </p>
-      ) : null}
-      {evidence.length ? (
-        <div className={styles.certificateEvidence}>
-          <strong>근거 페이지</strong>
-          <ul>
-            {evidence.map((item) => (
-              <li key={evidenceKey(item)}>
-                {item.kind === "OPERATIONAL_EVIDENCE" ? "가입 문서" : "약관"}{" "}
-                {pageLabel(item.page_start, item.page_end)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {onStartClaim ? (
-        <button
-          type="button"
-          className={styles.primaryButton}
-          disabled={claimStartDisabled}
-          aria-label={`${candidate.coverage_label} 청구 준비`}
-          onClick={() => onStartClaim(candidate.ref)}
-        >
-          청구 준비
-        </button>
-      ) : null}
-    </article>
+        {candidate.estimate.kind === "FORMULA" &&
+        candidate.canonical_identity?.field_conflicts?.includes(
+          "insured_amount",
+        ) ? (
+          <p className={styles.cardCopy}>
+            가입 분석과 앱 원장의 금액이 달라 계산식만 안내합니다.
+          </p>
+        ) : null}
+        {candidate.estimate.kind === "FORMULA" &&
+        candidate.canonical_identity?.field_conflicts?.includes("currency") ? (
+          <p className={styles.cardCopy}>
+            가입 분석과 앱 원장의 통화가 달라 계산식만 안내합니다.
+          </p>
+        ) : null}
+        {candidate.contract_amount ? (
+          <ContractAmount value={candidate.contract_amount} />
+        ) : null}
+        <CandidateAmounts
+          candidate={candidate}
+          inputLabel={guidanceInputLabel}
+        />
+        {candidate.freshness === "STATUS_UNRESOLVED" ? (
+          <p className={styles.cardCopy}>
+            사건일의 계약 상태에 따라 이 후보가 달라질 수 있습니다.
+          </p>
+        ) : null}
+        {candidate.assumptions?.includes("EVENT_DATE_REQUIRED") ? (
+          <p className={styles.cardCopy}>
+            사건일이 확인되면 계약 기간과 적용 조건을 다시 계산합니다.
+          </p>
+        ) : null}
+        {candidate.benefit_kind === "INDEMNITY" ? (
+          <p className={styles.cardCopy}>
+            실손형 예상액은 실제 지출과 자기부담 조건을 기준으로 하며 정액형과
+            별도로 봅니다.
+          </p>
+        ) : null}
+        <EvidencePages evidence={evidence} />
+        {onStartClaim ? (
+          <button
+            type="button"
+            className={styles.primaryButton}
+            disabled={claimStartDisabled}
+            aria-label={`${candidate.coverage_label} 청구 준비`}
+            onClick={() => onStartClaim(candidate.ref)}
+          >
+            청구 준비
+          </button>
+        ) : null}
+      </article>
+    </GuidanceEvidenceContext.Provider>
   );
 }
 
@@ -173,12 +193,17 @@ export function LocalGuidancePanel({
   showEmpty = true,
   onStartClaim,
   claimStartDisabled = false,
+  onOpenEvidence,
 }: {
   guidance: LocalGuidanceResponse;
   onRetry?: () => void;
   showEmpty?: boolean;
   onStartClaim?: (coverage: CanonicalCoverageRef) => void;
   claimStartDisabled?: boolean;
+  onOpenEvidence?: (
+    coverage: CanonicalCoverageRef,
+    evidence: GuidanceEvidenceReferences,
+  ) => void;
 }) {
   const id = useId();
   const questions = [
@@ -241,6 +266,7 @@ export function LocalGuidancePanel({
                   candidate={candidate}
                   onStartClaim={onStartClaim}
                   claimStartDisabled={claimStartDisabled}
+                  onOpenEvidence={onOpenEvidence}
                 />
               ))}
             </div>
