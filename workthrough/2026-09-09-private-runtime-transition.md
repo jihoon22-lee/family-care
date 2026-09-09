@@ -131,3 +131,11 @@ to `apps/api/tests/test_private_runtime_restore_integration.py` and
 suite. Script unit mocks now use explicitly typed handles and direct standard-library monkeypatches;
 no required check or typing rule is removed. The coordinator fake adapter also receives complete
 annotations in its follow-up. Full combined verification is rerun after these test-only changes.
+
+After test relocation and typed fake adapters, clean source `e04604c` passed full mypy
+(**350 source files**) and default pytest (**3,558 passed, 754 integration deselected,
+3 subtests passed**, 55.50s). The relocated restore/coordinator integration tests plus state
+integration passed **12 tests** (21.09s) on the dedicated migrated PostgreSQL 18.6 container.
+Documentation, repository safety, generated contracts, 11 commit subjects, actionlint and diff
+checks passed. The earlier draft CI's PostgreSQL integration also passed (20m39s); its Python
+failure remains recorded until a new run verifies the corrected head.
