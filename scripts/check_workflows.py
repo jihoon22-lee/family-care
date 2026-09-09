@@ -226,6 +226,40 @@ def _job_level_env_blocks(content: str) -> tuple[str, ...]:
     )
 
 
+def _step_block(content: str, name: str) -> str:
+    match = re.search(
+        rf"(?ms)^      - name: {re.escape(name)}\s*$\n(?P<body>.*?)(?=^      - |\Z)",
+        content,
+    )
+    return match.group("body") if match is not None else ""
+
+
+def _validate_release_test_environment(validate: str, relative: Path) -> list[str]:
+    errors: list[str] = []
+    unit = _step_block(validate, "Validate Python")
+    integration = _step_block(validate, "Validate PostgreSQL integration")
+    database_variables = (
+        "FAMILYCARE_DATABASE_URL",
+        "FAMILYCARE_TEST_DATABASE_URL",
+        "FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB",
+    )
+    if any(
+        variable in block
+        for variable in database_variables
+        for block in (*_job_level_env_blocks(validate), unit)
+    ):
+        errors.append(f"{relative}: unit tests must not inherit database configuration")
+    if "uv run pytest -q" not in unit:
+        errors.append(f"{relative}: separate Python unit validation is required")
+    if any(f"{variable}:" not in integration for variable in database_variables):
+        errors.append(f"{relative}: integration database configuration must be step-scoped")
+    migration = integration.find("uv run alembic -c apps/api/alembic.ini upgrade head")
+    tests = integration.find("uv run pytest -m integration -q")
+    if not 0 <= migration < tests:
+        errors.append(f"{relative}: integration tests require migration in the same step")
+    return errors
+
+
 def _release_matrix(publish: str) -> tuple[tuple[str, str], ...]:
     return tuple(
         (match.group("name"), match.group("dockerfile"))
@@ -278,6 +312,7 @@ def validate_release(content: str) -> list[str]:
     verify = _job_block(content, "verify-publication")
     release = _job_block(content, "publish-release")
     validate = _job_block(content, "validate-foundation")
+    errors.extend(_validate_release_test_environment(validate, relative))
 
     if any(re.search(r"\$\{\{\s*runner\.", block) for block in _job_level_env_blocks(content)):
         errors.append(f"{relative}: job-level env cannot use the runner context")

@@ -104,6 +104,18 @@ def test_current_release_satisfies_workflow_policy() -> None:
     assert validate_release(current_release()) == []
 
 
+def test_release_unit_tests_reject_inherited_runtime_database_configuration() -> None:
+    content = current_release()
+    job = "  validate-foundation:\n"
+    unsafe = content.replace(
+        job,
+        job + "    env:\n      FAMILYCARE_DATABASE_URL: postgresql://synthetic.invalid/test\n",
+        1,
+    )
+
+    assert any("unit tests must not inherit" in error for error in validate_release(unsafe))
+
+
 def test_current_dependabot_satisfies_update_policy() -> None:
     assert validate_dependabot(current_dependabot()) == []
 
