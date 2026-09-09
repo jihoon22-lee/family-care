@@ -84,3 +84,12 @@ CI `34341189086`의 전체 PostgreSQL은 798건 통과/2건 실패(1399.85초)�
 checkout이 내부 downgrade를 해석할 수 없어 발생했으며 DB head는 그대로 보존됐다.
 이 검사는 0067 후속 소스와 최신 전체 CI에서 다시 확인한다. Scoped Ruff와 diff는
 통과했으며 이전 CI를 전체 통과로 표시하지 않는다.
+
+후속 CI `34344216914`는 799건 통과/1건 실패(1389.07초)였다. 선행 consumers 테스트가
+남긴 metadata를 date-origin의 전역 게시기가 함께 처리한 격리 실패였다. 실제 순서인
+consumers→date-origin으로 1건 실패/3건 통과(5.80초)를 재현했다. `c485d79`는 검증된
+전용 test URL에서 generation을 정리한 뒤 현재 job fixture를 생성하도록 순서를 고친다.
+제품 코드·migration·정확한 게시 건수/날짜 판정 assertions는 유지한다. 같은 순서 4건
+통과(6.11초), 확장 7개 모듈 44건 통과/1건 환경 실패(57.06초)를 기록했다. 환경 실패는
+0068 합성 DB를 0066 checkout의 내부 migration 검사가 해석하지 못한 것이며 DB head는
+보존됐다. Ruff·문서/안전·diff·Git 규칙은 통과했고 최신 전체 CI를 다시 확인한다.
