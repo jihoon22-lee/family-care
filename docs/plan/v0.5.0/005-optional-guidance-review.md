@@ -1,6 +1,6 @@
 # v0.5 B05: Optional source-grounded guidance review
 
-- 상태: in_progress
+- 상태: completed
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP07 #67](https://github.com/jihoon22-lee/family-care/issues/67)
 - 구현 기반: B04 [PR #79](https://github.com/jihoon22-lee/family-care/pull/79), merge `05325888bb52b7b6c00365fd237d7473bef1dc20`; source `02be761` CI 34289732889 필수 7/7 통과.
@@ -13,7 +13,7 @@
 3. completed — structured 검수의 인용·가입·가족·입력·규칙을 검증한다. 검증 가능한 교정은 같은 로컬 엔진으로 재평가하고 AI 의견/숫자를 사실·지급액으로 직접 저장하지 않는다.
 4. completed — 별도 작업 lease/deadline/취소와 durable 요청 예산을 연결한다. SDK retry 0, 실제 HTTP 수·입출력 토큰·문서별/전체 한도, 응답 소실·재시작·오래된 완료를 검증한다.
 5. completed — API와 생성 계약, 선택 검수 상태·범위·차이 소비를 연결한다. 실패/부분/미설정에도 로컬 결과·금액·과거 snapshot을 유지한다.
-6. in_progress — 합성 누락/예외 개선과 새 오류를 함께 평가하고 관련 PG·HTTP transport·브라우저 및 전체 필수 검사, PR/CI/병합 증거를 기록한다.
+6. completed — 합성 누락/예외 개선과 새 오류를 함께 평가하고 관련 PG·HTTP transport·브라우저 및 전체 필수 검사, PR/CI/병합 증거를 기록한다.
 
 ## Decisions and acceptance
 
@@ -31,3 +31,6 @@ decision run과 현재 사건/원문/지식/규칙/가정 revision을 결합한�
 취소는 이후 전송을 막으며 이미 발생한 비용을 취소한 것으로 표시하지 않는다.
 모든 공개 검증은 합성 입력과 모의 HTTP를 사용한다. 실제 제공자 호출은 기존 승인과
 최소 호출 제약을 따르며 모의 검수의 성공을 실제 품질 수용으로 확대하지 않는다.
+
+B05는 PR #80, merge `c58fae77139bbe77caf3648b5d46e3eed74aaaf1`로 통합했다.
+소스 `0c70e51`의 CI 34302926708 필수 7/7 통과; 실제 제공자/보호 자료/기기 수용은 B07/B08과 구분한다.

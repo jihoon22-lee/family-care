@@ -2,7 +2,7 @@
 
 B05 [#67](https://github.com/jihoon22-lee/family-care/issues/67) builds on B04 PR #79,
 merge `05325888bb52b7b6c00365fd237d7473bef1dc20`. Implementation is complete through the Worker, API projection and Web result flow;
-final verification and review corrections are in progress.
+verification and review corrections completed; PR #80 is merged.
 
 Explicit requests bind the saved local decision, event version, source digest, model and prompt
 revision. Duplicate clicks reuse one job. Other households, mismatched runs and stale inputs are
@@ -194,3 +194,17 @@ with **714 integration tests deselected** (151.77s). This is the default unit su
 the 70 related PostgreSQL cases. Contract, container-policy, workflow-policy and branch-convention
 checks and `git diff --check` passed. Container policy is static; all three image builds and the
 full PostgreSQL suite will run as required PR CI checks. No Dockerfile or workflow was changed.
+
+
+## PR and merge
+
+[PR #80](https://github.com/jihoon22-lee/family-care/pull/80) merged as
+`c58fae77139bbe77caf3648b5d46e3eed74aaaf1` at 2026-09-09 02:41 UTC.
+[CI 34302926708](https://github.com/jihoon22-lee/family-care/actions/runs/34302926708)
+passed all seven required checks on source `0c70e515a5fc8d64d404a60c6d4a25c5c985e445`:
+Python **3482 + 3 subtests** (42.43s), PostgreSQL **714** (956.86s) and empty
+head→base→head at 0062, Web **220**/build, Chromium mock **22** (24.1s), three sequential
+image builds, repository safety/contracts and conventions. The ten PR commit subjects passed
+local convention checking. This adds CI evidence to the separate local results above.
+No tag, deployment, live-provider review or protected-data acceptance was performed by B05.
+#66/#67 code/synthetic acceptance is complete; #59/#60 remain open for B06–B08 and protected acceptance.

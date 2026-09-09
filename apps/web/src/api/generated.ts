@@ -48,6 +48,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}/analyze",
   "/api/v1/medical-events/{event_id}/calculations",
   "/api/v1/medical-events/{event_id}/claims",
+  "/api/v1/medical-events/{event_id}/guidance-evidence",
   "/api/v1/medical-events/{event_id}/guidance-reviews",
   "/api/v1/medical-events/{event_id}/guidance-reviews/current",
   "/api/v1/medical-events/{event_id}/receipt-lines",
@@ -367,6 +368,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/claims",
     operationId:
       "create_claim_case_api_v1_medical_events__event_id__claims_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/guidance-evidence",
+    operationId:
+      "get_guidance_evidence_api_v1_medical_events__event_id__guidance_evidence_post",
   },
   {
     method: "POST",
@@ -1104,9 +1111,17 @@ export interface ClaimLocalGuidanceSnapshot {
   expenses: GuidanceExpenses | null;
   family_member_id: string;
   medical_event_id: string;
+  review?: ClaimReviewProvenance | null;
   run_id: string;
   schema_version?: "claim-local-guidance-snapshot-v1";
   versions: GuidanceVersions;
+}
+
+export interface ClaimReviewProvenance {
+  original_decision_run_id: string;
+  result_digest: string;
+  review_job_id: string;
+  source_digest: string;
 }
 
 export interface ClaimSnapshotResponse {
@@ -1587,6 +1602,7 @@ export interface GuidanceCandidate {
 export interface GuidanceClaimSelection {
   coverage: CanonicalCoverageRef;
   expected_event_version: number;
+  review_job_id?: string | null;
   run_id: string;
 }
 
@@ -1662,6 +1678,32 @@ export interface GuidanceEvidence {
   page_start: number;
   publication_id?: string | null;
   source_sha256?: string | null;
+}
+
+export interface GuidanceEvidenceDetail {
+  bbox?: [number, number, number, number] | null;
+  clause_label?: string | null;
+  content_kind: "ORIGINAL" | "SUMMARY" | "UNAVAILABLE";
+  document_label: string;
+  document_version_id?: string | null;
+  evidence: GuidanceEvidence | GuidanceSemanticEvidence;
+  page_end: number;
+  page_start: number;
+  reason_codes?: Array<string>;
+  schema_version?: "1";
+  source_document_ref?: string | null;
+  terms_edition_id?: string | null;
+  terms_edition_label?: string | null;
+  text?: string | null;
+  truncated?: boolean;
+}
+
+export interface GuidanceEvidenceRequest {
+  coverage: CanonicalCoverageRef;
+  decision_run_id: string;
+  evidence: GuidanceEvidence | GuidanceSemanticEvidence;
+  expected_event_version: number;
+  review_job_id?: string | null;
 }
 
 export interface GuidanceExpenses {

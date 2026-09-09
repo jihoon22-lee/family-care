@@ -3,16 +3,16 @@
 - 상태: in_progress
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP08 #68](https://github.com/jihoon22-lee/family-care/issues/68)
-- 구현 기반: B04 PR #79와 B05 [PR #80](https://github.com/jihoon22-lee/family-care/pull/80) source `0c70e51`; B05 CI/merge는 별도 확인 중이다.
+- 구현 기반: B04 PR #79와 B05 [PR #80](https://github.com/jihoon22-lee/family-care/pull/80) source `0c70e51`, CI 34302926708 필수 7/7, merge `c58fae77139bbe77caf3648b5d46e3eed74aaaf1`.
 - 요구사항 R01/R07/R10/R11/R13/R15/R16/R17/R19, 시나리오 S01/S05/S06/S08/S09/S10/S12/S13/S14.
 
 ## Tasks
 
-1. in_progress — 저장된 현재 run과 동일 입력 검수의 연결을 서버에서 검증하고 조회 전용 재사용·재열기 계약을 만든다. 새 run이나 조회가 유료 요청을 새로 만들지 않는다.
-2. pending — 검수의 저장된 프로그램 후보를 명시적 출처로 청구 준비에 연결한다. 원래 run과 검수 job/publication/결과 digest를 불변 snapshot에 보존하며 기존 초안·실제 지급 이력을 덮지 않는다.
-3. pending — 저장 run/검수/담보가 실제 사용한 운영·private·semantic 근거를 공통 조회한다. 원문과 요약을 구분하고 인증·가정 범위·no-store를 유지한다.
-4. pending — 가족·사건·자료 기준과 선택 사건 질문, 입력/결과/청구 간 재개 링크를 연결한다. 부분 근거·더 보기·실패 항목 재시도와 늦은 응답을 처리한다.
-5. pending — 네트워크/폴링 복구에도 로컬 금액·정상 근거를 유지하고 검수 상태 갱신으로 focus를 옮기지 않는다. 동일 입력 terminal 검수 조회를 새 유료 실행처럼 표시하지 않는다.
+1. completed — 저장된 현재 run과 동일 입력 검수의 연결을 서버에서 검증하고 조회 전용 재사용·재열기 계약을 만든다. 새 run이나 조회가 유료 요청을 새로 만들지 않는다.
+2. completed — 검수의 저장된 프로그램 후보를 명시적 출처로 청구 준비에 연결한다. 원래 run과 검수 job/publication/결과 digest를 불변 snapshot에 보존하며 기존 초안·실제 지급 이력을 덮지 않는다.
+3. completed — 저장 run/검수/담보가 실제 사용한 운영·private·semantic 근거를 공통 조회한다. 원문과 요약을 구분하고 인증·가정 범위·no-store를 유지한다.
+4. in_progress — 가족·사건·자료 기준과 선택 사건 질문, 입력/결과/청구 간 재개 링크를 연결한다. 부분 근거·더 보기·실패 항목 재시도와 늦은 응답을 처리한다.
+5. in_progress — 네트워크/폴링 복구에도 로컬 금액·정상 근거를 유지하고 검수 상태 갱신으로 focus를 옮기지 않는다. 동일 입력 terminal 검수 조회를 새 유료 실행처럼 표시하지 않는다.
 6. pending — 320px·keyboard·한글·뒤로 가기·세션 만료·혼합 근거·검수 후보 청구의 합성 API/PG/브라우저와 전체 필수 검증, PR/CI/merge 증거를 기록한다.
 
 ## Decisions and boundaries
