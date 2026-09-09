@@ -6,6 +6,7 @@ from familycare_api.clauses.component_editions import ComponentTermsProjector
 from familycare_api.clauses.source_repository import ClauseSourceProjector
 from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
 from familycare_api.clauses.terms_change_repository import TermsChangeProjector
+from familycare_api.guidance_review.projector import GuidanceReviewProjector
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.main import create_app
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
@@ -20,6 +21,7 @@ def stub_canonical_storage(monkeypatch: MonkeyPatch) -> None:
     from familycare_api.insurance_reconciliation.canonical_repository import CanonicalLinkRepository
 
     monkeypatch.setattr(CanonicalLinkRepository, "refresh_pending", lambda self: 0)
+    monkeypatch.setattr(GuidanceReviewProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(DocumentMetadataProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", lambda *args, **kwargs: 0)
@@ -43,7 +45,7 @@ def test_worker_results_are_published_locally_while_new_ai_work_is_disabled(monk
     monkeypatch.setattr(
         TermsSemanticWorkRepository, "prepare_pending", lambda *a, **kw: prepared.append(1) or 0
     )
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert not prepared
 
@@ -65,7 +67,7 @@ def test_opted_in_terms_work_is_prepared_after_local_projection(monkeypatch):
         return 0
 
     monkeypatch.setattr(TermsSemanticWorkRepository, "prepare_pending", prepare)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert order[:2] == ["local", "prepare"]
 
@@ -82,7 +84,7 @@ def test_enabled_api_consumes_without_a_request_and_stops(monkeypatch: MonkeyPat
     monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
     monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", consume)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert checks and checks[0]()
 
@@ -95,7 +97,7 @@ def test_disabled_api_does_not_start_projection(monkeypatch: MonkeyPatch) -> Non
         raise AssertionError("projection is disabled")
 
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", forbidden)
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(readiness_probe=lambda: True)) as client:
         assert client.get("/health/live").status_code == 200
 
 
@@ -116,7 +118,7 @@ def test_transient_projection_failure_retries_without_logging_details(
     monkeypatch.setenv("FAMILYCARE_ENABLE_RANGE_ENROLLMENT", "true")
     monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", consume)
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(readiness_probe=lambda: True)) as client:
         assert client.get("/health/live").status_code == 200
         assert recovered.wait(timeout=4)
     assert "range_enrollment_projection_unavailable" in caplog.messages
@@ -136,7 +138,7 @@ def test_enabled_api_refreshes_canonical_identity_without_http(monkeypatch: Monk
     monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(CanonicalLinkRepository, "refresh_pending", refresh, raising=False)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
 
 
@@ -151,7 +153,7 @@ def test_enabled_api_publishes_component_metadata_without_http(monkeypatch: Monk
     monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(DocumentMetadataProjector, "project_pending", publish)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
 
 
@@ -166,7 +168,7 @@ def test_enabled_api_registers_component_editions_without_http(monkeypatch: Monk
     monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", publish)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
 
 
@@ -191,7 +193,7 @@ def test_enabled_api_assesses_terms_after_component_registration(monkeypatch: Mo
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ComponentTermsProjector, "project_pending", editions)
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", refresh)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert order[:2] == ["editions", "applicability"]
 
@@ -217,7 +219,7 @@ def test_enabled_api_assesses_changes_after_base_terms_without_http(
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(TermsApplicabilityProjector, "refresh_pending", base)
     monkeypatch.setattr(TermsChangeProjector, "refresh_pending", changes)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert order[:2] == ["base", "changes"]
 
@@ -243,7 +245,7 @@ def test_enabled_api_replays_clause_sources_before_assessing_changes(
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", sources)
     monkeypatch.setattr(TermsChangeProjector, "refresh_pending", changes)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert order[:2] == ["sources", "changes"]
 
@@ -269,6 +271,6 @@ def test_enabled_api_compiles_semantic_sources_after_source_projection(
     monkeypatch.setattr(RangeEnrollmentProjector, "project_pending", lambda *args, **kwargs: 0)
     monkeypatch.setattr(ClauseSourceProjector, "refresh_pending", sources)
     monkeypatch.setattr(TermsSemanticProjector, "project_pending", knowledge)
-    with TestClient(create_app()):
+    with TestClient(create_app(readiness_probe=lambda: True)):
         assert called.wait(timeout=1)
     assert order[:2] == ["sources", "knowledge"]

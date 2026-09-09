@@ -1,9 +1,12 @@
 """FastAPI application factory."""
 
+import asyncio
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from familycare_api import __version__
 from familycare_api.claims.router import medical_event_claim_router
@@ -54,11 +57,29 @@ def create_app(
     """Create the Foundation API with an injectable database probe."""
 
     probe = readiness_probe or database_is_ready
+    database_configured = bool(os.getenv("FAMILYCARE_DATABASE_URL"))
+
+    def schema_is_ready() -> bool:
+        try:
+            return probe()
+        except Exception:
+            # Database exceptions can include credentials; never propagate them.
+            return False
+
+    @asynccontextmanager
+    async def guarded_lifespan(app: FastAPI) -> AsyncIterator[None]:
+        nonlocal database_configured
+        database_configured = database_configured or bool(os.getenv("FAMILYCARE_DATABASE_URL"))
+        if database_configured and not await asyncio.to_thread(schema_is_ready):
+            raise RuntimeError("database schema unavailable") from None
+        async with application_lifespan(app):
+            yield
+
     app = FastAPI(
         title="FamilyCare API",
         version=__version__,
         description="Evidence-first family insurance guidance API",
-        lifespan=application_lifespan,
+        lifespan=guarded_lifespan,
     )
     install_error_handlers(app)
 
@@ -67,6 +88,19 @@ def create_app(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
+        if (
+            database_configured
+            and request.url.path.startswith("/api/v1/")
+            and not await asyncio.to_thread(schema_is_ready)
+        ):
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={
+                    "error_code": "RESOURCE_LIMIT_EXCEEDED",
+                    "message": "database schema unavailable",
+                },
+                headers={"Cache-Control": "no-store"},
+            )
         response = await call_next(request)
         if request.url.path.startswith("/api/v1/"):
             response.headers["Cache-Control"] = "no-store"
@@ -96,7 +130,7 @@ def create_app(
 
     @app.get("/health/ready", response_model=HealthResponse, tags=["health"])
     def readiness_endpoint(response: Response) -> HealthResponse:
-        health = readiness(probe)
+        health = readiness(schema_is_ready)
         if health.status == "unavailable":
             response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return health

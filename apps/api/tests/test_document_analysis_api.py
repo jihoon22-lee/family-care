@@ -235,7 +235,9 @@ def fake_database(monkeypatch: pytest.MonkeyPatch) -> _FakeDatabase:
 @pytest.fixture()
 def client(fake_database: _FakeDatabase) -> Iterator[TestClient]:
     del fake_database
-    with TestClient(create_app(enable_synthetic_ingestion=True)) as test_client:
+    with TestClient(
+        create_app(enable_synthetic_ingestion=True, readiness_probe=lambda: True)
+    ) as test_client:
         yield test_client
 
 
@@ -298,7 +300,7 @@ def test_environment_gate_requires_both_exact_opt_in_values(
         else:
             monkeypatch.setenv(name, value)
 
-    with TestClient(create_app()) as test_client:
+    with TestClient(create_app(readiness_probe=lambda: True)) as test_client:
         response = test_client.post(
             "/api/v1/documents/analysis",
             json=SYNTHETIC_REQUEST,
@@ -315,7 +317,9 @@ def test_explicit_disabled_override_wins_over_environment(
     monkeypatch.setenv("FAMILYCARE_ENV", "development")
     monkeypatch.setenv("FAMILYCARE_ENABLE_SYNTHETIC_INGESTION", "true")
 
-    with TestClient(create_app(enable_synthetic_ingestion=False)) as test_client:
+    with TestClient(
+        create_app(enable_synthetic_ingestion=False, readiness_probe=lambda: True)
+    ) as test_client:
         response = test_client.post(
             "/api/v1/documents/analysis",
             json=SYNTHETIC_REQUEST,
