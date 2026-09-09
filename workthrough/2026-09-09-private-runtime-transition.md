@@ -139,3 +139,25 @@ integration passed **12 tests** (21.09s) on the dedicated migrated PostgreSQL 18
 Documentation, repository safety, generated contracts, 11 commit subjects, actionlint and diff
 checks passed. The earlier draft CI's PostgreSQL integration also passed (20m39s); its Python
 failure remains recorded until a new run verifies the corrected head.
+
+## Initial partial source availability
+
+Protected reconstruction exposed an integration gap: a new partial chunk plan kept all independent
+metadata unavailable even when useful original nodes were retained and no previous current source
+existed. `db9e8dd` (integrated as `50c2e2d`) permits that first nonempty partial source to be current,
+while preserving any existing current and refusing cancelled/empty sources. Canonical source/plan
+replay and item locking still apply. Preparation revision
+`stored-structure-availability-v4-ch4096-context4096-max16384` revisits terminal history once,
+reuses the same generation and appends a new preparation record; old records are not rewritten.
+The coordinator handles anchored metadata on an approved current partial source while reporting
+`partial_sources` and `unprocessed_ranges`. It never marks the chunk plan complete or bypasses
+role, enrollment, layout, semantic or rule validators. Protected plans must be captured for v4.
+
+The agent's focused PostgreSQL source/preparation suite passed **22** (9.04s), including initial
+partial metadata publication with zero enrollment, old partial replay once, previous-current
+preservation and empty/cancelled refusal; coordinator units **26 passed** (0.18s).
+Root at `50c2e2d` passed full Ruff/format, mypy **350 files**, default pytest **3,559 passed,
+759 integration deselected, 3 subtests passed** (34.92s), and both Worker source/preparation files
+plus the API coordinator integration: **23 PostgreSQL tests passed** (18.25s).
+These focused runs precede the new protected replay and final CI; they do not establish complete
+interpretation or native source binding of the actual corpus.
