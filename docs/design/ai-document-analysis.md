@@ -142,6 +142,13 @@ Worker 준비·lease·예산 예약·범위 저장과 API의 새 반영은 원�
 검사한다. 재준비 결과가 고정한 세대와 달라지면 transaction을 되돌리고 호출하지 않는다.
 문서별/일일 예산은 새 작업을 만든 뒤에도 이어지며, 재처리 이력이 있는 DB의 downgrade는 거부한다.
 
+`0066_provider_privacy_revision`은 최소화 v3와 retained 처리 v2를 구분한다. label과 분리된
+주민 식별번호 형식도 원문 전체에서 먼저 가리며, 과거 최소화 입력과 작업은 수정하지 않는다.
+공유 privacy digest에 최소화 revision을 포함해 이전 선택 검수·약관 작업의 재실행/새 반영을
+막고 기존 결과 이력은 유지한다. 새 retained 작업은 같은 원문 세대에 새 계획을 만든다.
+provider 요청·약관/검수 작업 또는 retained v2 이력이 있으면 이전 privacy 체계로의
+downgrade를 보수적으로 거부한다.
+
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
 ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고

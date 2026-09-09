@@ -10,6 +10,7 @@ import pytest
 from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
 from familycare_worker.policy_range_repository import PolicyRangeConflict, PolicyRangeRepository
+from familycare_worker.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from psycopg.rows import dict_row
 
 from workers.analyzer.tests.test_policy_range_repository import (
@@ -389,7 +390,7 @@ def test_migration_refuses_to_discard_retained_processing_history(retained_sourc
     assert PolicyStructuringJobQueue(sample.url).get_job(new.id) is not None
     with psycopg.connect(_psycopg_url(sample.url)) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0065_retained_policy_jobs",
+            SUPPORTED_SCHEMA_REVISION,
         )
     _assert_original_preserved(sample)
 
