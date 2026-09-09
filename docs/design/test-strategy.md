@@ -56,6 +56,10 @@
 릴리스 단위 테스트에는 DB 환경을 상속하지 않는다. PostgreSQL 통합 step은 전용 DB URL·
 파괴적 시험 동의와 해당 서비스의 `FAMILYCARE_TEST_POSTGRES_CONTAINER`를 함께 받는다.
 게시 전 foundation에서 기존 browser E2E와 Worker OCR 언어·한글 glyph smoke도 실행한다.
+브라우저 의존성 설치 전에는 CI runner의 사용하지 않는 Chrome 전용 `.list`/`.sources`만
+제외하며 Ubuntu 저장소·무결성 검사·`--with-deps chromium`을 유지한다. Python의 현재
+CHANGELOG 회귀는 모든 버전 섹션과 현재 package 버전의 존재를 검사해 범주 순서 오류를
+이미지 게시 전에 거부한다.
 이 환경 바인딩과 실행 검사가 빠지면 workflow 정책 검사에서 거부한다.
 
 ### Unit tests

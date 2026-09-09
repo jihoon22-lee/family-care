@@ -123,6 +123,11 @@ jobs:
           uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Validate Web
         run: pnpm web:check
+      - name: Exclude unused Google Chrome APT repository
+        run: |
+          sudo rm -f -- \
+            /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
       - name: Install synthetic browser test runtime
         run: pnpm --filter @familycare/web exec playwright install --with-deps chromium
       - name: Run synthetic browser flows

@@ -1,7 +1,7 @@
 # Changelog-derived GitHub Release Notes Design
 
-- 상태: PR #49 구현·기존 `v0.1.0`~`v0.3.2` Release 정비와 후속 job-level
-  `runner.temp` GitHub parser regression 수정 완료; 다음 실제 tag run 미실행
+- 상태: PR #49 기반 Release 정비와 job-level `runner.temp` 회귀 수정 완료;
+  v0.5.2의 제한된 메타데이터 복구와 모든 CHANGELOG 버전 검증 반영
 - 작성일: 2026-08-31
 - 적용 범위: `CHANGELOG.md`, 릴리스 노트 생성 도구, GHCR 태그 검증, GitHub Release 게시, 기존 v0.1.0~v0.3.2 본문 정비
 
@@ -18,7 +18,8 @@ FamilyCare의 GitHub Release 본문을 버전마다 수기로 다시 쓰거나 G
 - renderer, digest evidence, release audit, workflow policy와 v0.1.0 CHANGELOG 정규화는 구현됐다.
 - 후속 검토에서 확인한 `publish-release` job-level `env`의 `${{ runner.temp }}` 오류는 해당
   경로를 step-level `env`로 이동하고 저장소 validator에 회귀 검사를 추가해 수정했다. 기존
-  Release 정비 결과는 바뀌지 않았고, 다음 실제 tag-run 검증은 아직 수행하지 않았다.
+  Release 정비 결과는 유지했으며 당시 다음 실제 tag-run 검증은 미실행이었다. v0.5.2의
+  실제 결과와 제한된 복구는 아래에 별도로 기록한다.
 
 ## 결정
 
@@ -90,6 +91,22 @@ job은 태그 checkout에서 image evidence와 Release Markdown을 다시 생성
 
 태그, 커밋, 이미지, 배포된 FamilyCare runtime은 변경하지 않는다.
 
+### v0.5.2 범주 순서 오류의 제한된 복구
+
+v0.5.2의 게시 전 검증·세 이미지 게시·registry digest 검증은 성공했지만 태그 CHANGELOG의
+`Fixed`→`Changed` 순서 때문에 마지막 자동 노트 생성이 실패했다. 승인된 릴리스 작업에서
+이 버전의 메타데이터를 복구할 때에만 범주 순서 보존 규칙에 다음 예외를 적용한다.
+
+- 태그의 버전 제목·날짜와 각 범주 제목/본문 bytes를 대조해 보존하고 범주 블록만 재정렬한다.
+  재정렬 결과를 태그 섹션 전체와 byte-exact하다고 표현하지 않는다.
+- 기존 태그의 renderer와 새로 검증한 version/SHA tag·세 digest 증거로 본문을 생성한다.
+  앱·이미지·태그를 다시 만들거나 무결성 검증을 생략하지 않는다.
+- `Changes` 밖에 자동 노트 생성 실패와 수동 메타데이터 복구를 명시하고, 실패한 workflow를
+  전체 성공으로 표시하지 않는다. 기존 태그를 확인한 뒤 `--notes-file`로 게시한다.
+- 게시한 본문·태그·세 digest를 다시 읽어 대조하고 작업별 임시 파일을 정리한다.
+- 저장소 CHANGELOG 순서를 바로잡고, 고정된 과거 버전 목록 대신 모든 버전과 현재 패키지
+  버전을 검사해 다음 태그의 게시 전 Python 검증에서 같은 누락을 거부한다.
+
 ## 실패 처리
 
 - CHANGELOG 파싱 오류: 안정적인 오류 메시지와 exit 1, 출력 파일 없음
@@ -105,5 +122,5 @@ job은 태그 checkout에서 image evidence와 Release Markdown을 다시 생성
 - 생성된 Markdown이 CHANGELOG 섹션을 byte-for-byte 포함하는지 테스트
 - mode `0600`, 정확히 세 이미지, 실제 줄바꿈, 개인정보 금지 패턴 테스트
 - workflow policy에서 job 의존성·권한·`--notes-file` 사용 테스트
-- 현재 CHANGELOG의 v0.1.0~v0.3.2 전체 렌더링 테스트
+- 현재 패키지 버전의 CHANGELOG 존재와 모든 버전 섹션의 전체 렌더링 테스트
 - 기존 필수 repository/Web/Python/PostgreSQL/container CI 유지

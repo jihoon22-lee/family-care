@@ -10,6 +10,7 @@ import pytest
 
 from scripts.release_audit import ReleaseImageDigest
 from scripts.release_notes import (
+    RELEASE_HEADER_RE,
     ReleaseNotesError,
     ReleaseNotesEvidence,
     extract_changelog_section,
@@ -275,7 +276,15 @@ def test_current_changelog_renders_every_published_version() -> None:
 
     assert r"\n" not in changelog
 
-    for version in ("0.1.0", "0.2.0", "0.3.0", "0.3.1", "0.3.2"):
+    versions = [
+        match.group("label")
+        for match in RELEASE_HEADER_RE.finditer(changelog)
+        if match.group("label") != "Unreleased"
+    ]
+    current_version = json.loads((ROOT / "apps/web/package.json").read_text())["version"]
+    assert current_version in versions
+
+    for version in versions:
         section = extract_changelog_section(changelog, version)
         notes = render_release_notes(
             section,

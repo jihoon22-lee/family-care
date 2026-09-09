@@ -45,6 +45,11 @@ ALL_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)")
 GUARDED_DATABASE_RESET = "uv run python scripts/integration_test_database.py"
 ALEMBIC_DOWNGRADE = "uv run alembic -c apps/api/alembic.ini downgrade base"
 RESTORE_CONTAINER_BINDING = "FAMILYCARE_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}"
+BROWSER_INSTALL = "pnpm --filter @familycare/web exec playwright install --with-deps chromium"
+CHROME_APT_EXCLUSION = (
+    "sudo rm -f -- /etc/apt/sources.list.d/google-chrome.list "
+    "/etc/apt/sources.list.d/google-chrome.sources"
+)
 
 
 def validate_action_pins(content: str, relative: Path) -> list[str]:
@@ -122,6 +127,7 @@ def validate_ci(content: str) -> list[str]:
     missing_jobs = REQUIRED_CI_JOBS - jobs
     if missing_jobs:
         errors.append(f"{relative}: missing jobs {sorted(missing_jobs)}")
+    errors.extend(_validate_browser_dependencies(_job_block(content, "web"), relative))
     return errors
 
 
@@ -236,6 +242,23 @@ def _step_block(content: str, name: str) -> str:
     return match.group("body") if match is not None else ""
 
 
+def _validate_browser_dependencies(job: str, relative: Path) -> list[str]:
+    """Exclude only Chrome package sources before the full Playwright dependency install."""
+
+    exclusion_name = "Exclude unused Google Chrome APT repository"
+    install_name = "Install synthetic browser test runtime"
+    exclusion = _step_block(job, exclusion_name)
+    install = _step_block(job, install_name)
+    normalized = " ".join(exclusion.replace("\\\n", " ").split())
+    if (
+        normalized != f"run: | {CHROME_APT_EXCLUSION}"
+        or " ".join(install.split()) != f"run: {BROWSER_INSTALL}"
+        or not 0 <= job.find(exclusion_name) < job.find(install_name)
+    ):
+        return [f"{relative}: browser dependency boundary requires scoped source exclusion first"]
+    return []
+
+
 def _validate_release_test_environment(validate: str, relative: Path) -> list[str]:
     errors: list[str] = []
     unit = _step_block(validate, "Validate Python")
@@ -318,6 +341,7 @@ def validate_release(content: str) -> list[str]:
     release = _job_block(content, "publish-release")
     validate = _job_block(content, "validate-foundation")
     errors.extend(_validate_release_test_environment(validate, relative))
+    errors.extend(_validate_browser_dependencies(validate, relative))
     for runtime_check in (
         "pnpm --filter @familycare/web test:e2e",
         "tesseract --list-langs",
