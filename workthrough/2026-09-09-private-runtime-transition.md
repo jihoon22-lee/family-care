@@ -258,3 +258,18 @@ glyph cells and the control. Its source is `883ff9f` plus the font Dockerfile, C
 cleanup changes. Full Ruff/format, mypy **353 files**, default pytest **3,586 passed / 763 integration
 deselected / 3 subtests passed** (37.43s), container/workflow policy and actionlint passed. The unchanged
 Web and schema/DB inputs retain the preceding source-bound results; the new final CI is pending.
+
+Final source `04fbbda540b0002bc9dc56c04ea5aad79e68322d` passed all seven required jobs in
+[CI 34318679642](https://github.com/jihoon22-lee/family-care/actions/runs/34318679642), including the
+new Worker glyph smoke and PostgreSQL/migration checks. [PR #82](https://github.com/jihoon22-lee/family-care/pull/82)
+merged as `18dc981f344bf9d9d656d513aa08a05da1f30b42` on 2026-09-09. Protected backfill reached
+terminal `PARTIAL`; a subsequent comparison preserved every original baseline row. Read-only
+inspection of retained package artifacts found no exact PDF-byte identity mapping for the opaque
+source aliases. This remains a source-declaration gap, not an assertion that documents were never
+provided. Policy page roles and usable retained data are reported separately from metadata counts.
+
+The separate acceptance clone at `04fbbda` also passed the real Chromium candidate→claim-draft→reload
+path at narrow width, with observed sensitive storage/cache writes and external/AI POSTs remaining
+zero. Those test drafts exist only in the clone. The original live v0.4/0024 DB and its claims remain
+untouched. B08 records the broader acceptance limits and the separate one-call synthetic live-model
+evaluation; none of these checks marks activation, the milestone or release complete.

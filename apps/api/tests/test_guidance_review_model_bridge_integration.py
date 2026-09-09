@@ -32,7 +32,7 @@ from workers.analyzer.tests.test_guidance_review_provider import _response
 pytestmark = pytest.mark.integration
 
 
-def _wire_graph(sample, packet, *, missing_relation_citation):
+def _wire_graph(sample, packet, *, fault):
     """Express the fixture's executable meaning using only the actual request aliases."""
     original = sample.packet.to_payload()["envelope"]
     envelope = packet["envelope"]
@@ -68,7 +68,7 @@ def _wire_graph(sample, packet, *, missing_relation_citation):
             if key in regions
         ],
     }
-    if missing_relation_citation:
+    if fault != "none":
         # Keep the meanings and dependency intact; omit only its original linking proof.
         by_node = {node["node_id"]: node for node in graph["nodes"]}
         cross_region = next(
@@ -85,18 +85,28 @@ def _wire_graph(sample, packet, *, missing_relation_citation):
             and citation["text"] != source_node["statement"]
         }
         assert len(references) == 1
-        source_node["citation_ids"] = [
-            key for key in source_node["citation_ids"] if key not in references
-        ]
-        graph["citations"] = [
-            citation for citation in graph["citations"] if citation["citation_id"] not in references
-        ]
+        if fault == "missing_relation_citation":
+            source_node["citation_ids"] = [
+                key for key in source_node["citation_ids"] if key not in references
+            ]
+            graph["citations"] = [
+                citation
+                for citation in graph["citations"]
+                if citation["citation_id"] not in references
+            ]
+        else:
+            assert fault == "combined_statement"
+            source_node["statement"] += " " + next(
+                citation["text"]
+                for citation in graph["citations"]
+                if citation["citation_id"] in references
+            )
     return graph
 
 
-@pytest.mark.parametrize("missing_relation_citation", [False, True])
+@pytest.mark.parametrize("fault", ["none", "missing_relation_citation", "combined_statement"])
 def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
-    unreviewed_original, monkeypatch, missing_relation_citation
+    unreviewed_original, monkeypatch, fault
 ):
     sample = unreviewed_original
     with psycopg.connect(_psycopg_url(sample.url), row_factory=dict_row) as connection:
@@ -136,9 +146,7 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
                 {
                     "packet_alias": packet["packet_alias"],
                     "kind": "ADDITIONAL_CANDIDATE",
-                    "graph": _wire_graph(
-                        sample, packet, missing_relation_citation=missing_relation_citation
-                    ),
+                    "graph": _wire_graph(sample, packet, fault=fault),
                     "affected_fact_paths": ["MedicalEvent.admission_days"],
                     "proposed_amount": "999999",
                 }
@@ -181,7 +189,7 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
     assert reviewed.error_code is None
     assert reviewed.result is not None
     assert reviewed.result.findings[0].evidence
-    if missing_relation_citation:
+    if fault != "none":
         assert reviewed.state == "disagreement"
         assert not reviewed.result.guidance.candidates
         assert not reviewed.result.differences
@@ -206,7 +214,7 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
         assert connection.execute(
             "SELECT count(*) FROM guidance_review_publications WHERE review_job_id=%s",
             (sample.job.id,),
-        ).fetchone() == (0 if missing_relation_citation else 1,)
+        ).fetchone() == (0 if fault != "none" else 1,)
         assert connection.execute(
             "SELECT count(*) FROM terms_semantic_publications"
         ).fetchone() == (0,)

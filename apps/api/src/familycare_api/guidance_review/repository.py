@@ -28,7 +28,7 @@ from familycare_api.guidance_review.sources import read_review_sources
 from familycare_api.policies.errors import VersionConflict
 from familycare_api.terms_knowledge.work_repository import _privacy_digest
 
-REVIEW_PROMPT_REVISION = "guidance-review-proposals-v1"
+REVIEW_PROMPT_REVISION = "guidance-review-proposals-v3"
 DEFAULT_REVIEW_MODEL = "gpt-5.6-terra"
 
 
