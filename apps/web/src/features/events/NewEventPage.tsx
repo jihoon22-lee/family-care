@@ -56,19 +56,34 @@ async function synchronizeReceiptLines(
   draftLines: ReceiptLineView[],
   currentLines: ReceiptLineView[],
   signal?: AbortSignal,
+  onProgress?: (draft: ReceiptLineView[], persisted: ReceiptLineView[]) => void,
 ): Promise<ReceiptLineView[]> {
+  const synchronized = [...draftLines];
+  let persisted = [...currentLines];
+  const progress = () => onProgress?.([...synchronized], [...persisted]);
   const retainedIds = new Set(
     draftLines.flatMap((line) => (line.id ? [line.id] : [])),
   );
   for (const current of currentLines) {
     if (current.id && current.version && !retainedIds.has(current.id)) {
       await deleteReceiptLine(eventId, current.id, current.version, signal);
+      signal?.throwIfAborted();
+      persisted = persisted.filter((line) => line.id !== current.id);
+      progress();
     }
   }
 
-  const synchronized: ReceiptLineView[] = [];
-  for (const line of draftLines) {
+  for (const [index, line] of draftLines.entries()) {
     signal?.throwIfAborted();
+    const previous = persisted.find(
+      (value) => value.id === line.id && value.version === line.version,
+    );
+    if (
+      previous &&
+      JSON.stringify(createReceiptInput(previous)) ===
+        JSON.stringify(createReceiptInput(line))
+    )
+      continue;
     const saved =
       line.id && line.version
         ? await updateReceiptLine(
@@ -81,7 +96,14 @@ async function synchronizeReceiptLines(
             signal,
           )
         : await createReceiptLine(eventId, createReceiptInput(line), signal);
-    synchronized.push(receiptView(saved));
+    signal?.throwIfAborted();
+    const savedLine = receiptView(saved);
+    synchronized[index] = savedLine;
+    persisted = [
+      ...persisted.filter((value) => value.id !== savedLine.id),
+      savedLine,
+    ];
+    progress();
   }
   return synchronized;
 }
@@ -146,6 +168,7 @@ function EventEditor({
 }) {
   const [medicalEvent, setMedicalEvent] = useState(initialEvent);
   const [receiptLines, setReceiptLines] = useState(initialReceiptLines);
+  const persistedReceipts = useRef(initialReceiptLines);
   const [editorRevision, setEditorRevision] = useState(0);
   const memberLabel = useFamilyMemberLabel(memberId);
   const request = useRef<AbortController | null>(null);
@@ -160,6 +183,7 @@ function EventEditor({
         request.current?.abort();
         setMedicalEvent(undefined);
         setReceiptLines([]);
+        persistedReceipts.current = [];
         setSessionExpired(true);
       }),
     [],
@@ -187,6 +211,13 @@ function EventEditor({
     draft: EventDraftView,
     signal: AbortSignal,
   ): Promise<MedicalEvent> {
+    const progress = (
+      draftLines: ReceiptLineView[],
+      persisted: ReceiptLineView[],
+    ) => {
+      persistedReceipts.current = persisted;
+      setReceiptLines(draftLines);
+    };
     if (!medicalEvent) {
       const created = await createMedicalEvent(
         {
@@ -210,8 +241,9 @@ function EventEditor({
         savedLines = await synchronizeReceiptLines(
           created.id,
           draft.receipt_lines,
-          [],
+          persistedReceipts.current,
           signal,
+          progress,
         );
       } catch {
         // The server event already exists. Retain its identity so retrying the
@@ -235,8 +267,9 @@ function EventEditor({
     const savedLines = await synchronizeReceiptLines(
       updated.id,
       draft.receipt_lines,
-      receiptLines,
+      persistedReceipts.current,
       signal,
+      progress,
     );
     signal.throwIfAborted();
     setReceiptLines(savedLines);
@@ -317,7 +350,13 @@ export function NewEventPage({ memberId }: { memberId?: string }) {
   const initialMode =
     search.get("mode") === "post_treatment" ? "post_treatment" : "pre_visit";
   if (!selectedMemberId) return <MissingMemberContext />;
-  return <EventEditor initialMode={initialMode} memberId={selectedMemberId} />;
+  return (
+    <EventEditor
+      key={selectedMemberId}
+      initialMode={initialMode}
+      memberId={selectedMemberId}
+    />
+  );
 }
 
 export function ExistingEventPage({ eventId }: { eventId: string }) {
@@ -385,6 +424,7 @@ export function ExistingEventPage({ eventId }: { eventId: string }) {
   }
   return (
     <EventEditor
+      key={event.id}
       memberId={event.family_member_id}
       initialEvent={event}
       initialReceiptLines={lines}
