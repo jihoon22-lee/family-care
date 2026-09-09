@@ -238,12 +238,22 @@ class DecisionRepository:
                         )
                     if "admission" in overrides:
                         admission = overrides.get("admission")
-                        fact_values["MedicalEvent.admission_days"] = (
-                            0 if admission is False else None
+                        submitted_facts = changes.get("facts")
+                        explicit_days = (
+                            isinstance(submitted_facts, Mapping)
+                            and "MedicalEvent.admission_days" in submitted_facts
                         )
-                        confirmation_values["MedicalEvent.admission_days"] = (
-                            "user" if admission is False else "unconfirmed"
-                        )
+                        days = fact_values.get("MedicalEvent.admission_days")
+                        if explicit_days and days is not None:
+                            if admission is False and days != 0:
+                                raise DecisionInvalid
+                        else:
+                            fact_values["MedicalEvent.admission_days"] = (
+                                0 if admission is False else None
+                            )
+                            confirmation_values["MedicalEvent.admission_days"] = (
+                                "user" if admission is False else "unconfirmed"
+                            )
                     if "event_date" in overrides:
                         event_date = _structured_date(overrides.get("event_date"))
                     if "visit_date" in overrides:

@@ -71,4 +71,43 @@ format/import/one SQL-line fixes. Claim schema, OpenAPI and Web types were regen
 read-only review found no further actionable claim-source/immutability issue; this was static review,
 not additional dynamic verification. Root also reviewed the common evidence source-to-disclosure path.
 
-UI integration, combined PostgreSQL coverage and full B06 completion checks are still pending.
+The combined PostgreSQL run passed **38 tests** (130.14s) on 2026-09-09 UTC at `c5d7b6a`:
+`pytest apps/api/tests/test_guidance_review_reuse_integration.py
+apps/api/tests/test_guidance_evidence_integration.py
+apps/api/tests/test_guidance_review_claim_integration.py
+apps/api/tests/test_guidance_claim_concurrency_integration.py
+apps/api/tests/test_guidance_claim_restore_integration.py
+apps/api/tests/test_guidance_claim_reimport_integration.py -m integration -q --maxfail=3`.
+This includes all new evidence/review claim cases and existing concurrency, restore and reimport
+boundaries on synthetic PostgreSQL schema 0063.
+
+The unpublished integration merge initially failed commit-title conventions. Only that message and
+descendant commit identities were corrected; all file trees were checked equal, with no working-tree
+change. Equivalent final source is `b1d3fa8`; `check_git_conventions.py --range c58fae7..HEAD`
+passed all four subjects. No shared history was rewritten.
+
+UI integration and full B06 completion checks are still pending.
+
+## Integrated browser behavior and completion checks
+
+UI source `8a68098`, integrated as `c466327`, adds exact family/event/source context, saved event URLs,
+optional question PATCH and reanalysis, review lookup by matched run, read-only polling recovery,
+common evidence pagination with individual retry, abort-on-logout and reviewed claim provenance.
+Focused frontend coverage passed **120 tests** (15.41s), TypeScript and ESLint passed in its isolated
+checkout. Additional browser scenarios and partial receipt-save recovery are still being completed.
+
+At integrated source `c466327` on 2026-09-09 UTC, default Python completion passed **3489 tests and
+3 subtests**, with **738 integration tests deselected** (152.77s). During review, a combined explicit
+admission/day answer was found to lose its days in the repository. A PostgreSQL regression first
+gave **3 failed / 1 passed** (1.60s). Preserving the explicit answer and rejecting contradictory
+no-admission/positive-day answers atomically then passed the entire event-structuring module:
+**8 passed** (3.08s). The related decision repository/API, event-structuring repository and review
+API checks passed **48 tests** (1.44s). One earlier related-test command used a nonexistent directory
+and collected no tests before the corrected explicit file list.
+
+With that repository correction and test plus this record uncommitted, mypy passed **342 source
+files**. Full Ruff initially reported one long pre-existing-in-this-bundle model-selection line;
+formatting it corrected both reports, after which format **840 files** and lint passed. Contracts,
+documentation **50**, repository safety **1053**, container definitions, workflow policy and diff
+checks passed. Static container checks do not establish image builds; full final Web/browser and
+PR CI evidence remain pending. All runs use the synthetic, provider-free environment above.

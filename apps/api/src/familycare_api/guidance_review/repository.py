@@ -36,7 +36,9 @@ class GuidanceReviewRepository:
     def __init__(self, database_url: str, *, model: str | None = None) -> None:
         self.decisions = DecisionRepository(database_url)
         self.database_url = self.decisions.database_url
-        selected_model = model or os.getenv("FAMILYCARE_GUIDANCE_REVIEW_MODEL", DEFAULT_REVIEW_MODEL)
+        selected_model = model or os.getenv(
+            "FAMILYCARE_GUIDANCE_REVIEW_MODEL", DEFAULT_REVIEW_MODEL
+        )
         if (
             not isinstance(selected_model, str)
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", selected_model) is None
