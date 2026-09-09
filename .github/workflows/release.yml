@@ -113,6 +113,7 @@ jobs:
           FAMILYCARE_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
           FAMILYCARE_TEST_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
           FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"
+          FAMILYCARE_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: |
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run pytest -m integration -q
@@ -122,12 +123,27 @@ jobs:
           uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Validate Web
         run: pnpm web:check
+      - name: Install synthetic browser test runtime
+        run: pnpm --filter @familycare/web exec playwright install --with-deps chromium
+      - name: Run synthetic browser flows
+        run: pnpm --filter @familycare/web test:e2e
       - name: Build Web image without publishing
         run: docker build --file infra/containers/web.Dockerfile --tag familycare-web:validation .
       - name: Build API image without publishing
         run: docker build --file infra/containers/api.Dockerfile --tag familycare-api:validation .
       - name: Build Worker image without publishing
         run: docker build --file infra/containers/worker.Dockerfile --tag familycare-worker:validation .
+      - name: Smoke local OCR languages
+        run: |
+          available_languages="$(docker run --rm --network none --read-only familycare-worker:validation tesseract --list-langs)"
+          grep -Fxq 'eng' <<<"${available_languages}"
+          grep -Fxq 'kor' <<<"${available_languages}"
+      - name: Smoke nonembedded Korean PDF rendering
+        run: |
+          docker run --rm --network none --read-only \
+            --mount "type=bind,src=${PWD}/scripts/check_korean_font_rendering.py,dst=/smoke/check_korean_font_rendering.py,readonly" \
+            --mount "type=bind,src=${PWD}/fixtures/synthetic/korean-font-fallback.pdf,dst=/fixture/korean-font-fallback.pdf,readonly" \
+            familycare-worker:validation python /smoke/check_korean_font_rendering.py /fixture/korean-font-fallback.pdf
 
   publish:
     name: Publish ${{ matrix.name }}

@@ -3,7 +3,7 @@
 - 상태: Phase 0~8과 private knowledge/advisory·원장 대사 결과 구현, `v0.1.0`~`v0.4.0` 컨테이너·GitHub
   Release 완료; 보호된 acceptance와 남은 실제 형식·기기·복구 경계 분리
 - 현재 구현 기준 설계: `docs/design/v0.1-product.md`; v0.5 전환 기준은 아래 현재 마일스톤 참조
-- 현재 코드 버전: `v0.5.1`; 태그·이미지·실제 적용 상태는 [v0.5 수용 원장](../release/v0.5.0-verification.md)에서 별도 추적
+- 현재 코드 버전: `v0.5.2`; 태그·이미지·실제 적용 상태는 [v0.5 수용 원장](../release/v0.5.0-verification.md)에서 별도 추적
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
 ## Current milestone

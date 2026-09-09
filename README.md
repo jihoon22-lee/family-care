@@ -6,7 +6,7 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-Web/API/Worker의 소스 버전은 `0.5.1`, 지원 DB schema는 `0069_policy_draft_replay`입니다.
+Web/API/Worker의 소스 버전은 `0.5.2`, 지원 DB schema는 `0069_policy_draft_replay`입니다.
 기본 사건 조회는 외부 AI 없이 로컬 서버에서 관련 후보·지원되는 금액/식·가정·부족한 정보를
 제공합니다. 선택 AI 검수는 원래 답변과 분리하며, 검증된 근거만 같은 결정론적 엔진으로
 다시 계산합니다. 결과에서 근거와 조건을 확인하고 청구 준비 기록으로 이어갈 수 있습니다.
