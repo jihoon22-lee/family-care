@@ -14,7 +14,7 @@
 3. complete (분모·한계 기록) / PARTIAL (자료 지원) — 제공 source identity·이전/현재 실패·native/기존 catalog 가입과 해석/설명/계산 가능 범위를 분리했다. 정확한 별칭 대응표와 자동 약관 판본/의미 지식은 미해결이다. 이전의 전량 처리 해소와 #60/#70의 지원 범위 측정을 같은 완료 조건으로 취급하지 않는다. 미지원 데이터를 분모에서 빼거나 해석 성공으로 바꾸지 않는다.
 4. complete (제한된 표본) — 한 개발 사례의 실제 모델 진단 4회와 성공/실패·원답 보존을 기록했다. 별도 보관 증권의 로컬 초안 축소와 실제 독립 검수 1회, 프로그램 근거 검사·가입 게시를 확인했다. 넓은 모델 순효과와 통화 비용은 미검증이다.
 5. complete (명시된 환경) — 0069 clone의 인증·AI-off·기존 결과/청구/원문과 Windows Chrome 320px/1280px, 뒤로 가기·연결 복귀·로그아웃/재로그인을 확인했다. 새 API 프로세스 첫 조회·warm·원문 검증 및 합성 native 추출 경합·idle을 측정했다. cold DB/OS cache, 전체 암호화 import/OCR/검수 부하, 자연 시간 경과 세션 만료와 모바일 실기기/PWA 설치는 미검증이다.
-6. in_progress — B07 최종 writer barrier·전환·재시작/복구와 v0.5 source/schema/image 조합을 확인한다. package/runtime/OpenAPI/CHANGELOG 0.5 정합과 릴리스 검사를 진행하며 tag·게시·실제 배포는 실행 뒤 기록한다.
+6. in_progress — B07 최종 writer barrier·전환·재시작/복구와 v0.5 source/schema/image 조합을 확인한다. PR #87은 필수 CI 후 `7642a1d`로 병합하고 v0.5.0 tag를 게시했으나, 게시 검증의 단위 테스트가 job-level DB 설정 때문에 실패해 이미지는 만들지 않았다. 태그를 보존한 채 v0.5.1에서 단위/통합 환경을 분리하고 전체 검증을 진행한다. 게시·실제 배포는 실행 뒤 기록한다.
 7. pending — 최종 수용과 제한을 #59/#60/#69/#70에 동기화하고 각 WP·명세·메인·마일스톤 종료를 판단한다. 자료 지원 PARTIAL을 전체 지급/판독 품질 PASS로 올리지 않는다.
 
 ## Current acceptance boundary

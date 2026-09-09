@@ -44,10 +44,6 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
-    env:
-      FAMILYCARE_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
-      FAMILYCARE_TEST_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
-      FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"
     steps:
       - name: Check out complete history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -106,12 +102,18 @@ jobs:
             --api-image "ghcr.io/synthetic/familycare-api@${SYNTHETIC_API_DIGEST}" \
             --worker-image "ghcr.io/synthetic/familycare-worker@${SYNTHETIC_WORKER_DIGEST}" \
             --config-check
-      - name: Validate Python and database integration
+      - name: Validate Python
         run: |
           uv run ruff format --check .
           uv run ruff check .
           uv run mypy apps/api/src workers/analyzer/src scripts
           uv run pytest -q
+      - name: Validate PostgreSQL integration
+        env:
+          FAMILYCARE_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
+          FAMILYCARE_TEST_DATABASE_URL: postgresql+psycopg://familycare_release:synthetic-release-only-password@127.0.0.1:5432/familycare_release_ci
+          FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"
+        run: |
           uv run alembic -c apps/api/alembic.ini upgrade head
           uv run pytest -m integration -q
           uv run python scripts/integration_test_database.py

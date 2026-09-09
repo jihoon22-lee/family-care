@@ -4,6 +4,21 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-09
+
+### Fixed
+
+- Release validation now confines disposable PostgreSQL credentials and destructive-test opt-in
+  to the integration step. Unit tests run without an inherited runtime database, as in normal CI.
+- Workflow policy rejects moving database configuration back into the shared validation job.
+
+### Changed
+
+- This patch carries the local guidance changes listed under 0.5.0. The 0.5.0 tag is retained as
+  published history; its validation failed before any images or GitHub Release were published.
+- Actual document interpretation and source-linking support remain partial; the patch changes
+  release validation, not the protected-data acceptance criteria.
+
 ## [0.5.0] - 2026-09-09
 
 ### Added
