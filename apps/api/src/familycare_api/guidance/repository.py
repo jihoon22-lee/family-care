@@ -28,6 +28,7 @@ from familycare_api.guidance.domain import (
     GuidanceRuleInput,
 )
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
+from familycare_api.guidance.semantic_binding import BoundSemanticRoot
 from familycare_api.guidance.semantic_repository import SemanticGuidanceReader
 from familycare_api.insurance_reconciliation import claim_aliases
 from familycare_api.insurance_reconciliation.canonical_repository import (
@@ -163,10 +164,28 @@ def read_operational_guidance(
     scope: HouseholdScope,
     event: MedicalEvent,
     repository: DecisionRepository,
+    *,
+    semantic_overlay: Mapping[CanonicalCoverageRef, tuple[BoundSemanticRoot, ...]] | None = None,
 ) -> GuidanceContext:
     snapshots = repository._policy_snapshots(
         connection, scope, event.family_member_id, event.event_date
     )
+    overlay: Mapping[CanonicalCoverageRef, tuple[BoundSemanticRoot, ...]] = {}
+    if semantic_overlay:
+        from familycare_api.guidance_review.reassessment import validate_review_overlay
+
+        allowed = {
+            CanonicalCoverageRef(
+                kind="OPERATIONAL_RIDER", contract_id=item.policy_id, coverage_id=item.rider_id
+            )
+            for item in snapshots
+        }
+        if not set(semantic_overlay) <= allowed:
+            raise ValueError("GUIDANCE_REVIEW_COVERAGE_SCOPE_INVALID")
+        overlay = validate_review_overlay(
+            connection, scope, event, semantic_overlay, decisions=repository
+        )
+    review_failures: list[str] = []
     coverages = []
     subjects = read_subject_guidance(connection, scope, event)
     versions: list[object] = [{"subject_scope": subjects.versions.status_digest}]
@@ -314,6 +333,43 @@ def read_operational_guidance(
         )
         amount_source = read_operational_amount_source(connection, scope, snapshot.rider_id)
         semantic = semantics.for_rider(snapshot.policy_id, snapshot.rider_id)
+        ref = CanonicalCoverageRef(
+            kind="OPERATIONAL_RIDER", contract_id=snapshot.policy_id, coverage_id=snapshot.rider_id
+        )
+        if ref in overlay:
+            if not enrolled or not subject:
+                raise ValueError("GUIDANCE_REVIEW_ENROLLMENT_CHANGED")
+            merged, changes = merge_review_roots(semantic.roots, overlay[ref])
+            review_failures.extend(
+                code
+                for code in changes
+                if code in {"REVIEW_SEMANTIC_PARTIAL", "REVIEW_SEMANTIC_DISAGREEMENT"}
+            )
+            semantic = replace(
+                semantic,
+                roots=merged,
+                versions=(
+                    *semantic.versions,
+                    {
+                        "review_roots": [
+                            {
+                                "anchor": root.original_anchor,
+                                "manifest": root.manifest_sha256,
+                                "publications": sorted(
+                                    {str(rule.publication_id) for rule in root.rules}
+                                    | (
+                                        {str(root.calculation.publication_id)}
+                                        if root.calculation
+                                        else set()
+                                    )
+                                ),
+                            }
+                            for root in overlay[ref]
+                        ],
+                        "changes": changes,
+                    },
+                ),
+            )
         semantic_kinds = {root.benefit_kind for root in semantic.roots} - {"UNKNOWN"}
         benefit = (
             "FIXED"
@@ -420,9 +476,80 @@ def read_operational_guidance(
         selected_subject_terms=subjects.selected_subject_terms,
         other_subject_terms=subjects.other_subject_terms,
         expenses=subjects.expenses,
-        failure_codes=history_failures,
+        failure_codes=tuple(dict.fromkeys((*history_failures, *review_failures))),
         versions=GuidanceVersions(engine="local-guidance-v2", status_digest=digest),
     )
+
+
+def merge_review_roots(
+    original: tuple[BoundSemanticRoot, ...], reviewed: tuple[BoundSemanticRoot, ...]
+) -> tuple[tuple[BoundSemanticRoot, ...], tuple[str, ...]]:
+    """Merge only independently verified roots; preserve unrelated source meanings.
+
+    Authority belongs to ``validate_review_overlay``. This pure step only selects
+    complete roots by their original address and records the resulting differences.
+    """
+    if len(original) > 32 or len(reviewed) > 32:
+        raise ValueError("GUIDANCE_REVIEW_ROOT_LIMIT")
+
+    def meaning(root: BoundSemanticRoot) -> str:
+        def document(value: Mapping[str, object]) -> dict[str, object]:
+            return {
+                key: item
+                for key, item in value.items()
+                if key not in {"evidence_ids", "result_reason_code"}
+            }
+
+        return json.dumps(
+            {
+                "kind": root.benefit_kind,
+                "complete": root.complete,
+                "rules": sorted(
+                    json.dumps(
+                        [document(rule.rule_document), rule.classification_scopes],
+                        sort_keys=True,
+                        default=str,
+                    )
+                    for rule in root.rules
+                ),
+                "calculation": document(root.calculation.calculation_document)
+                if root.calculation
+                else None,
+                "currency": root.calculation.source_currency if root.calculation else None,
+            },
+            sort_keys=True,
+            default=str,
+        )
+
+    merged = list(original)
+    positions = {root.original_anchor: position for position, root in enumerate(original)}
+    if len(positions) != len(original):
+        raise ValueError("GUIDANCE_REVIEW_ROOT_IDENTITY_INVALID")
+    reviewed_meanings: dict[tuple[object, ...], set[str]] = {}
+    for root in reviewed:
+        if root.complete:
+            reviewed_meanings.setdefault(root.original_anchor, set()).add(meaning(root))
+    conflicts = {anchor for anchor, values in reviewed_meanings.items() if len(values) > 1}
+    codes = ["REVIEW_SEMANTIC_DISAGREEMENT"] if conflicts else []
+    for root in reviewed:
+        if not root.complete:
+            codes.append("REVIEW_SEMANTIC_PARTIAL")
+            continue
+        if root.original_anchor in conflicts:
+            continue
+        position = positions.get(root.original_anchor)
+        if position is None:
+            positions[root.original_anchor] = len(merged)
+            merged.append(root)
+            codes.append("REVIEW_SEMANTIC_ADDITION")
+        elif meaning(merged[position]) != meaning(root):
+            if merged[position].complete:
+                codes.append("REVIEW_SEMANTIC_DISAGREEMENT")
+            merged[position] = root
+            codes.append("REVIEW_SEMANTIC_CORRECTION")
+    if len(merged) > 32:
+        raise ValueError("GUIDANCE_REVIEW_ROOT_LIMIT")
+    return tuple(merged), tuple(dict.fromkeys(codes))
 
 
 def combine_guidance_contexts(

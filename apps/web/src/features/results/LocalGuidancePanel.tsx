@@ -175,7 +175,7 @@ export function LocalGuidancePanel({
   claimStartDisabled = false,
 }: {
   guidance: LocalGuidanceResponse;
-  onRetry: () => void;
+  onRetry?: () => void;
   showEmpty?: boolean;
   onStartClaim?: (coverage: CanonicalCoverageRef) => void;
   claimStartDisabled?: boolean;
@@ -271,13 +271,15 @@ export function LocalGuidancePanel({
             일부 담보의 자료를 해석하지 못했습니다. 위에서 확인된 후보와 예상
             금액은 계속 볼 수 있습니다.
           </p>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            onClick={onRetry}
-          >
-            다시 확인
-          </button>
+          {onRetry ? (
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={onRetry}
+            >
+              다시 확인
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>

@@ -17,6 +17,16 @@ from familycare_worker.ai.event_structurer import (
     event_structurer_schema,
 )
 from familycare_worker.ai.evidence_loader import PolicyEvidenceLoader
+from familycare_worker.ai.guidance_reviewer import (
+    OUTPUT_TOKEN_LIMIT as REVIEW_OUTPUT_TOKENS,
+)
+from familycare_worker.ai.guidance_reviewer import (
+    REQUEST_TIMEOUT_SECONDS as REVIEW_TIMEOUT_SECONDS,
+)
+from familycare_worker.ai.guidance_reviewer import (
+    SCHEMA_NAME as REVIEW_SCHEMA_NAME,
+)
+from familycare_worker.ai.guidance_reviewer import guidance_review_schema
 from familycare_worker.ai.provider import (
     DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
     DEFAULT_STRUCTURER_MODEL,
@@ -36,6 +46,9 @@ from familycare_worker.archive.store import ArchiveStore
 from familycare_worker.document_metadata_repository import DocumentMetadataRunner
 from familycare_worker.document_preparation import DocumentPreparationRunner
 from familycare_worker.event_jobs import EventStructuringJobQueue
+from familycare_worker.guidance_review_budget import GuidanceReviewBudget
+from familycare_worker.guidance_review_jobs import GuidanceReviewQueue
+from familycare_worker.guidance_review_runner import GuidanceReviewRunner
 from familycare_worker.health import (
     DatabaseProbe,
     RuntimeProbe,
@@ -95,6 +108,7 @@ class FairJobRunner:
         preparations: JobRunner | None = None,
         metadata: JobRunner | None = None,
         terms: JobRunner | None = None,
+        reviews: JobRunner | None = None,
     ) -> None:
         self.events = events
         self.documents = documents
@@ -103,6 +117,7 @@ class FairJobRunner:
         self.preparations = preparations
         self.metadata = metadata
         self.terms = terms
+        self.reviews = reviews
         self._runners = tuple(
             runner
             for runner in (
@@ -113,6 +128,7 @@ class FairJobRunner:
                 preparations,
                 metadata,
                 terms,
+                reviews,
             )
             if runner is not None
         )
@@ -199,10 +215,12 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         {
             EVENT_STRUCTURER_SCHEMA_NAME: event_structurer_schema(),
             RECOMMENDER_SCHEMA_NAME: recommender_schema(),
+            REVIEW_SCHEMA_NAME: guidance_review_schema(),
             **openai_schema_registry(),
         },
         output_token_limits={
             TERMS_STRUCTURER_SCHEMA_NAME: 8_192,
+            REVIEW_SCHEMA_NAME: REVIEW_OUTPUT_TOKENS,
             EVENT_STRUCTURER_SCHEMA_NAME: DEFAULT_EVENT_STRUCTURER_OUTPUT_TOKENS,
             "policy_candidate_batch_structurer_v2": 8_192,
             "policy_candidate_batch_verifier_v2": 4_096,
@@ -210,6 +228,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         },
         request_timeouts={
             EVENT_STRUCTURER_SCHEMA_NAME: EVENT_STRUCTURER_REQUEST_TIMEOUT_SECONDS,
+            REVIEW_SCHEMA_NAME: REVIEW_TIMEOUT_SECONDS,
         },
     )
     event_runner = EventStructuringJobRunner(
@@ -240,6 +259,13 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
         model=os.getenv("FAMILYCARE_AI_STRUCTURER_MODEL", DEFAULT_STRUCTURER_MODEL),
         stop_requested=stop_event.is_set,
     )
+    review_runner = GuidanceReviewRunner(
+        queue=GuidanceReviewQueue(database_url),
+        provider=provider,
+        request_budget=GuidanceReviewBudget(database_url),
+        stop_requested=stop_event.is_set,
+        enabled=os.getenv("FAMILYCARE_ENABLE_GUIDANCE_REVIEW", "true") != "false",
+    )
     if not document_root:
         base_runner: JobRunner = FairJobRunner(
             events=event_runner,
@@ -247,6 +273,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             preparations=preparation_runner,
             metadata=metadata_runner,
             terms=terms_runner,
+            reviews=review_runner,
         )
     elif not work_root:
         LOGGER.error("document_runner_configuration_incomplete")
@@ -256,6 +283,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             preparations=preparation_runner,
             metadata=metadata_runner,
             terms=terms_runner,
+            reviews=review_runner,
         )
     else:
         queue = JobQueue(database_url)
@@ -275,6 +303,7 @@ def _runner_from_environment(stop_event: Event) -> JobRunner | None:
             preparations=preparation_runner,
             metadata=metadata_runner,
             terms=terms_runner,
+            reviews=review_runner,
         )
 
     private_values = {

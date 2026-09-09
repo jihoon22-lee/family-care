@@ -524,3 +524,28 @@ def test_environment_terms_runner_defaults_to_no_calls_and_uses_bounded_schema(m
     monkeypatch.setenv("FAMILYCARE_ENABLE_TERMS_STRUCTURING", "true")
     enabled = _runner_from_environment(Event())
     assert enabled.terms.enabled and not enabled.terms.configured()
+
+
+def test_explicit_review_lane_registers_4000_tokens_and_40_second_timeout(monkeypatch):
+    from familycare_worker.ai.guidance_reviewer import SCHEMA_NAME
+    from familycare_worker.guidance_review_runner import GuidanceReviewRunner
+
+    monkeypatch.setenv("FAMILYCARE_DATABASE_URL", "postgresql://synthetic")
+    for name in (
+        "FAMILYCARE_DOCUMENT_ROOT",
+        "FAMILYCARE_WORK_ROOT",
+        "FAMILYCARE_IMPORT_ROOT",
+        "FAMILYCARE_ARCHIVE_ROOT",
+        "FAMILYCARE_ARCHIVE_MASTER_KEY_FILE",
+        "FAMILYCARE_SECRET_SOCKET",
+        "OPENAI_API_KEY",
+        "FAMILYCARE_ENABLE_GUIDANCE_REVIEW",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    runner = _runner_from_environment(Event())
+    reviews = [lane for lane in runner._runners if isinstance(lane, GuidanceReviewRunner)]
+    assert len(reviews) == 1 and not reviews[0].configured()
+    assert reviews[0].provider._output_token_limits[SCHEMA_NAME] == 4000
+    assert reviews[0].provider._request_timeouts[SCHEMA_NAME] == 40.0
+    monkeypatch.setenv("FAMILYCARE_ENABLE_GUIDANCE_REVIEW", "false")
+    assert not _runner_from_environment(Event()).reviews.enabled

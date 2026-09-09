@@ -44,8 +44,14 @@ def bind_semantic_root(
     current: CurrentSemanticRoot,
     clause: ClauseSourceRegion,
     expected_source: Mapping[str, Any],
+    *,
+    review_job_id: UUID | None = None,
 ) -> BoundSemanticRoot | None:
-    """Caller replays both inputs in its transaction; labels never establish identity."""
+    """Bind replayed authority; review callers supply a real persisted publication.
+
+    This pure adapter does not grant publication authority. Review materialization
+    replays the stored job/packet/proof before passing its actual publication ID.
+    """
     root = current.root
     manifest = root.manifest
     nodes = {n["node_id"]: n for n in manifest["nodes"]}
@@ -88,6 +94,7 @@ def bind_semantic_root(
                     GuidanceSemanticEvidence(
                         citation_id=UUID(key),
                         publication_id=current.publication_id,
+                        review_job_id=review_job_id,
                         document_version_id=UUID(s["document_version_id"]),
                         terms_edition_id=UUID(s["terms_edition_id"]),
                         generation_id=UUID(s["generation_id"]),

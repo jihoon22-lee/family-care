@@ -3584,6 +3584,19 @@
           "title": "Publication Id",
           "type": "string"
         },
+        "review_job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Job Id"
+        },
         "document_version_id": {
           "format": "uuid",
           "title": "Document Version Id",

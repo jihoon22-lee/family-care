@@ -36,6 +36,8 @@ export const API_PATHS = [
   "/api/v1/family-members/{member_id}/insurance-document-sets",
   "/api/v1/family-members/{member_id}/insurance-reconciliation",
   "/api/v1/family-members/{member_id}/restore",
+  "/api/v1/guidance-reviews/{job_id}",
+  "/api/v1/guidance-reviews/{job_id}/cancel",
   "/api/v1/insurance-document-set-items/{item_id}",
   "/api/v1/insurance-document-sets/{document_set_id}",
   "/api/v1/insurance-document-sets/{document_set_id}/items",
@@ -46,6 +48,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}/analyze",
   "/api/v1/medical-events/{event_id}/calculations",
   "/api/v1/medical-events/{event_id}/claims",
+  "/api/v1/medical-events/{event_id}/guidance-reviews",
   "/api/v1/medical-events/{event_id}/receipt-lines",
   "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
@@ -287,6 +290,17 @@ export const API_OPERATIONS = [
       "restore_family_member_api_v1_family_members__member_id__restore_post",
   },
   {
+    method: "GET",
+    path: "/api/v1/guidance-reviews/{job_id}",
+    operationId: "get_guidance_review_api_v1_guidance_reviews__job_id__get",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/guidance-reviews/{job_id}/cancel",
+    operationId:
+      "cancel_guidance_review_api_v1_guidance_reviews__job_id__cancel_post",
+  },
+  {
     method: "DELETE",
     path: "/api/v1/insurance-document-set-items/{item_id}",
     operationId:
@@ -352,6 +366,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/claims",
     operationId:
       "create_claim_case_api_v1_medical_events__event_id__claims_post",
+  },
+  {
+    method: "POST",
+    path: "/api/v1/medical-events/{event_id}/guidance-reviews",
+    operationId:
+      "request_guidance_review_api_v1_medical_events__event_id__guidance_reviews_post",
   },
   {
     method: "GET",
@@ -1714,6 +1734,118 @@ export interface GuidanceRelevance {
   spans?: Array<GuidanceEventSpan>;
 }
 
+export interface GuidanceReviewCoverageScope {
+  contract_label: string;
+  coverage_label: string;
+  reason_codes?: Array<string>;
+  ref: CanonicalCoverageRef;
+  reviewed_packets: number;
+  source_state: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+  total_packets: number;
+}
+
+export interface GuidanceReviewDifference {
+  after: GuidanceCandidate | null;
+  before: GuidanceCandidate | null;
+  change: "ADDED" | "REMOVED" | "CHANGED";
+  coverage: CanonicalCoverageRef;
+}
+
+export interface GuidanceReviewFinding {
+  affected_fact_paths?: Array<string>;
+  coverage: CanonicalCoverageRef | null;
+  evidence?: Array<GuidanceReviewSourceCitation>;
+  kind:
+    | "AGREEMENT"
+    | "CORRECTION"
+    | "ADDITIONAL_CANDIDATE"
+    | "EXCEPTION"
+    | "CONFLICT";
+  publication_id?: string | null;
+  reason_codes: Array<string>;
+  status: "APPLIED" | "AGREEMENT" | "OPINION" | "REJECTED";
+}
+
+export interface GuidanceReviewJob {
+  completed_at?: string | null;
+  created_at: string;
+  decision_run_id: string;
+  error_code?: string | null;
+  event_version: number;
+  http_attempts: number;
+  id: string;
+  medical_event_id: string;
+  result?: GuidanceReviewResult | null;
+  schema_version?: "1";
+  stale?: boolean;
+  state:
+    | "queued"
+    | "running"
+    | "partial"
+    | "completed"
+    | "disagreement"
+    | "failed"
+    | "cancelled";
+  usage?: GuidanceReviewUsage | null;
+}
+
+export interface GuidanceReviewRequest {
+  decision_run_id: string;
+  expected_event_version: number;
+}
+
+export interface GuidanceReviewResult {
+  differences: Array<GuidanceReviewDifference>;
+  findings: Array<GuidanceReviewFinding>;
+  guidance: LocalGuidanceResponse;
+  reason_codes: Array<string>;
+  schema_version?: "1";
+  scope: GuidanceReviewScope;
+  source_digest: string;
+}
+
+export interface GuidanceReviewScope {
+  complete: boolean;
+  coverages?: Array<GuidanceReviewCoverageScope>;
+  expected_regions?: number;
+  indexed_coverages: number;
+  omitted_packets: number;
+  reason_codes?: Array<string>;
+  reviewed_packets: number;
+  supplied_regions?: number;
+  total_coverages: number;
+  total_packets: number;
+  unreviewed_packets: number;
+  unsupplied_regions?: number;
+}
+
+export interface GuidanceReviewSourceCitation {
+  bbox: [number, number, number, number];
+  citation_id: string;
+  document_version_id: string;
+  end: number;
+  kind?: "REVIEW_SOURCE_CITATION";
+  packet_id: string;
+  page_end: number;
+  page_start: number;
+  quote: string;
+  source_layer: "native" | "ocr";
+  source_node_id: string;
+  source_sha256: string;
+  start: number;
+  terms_edition_id: string;
+}
+
+export interface GuidanceReviewUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  requests_reserved: number;
+  reserved_input_tokens: number;
+  reserved_output_tokens: number;
+  total_tokens: number | null;
+  usage_complete: boolean;
+}
+
 export interface GuidanceScenario {
   estimate: GuidanceEstimate;
   hypotheses: Array<GuidanceHypothesis>;
@@ -1732,6 +1864,7 @@ export interface GuidanceSemanticEvidence {
   page_end: number;
   page_start: number;
   publication_id: string;
+  review_job_id?: string | null;
   root_node_id: string;
   source_layer: "native" | "ocr";
   source_node_id: string;

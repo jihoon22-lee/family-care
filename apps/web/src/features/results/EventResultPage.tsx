@@ -15,6 +15,7 @@ import { useMedicalEvent } from "../events/useMedicalEvent";
 import { authStore } from "../identity/authStore";
 import { useBenefitCalculations, useEventResult } from "./useEventResult";
 import { ActionFirstResult } from "./ActionFirstResult";
+import { GuidanceReviewPanel } from "./GuidanceReviewPanel";
 import styles from "./Results.module.css";
 
 export function EventResultPage({
@@ -267,6 +268,18 @@ export function EventResultPage({
         result={result}
         riderLabels={riderLabels}
       />
+      {guidance ? (
+        <GuidanceReviewPanel
+          key={`${eventId}:${event.version}:${result.run_id}`}
+          eventId={eventId}
+          eventVersion={event.version}
+          decisionRunId={result.run_id}
+          disabled={
+            !guidanceMatchesCurrentEvent ||
+            (result.local_guidance_stale ?? result.stale)
+          }
+        />
+      ) : null}
       {claimStartError ? (
         <p className={styles.error} role="alert">
           {claimStartError === "stale"

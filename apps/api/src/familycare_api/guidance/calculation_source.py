@@ -127,6 +127,13 @@ def _validated(
         isinstance(publication.citations, tuple) and 1 <= len(publication.citations) <= 64,
         "CALCULATION_CITATION_INVALID",
     )
+    origins = {
+        citation.evidence.review_job_id
+        for citation in publication.citations
+        if isinstance(citation, GuidanceCitation)
+        and isinstance(citation.evidence, GuidanceSemanticEvidence)
+    }
+    _require(len(origins) <= 1, "CALCULATION_SOURCE_REFERENCE_MISMATCH")
     keys = []
     for citation in publication.citations:
         _require(
@@ -246,7 +253,14 @@ def _source_refs(
             "CALCULATION_SOURCE_REFERENCE_MISMATCH",
         )
         manifest = next(iter(manifests))
-        add("SEMANTIC_PUBLICATION", publication.publication_id, digest=manifest)
+        review_id = semantic[0].review_job_id
+        add(
+            "GUIDANCE_REVIEW_PUBLICATION" if review_id is not None else "SEMANTIC_PUBLICATION",
+            publication.publication_id,
+            digest=manifest,
+        )
+        if review_id is not None:
+            add("GUIDANCE_REVIEW_JOB", review_id)
         assert publication.semantic_node_id is not None
         add(
             "SEMANTIC_ROOT",

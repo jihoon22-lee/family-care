@@ -51,6 +51,9 @@ class GuidanceSemanticEvidence(GuidanceModel):
     kind: Literal["SEMANTIC_CITATION"] = "SEMANTIC_CITATION"
     citation_id: UUID
     publication_id: UUID
+    # A real review publication has a different storage/authority boundary.
+    # Null preserves the meaning of historical global semantic publications.
+    review_job_id: UUID | None = None
     document_version_id: UUID
     terms_edition_id: UUID
     generation_id: UUID
@@ -71,6 +74,7 @@ class GuidanceSemanticEvidence(GuidanceModel):
 
         if (
             self.end <= self.start
+            or (self.review_job_id is not None and self.review_job_id.int == 0)
             or self.page_start != self.page_end
             or any(not math.isfinite(n) or not 0 <= n <= 100000 for n in self.bbox)
             or self.bbox[0] > self.bbox[2]

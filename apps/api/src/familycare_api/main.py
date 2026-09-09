@@ -19,6 +19,8 @@ from familycare_api.decisions.router import (
 from familycare_api.documents.batch_router import router as document_batch_router
 from familycare_api.documents.router import router as document_analysis_router
 from familycare_api.errors import install_error_handlers
+from familycare_api.guidance_review.consumer import application_lifespan
+from familycare_api.guidance_review.router import router as guidance_review_router
 from familycare_api.health import (
     HealthResponse,
     ReadinessProbe,
@@ -32,7 +34,6 @@ from familycare_api.insurance_reconciliation.router import (
     router as insurance_reconciliation_router,
 )
 from familycare_api.policies.candidate_router import router as policy_candidate_router
-from familycare_api.policies.enrollment_consumer import enrollment_lifespan
 from familycare_api.policies.router import router as policy_ledger_router
 from familycare_api.private_knowledge.router import router as private_knowledge_router
 
@@ -56,7 +57,7 @@ def create_app(
         title="FamilyCare API",
         version=__version__,
         description="Evidence-first family insurance guidance API",
-        lifespan=enrollment_lifespan,
+        lifespan=application_lifespan,
     )
     install_error_handlers(app)
 
@@ -115,6 +116,7 @@ def create_app(
     app.include_router(clause_search_router)
     app.include_router(coverage_decision_router)
     app.include_router(structuring_job_router)
+    app.include_router(guidance_review_router)
     app.include_router(evidence_router)
     app.include_router(private_knowledge_router)
     app.include_router(medical_event_claim_router)
