@@ -42,6 +42,9 @@
   (43.84초; integration 798건 제외), 계약·컨테이너 정적 정책·workflow 정책·diff를 통과했다.
   잠금 파일을 유지한 pnpm 설치를 사용했다. 전체 PG·빈 DB migration·이미지 빌드는 CI로
   추가 확인하며, 로컬 관련 PG 64건과 구분한다.
+- 후속 schema에서 downgrade 거부 후 head를 0064로 고정하던 과거 v8 이력 테스트가
+  실패함을 확인했다. 이력 수용 조건은 유지하고 설치된 head를 확인하도록 수정했으며
+  해당 PostgreSQL 회귀 1건을 다시 통과했다.
 - 2026-09-09, `355d15e` + API/Worker 테스트와 계획 문서 변경에서
   `TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_native_range_enrollment_integration.py -k compound_insured -q`:
   전용 합성 PostgreSQL에서 1 passed, 32 deselected(1.81초).
