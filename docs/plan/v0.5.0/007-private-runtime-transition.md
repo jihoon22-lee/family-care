@@ -12,7 +12,7 @@
 2. in_progress — 기존 backup/import/structure/projector를 재사용할 격리 복원·재구성 계획과 source→destination journal, 교정/이력 보존 비교 및 activation barrier를 구체화한다.
 3. in_progress — 실제 PostgreSQL custom dump 복원, archive/key 복구, 저디스크·부분 원문 누락·중단/재개·동시 변경 거부를 합성 자료로 검증한다. 0063 전체 행·검수 기반 청구 snapshot·암호화 archive roundtrip과 재구성 재개/원본 변경 거부를 PostgreSQL에서 통과했다.
 4. complete — 승인된 기존 WSL 자료와 실행체를 보호 환경에서 inventory하고 일관된 백업을 취득했다. 별도 DB/보관소 복원과 전체 원문 복호화·hash 대조 및 0063 migration 후 기존 행 보존을 확인했다. 실제 값은 공개 artifact에 기록하지 않는다.
-5. in_progress — 격리 복원에서 재구성·교정/청구 snapshot 비교·원문 접근·AI-off 결과·인증된 앱 경로를 검증한다. 첫 부분 구조의 안전한 metadata 처리를 보완하고 기존 준비 이력은 보존한다. 불완전 자료를 빈 성공으로 처리하지 않는다.
+5. in_progress — 격리 복원에서 재구성·교정/청구 snapshot 비교·원문 접근·AI-off 결과·인증된 앱 경로를 검증한다. 첫 부분 구조와 검증된 표 앞부분의 metadata를 보존하며 v8/0064로 이전 이력과 구분한다. 별도 clone의 인증된 ASGI·원문 발췌·기존 사건 로컬 안내/저장 결과 조회를 통과했다. 브라우저·원본 별칭 연결·최종 전환은 별도 확인하며 불완전 자료를 빈 성공으로 처리하지 않는다.
 6. pending — 검증한 기준점을 재확인해 전환하고 재시작·복구를 확인한다. 필수 검사·PR/CI/merge·보호된 수용 상태를 B08에 인계한다.
 
 ## Decisions and boundaries

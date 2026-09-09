@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0063_review_claim_sources"
+REVISION = "0064_metadata_proven_prefix"
 
 
 class Result:
@@ -57,8 +57,8 @@ class Engine:
     "rows",
     [
         [],
-        [("0062_guidance_review_context",)],
-        [("0064_synthetic_future",)],
+        [("0063_review_claim_sources",)],
+        [("0065_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

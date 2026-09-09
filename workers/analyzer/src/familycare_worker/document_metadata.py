@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Iterable, Sequence
@@ -33,7 +34,7 @@ from familycare_worker.navigation_page import is_navigation_page
 from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v7"
+REVISION = "document-metadata-v8"
 
 
 class DocumentMetadataError(ValueError):
@@ -416,14 +417,14 @@ def _layout_nodes(
             continue
         if node.kind == "TABLE_ROW":
             boxes = [cell.bbox for cell in node.cells]
-            if not boxes or any(box is None for box in boxes):
+            if not boxes or any(not _positionable_box(box) for box in boxes):
                 return nodes, False, frozenset()
             known = [box for box in boxes if box is not None]
             top = min(box[1] for box in known)
             left = min(box[0] for box in known)
             bottoms[node.node_id] = max(box[3] for box in known)
         else:
-            if node.bbox is None:
+            if node.bbox is None or not _positionable_box(node.bbox):
                 return nodes, False, frozenset()
             left, top = node.bbox[:2]
             bottoms[node.node_id] = node.bbox[3]
@@ -440,6 +441,15 @@ def _layout_nodes(
                 frozenset(item[3].node_id for item in ordered[index:]),
             )
     return [item[3] for item in ordered], True, frozenset()
+
+
+def _positionable_box(box: tuple[float, float, float, float] | None) -> bool:
+    return (
+        box is not None
+        and all(math.isfinite(value) for value in box)
+        and 0 <= box[0] < box[2]
+        and 0 <= box[1] < box[3]
+    )
 
 
 def _quarantined_fields(node: StructureNode) -> set[str]:

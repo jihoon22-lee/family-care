@@ -176,4 +176,52 @@ originals retain the native limit; the operational constraint is also explicit i
 The new regression plus evidence HTTP and local guidance units passed **24** (0.64s). Decision/claim
 schemas and OpenAPI were regenerated separately with their existing commands; Web types remain
 unchanged and the full contract checker passed. This changes citation compatibility, not PDF intake
-capacity or the authority of private summaries. Authenticated acceptance is rerun on the clone.
+capacity or the authority of private summaries.
+
+At clean source `93c6a51`, the protected ASGI acceptance helper passed against a separate clone:
+real login/session/CSRF, private catalog and claim-history reads, available original excerpts,
+AI-off local analysis for all retained events, and equality with stored-result reads. External
+HTTP attempts and provider work creation were zero. Counts, timings and configuration remain in
+the private journal; no document text or actual identifiers enter this artifact. This validates
+ASGI plus PostgreSQL, not the gateway/browser, native alias bindings or final runtime activation.
+Private adaptation failure is now isolated from the native evaluation path; the dedicated
+PostgreSQL source-isolation regression passed **7 tests** (12.23s).
+
+PR #82 CI [34312769544](https://github.com/jihoon22-lee/family-care/actions/runs/34312769544)
+passed all seven required checks at `eb920c5`. That run precedes the private page and source
+isolation fixes above; subsequent metadata changes require their own final verification.
+
+## Proven metadata prefixes
+
+A later overlapping table previously invalidated a geometrically unambiguous opening title and
+insurer row. Worker and independent API validation now preserve the verified prefix and quarantine
+formal titles/facts from the first overlap onward. Unknown geometry and contradictory native order
+retain the conservative fallback. Existing independent contractual-body proofs remain unchanged.
+The API uses this behavior only for metadata v8; older proposals retain their versioned validation.
+The neutral schema and both generated consumers accept v8. Migration `0064_metadata_proven_prefix`
+adds the matching publication revision, preserves prior rows and refuses downgrade after new
+proposal/publication history exists. API/Worker readiness requires the new schema.
+
+The synthetic prefix regression initially failed twice; after the core fix the broader metadata
+suite passed **165 tests**. Root v8 integration exposed and updated two tests tied to the old
+current revision, then passed **205 unit tests** (5.77s). The new neutral v8 test initially failed
+the enum, and the new PostgreSQL replay test initially could not revisit terminal v7. After schema
+migration and implementation, replay/history preservation plus navigation and publication passed
+**19 PostgreSQL tests** (20.85s); generated contracts passed. These results use `bd8f393` plus the
+v8 revision/schema/migration/readiness/test changes in this section. Protected reprocessing and
+final required checks remain separate.
+
+The first full Python run found one existing invalid-table-coordinate regression: a zero-area box
+was incorrectly admitted to positional ordering. New prefix processing now requires finite,
+positive-area boxes, while historical API revisions keep their original behavior. Related source
+change/metadata tests passed **109** (1.55s), then full Ruff/format, mypy **350 files**, default pytest
+**3,575 passed / 763 integration deselected / 3 subtests passed** (33.25s), container definitions and
+workflow checks passed. Final affected PostgreSQL publication/history tests passed **19** (19.33s).
+Web format/lint/types, **238 tests in 31 files** (50.10s) and production/PWA build passed with the
+unchanged Web source and frozen lockfile. These runs use `bd8f393` plus this v8 bundle; no private
+data or provider participates in the public suites.
+
+The protected target and the separate acceptance clone subsequently reached 0064 with every
+pre-migration row preserved. The target also passed comparison of all original baseline rows,
+allowing only newly appended records. The private journal stores the evidence; the original live
+database remains unchanged. Full CI, browser acceptance and final activation are still pending.

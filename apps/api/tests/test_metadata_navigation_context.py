@@ -123,7 +123,7 @@ def test_cached_navigation_context_cannot_change_a_legacy_revision() -> None:
             "lineage": projection["lineage"],
             "nodes": [node for node in projection["nodes"] if node["page_number"] == number],
         },
-        revision="document-metadata-v7",
+        revision="document-metadata-v8",
     )
     assert validate_component_metadata(component, projection, source_context=context)
     _legacy_identity(component, projection, revision="document-metadata-v4")

@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0063_review_claim_sources"
+REVISION = "0064_metadata_proven_prefix"
 
 
 class Result:
@@ -47,8 +47,8 @@ class Connection:
     "rows",
     [
         [],
-        [("0062_guidance_review_context",)],
-        [("0064_synthetic_future",)],
+        [("0063_review_claim_sources",)],
+        [("0065_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],
