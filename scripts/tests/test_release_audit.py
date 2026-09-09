@@ -51,6 +51,13 @@ def _codes(root: Path, *, version: str = VERSION, commit_sha: str = COMMIT_SHA) 
     }
 
 
+def test_current_repository_release_metadata_is_aligned() -> None:
+    root = Path(__file__).resolve().parents[2]
+    version = json.loads((root / "apps/web/package.json").read_text())["version"]
+
+    assert check_release_identity(root, version, COMMIT_SHA) == ()
+
+
 def test_release_identity_accepts_aligned_metadata(tmp_path: Path) -> None:
     _write_release_tree(tmp_path)
 

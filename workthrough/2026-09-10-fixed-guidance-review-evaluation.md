@@ -3,7 +3,7 @@
 고정 dev/holdout 20개 사례를 실제 PostgreSQL·로컬 약관 해석·검수 경로에 연결하면서
 확정 진단 입력 누락, 의미 조건에서 치료 종류가 사라지는 문제, 같은 분류 조건을 서로 다른
 내부 node ID 때문에 불일치로 처리하는 문제를 확인했다. 이 변경은 세 경계를 수정하고,
-사례·정답·split·목표를 유지한 실제 모델 평가를 준비한다. 이 구현 검증 중 외부 모델 호출은 0회다. 실제 평가 결과는 후속 실행 증거로 구분한다.
+사례·정답·split·목표를 유지한 실제 모델 평가를 제공한다. 구현 검증의 모의 전송과 후속 실제 호출 결과를 구분한다.
 
 ## Changes
 
@@ -93,3 +93,36 @@ assert-rewrite 경고 1건을 기록하며 실패나 실제 provider 통과로 �
 실제 모델 평가·최종 PR/CI·릴리스 결과는 실행 뒤 기록한다. 실제 자료는 저장소나
 합성 fixture로 복사하지 않았고, 운영 DB·기존 v0.5.2 이미지·키를 변경하지 않았다. 자동 약관
 역할 판독의 미지원 형식, 실제 모바일/PWA 수용은 이 합성 평가로 완료 처리하지 않는다.
+
+
+## 실제 평가와 게시 전 버전 정렬
+
+최종 source `b270a7d21f2eaaf11ee82cbfedba2eafcc7768dc`의
+[CI 34410453799](https://github.com/jihoon22-lee/family-care/actions/runs/34410453799)는
+필수 7/7, Python 3835/3 subtests, PostgreSQL 852 및 빈 DB 왕복, Web 240/build/mock
+27과 이미지 3개를 통과했다. PR #92는 `d88936c5cf971d575684d4ca37e47abe0f394e3c`로
+병합됐으며 파일 트리는 최종 PR source와 같다.
+
+같은 b270a7d의 20건 실제 API 평가는 20 요청/20 응답·사용량 정산을 마쳤고 재호출하지
+않았다. 후보·금액 개선/새 오류 0, 처리 실패 3건 원답 보존, 비용 추정 USD 0.6554364였다.
+원문 범위 PARTIAL과 고정 금액 3건 미산정을 포함한 [평가 보고](../docs/release/v0.5-fixed-review-evaluation.md)를
+별도로 연결한다. 이 결과는 실제 자료 품질이나 모델 단독 정확도가 아니다.
+
+병합 후 `release_audit.py --version 0.5.3 --commit-sha d88936c5cf971d575684d4ca37e47abe0f394e3c`가
+API/Worker `__version__`의 0.5.2 잔여를 거부했다. 태그/전환 전이므로 실행 중인 앱에는
+영향이 없었다. 현재 저장소의 메타데이터 일치를 검증하는 회귀 1 실패(0.05s) 뒤 두
+런타임 버전을 0.5.3으로 수정하고 OpenAPI를 재생성했다. 관련 release audit 8 통과(0.02s),
+동일 CLI 통과를 확인했다. 이 버전 정렬은 기존 실제 모델 입력/해석/비용을 바꾸지 않는다.
+새 source의 완료 검사와 PR/게시 결과는 확인 후 이어 기록한다.
+
+
+2026-09-09 UTC, base d88936c와 위 버전/검사/문서 diff, WSL/Python 3.14.7:
+`uv sync --frozen --offline --all-packages --group dev` 통과(파일 시스템 간 hardlink 대신
+copy 경고). 전체 Python 첫 실행은 health 기대값 0.5.2 잔여로 9 실패/3827 통과였고,
+기대값 정렬 후 3836 통과/852 integration 제외/3 subtests 통과(36.13s)였다.
+Ruff format 903 files/lint, mypy 361 source files, 계약/OpenAPI/Web 생성 drift,
+container 정의·workflow 정책·문서/저장소 안전·diff 검사를 통과했다.
+`corepack pnpm install --offline --frozen-lockfile` 및 `corepack pnpm web:check`는
+31 files/240 tests(49.88s), format/lint/type/build를 통과했다. 이 후속 변경에는
+새 DB 동작이 없으며 전체 PostgreSQL과 세 이미지 빌드는 새 PR CI에서 확인한다.
+실제 provider 입력이 같아 앞선 20건 평가를 반복하지 않았다.

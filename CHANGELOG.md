@@ -14,6 +14,9 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Fixed
 
+- API and Worker runtime version reports align with package metadata and OpenAPI;
+  ordinary CI now rejects a current-repository release version mismatch.
+
 - Confirmed diagnosis can be entered, corrected and reviewed consistently in Web, API and
   Worker inputs. Explicit local diagnosis statements remain subject to uncertainty, person,
   time and contradiction checks; changed interpretation makes prior guidance stale.
