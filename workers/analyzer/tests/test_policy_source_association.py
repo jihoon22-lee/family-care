@@ -3,6 +3,8 @@
 from dataclasses import replace
 from uuid import uuid4
 
+import pytest
+from familycare_worker.document_structure import StructureCell
 from familycare_worker.policy_source_association import LocalMember, associate_policy_sources
 
 from workers.analyzer.tests.test_document_structure import _block, _build, _extraction, _page
@@ -16,6 +18,167 @@ def _source(*pages: str):
     return _build(
         _extraction(*(_page(position, [_block(text)]) for position, text in enumerate(pages, 1)))
     )
+
+
+def _insured_cell(value: str, *, label: str = "피보험자"):
+    source = _source("보험증권 가입금액\n증권번호: synthetic-policy-001")
+    original = source.nodes[0]
+    row = replace(
+        original,
+        node_id="d" * 64,
+        kind="TABLE_ROW",
+        text=f"{label} | {value}",
+        bbox=(20, 40, 420, 60),
+        row_role="data",
+        cells=(
+            StructureCell(0, 0, label, (20, 40, 120, 60), "synthetic.cells[0]"),
+            StructureCell(0, 1, value, (120, 40, 420, 60), "synthetic.cells[1]"),
+        ),
+    )
+    return replace(
+        source,
+        nodes=(*source.nodes, row),
+        pages=(replace(source.pages[0], node_ids=(original.node_id, row.node_id)),),
+    ), row
+
+
+@pytest.mark.parametrize(
+    "qualifier", ["010203-1******", "010203-*******", "2001-02-03", "2000.02.29", "2001/02/03"]
+)
+def test_recognized_insured_qualifier_keeps_whole_original_cell_anchor(qualifier: str) -> None:
+    member = _member()
+    value = f"Family Member A ({qualifier})"
+    source, row = _insured_cell(value)
+    item = associate_policy_sources(source, members=(member,), expected_member_id=member.id)[
+        row.node_id
+    ]
+    assert item.state == "RESOLVED" and item.family_member_id == member.id
+    insured = [anchor for anchor in item.anchor_refs if anchor.kind == "insured"]
+    assert len(insured) == 1
+    assert (insured[0].node_id, insured[0].page, insured[0].start, insured[0].end) == (
+        row.node_id,
+        1,
+        0,
+        len(row.text),
+    )
+    assert row.text == f"피보험자 | {value}"
+    assert value not in repr(item.to_dict()) and qualifier not in repr(item.to_dict())
+
+
+def test_recognized_insured_qualifier_keeps_whole_original_line_anchor() -> None:
+    member = _member()
+    insured_line = "피보험자: Family Member A (010203-1******)"
+    source = _source(f"보험증권 가입금액\n증권번호: synthetic-policy-001\n{insured_line}")
+    item = next(
+        iter(
+            associate_policy_sources(
+                source, members=(member,), expected_member_id=member.id
+            ).values()
+        )
+    )
+    assert item.state == "RESOLVED"
+    anchor = next(anchor for anchor in item.anchor_refs if anchor.kind == "insured")
+    assert source.nodes[0].text[anchor.start : anchor.end] == insured_line
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Family Member A Plus (010203-1******)",
+        "Another Person (010203-1******)",
+        "Family Member A and Family Member B (010203-1******)",
+        "Family Member A (010203-1******) Family Member B",
+        "Family Member A (010203-1******) other text",
+        "Family Member A (other person)",
+        "Family Member A (010203-1******, other text)",
+        "Family Member A (010203-1******) (2001-02-03)",
+        "Family Member A ((010203-1******))",
+        "Family Member A (010203-1*****)",
+        "Family Member A (010203-9******)",
+        "Family Member A (010230-1******)",
+        "Family Member A (000229-1******)",
+        "Family Member A (2001-02-29)",
+        "Family Member A (2001-13-03)",
+        "Family Member A (2001-02/03)",
+        "Family Member A (age 20)",
+    ],
+)
+def test_unrecognized_or_compound_insured_values_do_not_match_a_member(value: str) -> None:
+    member = _member()
+    source, row = _insured_cell(value)
+    item = associate_policy_sources(source, members=(member,), expected_member_id=member.id)[
+        row.node_id
+    ]
+    assert item.state == "UNRESOLVED" and item.family_member_id is None
+
+
+def test_recognized_qualifier_does_not_hide_wrong_or_ambiguous_member() -> None:
+    selected, other = _member(), _member("Family Member B")
+    source, row = _insured_cell("Family Member B (010203-1******)")
+    result = associate_policy_sources(
+        source, members=(selected, other), expected_member_id=selected.id
+    )
+    assert result[row.node_id].state == "WRONG_MEMBER"
+    source, row = _insured_cell("Family Member A (010203-1******)")
+    result = associate_policy_sources(
+        source, members=(selected, _member()), expected_member_id=selected.id
+    )
+    assert result[row.node_id].state == "AMBIGUOUS"
+
+
+def test_qualified_conflicting_insured_anchors_remain_ambiguous() -> None:
+    selected, other = _member(), _member("Family Member B")
+    source = _source(
+        "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
+        "피보험자: Family Member A (010203-1******)",
+        "보험증권 가입금액\n증권번호: synthetic-policy-001\n피보험자: Family Member B (2001-02-03)",
+    )
+    result = associate_policy_sources(
+        source, members=(selected, other), expected_member_id=selected.id
+    )
+    assert all(item.state == "AMBIGUOUS" for item in result.values())
+
+
+@pytest.mark.parametrize("label", ["계약자", "수익자", "메모"])
+def test_qualifier_cannot_turn_other_person_labels_into_insured_proof(label: str) -> None:
+    member = _member()
+    source, row = _insured_cell("Family Member A (010203-1******)", label=label)
+    result = associate_policy_sources(source, members=(member,), expected_member_id=member.id)
+    assert result[row.node_id].state == "UNRESOLVED"
+
+
+@pytest.mark.parametrize("fault", ["column_gap", "different_row", "merged_label", "merged_value"])
+def test_qualifier_cannot_bypass_unsafe_cell_relationships(fault: str) -> None:
+    member = _member()
+    source, row = _insured_cell("Family Member A (010203-1******)")
+    label, value = row.cells
+    if fault == "column_gap":
+        value = replace(value, column_index=2)
+    elif fault == "different_row":
+        value = replace(value, row_index=1)
+    elif fault == "merged_label":
+        label = replace(label, row_span=2)
+    else:
+        value = replace(value, column_span=2)
+    changed = replace(row, cells=(label, value))
+    source = replace(source, nodes=(*source.nodes[:-1], changed))
+    result = associate_policy_sources(source, members=(member,), expected_member_id=member.id)
+    assert result[row.node_id].state == "UNRESOLVED"
+
+
+def test_qualified_insured_line_with_ambiguous_columns_is_not_proof() -> None:
+    member = _member()
+    source, row = _insured_cell("Family Member A (010203-1******)")
+    changed = replace(
+        row,
+        kind="TEXT_LINE",
+        cells=(),
+        text="피보험자: Family Member A (010203-1******)",
+        issue_codes=("LINE_COLUMN_CONTEXT_UNRESOLVED",),
+    )
+    source = replace(source, nodes=(*source.nodes[:-1], changed))
+    result = associate_policy_sources(source, members=(member,), expected_member_id=member.id)
+    assert result[row.node_id].state == "UNRESOLVED"
 
 
 def test_repeated_contract_anchor_links_later_pages_without_transmitting_names() -> None:

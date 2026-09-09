@@ -8,6 +8,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from typing import Any, Literal
 from uuid import UUID, uuid5
 
@@ -19,6 +20,15 @@ _TYPE_LABELS = {
     "insured": re.compile(r"^(?:피보험자(?: 성명)?|insured(?: name)?)$", re.IGNORECASE),
     "contract": re.compile(r"^(?:증권번호|계약번호|policy number|contract number)$", re.IGNORECASE),
 }
+_QUALIFIED_INSURED = re.compile(r"(?P<name>[^()]+)\((?P<qualifier>[^()]+)\)")
+_DATE_QUALIFIER = re.compile(
+    r"(?P<year>[0-9]{4})(?P<separator>[-./])(?P<month>[0-9]{2})"
+    r"(?P=separator)(?P<day>[0-9]{2})"
+)
+_MASKED_ID_QUALIFIER = re.compile(
+    r"(?P<year>[0-9]{2})(?P<month>[0-9]{2})(?P<day>[0-9]{2})-"
+    r"(?P<code>[1-8*])\*{6}"
+)
 
 
 @dataclass(frozen=True, repr=False)
@@ -67,6 +77,41 @@ class SourceAssociation:
 
 def _normalize(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _recognized_insured_qualifier(value: str) -> bool:
+    """Recognize a complete date/masked-ID shape without emitting its values as facts."""
+    matched = _DATE_QUALIFIER.fullmatch(value)
+    if matched is not None:
+        year = int(matched["year"])
+    else:
+        matched = _MASKED_ID_QUALIFIER.fullmatch(value)
+        if matched is None:
+            return False
+        # A fully masked suffix leaves the century unknown. Use a leap-capable
+        # century only for calendar-shape validation; no birth date is inferred.
+        century = 1900 if matched["code"] in {"1", "2", "5", "6"} else 2000
+        year = century + int(matched["year"])
+    try:
+        date(year, int(matched["month"]), int(matched["day"]))
+    except ValueError:
+        return False
+    return True
+
+
+def _insured_matches(value: str, names: dict[str, set[UUID]]) -> set[UUID]:
+    direct = names.get(value)
+    if direct is not None:
+        return direct
+    matched = _QUALIFIED_INSURED.fullmatch(value)
+    if matched is None:
+        return set()
+    identities = names.get(matched["name"].strip())
+    if identities is None or not _recognized_insured_qualifier(matched["qualifier"].strip()):
+        return set()
+    # Only the lookup changes. The caller retains the complete original anchor
+    # and never stores a parsed identifier, date, or new member alias.
+    return identities
 
 
 def _anchors(node: StructureNode) -> list[tuple[str, str, AnchorRef]]:
@@ -170,7 +215,7 @@ def associate_policy_sources(
                 for anchor in items
             ]
             insured = [(value, ref) for kind, value, ref in linked if kind == "insured"]
-            matches = [names.get(value, set()) for value, _ in insured]
+            matches = [_insured_matches(value, names) for value, _ in insured]
             identities = set().union(*matches) if matches else set()
             if any(len(item) > 1 for item in matches) or len(identities) > 1:
                 association = SourceAssociation("AMBIGUOUS")
@@ -213,7 +258,7 @@ def associate_policy_sources(
         own_insured = [
             value for kind, value, _ in page_anchors[node.page_number] if kind == "insured"
         ]
-        if any(names.get(value, set()) != {expected_member_id} for value in own_insured):
+        if any(_insured_matches(value, names) != {expected_member_id} for value in own_insured):
             result[node.node_id] = SourceAssociation("AMBIGUOUS")
             continue
         own = result[node.node_id]
