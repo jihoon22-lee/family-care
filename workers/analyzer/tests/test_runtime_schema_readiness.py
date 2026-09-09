@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0064_metadata_proven_prefix"
+REVISION = "0065_retained_policy_jobs"
 
 
 class Result:
@@ -47,8 +47,8 @@ class Connection:
     "rows",
     [
         [],
-        [("0063_review_claim_sources",)],
-        [("0065_synthetic_future",)],
+        [("0064_metadata_proven_prefix",)],
+        [("0066_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],
@@ -68,6 +68,7 @@ def test_worker_current_schema_is_ready_without_ai_or_checkout(monkeypatch, tmp_
     assert health.database_is_ready("postgresql://synthetic") is True
     assert any("alembic_version" in q and "LIMIT 2" in q for q in connection.queries)
     assert any("sources_json" in q and "WHERE false" in q for q in connection.queries)
+    assert any("policy_structuring_source_current" in q for q in connection.queries)
 
 
 def test_worker_rejects_stamped_revision_with_missing_contract(monkeypatch, caplog):

@@ -74,7 +74,7 @@ _SAFE_JOB_COLUMNS = (
     "id, household_space_id, batch_item_id, family_member_id, document_version_id, "
     "extraction_id, policy_aggregate_id, state, pipeline_version, available_at, "
     "lease_owner, lease_expires_at, heartbeat_at, attempts, max_attempts, error_code, "
-    "completed_at"
+    "completed_at, processing_mode, resubmission_of_job_id, source_generation_id"
 )
 _SAFE_RETURNING_COLUMNS = ", ".join(
     f"job.{column.strip()}" for column in _SAFE_JOB_COLUMNS.split(",")
@@ -152,6 +152,9 @@ class PolicyStructuringJobRecord:
     attempts: int
     max_attempts: int
     error_code: PolicyStructuringErrorCode | None
+    processing_mode: Literal["automatic", "retained"] = "automatic"
+    resubmission_of_job_id: UUID | None = None
+    source_generation_id: UUID | None = None
 
 
 class PolicyStructuringQueue(Protocol):
@@ -320,6 +323,21 @@ def _row_to_job(row: Mapping[str, object]) -> PolicyStructuringJobRecord:
             raise InvalidPolicyStructuringJob
         if completed_at is not None and not isinstance(completed_at, datetime):
             raise InvalidPolicyStructuringJob
+        mode = row.get("processing_mode", "automatic")
+        parent, generation = row.get("resubmission_of_job_id"), row.get("source_generation_id")
+        if (
+            mode not in {"automatic", "retained"}
+            or (mode == "automatic" and (parent is not None or generation is not None))
+            or (
+                mode == "retained"
+                and (
+                    not isinstance(parent, UUID)
+                    or not isinstance(generation, UUID)
+                    or parent == values["id"]
+                )
+            )
+        ):
+            raise InvalidPolicyStructuringJob
         return PolicyStructuringJobRecord(
             id=cast(UUID, values["id"]),
             household_space_id=cast(UUID, values["household_space_id"]),
@@ -337,6 +355,9 @@ def _row_to_job(row: Mapping[str, object]) -> PolicyStructuringJobRecord:
             attempts=attempts,
             max_attempts=max_attempts,
             error_code=_row_error_code(row.get("error_code")),
+            processing_mode=mode,
+            resubmission_of_job_id=cast(UUID | None, parent),
+            source_generation_id=cast(UUID | None, generation),
         )
     except KeyError, TypeError, ValueError:
         raise InvalidPolicyStructuringJob from None
@@ -395,6 +416,7 @@ class PolicyStructuringJobQueue:
                 SELECT job.id
                 FROM policy_structuring_jobs AS job
                 WHERE job.state IN ('queued', 'retryable_failed')
+                  AND job.processing_mode = 'automatic'
                   AND job.available_at <= clock_timestamp()
                   AND job.attempts < job.max_attempts
                 ORDER BY job.available_at, job.created_at, job.id
@@ -433,6 +455,7 @@ class PolicyStructuringJobQueue:
                 END,
                 updated_at = clock_timestamp()
             WHERE state = 'running'
+              AND processing_mode = 'automatic'
               AND lease_expires_at <= clock_timestamp()
         """
 
@@ -448,6 +471,7 @@ class PolicyStructuringJobQueue:
                 completed_at = clock_timestamp(),
                 updated_at = clock_timestamp()
             WHERE state IN ('queued', 'retryable_failed')
+              AND processing_mode = 'automatic'
               AND attempts >= max_attempts
         """
 
@@ -517,6 +541,7 @@ class PolicyStructuringJobQueue:
                       AND state = 'running'
                       AND lease_owner = %s
                       AND lease_expires_at > clock_timestamp()
+                      AND policy_structuring_source_current(id)
                     RETURNING id
                     """,
                     (lease, target, owner),

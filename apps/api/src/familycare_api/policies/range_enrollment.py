@@ -292,7 +292,10 @@ def project_range_candidate(
         "JOIN document_structure_generations g ON g.id=p.generation_id "
         "JOIN document_versions dv ON dv.id=j.document_version_id "
         "JOIN documents d ON d.id=dv.document_id AND d.deleted_at IS NULL "
-        "WHERE root.review_item_id=%s AND root.household_space_id=%s AND j.id=%s FOR SHARE OF d",
+        "WHERE root.review_item_id=%s AND root.household_space_id=%s AND j.id=%s "
+        "AND policy_structuring_source_current(j.id) "
+        "AND (j.processing_mode='automatic' OR "
+        "(g.id=j.source_generation_id AND g.is_current AND NOT g.cancelled)) FOR SHARE OF d,g",
         (version["review_item_id"], household, context["id"]),
     ).fetchone()
     if source is None or source["structure_json"] is None:

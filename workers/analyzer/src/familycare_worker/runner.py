@@ -279,6 +279,9 @@ class PolicyStructuringJobRunner:
         if job is None:
             return False
         try:
+            if job.processing_mode == "retained" and self.range_repository is None:
+                self._safe_fail(job.id, worker_id, "POLICY_STRUCTURING_INVALID_RESPONSE")
+                return True
             if self.range_repository is not None:
                 self._run_range(job, worker_id)
                 return True

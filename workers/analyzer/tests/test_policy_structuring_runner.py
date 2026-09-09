@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from familycare_worker.ai.provider import (
     EvidenceSlice,
@@ -312,3 +313,26 @@ def test_runner_returns_false_when_no_job_is_due() -> None:
     )
 
     assert runner.run_once("worker-a") is False
+
+
+def test_retained_job_cannot_fall_back_to_legacy_provider_processing() -> None:
+    from familycare_worker.retained_policy import RETAINED_POLICY_PIPELINE_REVISION
+
+    job = replace(
+        _job(),
+        processing_mode="retained",
+        resubmission_of_job_id=uuid4(),
+        source_generation_id=uuid4(),
+        pipeline_version=RETAINED_POLICY_PIPELINE_REVISION,
+    )
+    queue = FakeQueue(job)
+    provider = RecordingProvider()
+    runner = PolicyStructuringJobRunner(
+        queue=queue,
+        evidence_loader=FakeLoader(_evidence()),
+        provider=provider,
+        publisher=RecordingPublisher(),
+    )
+    assert runner.run_once("worker-a")
+    assert provider.calls == []
+    assert queue.failures == [(job.id, "worker-a", "POLICY_STRUCTURING_INVALID_RESPONSE")]

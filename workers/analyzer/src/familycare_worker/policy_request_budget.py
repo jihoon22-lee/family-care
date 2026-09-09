@@ -60,6 +60,7 @@ class PolicyRequestBudget:
                       AND j.pipeline_version = %s AND j.state = 'running'
                       AND j.lease_owner = %s AND j.attempts = %s
                       AND j.lease_expires_at > clock_timestamp()
+                      AND policy_structuring_source_current(j.id)
                     FOR SHARE OF j, d
                     """,
                     (
