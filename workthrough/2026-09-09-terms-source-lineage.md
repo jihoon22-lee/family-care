@@ -93,3 +93,8 @@ revision 비교만 v2/v3로 확장하며 v1은 계속 차단한다. v3 이력이
 
 PR84의 이전 전체 PG CI 실패와 수정은 해당 workthrough에 보존했다. 현재 두 PR의
 최신 전체 CI와 보호된 0068 적용·재구성·제한된 v3 실행은 별도 수용으로 진행한다.
+
+`e52e932`의 후속 순서 검증에서 consumers→date-origin과 앞서 환경 차이로 실행하지
+못했던 enrollment migration 회귀를 함께 실행해 PostgreSQL 5건을 통과했다(7.92초).
+과거 metadata 정리는 검증된 전용 test DB에서 현재 job 생성 전에 수행하며 제품 가드나
+정확한 게시 건수 assertion을 변경하지 않는다. 두 PR의 CI 실패 이력은 보존한다.
