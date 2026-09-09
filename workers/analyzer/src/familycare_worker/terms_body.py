@@ -146,7 +146,9 @@ def _box(node: StructureNode) -> tuple[float, float, float, float]:
         or not (0 <= box[0] < box[2] and 0 <= box[1] < box[3])
     ):
         raise _InvalidPage("SOURCE_GEOMETRY_UNRESOLVED")
-    return box
+    # Stored projections deserialize JSON arrays. Compare their coordinates by
+    # value against the derived union, independent of the container type.
+    return box[0], box[1], box[2], box[3]
 
 
 def _lineage(node: StructureNode, by_id: dict[str, StructureNode]) -> set[str]:

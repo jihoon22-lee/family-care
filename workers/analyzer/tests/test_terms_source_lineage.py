@@ -1,6 +1,9 @@
 """Synthetic native lines use the constructor's first-word geometry contract."""
 
-from dataclasses import replace
+import json
+from dataclasses import asdict, replace
+from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
 from familycare_worker.document_structure import (
@@ -61,6 +64,30 @@ def test_constructor_line_passes_first_word_lineage_validation(boxes: tuple[BBox
     assert len(lines) == 1 and len(lines[0].source_spans) == 3
     by_id = {node.node_id: node for node in source.nodes}
     assert _lineage(lines[0], by_id) == {span.block_node_id for span in lines[0].source_spans}
+
+
+def test_persisted_json_boxes_keep_the_same_operative_body() -> None:
+    from familycare_worker.document_metadata_repository import _pages
+
+    source = _build(
+        _extraction(
+            _page(
+                1, _words(["제7조 (가상 지급 조건)", "회사는 보험수익자에게 보험금을 지급합니다."])
+            )
+        )
+    )
+    original = observe_terms_body(1, source.nodes)
+    assert original.status == "SUPPORTED"
+    persisted = json.loads(json.dumps([asdict(node) for node in source.nodes]))
+    connection = Mock()
+    connection.execute.side_effect = [
+        Mock(fetchall=lambda: [{"number": 1, "layer": "native"}]),
+        Mock(fetchone=lambda: {"source": {"nodes": persisted}}),
+    ]
+    pages = list(_pages(connection, {"id": uuid4(), "household_space_id": uuid4()}))
+    assert len(pages) == 1
+    restored = pages[0][1]
+    assert observe_terms_body(1, restored) == original
 
 
 @pytest.mark.parametrize("change", ("alternating-baselines", "short-middle-word"))

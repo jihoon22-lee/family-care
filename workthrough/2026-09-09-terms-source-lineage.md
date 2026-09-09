@@ -17,6 +17,10 @@ revision별 기준을 전달하는 변경은 진행 중이다. 과거 검증 결
   보존, 반복 실행과 v9 이력 downgrade 거부를 통합 완료 후 검증한다.
 - 공유 계약의 revision enum과 range evidence 요구를 갱신하고 공식 generator로
   API/Worker 소비자를 재생성한다. API/Worker runtime fence는 0066을 요구한다.
+- 저장된 JSON 좌표 배열이 줄의 tuple bbox와 다르다고 판정되는 추가 문제도 확인했다.
+  실제 metadata `_pages` 복원 경로를 쓰는 합성 JSON 왕복으로 지원 조항이 AMBIGUOUS가
+  되는 실패를 재현했고, 좌표 값으로 비교하도록 정규화했다. 초기 fixture import 오류는
+  이 기능 실패 확인 전에 수정했다. 원문/IR 값과 identity는 변경하지 않는다.
 
 전체 필수 검사·통합 API/약관 source 검증·보호된 재처리·릴리스/운영 전환은 진행 중이다.
 보호 진단의 실제 본문·개인정보·수치는 저장소 밖에만 보존한다.
