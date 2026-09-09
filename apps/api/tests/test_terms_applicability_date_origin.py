@@ -33,8 +33,8 @@ pytestmark = pytest.mark.integration
 @pytest.fixture()
 def date_origin_database(request: pytest.FixtureRequest) -> Iterator[Any]:
     url, job = request.getfixturevalue("enrollment_database")
-    with psycopg.connect(_psycopg_url(url)) as connection:
-        connection.execute("TRUNCATE document_structure_generations CASCADE")
+    # The parent owns source cleanup. Truncating generations here also deletes
+    # its already-claimed job through the retained-source foreign key.
     try:
         yield url, job
     finally:
