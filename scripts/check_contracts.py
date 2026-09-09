@@ -245,6 +245,7 @@ STRUCTURING_FACT_FIELD_IDS = [
     "visit_date",
     "condition_class",
     "diagnosis_label",
+    "diagnosis_confirmed",
     "treatment_kind",
     "admission",
     "outpatient",

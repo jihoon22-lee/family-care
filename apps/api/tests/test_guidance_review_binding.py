@@ -59,3 +59,39 @@ def test_conflicting_review_meanings_for_one_original_do_not_select_by_input_ord
         roots, codes = merge_review_roots((), reviewed)
         assert roots == ()
         assert "REVIEW_SEMANTIC_DISAGREEMENT" in codes
+
+
+def test_local_and_model_node_ids_do_not_create_a_false_semantic_disagreement():
+    original, _ = _review_root()
+    assert any(rule.classification_scopes for rule in original.rules)
+    reviewed = replace(
+        original,
+        rules=tuple(
+            replace(
+                rule,
+                classification_scopes=tuple(
+                    {**scope, "node_id": f"synthetic-model-node-{index}"}
+                    for index, scope in enumerate(reversed(rule.classification_scopes))
+                ),
+            )
+            for rule in original.rules
+        ),
+    )
+    roots, codes = merge_review_roots((original,), (reviewed,))
+    assert roots == (original,)
+    assert codes == ()
+    different = replace(
+        reviewed,
+        rules=tuple(
+            replace(
+                rule,
+                classification_scopes=tuple(
+                    {**scope, "code_version": "different-version"}
+                    for scope in rule.classification_scopes
+                ),
+            )
+            for rule in reviewed.rules
+        ),
+    )
+    _, codes = merge_review_roots((original,), (different,))
+    assert "REVIEW_SEMANTIC_DISAGREEMENT" in codes

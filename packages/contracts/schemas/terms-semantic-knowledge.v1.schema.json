@@ -193,6 +193,7 @@
             "MedicalEvent.admission",
             "MedicalEvent.performed",
             "MedicalEvent.diagnosis_confirmed",
+            "MedicalEvent.treatment_kind",
             "MedicalEvent.admission_days",
             "PolicyContract.contract_start",
             "ClaimHistory.counted_occurrence"
@@ -256,6 +257,14 @@
               "maxItems": 2,
               "minItems": 2,
               "type": "array"
+            },
+            {
+              "enum": [
+                "surgery",
+                "admission",
+                "outpatient"
+              ],
+              "type": "string"
             }
           ]
         }

@@ -19,6 +19,7 @@ _STRUCTURED_FIELD_PATHS = {
     "visit_date": "MedicalEvent.visit_date",
     "condition_class": "MedicalEvent.classification",
     "diagnosis_label": "MedicalEvent.diagnosis_label",
+    "diagnosis_confirmed": "MedicalEvent.diagnosis_confirmed",
     "treatment_kind": "MedicalEvent.treatment_kind",
     "admission": "MedicalEvent.admission",
     "outpatient": "MedicalEvent.outpatient",

@@ -4,7 +4,24 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-09-10
+
+### Added
+
+- The frozen twenty-case local guidance benchmark can run through synthetic originals,
+  PostgreSQL, the real review Worker and an explicitly invoked provider evaluation with
+  durable per-case reservations and a conservative USD ceiling.
+
 ### Fixed
+
+- Confirmed diagnosis can be entered, corrected and reviewed consistently in Web, API and
+  Worker inputs. Explicit local diagnosis statements remain subject to uncertainty, person,
+  time and contradiction checks; changed interpretation makes prior guidance stale.
+- Source-proven treatment activities retain their eligibility meaning through semantic
+  compilation, so an explicit negative surgery observation can exclude a surgery condition.
+  Schema 0070 admits compiler v2 without rewriting v1 publication history.
+- Equivalent source-verified classification rules no longer become review disagreements
+  merely because the local planner and model assigned different node identifiers.
 
 - Browser dependency setup excludes the unused Google Chrome APT repository on CI runners
   while preserving Playwright system dependency installation and integrity checks.

@@ -140,12 +140,16 @@ def read_subject_guidance(
         if (value := member[key])
     )
     from familycare_api.guidance.expenses import read_expenses
+    from familycare_api.guidance.interpretation import INTERPRETATION_REVISION
 
     expenses = read_expenses(connection, scope, event.id, event.version)
     # Names stay in transient parser inputs; snapshots retain only their aggregate digest.
     digest = hashlib.sha256(
         json.dumps(
-            [members, expenses.digest_sha256], sort_keys=True, default=str, separators=(",", ":")
+            [INTERPRETATION_REVISION, members, expenses.digest_sha256],
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
         ).encode()
     ).hexdigest()
     return GuidanceContext(
@@ -506,7 +510,20 @@ def merge_review_roots(
                 "complete": root.complete,
                 "rules": sorted(
                     json.dumps(
-                        [document(rule.rule_document), rule.classification_scopes],
+                        [
+                            document(rule.rule_document),
+                            sorted(
+                                json.dumps(
+                                    {
+                                        key: value
+                                        for key, value in scope.items()
+                                        if key != "node_id"
+                                    },
+                                    sort_keys=True,
+                                )
+                                for scope in rule.classification_scopes
+                            ),
+                        ],
                         sort_keys=True,
                         default=str,
                     )

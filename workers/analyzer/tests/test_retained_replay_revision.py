@@ -5,6 +5,7 @@ import pytest
 from familycare_worker import retained_policy
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
 from familycare_worker.policy_range_repository import PolicyRangeRepository
+from familycare_worker.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from psycopg.types.json import Jsonb
 
 from apps.api.tests.test_metadata_navigation_publication import _migrate
@@ -130,7 +131,7 @@ def test_v4_job_alone_refuses_downgrade(retained_source):
     assert _history(sample.url, new.id) == before
     with psycopg.connect(_psycopg_url(sample.url)) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            REVISION,
+            SUPPORTED_SCHEMA_REVISION,
         )
 
 

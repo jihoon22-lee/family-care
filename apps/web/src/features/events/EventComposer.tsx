@@ -88,6 +88,7 @@ function isEventFactField(value: string): value is EventFactField {
     "visit_date",
     "condition_class",
     "diagnosis_label",
+    "diagnosis_confirmed",
     "treatment_kind",
     "admission",
     "outpatient",

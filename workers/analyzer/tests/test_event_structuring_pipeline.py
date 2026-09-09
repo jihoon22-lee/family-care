@@ -374,3 +374,29 @@ def test_result_has_no_authority_or_private_fields() -> None:
     assert "password" not in representation
     assert "household_space_id" not in representation
     assert "synthetic pre-visit situation" not in representation
+
+
+@pytest.mark.parametrize("value", [True, False, None])
+def test_diagnosis_confirmation_remains_an_editable_ai_candidate(value):
+    state = "missing" if value is None else "confirmed"
+    provider = FakeProvider(
+        {
+            "schema_version": "1",
+            "facts": [
+                _fact("00000000-0000-4000-8000-000000000a01", "diagnosis_confirmed", value, state)
+            ],
+            "questions": [_question("diagnosis_confirmed")],
+        }
+    )
+    result = structure_event(request=_request(), provider=provider, model="gpt-5.6-luna")
+    assert len(result.facts) == 1
+    assert result.facts[0].field_id == "diagnosis_confirmed"
+    assert result.facts[0].value is value and result.facts[0].source == "ai"
+    assert result.questions == (OptionalQuestion("diagnosis_confirmed", "diagnosis_confirmed"),)
+    assert not result.issues
+
+
+@pytest.mark.parametrize("value", ["true", "false", 1, 0])
+def test_diagnosis_confirmation_candidate_rejects_non_boolean_values(value):
+    with pytest.raises(ValueError):
+        StructuredFactCandidate(field_id="diagnosis_confirmed", value=value, state="confirmed")

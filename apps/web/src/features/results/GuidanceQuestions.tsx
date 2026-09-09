@@ -14,6 +14,7 @@ import styles from "./GuidanceQuestions.module.css";
 const structuredFields: StructuredFactInput["field_id"][] = [
   "condition_class",
   "diagnosis_label",
+  "diagnosis_confirmed",
   "treatment_kind",
   "admission",
   "outpatient",
@@ -27,6 +28,7 @@ const structuredFields: StructuredFactInput["field_id"][] = [
   "separately_billed_treatment",
 ];
 const booleans = new Set([
+  "diagnosis_confirmed",
   "admission",
   "outpatient",
   "pharmacy",

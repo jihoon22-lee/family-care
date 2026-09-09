@@ -88,6 +88,7 @@ class SemanticCondition(SemanticContract):
         "MedicalEvent.admission",
         "MedicalEvent.performed",
         "MedicalEvent.diagnosis_confirmed",
+        "MedicalEvent.treatment_kind",
         "MedicalEvent.admission_days",
         "PolicyContract.contract_start",
         "ClaimHistory.counted_occurrence",
@@ -100,6 +101,7 @@ class SemanticCondition(SemanticContract):
         bool
         | Annotated[int, Field(ge=0, le=100000)]
         | Annotated[list[Annotated[int, Field(ge=0, le=100000)]], Field(min_length=2, max_length=2)]
+        | Literal["surgery", "admission", "outpatient"]
     )
 
 

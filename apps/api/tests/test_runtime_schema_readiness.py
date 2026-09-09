@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0069_policy_draft_replay"
+REVISION = "0070_semantic_activity"
 
 
 class Result:
@@ -57,8 +57,8 @@ class Engine:
     "rows",
     [
         [],
-        [("0068_range_field_proof",)],
-        [("0070_synthetic_future",)],
+        [("0069_policy_draft_replay",)],
+        [("0071_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

@@ -416,6 +416,14 @@ def test_unrepresentable_decimal_is_preserved_as_unsupported_calculation() -> No
         {
             "kind": "condition",
             "rule_kind": "eligibility",
+            "field": "MedicalEvent.treatment_kind",
+            "operator": "equals",
+            "value": "surgery",
+            "unit": None,
+        },
+        {
+            "kind": "condition",
+            "rule_kind": "eligibility",
             "field": "MedicalEvent.admission_days",
             "operator": "range",
             "value": [1, 10],
@@ -499,6 +507,9 @@ def test_frequency_count_below_evaluates_known_and_missing_history(
 @pytest.mark.parametrize(
     "field,operator,value,unit,kind",
     [
+        ("MedicalEvent.treatment_kind", "equals", True, None, "eligibility"),
+        ("MedicalEvent.treatment_kind", "equals", "surgery", "days", "eligibility"),
+        ("MedicalEvent.admission", "equals", "surgery", None, "eligibility"),
         ("MedicalEvent.admission", "equals", 1, None, "eligibility"),
         ("MedicalEvent.admission_days", "equals", True, None, "eligibility"),
         ("MedicalEvent.admission", "equals", True, None, "temporal"),

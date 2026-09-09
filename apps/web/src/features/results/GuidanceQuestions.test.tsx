@@ -25,6 +25,39 @@ const questions = [
 ];
 
 describe("minimum event questions", () => {
+  it.each([true, false])(
+    "saves explicit diagnosis confirmation as boolean %s",
+    async (value) => {
+      const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
+      render(
+        <GuidanceQuestions
+          event={event}
+          questions={[
+            {
+              field_path: "MedicalEvent.diagnosis_confirmed",
+              reason_code: "EVENT_FACT_NEEDED",
+            },
+          ]}
+          onSave={save}
+          onAnalyze={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      await userEvent.selectOptions(
+        screen.getByLabelText("확정 진단 여부"),
+        String(value),
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+      );
+      expect(save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          structured_facts: [{ field_id: "diagnosis_confirmed", value }],
+        }),
+        expect.any(AbortSignal),
+      );
+    },
+  );
+
   it("sends both explicit admission and day-count answers without dropping either", async () => {
     const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
     render(

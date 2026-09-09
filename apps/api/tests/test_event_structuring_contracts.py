@@ -105,6 +105,7 @@ def test_event_structuring_schema_is_recursive_strict_and_bounded() -> None:
         "visit_date",
         "condition_class",
         "diagnosis_label",
+        "diagnosis_confirmed",
         "treatment_kind",
         "admission",
         "outpatient",

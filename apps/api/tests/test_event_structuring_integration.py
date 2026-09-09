@@ -269,3 +269,121 @@ def test_conflicting_combined_admission_answers_do_not_change_event(database_url
             ),
         )
     assert repository.get_medical_event(scope, event.id).version == event.version
+
+
+def test_diagnosis_confirmation_update_roundtrip_is_scoped_versioned_and_reversible(database_url):
+    event = _event(database_url)
+    scope = HouseholdScope(HOUSEHOLD_A)
+    repository = DecisionRepository(database_url)
+    service = DecisionService(scope, repository)
+    first_version = event.version
+    for value in (True, False, None):
+        previous_version = event.version
+        change = MedicalEventUpdateRequest.model_validate(
+            {
+                "expected_version": previous_version,
+                "structured_facts": [{"field_id": "diagnosis_confirmed", "value": value}],
+            }
+        )
+        with pytest.raises(MedicalEventNotFound):
+            DecisionService(HouseholdScope(HOUSEHOLD_B), repository).update_medical_event(
+                event.id, change
+            )
+        event = service.update_medical_event(event.id, change)
+        assert event.version == previous_version + 1
+        stored = repository.get_medical_event(scope, event.id)
+        fact = next(
+            fact for fact in stored.structured_facts if fact["field_id"] == "diagnosis_confirmed"
+        )
+        assert fact["value"] is value and fact["source"] == "user"
+        assert fact["state"] == ("missing" if value is None else "confirmed")
+        with pytest.raises(VersionConflict):
+            service.update_medical_event(event.id, change)
+    with psycopg.connect(database_url) as connection:
+        history = connection.execute(
+            "SELECT event_version, facts_json->'diagnosis_confirmed'->'value' "
+            "FROM medical_event_fact_versions "
+            "WHERE medical_event_id=%s ORDER BY event_version",
+            (event.id,),
+        ).fetchall()
+    assert history == [
+        (first_version + 1, True),
+        (first_version + 2, False),
+        (first_version + 3, None),
+    ]
+
+
+@pytest.mark.parametrize("value", [True, False, None])
+def test_diagnosis_history_blocks_downgrade_before_any_semantic_publication(database_url, value):
+    from apps.api.tests.test_metadata_navigation_publication import _migrate
+
+    migration_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    event = _event(database_url)
+    service = DecisionService(HouseholdScope(HOUSEHOLD_A), DecisionRepository(database_url))
+    event = service.update_medical_event(
+        event.id,
+        MedicalEventUpdateRequest.model_validate(
+            {
+                "expected_version": event.version,
+                "structured_facts": [{"field_id": "diagnosis_confirmed", "value": value}],
+            }
+        ),
+    )
+    with psycopg.connect(database_url) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM terms_semantic_publications"
+        ).fetchone() == (0,)
+    try:
+        refused = _migrate(migration_url, "downgrade", "0069_policy_draft_replay")
+        assert refused.returncode != 0
+        assert "event diagnosis history prevents downgrade" in refused.stderr
+        assert service.repository.get_medical_event(service.scope, event.id) == event
+    finally:
+        assert _migrate(migration_url, "upgrade", "head").returncode == 0
+
+
+def test_diagnosis_question_without_a_fact_also_preserves_rollback_boundary(database_url):
+    from apps.api.tests.test_metadata_navigation_publication import _migrate
+
+    event = _event(database_url)
+    scope = HouseholdScope(HOUSEHOLD_A)
+    job = EventStructuringRepository(database_url).enqueue(scope, event.id, event.version)
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            "INSERT INTO medical_event_fact_versions (household_space_id,medical_event_id,"
+            "structuring_job_id,event_version,version,source,version_state,facts_json,"
+            "questions_json,issue_codes_json,is_current) VALUES(%s,%s,%s,1,1,'ai','candidate',"
+            "'{}',%s,'[]',true)",
+            (
+                HOUSEHOLD_A,
+                event.id,
+                job.id,
+                Jsonb(
+                    [
+                        {"question_code": "diagnosis_confirmed", "field_id": "diagnosis_confirmed"},
+                    ]
+                ),
+            ),
+        )
+    migration_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    refused = _migrate(migration_url, "downgrade", "0069_policy_draft_replay")
+    assert refused.returncode != 0
+    assert "event diagnosis history prevents downgrade" in refused.stderr
+    retained = DecisionRepository(database_url).get_medical_event(scope, event.id)
+    assert any(
+        question["field_id"] == "diagnosis_confirmed" for question in retained.optional_questions
+    )
+
+
+def test_parser_revision_marks_saved_guidance_stale_without_rewriting_it(database_url, monkeypatch):
+    from familycare_api.guidance import interpretation
+
+    event = _event(database_url)
+    service = DecisionService(HouseholdScope(HOUSEHOLD_A), DecisionRepository(database_url))
+    original = service.analyze_medical_event(event.id)
+    assert original.local_guidance is not None
+    assert service.get_decision_result(event.id, event.version).local_guidance_stale is False
+    monkeypatch.setattr(interpretation, "INTERPRETATION_REVISION", "synthetic-next-parser-revision")
+    saved = service.get_decision_result(event.id, event.version)
+    assert saved.local_guidance_stale is True
+    assert saved.local_guidance == original.local_guidance

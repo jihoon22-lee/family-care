@@ -14,7 +14,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-INTERPRETATION_REVISION = "local-situation-v1"
+INTERPRETATION_REVISION = "local-situation-v2"
 MAX_SITUATION_CHARS = 2000
 _MAX_SUBJECT_TERMS = 32
 _MAX_CLAUSES = 128
@@ -65,7 +65,7 @@ class InterpretationIssue:
 class SituationInterpretation:
     facts: tuple[InterpretedFact, ...]
     issues: tuple[InterpretationIssue, ...]
-    revision: Literal["local-situation-v1"] = "local-situation-v1"
+    revision: Literal["local-situation-v2"] = "local-situation-v2"
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -108,6 +108,27 @@ _ACTIVITIES: tuple[tuple[Activity, str, re.Pattern[str]], ...] = (
         ),
     ),
 )
+_DIAGNOSIS = re.compile(
+    r"(?<![가-힣A-Za-z])(?:확정\s*진단|진단|확진)|\b(?:diagnosis|diagnosed)\b", re.I
+)
+_DIAGNOSIS_ASSERTED = re.compile(
+    r"(?:확정\s*)?진단(?:을|은|를)?\s*(?:받았|되었|됐)|"
+    r"확진(?:을|이|은)?\s*(?:받았|되었|됐)|"
+    r"\b(?:was|were|has\s+been|have\s+been)\s+diagnosed\b|"
+    r"\bdiagnosis\s+(?:was|is|has\s+been)\s+confirmed\b",
+    re.I,
+)
+
+
+_DIAGNOSIS_DENIED = re.compile(
+    r"(?:확정\s*)?진단(?:을|은|를)?\s*(?:받지|되지)\s*(?:않|아니)|"
+    r"확진(?:을|이|은)?\s*(?:받지|되지)\s*(?:않|아니)|"
+    r"\bdiagnosis\s+(?:was|is|has\s+been)\s+not\s+confirmed\b|"
+    r"\b(?:not|never)\s+(?:been\s+)?diagnosed\b",
+    re.I,
+)
+
+
 _NEGATED = re.compile(
     r"않|안(?=\s*(?:했|하|받|할))|(?<![가-힣])안\s|없|아니|아닙|아님|미(?:시행|실시)|"
     r"\b(?:no|not|never|without|denied)\b|\b(?:did|was|were|has|have|had|is|are|do|does)n['’]t\b",
@@ -499,6 +520,42 @@ def _activity_facts(
     return result
 
 
+def _diagnosis_facts(
+    text: str, clause: _Clause, clauses: tuple[_Clause, ...]
+) -> list[InterpretedFact]:
+    """Recognize only explicit confirmation; diagnosis words never establish a code."""
+    body = text[clause.span.start : clause.span.end]
+    result = []
+    for match in _DIAGNOSIS.finditer(body):
+        span = SourceSpan(clause.span.start + match.start(), clause.span.start + match.end())
+        scoped = _guard(text, span, clauses)
+        value: bool | None = None
+        state: FactState = "UNKNOWN"
+        reasons = scoped.reason_codes
+        if re.search(r"\bmay\b", body, re.I):
+            reasons = ("LOCAL_STATEMENT_UNCERTAIN",)
+        elif scoped.state == "NEGATED":
+            if _DIAGNOSIS_DENIED.search(body):
+                value, state = False, "CONFIRMED"
+            else:
+                reasons = ("LOCAL_DIAGNOSIS_UNRESOLVED",)
+        elif scoped.state == "PLANNED":
+            state = "SCENARIO"
+        elif scoped.state == "AFFIRMED" and any(
+            asserted.start() <= match.start() and match.end() <= asserted.end()
+            for asserted in _DIAGNOSIS_ASSERTED.finditer(body)
+        ):
+            value, state, reasons = True, "CONFIRMED", ("LOCAL_DIAGNOSIS_CONFIRMED",)
+        elif scoped.state == "AFFIRMED":
+            reasons = ("LOCAL_DIAGNOSIS_UNRESOLVED",)
+        result.append(
+            InterpretedFact(
+                "MedicalEvent.diagnosis_confirmed", value, state, (clause.span,), reasons
+            )
+        )
+    return result
+
+
 def _cost_fact(text: str, clause: _Clause, clauses: tuple[_Clause, ...]) -> InterpretedFact | None:
     body = text[clause.span.start : clause.span.end]
     if not _COST_ROLE.search(body) or _DOCUMENT.search(body):
@@ -615,6 +672,7 @@ def interpret_situation(
     issues = []
     for clause in clauses:
         facts.extend(_activity_facts(lexical, clause, clauses))
+        facts.extend(_diagnosis_facts(lexical, clause, clauses))
         cost = _cost_fact(lexical, clause, clauses)
         if cost is not None:
             facts.append(cost)
