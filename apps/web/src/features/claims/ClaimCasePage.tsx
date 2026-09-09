@@ -456,6 +456,14 @@ export function ClaimCasePage({ claimId }: { claimId: string }) {
       {savedGuidance ? (
         <section className="claim-card" aria-labelledby="claim-guidance-title">
           <h2 id="claim-guidance-title">청구 준비 때 저장한 안내</h2>
+          <a
+            href={`/app/events/${encodeURIComponent(claim.medical_event_id)}/result/${savedGuidance.event_version}`}
+          >
+            이 안내의 사건 결과
+          </a>
+          {savedGuidance.review ? (
+            <p>선택 검수 결과에서 준비한 안내입니다.</p>
+          ) : null}
           <h3>{savedGuidance.candidate.coverage_label}</h3>
           <p>
             {savedGuidance.candidate.contract_label} · 사건 버전{" "}

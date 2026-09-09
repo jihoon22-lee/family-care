@@ -20,6 +20,7 @@ import {
 import { RelatedClauseRecommendations } from "./RelatedClauseRecommendations";
 import { StaleResultBanner } from "./StaleResultBanner";
 import styles from "./Results.module.css";
+import type { GuidanceEvidenceReferences } from "./GuidanceEvidenceContext";
 
 export function ActionFirstResult({
   calculations,
@@ -31,6 +32,7 @@ export function ActionFirstResult({
   claimStartDisabled = false,
   result,
   riderLabels,
+  onOpenGuidanceEvidence,
 }: {
   calculations?: BenefitCalculationsResponse;
   onOpenEvidence: (evidenceIds: string[]) => void;
@@ -41,6 +43,10 @@ export function ActionFirstResult({
   claimStartDisabled?: boolean;
   result: CoverageDecisionResponse;
   riderLabels?: Record<string, string>;
+  onOpenGuidanceEvidence?: (
+    coverage: CanonicalCoverageRef,
+    evidence: GuidanceEvidenceReferences,
+  ) => void;
 }) {
   if (result.local_guidance) {
     const operationalCandidates = result.candidates.filter(
@@ -57,6 +63,7 @@ export function ActionFirstResult({
           onRetry={onReanalyze}
           showEmpty={operationalCandidates.length === 0}
           onStartClaim={onStartGuidanceClaim}
+          onOpenEvidence={onOpenGuidanceEvidence}
           claimStartDisabled={
             claimStarting ||
             claimStartDisabled ||

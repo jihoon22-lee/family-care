@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,6 +12,7 @@ import { NewEventPage } from "./NewEventPage";
 import { OptionalQuestionList } from "./OptionalQuestionList";
 import { ReceiptLineEditor } from "./ReceiptLineEditor";
 import { StructuredFactEditor } from "./StructuredFactEditor";
+import { authStore } from "../identity/authStore";
 
 const SYNTHETIC_FACT: EventFactView = {
   fact_id: "synthetic-fact-001",
@@ -39,6 +40,53 @@ afterEach(() => {
 });
 
 describe("hybrid medical event input", () => {
+  it("clears a draft on logout and ignores a late server creation response", async () => {
+    let resolve!: (value: Response) => void;
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === "/api/v1/family-members")
+          return new Response("[]", {
+            headers: { "content-type": "application/json" },
+          });
+        signal = init?.signal as AbortSignal;
+        return new Promise<Response>((done) => {
+          resolve = done;
+        });
+      }),
+    );
+    render(<NewEventPage memberId="synthetic-member" />);
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "현재 상황" }),
+      "합성 개인 사건 내용",
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "현재 후보 보기" }),
+    );
+    act(() => authStore.clear());
+    await act(async () =>
+      resolve(
+        new Response(
+          JSON.stringify({
+            id: "synthetic-late-event",
+            family_member_id: "synthetic-member",
+            version: 1,
+            facts: {},
+            mode: "pre_visit",
+            situation: "합성 개인 사건 내용",
+            event_date: null,
+            visit_date: null,
+            deleted: false,
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+    expect(signal?.aborted).toBe(true);
+    expect(screen.queryByRole("textbox", { name: "현재 상황" })).toBeNull();
+    expect(window.location.pathname).not.toContain("synthetic-late-event");
+  });
   it("submits a pre-visit situation without requiring optional questions", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -70,23 +118,24 @@ describe("hybrid medical event input", () => {
 
   it("creates a server event before exposing structure and analysis actions", async () => {
     const user = userEvent.setup();
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          deleted: false,
-          event_date: null,
-          facts: {},
-          family_member_id: "00000000-0000-4000-8000-000000000202",
-          id: "00000000-0000-4000-8000-000000000201",
-          mode: "pre_visit",
-          optional_questions: [],
-          situation: "Synthetic pre-visit situation",
-          structured_facts: [],
-          version: 1,
-          visit_date: null,
-        }),
-        { status: 201, headers: { "Content-Type": "application/json" } },
-      ),
+    const fetchMock = vi.fn().mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            deleted: false,
+            event_date: null,
+            facts: {},
+            family_member_id: "00000000-0000-4000-8000-000000000202",
+            id: "00000000-0000-4000-8000-000000000201",
+            mode: "pre_visit",
+            optional_questions: [],
+            situation: "Synthetic pre-visit situation",
+            structured_facts: [],
+            version: 1,
+            visit_date: null,
+          }),
+          { status: 201, headers: { "Content-Type": "application/json" } },
+        ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
@@ -108,12 +157,17 @@ describe("hybrid medical event input", () => {
         method: "POST",
       }),
     );
-    const body = fetchMock.mock.calls[0]?.[1]?.body as string;
+    const body = fetchMock.mock.calls.find(
+      ([, init]) => init?.method === "POST",
+    )?.[1]?.body as string;
     expect(JSON.parse(body)).toEqual(
       expect.objectContaining({
         family_member_id: "00000000-0000-4000-8000-000000000202",
         situation: "Synthetic pre-visit situation",
       }),
+    );
+    expect(window.location.pathname).toBe(
+      "/app/events/00000000-0000-4000-8000-000000000201",
     );
   });
 

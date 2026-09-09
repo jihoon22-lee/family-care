@@ -16,6 +16,7 @@ import type {
 import { pageLabel } from "./resultPresentation";
 import styles from "./Results.module.css";
 import panelStyles from "./LocalGuidancePanel.module.css";
+import { useGuidanceEvidence } from "./GuidanceEvidenceContext";
 
 export function money(
   amount: string,
@@ -88,6 +89,7 @@ export function EvidencePages({
 }: {
   evidence: (GuidanceEvidence | GuidanceSemanticEvidence)[];
 }) {
+  const onOpen = useGuidanceEvidence();
   const pages = [
     ...new Map(
       evidence.map((item) => {
@@ -110,6 +112,15 @@ export function EvidencePages({
           </li>
         ))}
       </ul>
+      {onOpen ? (
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          onClick={() => onOpen(pages)}
+        >
+          근거 내용 보기
+        </button>
+      ) : null}
     </div>
   ) : null;
 }

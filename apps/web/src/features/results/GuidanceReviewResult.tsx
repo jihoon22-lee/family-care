@@ -5,6 +5,7 @@ import type {
 import { CandidateAmounts } from "./LocalGuidanceDetails";
 import { guidanceInputLabel, LocalGuidancePanel } from "./LocalGuidancePanel";
 import { pageLabel } from "./resultPresentation";
+import type { GuidanceEvidenceReferences } from "./GuidanceEvidenceContext";
 
 const kinds = {
   AGREEMENT: "기존 해석과 일치",
@@ -25,7 +26,20 @@ const changes = {
   CHANGED: "달라진 후보",
 };
 
-export function GuidanceReviewResult({ result }: { result: ReviewResult }) {
+export function GuidanceReviewResult({
+  result,
+  onStartClaim,
+  claimStartDisabled = false,
+  onOpenEvidence,
+}: {
+  result: ReviewResult;
+  onStartClaim?: (coverage: CanonicalCoverageRef) => void;
+  claimStartDisabled?: boolean;
+  onOpenEvidence?: (
+    coverage: CanonicalCoverageRef,
+    evidence: GuidanceEvidenceReferences,
+  ) => void;
+}) {
   const scope = result.scope;
   function coverageLabel(ref: CanonicalCoverageRef | null) {
     const coverage = scope.coverages?.find(
@@ -134,7 +148,8 @@ export function GuidanceReviewResult({ result }: { result: ReviewResult }) {
         <summary>프로그램 재평가 결과와 변경점</summary>
         <p>
           기존 로컬 안내는 위에 유지됩니다. 아래는 검수 해석을 반영한 별도
-          결과이며, 청구 준비는 기존 결과에서 시작합니다.
+          결과입니다. 원하는 결과에서 청구 준비를 시작하면 그때의 안내를 따로
+          저장합니다.
         </p>
         {result.differences.length === 0 ? (
           <p>기존 후보와 달라진 항목이 없습니다.</p>
@@ -177,7 +192,12 @@ export function GuidanceReviewResult({ result }: { result: ReviewResult }) {
             </article>
           ))
         )}
-        <LocalGuidancePanel guidance={result.guidance} />
+        <LocalGuidancePanel
+          guidance={result.guidance}
+          onStartClaim={onStartClaim}
+          claimStartDisabled={claimStartDisabled}
+          onOpenEvidence={onOpenEvidence}
+        />
       </details>
     </>
   );

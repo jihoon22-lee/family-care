@@ -1,0 +1,39 @@
+.panel {
+  margin-block: 1.5rem;
+  padding: clamp(0.75rem, 3vw, 1.5rem);
+  border: 1px solid #bfccd8;
+  border-radius: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.panel h2 {
+  font-size: 1.25rem;
+  margin-top: 0;
+}
+.panel p {
+  line-height: 1.65;
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 1rem;
+}
+.fields label {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.fields input,
+.fields select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0.65rem;
+}
+.panel button {
+  min-height: 44px;
+  margin-top: 1rem;
+  padding: 0.65rem 1rem;
+  max-width: 100%;
+}

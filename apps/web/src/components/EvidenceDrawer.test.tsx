@@ -55,8 +55,8 @@ describe("EvidenceDrawer", () => {
     expect(
       screen.getByText("Synthetic bounded Evidence excerpt."),
     ).toBeInTheDocument();
-    expect(screen.getByText(/USER_CONFIRMED/)).toBeInTheDocument();
-    expect(screen.getByText(/10\.25/)).toBeInTheDocument();
+    expect(screen.getByText("사용자 확인")).toBeInTheDocument();
+    expect(dialog).not.toHaveTextContent("USER_CONFIRMED");
     expect(dialog).not.toHaveTextContent("synthetic-document-version-001");
     expect(dialog).not.toHaveTextContent("synthetic-evidence-001");
   });
@@ -123,7 +123,7 @@ describe("EvidenceDrawer", () => {
     expect(screen.getByRole("button", { name: "근거 보기" })).toHaveFocus();
   });
 
-  it("shows a stable unavailable state without raw Evidence values", () => {
+  it("keeps successfully loaded evidence beside a partial failure", () => {
     render(
       <EvidenceDrawer
         evidence={[SYNTHETIC_EVIDENCE]}
@@ -137,9 +137,11 @@ describe("EvidenceDrawer", () => {
       name: "증권과 약관 근거",
     });
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(screen.getByRole("alert")).toHaveTextContent("EVIDENCE_UNAVAILABLE");
-    expect(dialog).not.toHaveTextContent("Sample Policy");
-    expect(dialog).not.toHaveTextContent("Synthetic bounded Evidence excerpt.");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "근거 1건을 불러오지 못했습니다",
+    );
+    expect(dialog).toHaveTextContent("Sample Policy");
+    expect(dialog).toHaveTextContent("Synthetic bounded Evidence excerpt.");
     expect(dialog).not.toHaveTextContent("synthetic-evidence-001");
   });
 });

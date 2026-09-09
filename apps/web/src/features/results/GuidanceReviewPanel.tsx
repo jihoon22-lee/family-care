@@ -1,15 +1,22 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { GuidanceReviewJob } from "../../api/generated";
+import type {
+  CanonicalCoverageRef,
+  GuidanceEvidence,
+  GuidanceReviewJob,
+  GuidanceSemanticEvidence,
+} from "../../api/generated";
 import { ApiError } from "../../api/errors";
 import {
   cancelGuidanceReview,
   createGuidanceReview,
+  getCurrentGuidanceReview,
   getGuidanceReview,
 } from "../../api/guidance-reviews";
 import { authStore } from "../identity/authStore";
 import { GuidanceReviewResult } from "./GuidanceReviewResult";
 import styles from "./GuidanceReviewPanel.module.css";
 
+const MAX_POLLS = 40;
 const stateCopy: Record<GuidanceReviewJob["state"], string> = {
   queued: "검수 순서를 기다리고 있습니다.",
   running: "가입 자료와 약관을 검수하고 있습니다.",
@@ -19,6 +26,8 @@ const stateCopy: Record<GuidanceReviewJob["state"], string> = {
   failed: "검수를 완료하지 못했습니다. 기존 로컬 안내는 계속 볼 수 있습니다.",
   cancelled: "검수를 취소했습니다.",
 };
+const staleCopy =
+  "현재 사건과 다른 검수 결과입니다. 다시 분석한 뒤 확인해 주세요.";
 function active(job?: GuidanceReviewJob) {
   return job?.state === "queued" || job?.state === "running";
 }
@@ -32,7 +41,7 @@ function belongsToResult(
     !job.stale &&
     job.medical_event_id === eventId &&
     job.event_version === eventVersion &&
-    job.decision_run_id === decisionRunId &&
+    (job.matched_decision_run_id ?? job.decision_run_id) === decisionRunId &&
     (!job.result ||
       (job.result.guidance.medical_event_id === eventId &&
         job.result.guidance.event_version === eventVersion))
@@ -54,11 +63,21 @@ export function GuidanceReviewPanel({
   eventVersion,
   decisionRunId,
   disabled = false,
+  claimStarting = false,
+  onStartClaim,
+  onOpenEvidence,
 }: {
   eventId: string;
   eventVersion: number;
   decisionRunId: string;
   disabled?: boolean;
+  claimStarting?: boolean;
+  onStartClaim?: (reviewJobId: string, coverage: CanonicalCoverageRef) => void;
+  onOpenEvidence?: (
+    reviewJobId: string,
+    coverage: CanonicalCoverageRef,
+    evidence: (GuidanceEvidence | GuidanceSemanticEvidence)[],
+  ) => void;
 }) {
   const id = useId();
   const [job, setJob] = useState<GuidanceReviewJob>();
@@ -66,6 +85,8 @@ export function GuidanceReviewPanel({
   const [error, setError] = useState<string>();
   const [expired, setExpired] = useState(false);
   const [now, setNow] = useState(Date.now);
+  const [pollCount, setPollCount] = useState(0);
+  const [lookupAttempt, setLookupAttempt] = useState(0);
   const request = useRef<AbortController | null>(null);
   const epoch = useRef(0);
   const submitting = useRef(false);
@@ -74,6 +95,7 @@ export function GuidanceReviewPanel({
     setJob(undefined);
     setError(undefined);
     setBusy(false);
+    setPollCount(0);
     submitting.current = false;
     return () => {
       epoch.current += 1;
@@ -81,6 +103,38 @@ export function GuidanceReviewPanel({
       request.current = null;
     };
   }, [eventId, eventVersion, decisionRunId, disabled]);
+
+  useEffect(() => {
+    if (disabled || expired) return;
+    const current = epoch.current;
+    const controller = new AbortController();
+    request.current = controller;
+    void getCurrentGuidanceReview(
+      eventId,
+      { decision_run_id: decisionRunId, expected_event_version: eventVersion },
+      controller.signal,
+    )
+      .then((saved) => {
+        if (controller.signal.aborted || current !== epoch.current) return;
+        if (
+          saved &&
+          !belongsToResult(saved, eventId, eventVersion, decisionRunId)
+        ) {
+          setError(staleCopy);
+          return;
+        }
+        setJob(saved ?? undefined);
+        setError(undefined);
+        setPollCount(0);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && current === epoch.current)
+          setError(
+            "저장된 검수 상태를 불러오지 못했습니다. 상태를 다시 확인해 주세요.",
+          );
+      });
+    return () => controller.abort();
+  }, [eventId, eventVersion, decisionRunId, disabled, expired, lookupAttempt]);
 
   useEffect(
     () =>
@@ -98,6 +152,7 @@ export function GuidanceReviewPanel({
   );
 
   const running = active(job);
+  const paused = running && pollCount >= MAX_POLLS;
   useEffect(() => {
     if (!running) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -105,24 +160,32 @@ export function GuidanceReviewPanel({
   }, [running]);
 
   useEffect(() => {
-    if (!job || !active(job) || disabled || expired || busy || error) return;
+    if (
+      !job ||
+      !active(job) ||
+      disabled ||
+      expired ||
+      busy ||
+      error ||
+      pollCount >= MAX_POLLS
+    )
+      return;
     const current = epoch.current;
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       request.current = controller;
-      void getGuidanceReview(job.id, controller.signal)
+      void getGuidanceReview(job.id, controller.signal, decisionRunId)
         .then((next) => {
           if (controller.signal.aborted || current !== epoch.current) return;
           if (
             !belongsToResult(next, eventId, eventVersion, decisionRunId) ||
             next.id !== job.id
           ) {
-            setError(
-              "현재 사건과 다른 검수 결과입니다. 다시 분석한 뒤 확인해 주세요.",
-            );
+            setError(staleCopy);
             return;
           }
           setJob(next);
+          setPollCount((count) => count + 1);
         })
         .catch((cause: unknown) => {
           if (!controller.signal.aborted && current === epoch.current)
@@ -142,10 +205,23 @@ export function GuidanceReviewPanel({
     expired,
     busy,
     error,
+    pollCount,
   ]);
 
-  async function submit(cancel = false) {
-    if (submitting.current || disabled || expired || (cancel && !job)) return;
+  useEffect(() => {
+    const resume = () => {
+      if (!error || disabled || expired) return;
+      setError(undefined);
+      setPollCount(0);
+      if (!job) setLookupAttempt((attempt) => attempt + 1);
+    };
+    window.addEventListener("online", resume);
+    return () => window.removeEventListener("online", resume);
+  }, [error, disabled, expired, job]);
+
+  async function submit(kind: "start" | "cancel" | "refresh") {
+    if (submitting.current || disabled || expired || (kind !== "start" && !job))
+      return;
     submitting.current = true;
     setBusy(true);
     setError(undefined);
@@ -156,28 +232,29 @@ export function GuidanceReviewPanel({
     request.current = controller;
     try {
       const next =
-        cancel && job
-          ? await cancelGuidanceReview(job.id, controller.signal)
-          : await createGuidanceReview(
-              eventId,
-              {
-                decision_run_id: decisionRunId,
-                expected_event_version: eventVersion,
-              },
-              controller.signal,
-            );
+        kind === "cancel" && job
+          ? await cancelGuidanceReview(job.id, controller.signal, decisionRunId)
+          : kind === "refresh" && job
+            ? await getGuidanceReview(job.id, controller.signal, decisionRunId)
+            : await createGuidanceReview(
+                eventId,
+                {
+                  decision_run_id: decisionRunId,
+                  expected_event_version: eventVersion,
+                },
+                controller.signal,
+              );
       if (controller.signal.aborted || current !== epoch.current) return;
       if (
         !belongsToResult(next, eventId, eventVersion, decisionRunId) ||
-        (cancel && next.id !== job?.id)
+        (kind !== "start" && next.id !== job?.id)
       ) {
-        setError(
-          "현재 사건과 다른 검수 결과입니다. 다시 분석한 뒤 확인해 주세요.",
-        );
+        setError(staleCopy);
         return;
       }
       setJob(next);
       setNow(Date.now());
+      setPollCount(0);
     } catch (cause) {
       if (!controller.signal.aborted && current === epoch.current)
         setError(failureCopy(cause));
@@ -187,6 +264,12 @@ export function GuidanceReviewPanel({
         setBusy(false);
       }
     }
+  }
+  function resume() {
+    setError(undefined);
+    setPollCount(0);
+    if (!job) setLookupAttempt((attempt) => attempt + 1);
+    else if (!active(job)) void submit("refresh");
   }
 
   const elapsed = job
@@ -206,28 +289,36 @@ export function GuidanceReviewPanel({
         선택하면 사건 정보와 관련 보험 자료를 외부 AI에 보내 추가로 검수합니다.
         기존 로컬 안내와 검수 후 결과를 따로 확인할 수 있습니다.
       </p>
-      {!running ? (
+      {!job ? (
         <button
           type="button"
           disabled={disabled || expired || busy}
-          onClick={() => void submit()}
+          onClick={() => void submit("start")}
         >
           AI 선택 검수 시작
         </button>
-      ) : (
+      ) : running ? (
         <>
           <button
             type="button"
             disabled={busy || expired || disabled}
-            onClick={() => void submit(true)}
+            onClick={() => void submit("cancel")}
           >
             검수 취소
           </button>
           <p>취소해도 이미 전송된 요청의 비용은 취소되지 않을 수 있습니다.</p>
         </>
+      ) : (
+        <button
+          type="button"
+          disabled={busy || expired || disabled}
+          onClick={() => void submit("refresh")}
+        >
+          검수 결과 다시 확인
+        </button>
       )}
       {disabled ? (
-        <p>현재 사건 버전으로 다시 분석한 뒤 선택 검수를 시작할 수 있습니다.</p>
+        <p>현재 사건과 자료로 다시 분석한 뒤 선택 검수를 시작할 수 있습니다.</p>
       ) : null}
       {expired ? (
         <p role="alert">다시 로그인한 뒤 검수를 시작해 주세요.</p>
@@ -239,17 +330,40 @@ export function GuidanceReviewPanel({
           <p>경과 {Number.isFinite(elapsed) ? elapsed : 0}초</p>
         </>
       ) : null}
+      {paused ? (
+        <p role="status">
+          자동 상태 확인을 잠시 멈췄습니다. 진행 중인 검수의 상태를 다시 확인할
+          수 있습니다.
+        </p>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
-      {error && running ? (
+      {(error || paused) && (!job || running) ? (
         <button
           type="button"
           disabled={busy || expired || disabled}
-          onClick={() => setError(undefined)}
+          onClick={resume}
         >
           상태 다시 확인
         </button>
       ) : null}
-      {job?.result ? <GuidanceReviewResult result={job.result} /> : null}
+      {job?.result ? (
+        <GuidanceReviewResult
+          result={job.result}
+          onStartClaim={
+            onStartClaim
+              ? (coverage) => onStartClaim(job.id, coverage)
+              : undefined
+          }
+          claimStartDisabled={
+            claimStarting || disabled || expired || Boolean(error)
+          }
+          onOpenEvidence={
+            onOpenEvidence
+              ? (coverage, refs) => onOpenEvidence(job.id, coverage, refs)
+              : undefined
+          }
+        />
+      ) : null}
       {job?.usage ? (
         <details>
           <summary>검수 사용량</summary>
