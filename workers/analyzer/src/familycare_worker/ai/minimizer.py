@@ -16,13 +16,14 @@ _EMAIL_PATTERN = re.compile(
 _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:\+82[- .]?)?0?(?:1[016789]|2|[3-6][1-5])[- .]?\d{3,4}[- .]?\d{4}(?!\d)"
 )
+_RESIDENT_IDENTIFIER_PATTERN = re.compile(r"(?<![\d*])\d{6}\s*-\s*[\d*]{7}(?![\d*])")
 _POLICY_IDENTIFIER_PATTERN = re.compile(
     r"(?P<label>(?:(?:보험\s*)?증권|계약)\s*번호|"
     r"(?:policy|contract|certificate)\s*(?:number|no\.?|id))"
     r"\s*[:#]?\s*(?P<value>[A-Z0-9][A-Z0-9._/-]{4,})",
     re.IGNORECASE,
 )
-MINIMIZATION_REVISION = "source-window-minimizer-v2"
+MINIMIZATION_REVISION = "source-window-minimizer-v3"
 
 _IDENTITY_LABEL = (
     r"계약자(?:명)?|피보험자(?:명)?|보험\s*수익자|수익자(?:명)?|성명|이름|"
@@ -67,6 +68,9 @@ def _bounded_terms(sensitive_terms: Sequence[str]) -> tuple[str, ...]:
 
 def _redact(text: str, sensitive_terms: tuple[str, ...]) -> str:
     minimized = _EMAIL_PATTERN.sub(_REDACTED, text)
+    # Native word/block views can detach an identifier from its person label.
+    # Redact the shape; no birth date or identifier validity is inferred here.
+    minimized = _RESIDENT_IDENTIFIER_PATTERN.sub(_REDACTED, minimized)
     minimized = _PHONE_PATTERN.sub(_REDACTED, minimized)
     minimized = _POLICY_IDENTIFIER_PATTERN.sub(
         lambda match: f"{match.group('label')}: {_REDACTED}",
@@ -136,6 +140,7 @@ class SourceWindowMinimizer:
         spans: list[tuple[int, int]] = []
         patterns = (
             (_EMAIL_PATTERN, None),
+            (_RESIDENT_IDENTIFIER_PATTERN, None),
             (_PHONE_PATTERN, None),
             (_POLICY_IDENTIFIER_PATTERN, "value"),
             (_LABELLED_IDENTITY_PATTERN, "value"),
