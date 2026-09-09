@@ -31,7 +31,7 @@ from familycare_api.terms_knowledge.generated_contracts import (
 )
 from pydantic import ValidationError
 
-COMPILER_REVISION = "terms-semantic-compiler-v1"
+COMPILER_REVISION = "terms-semantic-compiler-v2"
 MAX_CLOSURE_DEPTH = 32
 
 
@@ -414,6 +414,12 @@ def _condition_expression(payload: SemanticCondition) -> dict[str, Any] | None:
                 payload.field in integer_units
                 and type(payload.value) is int
                 and payload.rule_kind in allowed_integer_kinds
+            )
+            or (
+                payload.field == "MedicalEvent.treatment_kind"
+                and isinstance(payload.value, str)
+                and payload.value in {"surgery", "admission", "outpatient"}
+                and payload.rule_kind in ordinary_kinds
             )
         )
     elif payload.operator == "range":

@@ -4,6 +4,41 @@ import pytest
 from familycare_api.terms_knowledge.source_meaning import observe_statement
 
 
+@pytest.mark.parametrize(
+    ("text", "field"),
+    [
+        ("Surgery must have been performed.", "performed"),
+        ("Diagnosis must be confirmed.", "diagnosis_confirmed"),
+        ("Admission is required.", "admission"),
+    ],
+)
+def test_explicit_boolean_eligibility_preserves_condition_not_event_fact(text, field):
+    assert observe_statement(text) == {
+        "kind": "condition",
+        "rule_kind": "eligibility",
+        "field": f"MedicalEvent.{field}",
+        "operator": "equals",
+        "value": True,
+        "unit": None,
+    }
+    for altered in (f"Example: {text}", text[:-1] + " unless excluded.", "Not " + text):
+        assert observe_statement(altered) is None
+
+
+@pytest.mark.parametrize("activity", ["surgery", "admission", "outpatient"])
+def test_explicit_source_activity_is_not_a_clinical_classification(activity):
+    assert observe_statement(f"The treatment kind must be {activity}.") == {
+        "kind": "condition",
+        "rule_kind": "eligibility",
+        "field": "MedicalEvent.treatment_kind",
+        "operator": "equals",
+        "value": activity,
+        "unit": None,
+    }
+    assert observe_statement(f"The treatment kind may be {activity}.") is None
+    assert observe_statement(f"Example: The treatment kind must be {activity}.") is None
+
+
 def test_daily_benefit_basis_and_rounding_are_explicit() -> None:
     assert observe_statement(
         "For each payable admission day, pay the insured amount in KRW; "

@@ -14,6 +14,7 @@ FactFieldId = Literal[
     "visit_date",
     "condition_class",
     "diagnosis_label",
+    "diagnosis_confirmed",
     "treatment_kind",
     "admission",
     "outpatient",
@@ -27,7 +28,7 @@ FactFieldId = Literal[
     "separately_billed_treatment",
 ]
 _BOOLEAN_FACT_FIELDS = frozenset(
-    {"admission", "outpatient", "pharmacy", "separately_billed_treatment"}
+    {"admission", "outpatient", "pharmacy", "separately_billed_treatment", "diagnosis_confirmed"}
 )
 _DATE_FACT_FIELDS = frozenset({"event_date", "visit_date"})
 _NORMALIZED_CODE_FACT_FIELDS = frozenset(

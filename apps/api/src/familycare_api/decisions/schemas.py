@@ -7,7 +7,16 @@ from decimal import Decimal
 from typing import Annotated, Literal, Self, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, StrictInt, StrictStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    RootModel,
+    StrictBool,
+    StrictInt,
+    StrictStr,
+    model_validator,
+)
 
 from familycare_api.common.evidence import EvidenceRef
 from familycare_api.decisions.assistance import AnalysisAssistance, AnalysisRecommendation
@@ -61,7 +70,7 @@ class FactInput(StrictModel):
 
 class StructuredFactInput(StrictModel):
     field_id: FactFieldId
-    value: Annotated[str, Field(min_length=1, max_length=160)] | bool | None
+    value: Annotated[str, Field(min_length=1, max_length=160)] | StrictBool | None
     code_system: CodeScopeLabel | None = None
     code_version: CodeScopeLabel | None = None
 

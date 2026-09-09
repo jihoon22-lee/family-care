@@ -27,7 +27,7 @@ def test_clear_local_admission_is_reusable_with_offsets_and_original_provenance(
     days = result.context.get("MedicalEvent.admission_days")
     assert admission.value is True and admission.is_trusted
     assert days.value == 5 and days.provenance == "DERIVED_CONFIRMED"
-    assert all(key.startswith("local-situation-v1:") for key in days.evidence_keys)
+    assert all(key.startswith("local-situation-v2:") for key in days.evidence_keys)
     assert all(item.provenance == "EXPLICIT_LOCAL" for item in result.interpretation.facts)
 
 

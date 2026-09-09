@@ -8,6 +8,7 @@ const FIELD_LABELS: Record<EventFactField, string> = {
   visit_date: "방문 날짜",
   condition_class: "상황 분류",
   diagnosis_label: "진단 표기",
+  diagnosis_confirmed: "확정 진단 여부",
   treatment_kind: "치료 종류",
   admission: "입원 여부",
   outpatient: "외래 여부",
@@ -22,6 +23,7 @@ const FIELD_LABELS: Record<EventFactField, string> = {
 };
 
 const BOOLEAN_FIELDS = new Set<EventFactField>([
+  "diagnosis_confirmed",
   "admission",
   "outpatient",
   "pharmacy",

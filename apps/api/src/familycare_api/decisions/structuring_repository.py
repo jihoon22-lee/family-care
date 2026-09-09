@@ -42,6 +42,7 @@ _FACT_FIELDS = frozenset(
         "visit_date",
         "condition_class",
         "diagnosis_label",
+        "diagnosis_confirmed",
         "treatment_kind",
         "admission",
         "outpatient",

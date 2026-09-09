@@ -44,6 +44,7 @@ type EventFactField = Literal[
     "visit_date",
     "condition_class",
     "diagnosis_label",
+    "diagnosis_confirmed",
     "treatment_kind",
     "admission",
     "outpatient",
@@ -78,6 +79,7 @@ _EVENT_FACT_FIELDS = frozenset(
         "visit_date",
         "condition_class",
         "diagnosis_label",
+        "diagnosis_confirmed",
         "treatment_kind",
         "admission",
         "outpatient",
@@ -93,7 +95,7 @@ _EVENT_FACT_FIELDS = frozenset(
 )
 _FACT_STATES = frozenset({"confirmed", "ambiguous", "missing", "conflict"})
 _BOOLEAN_FACT_FIELDS = frozenset(
-    {"admission", "outpatient", "pharmacy", "separately_billed_treatment"}
+    {"admission", "outpatient", "pharmacy", "separately_billed_treatment", "diagnosis_confirmed"}
 )
 _DATE_FACT_FIELDS = frozenset({"event_date", "visit_date"})
 _NORMALIZED_CODE_FACT_FIELDS = frozenset(

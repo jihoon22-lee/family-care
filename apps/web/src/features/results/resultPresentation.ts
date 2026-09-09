@@ -26,6 +26,7 @@ export function fieldLabel(path: string): string {
     "MedicalEvent.visit_date": "방문일",
     "MedicalEvent.classification": "상황 분류",
     "MedicalEvent.condition_class": "상황 분류",
+    "MedicalEvent.diagnosis_confirmed": "확정 진단 여부",
     "MedicalEvent.diagnosis_label": "진단 표기",
     "MedicalEvent.diagnosis_code": "진단 코드",
     "MedicalEvent.procedure_code": "처치·수술 코드",

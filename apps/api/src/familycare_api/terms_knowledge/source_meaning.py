@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-MEANING_REVISION = "terms-source-meaning-v2"
+MEANING_REVISION = "terms-source-meaning-v3"
 _NUMBER = r"(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,12})?"
 _INTEGER = r"(?:0|[1-9][0-9]{0,4})"
 _CURRENCY = r"[A-Z]{3}"
@@ -41,6 +41,30 @@ def observe_statement(text: str) -> dict[str, Any] | None:
     ):
         return None
     value = text.strip()
+    activity = _match(r"The treatment kind must be (surgery|admission|outpatient)\.", value)
+    if activity:
+        return {
+            "kind": "condition",
+            "rule_kind": "eligibility",
+            "field": "MedicalEvent.treatment_kind",
+            "operator": "equals",
+            "value": activity[1],
+            "unit": None,
+        }
+    boolean_field = {
+        "Surgery must have been performed.": "performed",
+        "Diagnosis must be confirmed.": "diagnosis_confirmed",
+        "Admission is required.": "admission",
+    }.get(value)
+    if boolean_field is not None:
+        return {
+            "kind": "condition",
+            "rule_kind": "eligibility",
+            "field": f"MedicalEvent.{boolean_field}",
+            "operator": "equals",
+            "value": True,
+            "unit": None,
+        }
     match = _match(
         rf"For each payable admission day, pay the insured amount in ({_CURRENCY}); "
         rf"multiply first, then round the total ({_ROUNDING}) to whole currency units\.",

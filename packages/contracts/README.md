@@ -66,3 +66,9 @@ and the complete expected-region manifest. These internal fields are not a provi
 the Worker must minimize identifiers and text before an authorized external call.
 A valid candidate or citation does not confer rule authority: source identity, exact original
 spans, field meaning and dependency relations require independent validation before compilation.
+
+Explicit `MedicalEvent.treatment_kind` semantic conditions use only `equals`, no unit, and
+`surgery`, `admission` or `outpatient`. They preserve a source activity separately from
+clinical classification codes and generic performed observations. Compiler v2 requires schema
+`0070_semantic_activity`; earlier publications stay immutable. `diagnosis_confirmed` event
+inputs accept only true, false or unknown, and AI proposals still require user confirmation.
