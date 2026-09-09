@@ -44,6 +44,7 @@ PINNED_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)\s+#\s+(v[0-9][0-9A-
 ALL_USE = re.compile(r"(?m)^\s+(?:-\s+)?uses:\s+([^\s#]+)")
 GUARDED_DATABASE_RESET = "uv run python scripts/integration_test_database.py"
 ALEMBIC_DOWNGRADE = "uv run alembic -c apps/api/alembic.ini downgrade base"
+RESTORE_CONTAINER_BINDING = "FAMILYCARE_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}"
 
 
 def validate_action_pins(content: str, relative: Path) -> list[str]:
@@ -103,6 +104,7 @@ def validate_ci(content: str) -> list[str]:
         "integration marker": "pytest -m integration",
         "dedicated test database URL": "FAMILYCARE_TEST_DATABASE_URL:",
         "destructive test opt-in": 'FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB: "true"',
+        "restore test container binding": RESTORE_CONTAINER_BINDING,
         "build-only containers": "push: false",
     }
     for label, fragment in required_fragments.items():
@@ -242,6 +244,7 @@ def _validate_release_test_environment(validate: str, relative: Path) -> list[st
         "FAMILYCARE_DATABASE_URL",
         "FAMILYCARE_TEST_DATABASE_URL",
         "FAMILYCARE_ALLOW_DESTRUCTIVE_TEST_DB",
+        "FAMILYCARE_TEST_POSTGRES_CONTAINER",
     )
     if any(
         variable in block
@@ -253,6 +256,8 @@ def _validate_release_test_environment(validate: str, relative: Path) -> list[st
         errors.append(f"{relative}: separate Python unit validation is required")
     if any(f"{variable}:" not in integration for variable in database_variables):
         errors.append(f"{relative}: integration database configuration must be step-scoped")
+    if RESTORE_CONTAINER_BINDING not in integration:
+        errors.append(f"{relative}: restore test container binding must use the PostgreSQL service")
     migration = integration.find("uv run alembic -c apps/api/alembic.ini upgrade head")
     tests = integration.find("uv run pytest -m integration -q")
     if not 0 <= migration < tests:
@@ -313,6 +318,13 @@ def validate_release(content: str) -> list[str]:
     release = _job_block(content, "publish-release")
     validate = _job_block(content, "validate-foundation")
     errors.extend(_validate_release_test_environment(validate, relative))
+    for runtime_check in (
+        "pnpm --filter @familycare/web test:e2e",
+        "tesseract --list-langs",
+        "scripts/check_korean_font_rendering.py",
+    ):
+        if runtime_check not in validate:
+            errors.append(f"{relative}: missing release runtime check before publication")
 
     if any(re.search(r"\$\{\{\s*runner\.", block) for block in _job_level_env_blocks(content)):
         errors.append(f"{relative}: job-level env cannot use the runner context")

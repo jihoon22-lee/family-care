@@ -6,7 +6,7 @@ Event/Result PWA, 수동 Claim workflow, 로컬 인증, 암호화 document batch
 private import reliability, private local Compose와 bounded Tailscale inspection이 `main`에 구현되어
 있다. 현재 구조에는 immutable private knowledge snapshot, 전체 catalog projection, append-only
 rule/calculation publication, advisory decision stream과 선택적 one-call result assistance도 포함된다.
-현재 코드 기준은 `v0.5.1`이며 문서 기준 가정·조건·계산 준비를 분리한 로컬 안내, 독립 검수,
+현재 코드 기준은 `v0.5.2`이며 문서 기준 가정·조건·계산 준비를 분리한 로컬 안내, 독립 검수,
 불변 청구 snapshot과 보관 원문 재처리를 포함한다. `docs/design/v0.5-local-first-claim-guidance.md`와
 `docs/release/v0.5.0-verification.md`가 현재 의미와 수용 범위를, `docs/design/v0.1-product.md`와
 `docs/plan/000-project-roadmap.md`가 초기 설계와 과거 기록을 소유한다.

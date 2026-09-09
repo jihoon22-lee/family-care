@@ -53,6 +53,10 @@
 사용하는 회귀를 명시적으로 거부합니다. 모든 GitHub expression 위치 규칙을 자체 구현하지는
 않으므로 release workflow 변경과 새 tag 전에는
 `actionlint -oneline .github/workflows/*.yml`도 실행합니다.
+릴리스 단위 테스트에는 DB 환경을 상속하지 않는다. PostgreSQL 통합 step은 전용 DB URL·
+파괴적 시험 동의와 해당 서비스의 `FAMILYCARE_TEST_POSTGRES_CONTAINER`를 함께 받는다.
+게시 전 foundation에서 기존 browser E2E와 Worker OCR 언어·한글 glyph smoke도 실행한다.
+이 환경 바인딩과 실행 검사가 빠지면 workflow 정책 검사에서 거부한다.
 
 ### Unit tests
 

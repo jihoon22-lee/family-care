@@ -116,6 +116,32 @@ def test_release_unit_tests_reject_inherited_runtime_database_configuration() ->
     assert any("unit tests must not inherit" in error for error in validate_release(unsafe))
 
 
+@pytest.mark.parametrize(
+    ("content_loader", "validator"),
+    [(current_ci, validate_ci), (current_release, validate_release)],
+)
+def test_integration_workflows_require_the_restore_service_container(
+    content_loader: Callable[[], str],
+    validator: Callable[[str], list[str]],
+) -> None:
+    content = content_loader().replace(
+        "FAMILYCARE_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}",
+        "REMOVED_RESTORE_CONTAINER: unavailable",
+    )
+
+    assert any("restore test container" in error for error in validator(content))
+
+
+def test_release_foundation_keeps_browser_and_worker_runtime_checks() -> None:
+    for fragment in (
+        "pnpm --filter @familycare/web test:e2e",
+        "tesseract --list-langs",
+        "scripts/check_korean_font_rendering.py",
+    ):
+        content = current_release().replace(fragment, "removed-runtime-check")
+        assert any("release runtime check" in error for error in validate_release(content))
+
+
 def test_current_dependabot_satisfies_update_policy() -> None:
     assert validate_dependabot(current_dependabot()) == []
 

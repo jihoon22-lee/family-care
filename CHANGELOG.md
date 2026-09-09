@@ -4,6 +4,22 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-09-09
+
+### Fixed
+
+- Release database integration now receives its PostgreSQL service container ID for the actual
+  custom-format dump, restore and encrypted-archive roundtrip test. Workflow policy requires the
+  binding in both CI and release validation.
+- Browser flows, OCR language availability and nonembedded Korean PDF rendering now also run
+  in the release foundation before image publication, matching the existing CI checks.
+
+### Changed
+
+- The 0.5.1 tag is retained as failed publication history: unit validation passed, while the
+  missing restore container binding caused one integration failure before image publication.
+- Local guidance behavior, retained data, schema and provider request budgets are unchanged.
+
 ## [0.5.1] - 2026-09-09
 
 ### Fixed
