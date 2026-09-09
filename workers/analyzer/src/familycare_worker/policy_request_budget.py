@@ -22,6 +22,7 @@ from familycare_worker.ai.provider import (
 )
 from familycare_worker.jobs import psycopg_database_url
 from familycare_worker.policy_jobs import PolicyStructuringJobRecord
+from familycare_worker.provider_quota import request_counts
 
 
 class PolicyBudgetExhausted(ProviderRateLimitError):
@@ -96,20 +97,8 @@ class PolicyRequestBudget:
                 ).fetchone()
                 if busy:
                     raise ProviderUnavailableError
-                counts = connection.execute(
-                    """
-                    SELECT count(*) FILTER (WHERE document_id = %s) AS document_requests,
-                      count(*) FILTER (WHERE reserved_at >=
-                        date_trunc('day', clock_timestamp() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')
-                        AS daily_requests FROM policy_provider_requests
-                    """,
-                    (scope["document_id"],),
-                ).fetchone()
-                assert counts is not None
-                if (
-                    counts["document_requests"] >= self.per_document
-                    or counts["daily_requests"] >= self.daily
-                ):
+                document_requests, daily_requests = request_counts(connection, scope["document_id"])
+                if document_requests >= self.per_document or daily_requests >= self.daily:
                     raise PolicyBudgetExhausted
                 row = connection.execute(
                     "INSERT INTO policy_provider_requests(job_id, document_id, fingerprint, state) "

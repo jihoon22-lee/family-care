@@ -122,3 +122,29 @@ def test_concurrent_explicit_requests_share_one_job(
             future.result(timeout=20) for future in [executor.submit(request) for _ in range(2)]
         ]
     assert jobs[0].id == jobs[1].id
+
+
+def test_review_retains_immutable_source_inventory_and_exact_event_snapshot(
+    saved_guidance_source: SavedGuidanceSource,
+) -> None:
+    from psycopg.rows import dict_row
+
+    source = saved_guidance_source
+    job = _request(source)
+    with psycopg.connect(_psycopg_url(source.url), row_factory=dict_row) as connection:
+        row = connection.execute(
+            "SELECT i.sources_json,i.event_json,j.source_digest FROM guidance_review_inputs i "
+            "JOIN guidance_review_jobs j ON j.id=i.review_job_id WHERE i.review_job_id=%s",
+            (job.id,),
+        ).fetchone()
+        assert row is not None
+        assert row["sources_json"]["digest_sha256"] == row["source_digest"]
+        assert row["sources_json"]["family_member_id"] == str(source.snapshot["family_member_id"])
+        assert row["event_json"]["id"] == str(source.event_id)
+        assert row["sources_json"]["manifest"]["total_coverage_count"] >= 1
+        with pytest.raises(psycopg.errors.CheckViolation):
+            with connection.transaction():
+                connection.execute(
+                    "UPDATE guidance_review_inputs SET sources_json='{}' WHERE review_job_id=%s",
+                    (job.id,),
+                )

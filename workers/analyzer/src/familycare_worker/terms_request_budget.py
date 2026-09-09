@@ -30,6 +30,7 @@ from familycare_worker.ai.terms_structurer import (
     terms_structurer_schema,
 )
 from familycare_worker.policy_request_budget import PolicyRequestBudget
+from familycare_worker.provider_quota import request_counts
 from familycare_worker.terms_semantic_jobs import (
     TermsSemanticJobQueue,
     TermsSemanticJobRecord,
@@ -153,19 +154,12 @@ class TermsRequestBudget:
                     "fingerprint=%s AND state='RESERVED'",
                     (document_id, fingerprint),
                 ).fetchone()
-                counts = connection.execute(
-                    "SELECT count(*) FILTER(WHERE document_id=%s) AS document_requests, "
-                    "count(*) FILTER(WHERE reserved_at>=date_trunc('day',clock_timestamp() AT TIME "
-                    "ZONE 'UTC') AT TIME ZONE 'UTC') AS daily_requests "
-                    "FROM policy_provider_requests",
-                    (document_id,),
-                ).fetchone()
-                assert counts is not None
+                document_requests, daily_requests = request_counts(connection, document_id)
                 if busy:
                     error = TermsRequestInFlight()
-                elif counts["document_requests"] >= self.per_document:
+                elif document_requests >= self.per_document:
                     error = TermsBudgetExhausted("document")
-                elif counts["daily_requests"] >= self.daily:
+                elif daily_requests >= self.daily:
                     error = TermsBudgetExhausted("daily")
                 else:
                     reservation = connection.execute(

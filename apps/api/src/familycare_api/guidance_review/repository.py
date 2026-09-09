@@ -6,11 +6,13 @@ import hashlib
 import json
 import os
 import re
+from dataclasses import asdict
 from typing import Any
 from uuid import UUID
 
 import psycopg
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 from familycare_api.common.scope import HouseholdScope
@@ -22,7 +24,9 @@ from familycare_api.decisions.errors import (
 from familycare_api.decisions.repository import DecisionRepository, _medical_event
 from familycare_api.guidance.models import LocalGuidanceResponse
 from familycare_api.guidance_review.models import GuidanceReviewJob
+from familycare_api.guidance_review.sources import read_review_sources
 from familycare_api.policies.errors import VersionConflict
+from familycare_api.terms_knowledge.work_repository import _privacy_digest
 
 REVIEW_PROMPT_REVISION = "guidance-review-v1"
 DEFAULT_REVIEW_MODEL = "gpt-5.6-terra"
@@ -94,6 +98,8 @@ class GuidanceReviewRepository:
                     is not False
                 ):
                     raise DecisionInvalid
+                sources = read_review_sources(connection, scope, event, self.decisions)
+                privacy_digest = _privacy_digest(connection, scope)
                 digest = hashlib.sha256(
                     json.dumps(
                         [
@@ -101,6 +107,8 @@ class GuidanceReviewRepository:
                             guidance.model_dump(mode="json"),
                             self.model,
                             REVIEW_PROMPT_REVISION,
+                            sources.digest_sha256,
+                            privacy_digest,
                         ],
                         sort_keys=True,
                         default=str,
@@ -126,11 +134,22 @@ class GuidanceReviewRepository:
                             run_id,
                             event.version,
                             digest,
-                            guidance.versions.status_digest,
+                            sources.digest_sha256,
                             self.model,
                             REVIEW_PROMPT_REVISION,
                         ),
                     ).fetchone()
+                    assert job is not None
+                    connection.execute(
+                        "INSERT INTO guidance_review_inputs(review_job_id,sources_json,"
+                        "event_json,privacy_digest) VALUES(%s,%s,%s,%s)",
+                        (
+                            job["id"],
+                            Jsonb(sources.to_payload()),
+                            Jsonb(json.loads(json.dumps(asdict(event), default=str))),
+                            privacy_digest,
+                        ),
+                    )
                 assert job is not None
                 return _job(job)
         except ValidationError, ValueError:
@@ -159,6 +178,19 @@ class GuidanceReviewRepository:
                     )
                     is not False
                 )
+                if not stale:
+                    sources = read_review_sources(
+                        connection, scope, _medical_event(event_row), self.decisions
+                    )
+                    stored = connection.execute(
+                        "SELECT privacy_digest FROM guidance_review_inputs WHERE review_job_id=%s",
+                        (job_id,),
+                    ).fetchone()
+                    stale = (
+                        sources.digest_sha256 != row["source_digest"]
+                        or stored is None
+                        or stored["privacy_digest"] != _privacy_digest(connection, scope)
+                    )
                 return _job(row, stale=stale)
         except ValidationError, ValueError, psycopg.Error:
             raise DecisionRepositoryUnavailable from None
