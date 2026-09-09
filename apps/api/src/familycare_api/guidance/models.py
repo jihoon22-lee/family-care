@@ -28,10 +28,27 @@ class GuidanceModel(BaseModel):
 
 
 class GuidanceEvidence(GuidanceModel):
+    # Private catalog addresses predate native PDF intake and have no 500-page cap.
+    # Keep the native capacity restriction explicit in the shared neutral schema.
+    model_config = ConfigDict(
+        json_schema_extra={
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {"kind": {"const": "OPERATIONAL_EVIDENCE"}},
+                        "required": ["kind"],
+                    },
+                    "then": {
+                        "properties": {"page_start": {"maximum": 500}, "page_end": {"maximum": 500}}
+                    },
+                }
+            ]
+        }
+    )
     kind: Literal["TERMS_SECTION", "OPERATIONAL_EVIDENCE"]
     evidence_id: UUID
-    page_start: int = Field(ge=1, le=500)
-    page_end: int = Field(ge=1, le=500)
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
     publication_id: UUID | None = None
     source_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")] | None = None
 
@@ -39,6 +56,8 @@ class GuidanceEvidence(GuidanceModel):
     def ordered_pages(self) -> Self:
         if self.page_end < self.page_start:
             raise ValueError("invalid evidence page order")
+        if self.kind == "OPERATIONAL_EVIDENCE" and self.page_end > 500:
+            raise ValueError("native evidence page limit")
         return self
 
 
@@ -145,8 +164,8 @@ class GuidancePrivateCertificate(GuidanceModel):
     catalog_import_run_id: UUID
     coverage_id: UUID
     document_alias: Label
-    page_start: int = Field(ge=1, le=500)
-    page_end: int = Field(ge=1, le=500)
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
 
     @model_validator(mode="after")
     def ordered_pages(self) -> Self:

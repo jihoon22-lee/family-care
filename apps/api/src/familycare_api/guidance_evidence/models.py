@@ -31,8 +31,9 @@ class GuidanceEvidenceDetail(EvidenceModel):
     source_document_ref: UUID | None = None
     terms_edition_id: UUID | None = None
     terms_edition_label: str | None = Field(default=None, min_length=1, max_length=200)
-    page_start: int = Field(ge=1, le=500)
-    page_end: int = Field(ge=1, le=500)
+    # The validated reference owns its source-specific bounds; equality is checked below.
+    page_start: int = Field(ge=1)
+    page_end: int = Field(ge=1)
     clause_label: str | None = Field(default=None, min_length=1, max_length=160)
     text: str | None = Field(default=None, min_length=1, max_length=2048)
     truncated: bool = False

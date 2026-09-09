@@ -161,3 +161,19 @@ Root at `50c2e2d` passed full Ruff/format, mypy **350 files**, default pytest **
 plus the API coordinator integration: **23 PostgreSQL tests passed** (18.25s).
 These focused runs precede the new protected replay and final CI; they do not establish complete
 interpretation or native source binding of the actual corpus.
+
+## Existing private page compatibility
+
+The separate authenticated acceptance clone passed login and original-excerpt reads, then returned
+no local guidance for an existing event. A count/field-only diagnostic traced this to private citation
+pages: the established private catalog accepts positive page addresses, but the new common evidence
+model incorrectly imposed native PDF intake's 500-page limit on them. The resulting private adapter
+exception affected both evaluation paths. No private page value or document content was logged.
+
+Synthetic large-page tests reproduced **3 failures** (0.39s). Private terms/certificate addresses and
+summary responses now preserve their original positive page numbers. Operational and semantic
+originals retain the native limit; the operational constraint is also explicit in the neutral schema.
+The new regression plus evidence HTTP and local guidance units passed **24** (0.64s). Decision/claim
+schemas and OpenAPI were regenerated separately with their existing commands; Web types remain
+unchanged and the full contract checker passed. This changes citation compatibility, not PDF intake
+capacity or the authority of private summaries. Authenticated acceptance is rerun on the clone.
