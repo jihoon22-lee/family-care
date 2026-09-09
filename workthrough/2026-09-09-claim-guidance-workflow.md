@@ -128,4 +128,12 @@ optional question version advancement. No actual backend, provider, private data
 Root checked all Web files, generated contracts and root lock/config inputs byte-identical to the
 integrated checkout, so these final results apply without repeating an unchanged successful suite.
 
-Local B06 completion checks are complete. PR CI and integration remain pending.
+Local B06 completion checks are complete. [PR #81](https://github.com/jihoon22-lee/family-care/pull/81),
+source `3625860`, passed all seven checks in [CI 34306662287](https://github.com/jihoon22-lee/family-care/actions/runs/34306662287)
+and merged as `f59c8a9e989ea2822ec6e57174a1a7055948828b` at 2026-09-09 03:46:27 UTC.
+CI confirms Python **3489 + 3 subtests** (43.11s), PostgreSQL **742** (1491.22s) with empty
+head/base/head migration, Web **238/build**, Chromium mock **27** (26.7s), and all three serial
+image builds. WP08 #68 is complete in the code/synthetic boundary; parents and protected acceptance
+remain open for B07/B08. The exact local browser command was
+`pnpm_config_verify_deps_before_run=false corepack pnpm --filter @familycare/web exec playwright test`
+against the task-owned built preview on 127.0.0.1:4173, which was stopped after verification.

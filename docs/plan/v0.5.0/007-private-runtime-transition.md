@@ -3,15 +3,15 @@
 - 상태: in_progress
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP09 #69](https://github.com/jihoon22-lee/family-care/issues/69)
-- 기반: B01–B05 통합 코드와 B06 검증 중인 source `dcd52f0`; B06 최종 merge를 반영한 뒤 B07 PR을 완성한다.
+- 기반: B01–B06 통합 코드, [PR #81](https://github.com/jihoon22-lee/family-care/pull/81) merge `f59c8a9e989ea2822ec6e57174a1a7055948828b`, CI 34306662287 필수 7/7 통과.
 - 요구사항 R02/R17/R18/R19/R20, 시나리오 S03/S04/S09/S11/S14.
 
 ## Tasks
 
 1. in_progress — 설치된 API/Worker의 지원 schema와 필수 읽기/쓰기 계약을 검사한다. Worker는 비밀/개인 자료 runner 생성 전과 다음 작업 시작 전 검사하며 AI-off는 정상 준비 상태를 유지한다.
 2. in_progress — 기존 backup/import/structure/projector를 재사용할 격리 복원·재구성 계획과 source→destination journal, 교정/이력 보존 비교 및 activation barrier를 구체화한다.
-3. pending — 실제 PostgreSQL custom dump 복원, archive/key 복구, 저디스크·부분 원문 누락·중단/재개·동시 변경 거부를 합성 자료로 검증한다.
-4. pending — 승인된 기존 WSL 자료와 실행체를 보호 환경에서 inventory하고 일관된 백업을 취득한다. 실제 값은 공개 artifact에 기록하지 않는다.
+3. in_progress — 실제 PostgreSQL custom dump 복원, archive/key 복구, 저디스크·부분 원문 누락·중단/재개·동시 변경 거부를 합성 자료로 검증한다. 0063 전체 행·검수 기반 청구 snapshot·암호화 archive roundtrip과 재구성 재개/원본 변경 거부를 PostgreSQL에서 통과했다.
+4. in_progress — 승인된 기존 WSL 자료와 실행체를 보호 환경에서 inventory하고 일관된 백업을 취득한다. 읽기 전용 inventory 완료; 실제 값은 공개 artifact에 기록하지 않는다.
 5. pending — 격리 복원에서 재구성·교정/청구 snapshot 비교·원문 접근·AI-off 결과·인증된 앱 경로를 검증한다. 불완전 자료를 빈 성공으로 처리하지 않는다.
 6. pending — 검증한 기준점을 재확인해 전환하고 재시작·복구를 확인한다. 필수 검사·PR/CI/merge·보호된 수용 상태를 B08에 인계한다.
 

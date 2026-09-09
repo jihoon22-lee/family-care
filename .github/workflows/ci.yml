@@ -136,6 +136,8 @@ jobs:
       - name: Apply migration baseline
         run: uv run alembic -c apps/api/alembic.ini upgrade head
       - name: Run database-backed tests
+        env:
+          FAMILYCARE_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
         run: uv run pytest -m integration -q
       - name: Validate shared contracts
         run: uv run python scripts/check_contracts.py

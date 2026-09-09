@@ -1,6 +1,6 @@
 # v0.5 B06: Guidance to claim preparation
 
-- 상태: in_progress
+- 상태: completed (코드·합성 수용)
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP08 #68](https://github.com/jihoon22-lee/family-care/issues/68)
 - 구현 기반: B04 PR #79와 B05 [PR #80](https://github.com/jihoon22-lee/family-care/pull/80) source `0c70e51`, CI 34302926708 필수 7/7, merge `c58fae77139bbe77caf3648b5d46e3eed74aaaf1`.
@@ -13,7 +13,7 @@
 3. completed — 저장 run/검수/담보가 실제 사용한 운영·private·semantic 근거를 공통 조회한다. 원문과 요약을 구분하고 인증·가정 범위·no-store를 유지한다.
 4. completed — 가족·사건·자료 기준과 선택 사건 질문, 입력/결과/청구 간 재개 링크를 연결한다. 부분 근거·더 보기·실패 항목 재시도와 늦은 응답을 처리한다.
 5. completed — 네트워크/폴링 복구에도 로컬 금액·정상 근거를 유지하고 검수 상태 갱신으로 focus를 옮기지 않는다. 동일 입력 terminal 검수 조회를 새 유료 실행처럼 표시하지 않는다.
-6. in_progress — 320px·keyboard·한글·뒤로 가기·세션 만료·혼합 근거·검수 후보 청구의 합성 API/PG/브라우저와 전체 필수 검증, PR/CI/merge 증거를 기록한다.
+6. completed — 320px·keyboard·한글·뒤로 가기·세션 만료·혼합 근거·검수 후보 청구의 합성 API/PG/브라우저와 전체 필수 검증을 완료했다. [PR #81](https://github.com/jihoon22-lee/family-care/pull/81), source `3625860`, CI 34306662287 필수 7/7, merge `f59c8a9e989ea2822ec6e57174a1a7055948828b`. 실제 수용·운영 전환은 B07/B08에서 이어간다.
 
 ## Decisions and boundaries
 

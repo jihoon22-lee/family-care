@@ -528,11 +528,18 @@ def _cleanup_created_directory(path: Path) -> None:
 
 
 def _create_destination(path: Path) -> None:
+    created = False
+    complete = False
     try:
         os.mkdir(path, PRIVATE_DIRECTORY_MODE)
+        created = True
         os.chmod(path, PRIVATE_DIRECTORY_MODE)
+        complete = True
     except OSError as error:
         _raise_os(error, "BACKUP_DESTINATION_INVALID")
+    finally:
+        if created and not complete:
+            _cleanup_created_directory(path)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -600,6 +607,7 @@ def capture_backup_set(
         destination_path.parent, database_size + archive_size + 10240 + MAX_MANIFEST_BYTES
     )
     _create_destination(destination_path)
+    complete = False
     try:
         database = _copy_database_dump(
             database_dump,
@@ -617,16 +625,17 @@ def capture_backup_set(
         _write_manifest(destination_path / MANIFEST_NAME, manifest)
         _fsync_directory(destination_path)
         _fsync_directory(destination_path.parent)
+        complete = True
         return manifest
     except BackupContractError:
-        _cleanup_created_directory(destination_path)
         raise
     except OSError as error:
-        _cleanup_created_directory(destination_path)
         _raise_os(error, "BACKUP_OPERATION_FAILED")
     except tarfile.TarError:
-        _cleanup_created_directory(destination_path)
         _raise("BACKUP_OPERATION_FAILED")
+    finally:
+        if not complete:
+            _cleanup_created_directory(destination_path)
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -957,6 +966,7 @@ def materialize_restore_inputs(
     _require_disk_space(destination_path.parent, manifest.database.size + manifest.archive.size)
     _create_destination(destination_path)
     archive_destination = destination_path / "archive"
+    complete = False
     try:
         os.mkdir(archive_destination, PRIVATE_DIRECTORY_MODE)
         os.chmod(archive_destination, PRIVATE_DIRECTORY_MODE)
@@ -976,16 +986,17 @@ def materialize_restore_inputs(
         _fsync_directory(archive_destination)
         _fsync_directory(destination_path)
         _fsync_directory(destination_path.parent)
+        complete = True
         return RestoreInputs(database_dump=database_destination, archive_root=archive_destination)
     except BackupContractError:
-        _cleanup_created_directory(destination_path)
         raise
     except OSError as error:
-        _cleanup_created_directory(destination_path)
         _raise_os(error, "BACKUP_OPERATION_FAILED")
     except tarfile.TarError:
-        _cleanup_created_directory(destination_path)
         _raise("BACKUP_OPERATION_FAILED")
+    finally:
+        if not complete:
+            _cleanup_created_directory(destination_path)
 
 
 def _parser() -> argparse.ArgumentParser:

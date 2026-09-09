@@ -1,7 +1,8 @@
 # Existing data transition and recovery
 
 B07 [#69](https://github.com/jihoon22-lee/family-care/issues/69) is in progress, based on B06
-[PR #81](https://github.com/jihoon22-lee/family-care/pull/81). B06 CI integration is still pending.
+[PR #81](https://github.com/jihoon22-lee/family-care/pull/81), merged as `f59c8a9` after CI
+34306662287 passed 7/7 (including 742 PG tests). The merged B06 source is integrated locally.
 The transition uses an isolated restore before activating reconstructed knowledge. Original source,
 corrections, event/claim snapshots and review history are preserved; provider work is not automatic.
 
@@ -39,7 +40,7 @@ synthetic DB only:
   comparison: RED **1 failed** (0.45s), corrected full suite **6 passed** (0.68s).
 - Backfill may append new identities while every original row remains unchanged. New identity
   cannot substitute for a removed original. RED **2 failed** (0.08s); **8 passed** (1.01s), followed
-  by the bounded identity-inventory regression in the final related run. Strict activation/source
+  by **9 passed** (1.02s), including the bounded identity-inventory regression. Strict activation/source
   comparison continues to reject schema or data changes.
 - Targeted mypy initially missed the source packages and reported untyped installed imports;
   setting task MYPYPATH corrected resolution and **2 source files passed**. Ruff import/style/line
@@ -53,3 +54,33 @@ confirmed. Only schema, counts, sizes and fixed status left the protected proces
 identifier, amount, path or key was written here; no external AI, migration, copy, deletion or runtime
 change was performed by that inventory. Backup acquisition, real pg_restore, reconstruction,
 source binding, authenticated app acceptance and activation remain pending.
+
+## PostgreSQL restore and reconstruction integration
+
+At `03414d4` plus PostgreSQL tools, cancellation fixes, CI/test/document changes, 2026-09-09 UTC:
+
+- Coordinator `de9ea17` (integrated as `03414d4`) binds explicit sources to cluster/DB identity,
+  retained-input digests and pipeline revisions. It reuses preparation, exact-generation metadata
+  and existing local projectors without scheduling provider work. Initial fake adapter RED became
+  **20 passed** (0.18s); source Ruff/mypy passed. Cooperative deadlines do not forcibly kill a
+  projector already executing.
+- New PostgreSQL tool missing-module RED failed collection (0.09s). Environment-only credentials,
+  exclusive private dump output, in-container timeout, empty-target and transactional restore are
+  covered by **5 passed** (0.03s). Static review exposed capture/restore cancellation and destination
+  chmod cleanup: **3 RED failures** (0.08s) became backup+tool **23 passed** (0.09s).
+- Initial integration attempts had an incorrect dedicated URL, then missing migration baseline;
+  neither established a product pass. Applied all migrations to the empty dedicated DB through 0063.
+  Real restore then failed because buffered header validation left the inherited descriptor after
+  read-ahead; resetting the OS offset corrected the failure.
+- `FAMILYCARE_TEST_DATABASE_URL` (dedicated synthetic DB), destructive opt-in and
+  `FAMILYCARE_TEST_POSTGRES_CONTAINER` set, `TMPDIR=/tmp uv run pytest -m integration
+  scripts/tests/test_private_runtime_restore_integration.py
+  scripts/tests/test_restructure_existing_documents_integration.py -q`: **2 passed** (20.12s).
+  A genuine custom dump, authenticated backup/materialization and pg_restore preserved all table
+  rows plus a reviewed claim snapshot; the restored synthetic archive decrypted. Coordinator SQL
+  prepared three explicit sources, retained PARTIAL for unresolved metadata, resumed idempotently
+  and rejected a same-row-count original edit. Separate state integration **9 passed** (within
+  the preceding 13.29s run whose restore test failed).
+- Ruff/format on seven affected files, workflow policy and targeted mypy with source MYPYPATH passed.
+  CI now passes its PostgreSQL service container ID at the database-test step. Full B07 required
+  suite, protected recovery and activation have not yet been completed.

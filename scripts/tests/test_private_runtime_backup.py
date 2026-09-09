@@ -97,6 +97,54 @@ def test_capture_verify_and_materialize_synthetic_backup_set(tmp_path: Path) -> 
     assert restored.database_dump.stat().st_mode & 0o777 == 0o600
 
 
+@pytest.mark.parametrize("operation", ["capture", "restore"])
+def test_interruption_removes_partial_owned_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
+    destination = tmp_path / "synthetic-backup"
+
+    def interrupted(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    if operation == "capture":
+        monkeypatch.setattr(backup, "_write_archive_tar", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            capture_backup_set(
+                database_dump=database_dump,
+                archive_root=archive_root,
+                master_key_file=key_file,
+                destination=destination,
+            )
+    else:
+        capture_backup_set(
+            database_dump=database_dump,
+            archive_root=archive_root,
+            master_key_file=key_file,
+            destination=destination,
+        )
+        monkeypatch.setattr(backup, "_extract_archive_tar", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            materialize_restore_inputs(
+                backup_root=destination, master_key_file=key_file, destination=tmp_path / "restore"
+            )
+        destination = tmp_path / "restore"
+    assert not destination.exists()
+
+
+def test_failed_destination_chmod_removes_only_created_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def denied(*args: object) -> None:
+        raise PermissionError("synthetic permission failure")
+
+    monkeypatch.setattr(backup.os, "chmod", denied)
+    destination = tmp_path / "new-backup"
+    with pytest.raises(BackupContractError):
+        backup._create_destination(destination)
+    assert not destination.exists()
+
+
 def test_capture_reports_low_disk_before_creating_output(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
