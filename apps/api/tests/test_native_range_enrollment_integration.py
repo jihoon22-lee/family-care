@@ -194,6 +194,53 @@ def _retain_native(
     return work
 
 
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "(010203-1******)",
+        "31세 (남성) (010203-1******)",
+        "(010203-1******) / 31세 / 남성 / (2급) Sample Occupation (Synthetic role, duties)",
+    ],
+)
+def test_compound_insured_name_keeps_native_proof_and_publishes_expected_member(
+    native_database: Any,
+    suffix: str,
+) -> None:
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                f"Insured: Family Member A {suffix}",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    policies = PolicyLedgerRepository(url).list_policies(HouseholdScope(job.household_space_id))
+    assert len(policies) == 1
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT family_member_id FROM policy_parties WHERE policy_contract_id=%s "
+            "AND role='primary_insured' AND deleted_at IS NULL",
+            (policies[0].id,),
+        ).fetchall() == [(job.family_member_id,)]
+        association, structure = connection.execute(
+            "SELECT s.association_json,document_structure_projection(p.generation_id,%s,ARRAY[1]) "
+            "FROM policy_range_candidate_sources s JOIN document_policy_range_plans p "
+            "ON p.job_id=s.job_id WHERE s.job_id=%s LIMIT 1",
+            (job.household_space_id, job.id),
+        ).fetchone()
+    anchor = next(ref for ref in association["anchor_refs"] if ref["kind"] == "insured")
+    node = next(node for node in structure["nodes"] if node["node_id"] == anchor["node_id"])
+    assert f"Family Member A {suffix}" in node["text"][anchor["start"] : anchor["end"]]
+
+
 def _reextract(url: str, job: Any, *, reimport: bool = False) -> Any:
     extraction, item, next_job = uuid4(), uuid4(), uuid4()
     with psycopg.connect(_psycopg_url(url)) as connection:

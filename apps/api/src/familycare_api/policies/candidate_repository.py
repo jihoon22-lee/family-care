@@ -836,6 +836,7 @@ class CandidateRepository:
             WHERE job.id = %s
               AND job.household_space_id = %s
               AND (job.state = 'succeeded' OR %s)
+              AND policy_structuring_source_current(job.id)
             """,
             (structuring_job_id, household_space_id, bool(lineage_rows[0].get("retained_range"))),
         ).fetchone()

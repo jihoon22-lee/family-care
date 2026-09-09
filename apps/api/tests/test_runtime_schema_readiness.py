@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0064_metadata_proven_prefix"
+REVISION = "0066_provider_privacy_revision"
 
 
 class Result:
@@ -57,8 +57,8 @@ class Engine:
     "rows",
     [
         [],
-        [("0063_review_claim_sources",)],
-        [("0065_synthetic_future",)],
+        [("0065_retained_policy_jobs",)],
+        [("0067_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],
@@ -81,6 +81,7 @@ def test_api_checks_current_contract_without_ai_or_checkout_access(monkeypatch, 
     assert health.database_is_ready("postgresql+psycopg://synthetic") is True
     assert any("alembic_version" in q and "LIMIT 2" in q for q in connection.queries)
     assert any("review_job_id" in q and "WHERE false" in q for q in connection.queries)
+    assert any("policy_structuring_source_current" in q for q in connection.queries)
     assert engine.disposed
 
 

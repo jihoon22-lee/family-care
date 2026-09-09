@@ -5,6 +5,7 @@ from typing import Any
 import psycopg
 import pytest
 from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
+from familycare_api.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from familycare_worker.document_metadata import metadata_proposal
 from familycare_worker.document_metadata_repository import DocumentMetadataRunner
 from psycopg.rows import dict_row
@@ -71,5 +72,5 @@ def test_v8_reprocessing_preserves_v7_and_refuses_destructive_downgrade(
             == snapshots
         )
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == {
-            "version_num": "0064_metadata_proven_prefix"
+            "version_num": SUPPORTED_SCHEMA_REVISION
         }

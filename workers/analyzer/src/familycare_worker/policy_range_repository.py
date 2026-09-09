@@ -58,6 +58,9 @@ def _lock(
         WHERE j.id = %s AND j.household_space_id = %s AND j.family_member_id = %s
           AND j.batch_item_id = %s AND j.document_version_id = %s AND j.extraction_id = %s
           AND j.pipeline_version = %s AND j.attempts = %s AND j.lease_owner = %s
+          AND j.processing_mode = %s
+          AND j.source_generation_id IS NOT DISTINCT FROM %s
+          AND j.resubmission_of_job_id IS NOT DISTINCT FROM %s
           AND j.state = 'running' AND j.lease_expires_at > clock_timestamp()
           AND d.deleted_at IS NULL AND m.deleted_at IS NULL
           AND m.household_space_id = j.household_space_id
@@ -73,10 +76,27 @@ def _lock(
             job.pipeline_version,
             job.attempts,
             worker_id,
+            job.processing_mode,
+            job.source_generation_id,
+            job.resubmission_of_job_id,
         ),
     ).fetchone()
     if row is None:
         raise PolicyRangeConflict
+    if job.processing_mode == "retained":
+        # Match preparation's item-before-generation lock order. The pin remains
+        # current throughout this short transaction, including publication.
+        connection.execute(
+            "SELECT id FROM document_batch_items WHERE id=%s FOR UPDATE", (job.batch_item_id,)
+        )
+        pinned = connection.execute(
+            "SELECT id FROM document_structure_generations WHERE id=%s "
+            "AND is_current AND NOT cancelled "
+            "AND policy_structuring_source_current(%s) FOR SHARE",
+            (job.source_generation_id, job.id),
+        ).fetchone()
+        if pinned is None:
+            raise PolicyRangeConflict
 
 
 def _work(row: dict[str, Any]) -> PolicyRangeWork:
@@ -150,6 +170,8 @@ class PolicyRangeRepository:
                     structure=structure,
                     plan=chunks,
                 )
+                if job.processing_mode == "retained" and generation_id != job.source_generation_id:
+                    raise PolicyRangeConflict
                 envelopes = build_policy_envelopes(
                     structure, chunks, sensitive_terms=sensitive_terms
                 )

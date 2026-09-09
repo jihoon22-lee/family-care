@@ -26,15 +26,19 @@ from apps.api.tests.test_range_enrollment_integration import (
     seeded_policy_database,  # noqa: F401 -- shared synthetic fixture
     structure_database,  # noqa: F401 -- shared synthetic fixture
 )
+from scripts.integration_test_database import configure_integration_test_database
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
 def date_origin_database(request: pytest.FixtureRequest) -> Iterator[Any]:
-    url, job = request.getfixturevalue("enrollment_database")
+    # Remove prior tests' metadata before the parent seeds and claims its job:
+    # truncating generations later also cascades to that new automatic job.
+    url = configure_integration_test_database()
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute("TRUNCATE document_structure_generations CASCADE")
+    url, job = request.getfixturevalue("enrollment_database")
     try:
         yield url, job
     finally:

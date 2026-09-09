@@ -8,6 +8,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from typing import Any, Literal
 from uuid import UUID, uuid5
 
@@ -19,6 +20,34 @@ _TYPE_LABELS = {
     "insured": re.compile(r"^(?:피보험자(?: 성명)?|insured(?: name)?)$", re.IGNORECASE),
     "contract": re.compile(r"^(?:증권번호|계약번호|policy number|contract number)$", re.IGNORECASE),
 }
+_DATE_QUALIFIER = re.compile(
+    r"(?P<year>[0-9]{4})(?P<separator>[-./])(?P<month>[0-9]{2})"
+    r"(?P=separator)(?P<day>[0-9]{2})"
+)
+_MASKED_ID_QUALIFIER = re.compile(
+    r"(?P<year>[0-9]{2})(?P<month>[0-9]{2})(?P<day>[0-9]{2})-"
+    r"(?P<code>[1-8*])\*{6}"
+)
+_DEMOGRAPHIC_TOKEN = re.compile(
+    r"(?P<identity>[0-9]{4}[-./][0-9]{2}[-./][0-9]{2}|[0-9]{6}-[1-8*]\*{6})"
+    r"|(?P<gender>남성|여성|남자|여자|남|여|male|female)"
+    r"|(?P<age>(?:만\s*)?(?P<years>[0-9]{1,3})\s*세)"
+)
+_CERTIFICATE_PERSON_FIELDS = re.compile(
+    r"(?P<name>[^()]+)\((?P<identity>[0-9]{6}-[1-8*]\*{6})\)\s*/\s*"
+    r"(?:만\s*)?(?P<age>[0-9]{1,3})\s*세\s*/\s*"
+    r"(?:남성|여성|남자|여자|남|여|male|female)\s*/\s*"
+    r"\((?P<class>[0-9]{1,2})(?:급|종)\)"
+    r"(?:\s+(?P<description>(?:[^()]|\([^()]*\))*))?"
+)
+_ADDITIONAL_PERSON_FIELD = re.compile(
+    "|".join(
+        r"\s*".join(label)
+        for label in ("피보험자", "계약자", "수익자", "성명", "이름", "생년월일", "주민등록번호")
+    )
+    + r"|\b(?:insured|policyholder|beneficiary|name|birth|resident)\b|"
+    r"[0-9]{6}\s*-\s*[0-9*]|[0-9]{4}\s*[-./년]\s*[0-9]{1,2}\s*[-./월]"
+)
 
 
 @dataclass(frozen=True, repr=False)
@@ -69,6 +98,110 @@ def _normalize(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
+def _recognized_insured_qualifier(value: str) -> bool:
+    """Recognize a complete date/masked-ID shape without emitting its values as facts."""
+    matched = _DATE_QUALIFIER.fullmatch(value)
+    if matched is not None:
+        year = int(matched["year"])
+    else:
+        matched = _MASKED_ID_QUALIFIER.fullmatch(value)
+        if matched is None:
+            return False
+        # A fully masked suffix leaves the century unknown. Use a leap-capable
+        # century only for calendar-shape validation; no birth date is inferred.
+        century = 1900 if matched["code"] in {"1", "2", "5", "6"} else 2000
+        year = century + int(matched["year"])
+    try:
+        date(year, int(matched["month"]), int(matched["day"]))
+    except ValueError:
+        return False
+    return True
+
+
+def _insured_matches(value: str, names: dict[str, set[UUID]]) -> set[UUID]:
+    direct = names.get(_normalize(value))
+    if direct is not None:
+        return direct
+    certificate = _CERTIFICATE_PERSON_FIELDS.fullmatch(value) if "\n" not in value else None
+    if certificate is not None:
+        description = certificate["description"] or ""
+        if (
+            not _recognized_insured_qualifier(certificate["identity"])
+            or int(certificate["age"]) > 130
+            or int(certificate["class"]) == 0
+            or len(description) > 500
+            or _ADDITIONAL_PERSON_FIELD.search(description)
+            or any(
+                re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", description) for name in names
+            )
+        ):
+            return set()
+        # The complete name is an independently delimited field. The final
+        # class description is not identity evidence and creates no new facts.
+        return names.get(certificate["name"].strip(), set())
+    identities: set[UUID] = set()
+    for name, members in names.items():
+        if not value.startswith(name):
+            continue
+        suffix = value[len(name) :]
+        if (
+            suffix
+            and (suffix[0].isspace() or suffix[0] == "(")
+            and _recognized_demographic_suffix(suffix.strip())
+        ):
+            identities.update(members)
+    # Only the lookup changes. The caller retains the complete original anchor
+    # and never stores a parsed identifier, date, or new member alias.
+    return identities
+
+
+def _recognized_demographic_suffix(value: str) -> bool:
+    """Consume the complete suffix; typed fields are discarded, never identity facts."""
+    kinds: set[str] = set()
+    position = 0
+    group_open = False
+    group_has_token = False
+    previous = "start"
+    while position < len(value):
+        char = value[position]
+        if char.isspace():
+            if previous == "token":
+                previous = "space"
+            position += 1
+            continue
+        if char == "(":
+            if group_open:
+                return False
+            group_open, group_has_token, previous = True, False, "open"
+        elif char == ")":
+            if not group_open or not group_has_token or previous in {"open", "slash"}:
+                return False
+            group_open, previous = False, "close"
+        elif char == "/":
+            if previous not in {"token", "space", "close"}:
+                return False
+            previous = "slash"
+        else:
+            if previous == "token":
+                return False
+            token = _DEMOGRAPHIC_TOKEN.match(value, position)
+            if token is None:
+                return False
+            kind = "age" if token["age"] is not None else token.lastgroup
+            if kind is None or kind in kinds:
+                return False
+            if kind == "identity" and not _recognized_insured_qualifier(token[0]):
+                return False
+            if kind == "age" and int(token["years"]) > 130:
+                return False
+            kinds.add(kind)
+            group_has_token, previous = True, "token"
+            position = token.end()
+            continue
+        position += 1
+    return not group_open and previous not in {"open", "slash"} and "identity" in kinds
+
+
 def _anchors(node: StructureNode) -> list[tuple[str, str, AnchorRef]]:
     if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
         return []
@@ -116,7 +249,11 @@ def _anchors(node: StructureNode) -> list[tuple[str, str, AnchorRef]]:
                     result.append(
                         (
                             kind,
-                            _normalize(node.cells[position + 1].text),
+                            "\n".join(
+                                _normalize(line) for line in value_cell.text.strip().splitlines()
+                            )
+                            if kind == "insured"
+                            else _normalize(value_cell.text),
                             AnchorRef(
                                 node.node_id,
                                 node.page_number,
@@ -170,7 +307,7 @@ def associate_policy_sources(
                 for anchor in items
             ]
             insured = [(value, ref) for kind, value, ref in linked if kind == "insured"]
-            matches = [names.get(value, set()) for value, _ in insured]
+            matches = [_insured_matches(value, names) for value, _ in insured]
             identities = set().union(*matches) if matches else set()
             if any(len(item) > 1 for item in matches) or len(identities) > 1:
                 association = SourceAssociation("AMBIGUOUS")
@@ -213,7 +350,7 @@ def associate_policy_sources(
         own_insured = [
             value for kind, value, _ in page_anchors[node.page_number] if kind == "insured"
         ]
-        if any(names.get(value, set()) != {expected_member_id} for value in own_insured):
+        if any(_insured_matches(value, names) != {expected_member_id} for value in own_insured):
             result[node.node_id] = SourceAssociation("AMBIGUOUS")
             continue
         own = result[node.node_id]
