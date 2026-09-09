@@ -135,7 +135,10 @@ export function GuidanceQuestions({
       return;
     }
     const input: MedicalEventUpdateRequest = {
-      expected_version: event.version,
+      expected_version: Math.max(
+        event.version,
+        saved.current?.version ?? event.version,
+      ),
     };
     for (const path of supplied) {
       const name = field(path),
@@ -170,7 +173,10 @@ export function GuidanceQuestions({
     submitted.current = true;
     setBusy(true);
     try {
-      if (saved.current?.values !== fingerprint) {
+      if (
+        saved.current?.values !== fingerprint ||
+        event.version > saved.current.version
+      ) {
         const updated = await onSave(input, controller.signal);
         if (controller.signal.aborted) return;
         saved.current = { values: fingerprint, version: updated.version };
@@ -183,7 +189,8 @@ export function GuidanceQuestions({
         setError(
           cause instanceof ApiError && cause.status === 409
             ? "사건이 변경되었습니다. 현재 사건을 다시 불러온 뒤 입력을 보완해 주세요."
-            : saved.current?.values === fingerprint
+            : saved.current?.values === fingerprint &&
+                event.version <= saved.current.version
               ? "입력은 저장했습니다. 연결을 확인한 뒤 다시 계산해 주세요."
               : "입력을 저장하지 못했습니다. 기존 결과를 유지하며 다시 시도할 수 있습니다.",
         );

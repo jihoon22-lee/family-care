@@ -111,3 +111,21 @@ formatting it corrected both reports, after which format **840 files** and lint 
 documentation **50**, repository safety **1053**, container definitions, workflow policy and diff
 checks passed. Static container checks do not establish image builds; full final Web/browser and
 PR CI evidence remain pending. All runs use the synthetic, provider-free environment above.
+
+Final UI follow-up `96b6b83`, integrated as `c98d8c4`, preserves each successful receipt create/update
+and deletion before retrying later failures. Identical saved lines are not PATCHed again; optional
+question retry uses its latest known event version. The three new behavioral RED cases reproduced
+duplicate POST, repeated DELETE/404 and stale saved-version reuse; after correction the related
+suite passed **23 tests** (5.91s), including both explicit admission answers.
+
+At 2026-09-09 03:15 UTC, `corepack pnpm web:check` on the isolated UI checkout passed all
+format/lint/TypeScript checks, **238 tests in 31 files** (49.87s), Vite build and PWA generation.
+At 03:16:43 UTC, the complete Chromium mock suite against that built preview passed **27 tests**
+(20.1s). The five new browser cases cover 320px/keyboard, 18 mixed evidence references with partial
+failure/retry, stale drawer responses and session expiry, network GET recovery with focus retention,
+equivalent-run review reuse and reviewed claim provenance, and Korean saved-draft reload/back plus
+optional question version advancement. No actual backend, provider, private data or device is implied.
+Root checked all Web files, generated contracts and root lock/config inputs byte-identical to the
+integrated checkout, so these final results apply without repeating an unchanged successful suite.
+
+Local B06 completion checks are complete. PR CI and integration remain pending.

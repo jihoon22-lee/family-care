@@ -25,6 +25,82 @@ const questions = [
 ];
 
 describe("minimum event questions", () => {
+  it("sends both explicit admission and day-count answers without dropping either", async () => {
+    const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
+    render(
+      <GuidanceQuestions
+        event={event}
+        questions={[
+          ...questions,
+          {
+            field_path: "MedicalEvent.admission",
+            reason_code: "MISSING_ADMISSION",
+          },
+        ]}
+        onSave={save}
+        onAnalyze={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("입원 일수"), "5");
+    await userEvent.selectOptions(screen.getByLabelText("입원 여부"), "true");
+    await userEvent.click(
+      screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+    );
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        facts: expect.objectContaining({
+          "MedicalEvent.admission_days": { value: 5, confirmation: "user" },
+        }),
+        structured_facts: [{ field_id: "admission", value: true }],
+      }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("reapplies the entered answer if the event changed after a saved PATCH and failed analysis", async () => {
+    const save = vi
+      .fn()
+      .mockResolvedValueOnce({ ...event, version: 3 })
+      .mockResolvedValueOnce({ ...event, version: 5 });
+    const analyze = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("synthetic offline"))
+      .mockResolvedValueOnce(undefined);
+    const view = render(
+      <GuidanceQuestions
+        event={event}
+        questions={questions}
+        onSave={save}
+        onAnalyze={analyze}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("입원 일수"), "5");
+    await userEvent.click(
+      screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "입력은 저장했습니다",
+    );
+    view.rerender(
+      <GuidanceQuestions
+        event={{ ...event, version: 4 }}
+        questions={questions}
+        onSave={save}
+        onAnalyze={analyze}
+      />,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+    );
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1][0]).toMatchObject({
+      expected_version: 4,
+      facts: {
+        "MedicalEvent.admission_days": { value: 5, confirmation: "user" },
+      },
+    });
+  });
+
   it("preserves the current answer and sends the confirmed integer with the expected event version", async () => {
     const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
     const analyze = vi.fn().mockResolvedValue(undefined);
