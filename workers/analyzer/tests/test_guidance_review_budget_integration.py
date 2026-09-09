@@ -18,7 +18,10 @@ from apps.api.tests.test_guidance_claim_concurrency_integration import (
 )
 from apps.api.tests.test_guidance_review_request_integration import _repository, _request
 
-pytestmark = pytest.mark.integration
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.parametrize("saved_guidance_source", ["operational"], indirect=True),
+]
 
 
 def _setup(source):
@@ -27,17 +30,8 @@ def _setup(source):
     _request(source)
     job = GuidanceReviewQueue(source.url).claim()
     assert job is not None
-    with psycopg.connect(_psycopg_url(source.url)) as connection:
-        documents = tuple(
-            row[0]
-            for row in connection.execute(
-                "SELECT DISTINCT d.id FROM documents d JOIN document_versions v ON v.document_id=d.id "
-                "JOIN evidence e ON e.document_version_id=v.id "
-                "WHERE e.household_space_id=%s AND d.deleted_at IS NULL "
-                "ORDER BY d.id LIMIT 2",
-                (source.scope.household_space_id,),
-            )
-        )
+    work = GuidanceReviewQueue(source.url).load_inputs(job)
+    documents = tuple(sorted(set(work.document_versions.values())))[:2]
     assert len(documents) == 2
     return GuidanceReviewBudget(source.url), job, documents
 

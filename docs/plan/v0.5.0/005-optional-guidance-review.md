@@ -9,11 +9,11 @@
 ## Tasks
 
 1. completed — 명시적 검수 요청과 불변 로컬 run 참조, 가입 담보/원문 범위 snapshot, revision별 재사용 계약을 만든다. 기본 분석·조회는 검수 작업을 예약하지 않는다.
-2. in_progress — 해당 가족의 가입 담보 index에서 로컬 출력 밖 후보·정의·예외를 독립 탐색한다. 문서/판본/페이지/구역과 읽지 못한 범위를 보존하고 최소화된 bounded packet을 만든다.
-3. pending — structured 검수의 인용·가입·가족·입력·규칙을 검증한다. 검증 가능한 교정은 같은 로컬 엔진으로 재평가하고 AI 의견/숫자를 사실·지급액으로 직접 저장하지 않는다.
-4. pending — 별도 작업 lease/deadline/취소와 durable 요청 예산을 연결한다. SDK retry 0, 실제 HTTP 수·입출력 토큰·문서별/전체 한도, 응답 소실·재시작·오래된 완료를 검증한다.
-5. pending — API와 생성 계약, 선택 검수 상태·범위·차이 소비를 연결한다. 실패/부분/미설정에도 로컬 결과·금액·과거 snapshot을 유지한다.
-6. pending — 합성 누락/예외 개선과 새 오류를 함께 평가하고 관련 PG·HTTP transport·브라우저 및 전체 필수 검사, PR/CI/병합 증거를 기록한다.
+2. completed — 해당 가족의 가입 담보 index에서 로컬 출력 밖 후보·정의·예외를 독립 탐색한다. 문서/판본/페이지/구역과 읽지 못한 범위를 보존하고 최소화된 bounded packet을 만든다.
+3. completed — structured 검수의 인용·가입·가족·입력·규칙을 검증한다. 검증 가능한 교정은 같은 로컬 엔진으로 재평가하고 AI 의견/숫자를 사실·지급액으로 직접 저장하지 않는다.
+4. completed — 별도 작업 lease/deadline/취소와 durable 요청 예산을 연결한다. SDK retry 0, 실제 HTTP 수·입출력 토큰·문서별/전체 한도, 응답 소실·재시작·오래된 완료를 검증한다.
+5. completed — API와 생성 계약, 선택 검수 상태·범위·차이 소비를 연결한다. 실패/부분/미설정에도 로컬 결과·금액·과거 snapshot을 유지한다.
+6. in_progress — 합성 누락/예외 개선과 새 오류를 함께 평가하고 관련 PG·HTTP transport·브라우저 및 전체 필수 검사, PR/CI/병합 증거를 기록한다.
 
 ## Decisions and acceptance
 

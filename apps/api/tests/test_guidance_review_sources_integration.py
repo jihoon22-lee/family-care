@@ -74,6 +74,10 @@ def test_native_inventory_does_not_need_a_decision_candidate_and_keeps_whole_foo
     result = _read(sample)
     index = next(c for c in result.index if c.ref.coverage_id == sample.sources["Sample Rider"])
     assert index.enrollment_decision == "MATCH"
+    assert index.source_document_version_ids
+    assert all(
+        isinstance(value, type(sample.event.id)) for value in index.source_document_version_ids
+    )
     assert index.packet_ids
     packet = next(p for p in result.packets if p.packet_id in index.packet_ids)
     envelope = json.loads(packet.envelope_json)

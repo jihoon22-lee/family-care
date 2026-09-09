@@ -57,7 +57,7 @@ function reviewedJob(): GuidanceReviewJob {
     ...job("partial"),
     result: {
       source_digest: "synthetic-source-digest",
-      reason_codes: [],
+      reason_codes: ["REVIEW_PARTIAL_INTERPRETATION"],
       scope: {
         complete: false,
         total_coverages: 2,
@@ -66,6 +66,9 @@ function reviewedJob(): GuidanceReviewJob {
         reviewed_packets: 1,
         unreviewed_packets: 1,
         omitted_packets: 1,
+        expected_regions: 12,
+        supplied_regions: 8,
+        unsupplied_regions: 4,
         coverages: [
           {
             ref: candidate.ref,
@@ -281,7 +284,11 @@ describe("optional guidance review", () => {
     expect(
       await screen.findByText("일부 자료의 검수가 완료되었습니다."),
     ).toBeVisible();
-    expect(screen.getByText(/미검수 1개/)).toBeVisible();
+    expect(screen.getByText(/미검수 원문 묶음 1개/)).toBeVisible();
+    expect(screen.getByText(/확인하지 못한 원문 범위는 4개/)).toBeVisible();
+    expect(
+      screen.getByText(/일부 조항의 해석은 검증하지 못했습니다/),
+    ).toBeVisible();
     await user.click(screen.getByText("AI 검수 의견과 근거"));
     expect(screen.getByText("AI 의견 · 프로그램 결과에 미반영")).toBeVisible();
     expect(screen.getByText("합성 약관의 보장 조건")).toBeVisible();

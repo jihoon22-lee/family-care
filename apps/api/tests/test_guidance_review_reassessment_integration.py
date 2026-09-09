@@ -47,7 +47,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture()
-def unreviewed_original(changes_database):
+def unreviewed_original(changes_database, request):
     url, job = changes_database
     body = "\n".join(
         (
@@ -74,6 +74,49 @@ def unreviewed_original(changes_database):
             inventory["EDITION-A"],
         )
     RiderClauseLinkRepository(url).confirm(scope, link, expected_version=1)
+    selected_item = None
+    if getattr(request, "param", False):
+        from familycare_api.clauses.terms_applicability_repository import (
+            TermsApplicabilityProjector,
+        )
+        from familycare_api.insurance_documents.repository import InsuranceDocumentRepository
+
+        with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+            actor = connection.execute(
+                "INSERT INTO app_users(household_space_id,username,display_name,password_hash) "
+                "VALUES(%s,'synthetic-review-admin','Admin A','$argon2id$synthetic') RETURNING id",
+                (scope.household_space_id,),
+            ).fetchone()["id"]
+            component = connection.execute(
+                "SELECT source_component_id FROM terms_editions WHERE id=%s",
+                (inventory["EDITION-A"],),
+            ).fetchone()["source_component_id"]
+        repository = InsuranceDocumentRepository(url)
+        document_set = repository.create_document_set(
+            scope,
+            actor_id=actor,
+            member_id=job.family_member_id,
+            policy_contract_id=inventory["policy_id"],
+            insurer_display=None,
+            product_display=None,
+            display_label="Sample Manual Terms Selection",
+        )
+        selected_item = repository.attach_set_item(
+            scope,
+            actor_id=actor,
+            document_set_id=document_set.id,
+            insurance_document_component_id=component,
+            match_state="USER_CONFIRMED",
+            evidence_id=None,
+            expected_set_version=document_set.version,
+        )
+        assert TermsApplicabilityProjector(url).refresh_pending() == 1
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            assert connection.execute(
+                "SELECT status,selection_state FROM current_policy_terms_applicability "
+                "WHERE policy_contract_id=%s AND terms_edition_id=%s",
+                (inventory["policy_id"], inventory["EDITION-A"]),
+            ).fetchone() == ("MATCH", "USER_SELECTED")
     service = _service(url, scope)
     event = service.create_medical_event(
         family_member_id=job.family_member_id,
@@ -117,6 +160,7 @@ def unreviewed_original(changes_database):
         packet=packet,
         graph=graph,
         inventory=inventory,
+        selected_item=selected_item,
     )
 
 

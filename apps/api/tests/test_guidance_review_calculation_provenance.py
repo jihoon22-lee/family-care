@@ -59,3 +59,23 @@ def test_review_identity_must_be_nonzero():
         GuidanceSemanticEvidence.model_validate(
             source.citations[0].evidence.model_dump() | {"review_job_id": UUID(int=0)}
         )
+
+
+def test_review_result_cannot_be_copied_as_an_original_decision_claim():
+    from familycare_api.claims.snapshot import (
+        SnapshotValidationError,
+        build_guidance_claim_snapshot,
+    )
+
+    from apps.api.tests.unit.claims.test_guidance_claim_snapshot import _guidance
+
+    _, _, source = semantic()
+    evidence = _review(source).citations[0].evidence
+    original = _guidance()
+    candidate = original.candidates[0]
+    reviewed = candidate.model_copy(
+        update={"estimate": candidate.estimate.model_copy(update={"evidence": (evidence,)})}
+    )
+    guidance = original.model_copy(update={"candidates": (reviewed,)})
+    with pytest.raises(SnapshotValidationError, match="GUIDANCE_REVIEW_CLAIM_SOURCE_REQUIRED"):
+        build_guidance_claim_snapshot(guidance, candidate.ref, run_id=REVIEW_ID)

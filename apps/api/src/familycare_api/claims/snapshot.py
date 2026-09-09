@@ -757,6 +757,18 @@ def build_guidance_claim_snapshot(
         candidate=selected[0],
         expenses=guidance.expenses,
     ).model_dump(mode="json")
+    pending: list[object] = [local]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            if value.get("review_job_id") is not None or value.get("source_kind") in (
+                "GUIDANCE_REVIEW_PUBLICATION",
+                "GUIDANCE_REVIEW_JOB",
+            ):
+                raise SnapshotValidationError("GUIDANCE_REVIEW_CLAIM_SOURCE_REQUIRED")
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
     _reject_forbidden_keys(local)
     baseline = build_claim_snapshot({})
     candidate = {**baseline.candidate_snapshot, "local_guidance": local}

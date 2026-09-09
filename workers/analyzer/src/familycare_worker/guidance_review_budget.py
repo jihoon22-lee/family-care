@@ -12,7 +12,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_worker.ai.provider import ProviderCallMetadata
-from familycare_worker.guidance_review_jobs import ReviewLease
+from familycare_worker.guidance_review_jobs import ReviewLease, _current_inputs, _input_documents
 from familycare_worker.policy_request_budget import PolicyRequestBudget
 from familycare_worker.provider_quota import request_counts
 
@@ -57,6 +57,10 @@ class GuidanceReviewBudget:
             with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
                 connection.execute("SET LOCAL lock_timeout='5s'")
                 connection.execute("SELECT pg_advisory_xact_lock(523019,28)")
+                connection.execute(
+                    "SELECT id FROM medical_events WHERE id=%s AND household_space_id=%s FOR SHARE",
+                    (job.medical_event_id, job.household_space_id),
+                )
                 owned = connection.execute(
                     "SELECT j.id FROM guidance_review_jobs j JOIN medical_events e "
                     "ON e.id=j.medical_event_id AND e.household_space_id=j.household_space_id "
@@ -65,7 +69,7 @@ class GuidanceReviewBudget:
                     "AND j.state='running' AND j.http_attempts<2 "
                     "AND j.deadline_at>clock_timestamp() AND j.lease_expires_at>clock_timestamp() "
                     "AND e.family_member_id=j.family_member_id AND e.version=j.event_version "
-                    "AND e.deleted_at IS NULL FOR UPDATE OF j FOR SHARE OF e",
+                    "AND e.deleted_at IS NULL FOR UPDATE OF j",
                     (
                         job.id,
                         job.household_space_id,
@@ -76,6 +80,11 @@ class GuidanceReviewBudget:
                     ),
                 ).fetchone()
                 if owned is None:
+                    raise ReviewBudgetRejected
+                current = _current_inputs(connection, job)
+                if current is None or not set(documents) <= set(
+                    _input_documents(connection, job, current).values()
+                ):
                     raise ReviewBudgetRejected
                 used = connection.execute(
                     "SELECT coalesce(sum(input_token_bound),0) AS input, "

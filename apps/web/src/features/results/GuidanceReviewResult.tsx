@@ -43,15 +43,38 @@ export function GuidanceReviewResult({ result }: { result: ReviewResult }) {
     <>
       <h3>검수 범위</h3>
       <p>
-        가입 담보 {scope.total_coverages}개 중 자료가 연결된 담보{" "}
-        {scope.indexed_coverages}개 · 원문 묶음 {scope.total_packets}개 중{" "}
+        가입 자료의 담보 항목 {scope.total_coverages}개 중 검수 목록에 포함된
+        항목 {scope.indexed_coverages}개 · 원문 묶음 {scope.total_packets}개 중{" "}
         {scope.reviewed_packets}개 검수
       </p>
       {!scope.complete ? (
-        <p>
-          일부 범위만 검수했습니다. 미검수 {scope.unreviewed_packets}개 ·
-          범위에서 제외된 원문 묶음 {scope.omitted_packets}개
-        </p>
+        <>
+          <p>일부 범위만 검수했습니다.</p>
+          {scope.unreviewed_packets || scope.omitted_packets ? (
+            <p>
+              미검수 원문 묶음 {scope.unreviewed_packets}개 · 범위에서 제외된
+              원문 묶음 {scope.omitted_packets}개
+            </p>
+          ) : null}
+          {(scope.expected_regions ?? 0) > 0 ? (
+            <p>
+              약관 조항·별표 등의 원문 범위 {scope.expected_regions}개 중{" "}
+              {scope.supplied_regions}개를 검수 입력에 포함했습니다. 확인하지
+              못한 원문 범위는 {scope.unsupplied_regions}개입니다.
+            </p>
+          ) : null}
+          {result.reason_codes.includes("REVIEW_PARTIAL_INTERPRETATION") ? (
+            <p>
+              일부 조항의 해석은 검증하지 못했습니다. 확인된 계산과 미확인
+              부분을 함께 봐 주세요.
+            </p>
+          ) : null}
+          {result.reason_codes.includes("REVIEW_LOCAL_COMPARISON_PARTIAL") ? (
+            <p>
+              기존 안내의 일부 계산이나 조건은 검수 비교에 포함하지 못했습니다.
+            </p>
+          ) : null}
+        </>
       ) : null}
       {scope.coverages?.length ? (
         <details>

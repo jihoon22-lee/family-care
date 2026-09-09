@@ -131,7 +131,7 @@ test("optional review exposes partial opinions and program changes with keyboard
   expect(requests.filter((request) => request.method === "POST")).toHaveLength(
     1,
   );
-  await expect(review).toContainText("미검수 1개");
+  await expect(review).toContainText("미검수 원문 묶음 1개");
   const opinion = review.getByText("AI 검수 의견과 근거", { exact: true });
   await opinion.focus();
   await page.keyboard.press("Enter");

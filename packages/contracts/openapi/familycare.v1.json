@@ -5912,6 +5912,194 @@
         "title": "GuidanceRelevance",
         "type": "object"
       },
+      "GuidanceReviewCoverageScope": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_label": {
+            "maxLength": 800,
+            "title": "Contract Label",
+            "type": "string"
+          },
+          "coverage_label": {
+            "maxLength": 800,
+            "title": "Coverage Label",
+            "type": "string"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/CanonicalCoverageRef"
+          },
+          "reviewed_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Reviewed Packets",
+            "type": "integer"
+          },
+          "source_state": {
+            "enum": [
+              "AVAILABLE",
+              "PARTIAL",
+              "UNAVAILABLE"
+            ],
+            "title": "Source State",
+            "type": "string"
+          },
+          "total_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Total Packets",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ref",
+          "contract_label",
+          "coverage_label",
+          "source_state",
+          "reviewed_packets",
+          "total_packets"
+        ],
+        "title": "GuidanceReviewCoverageScope",
+        "type": "object"
+      },
+      "GuidanceReviewDifference": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "before": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "change": {
+            "enum": [
+              "ADDED",
+              "REMOVED",
+              "CHANGED"
+            ],
+            "title": "Change",
+            "type": "string"
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/CanonicalCoverageRef"
+          }
+        },
+        "required": [
+          "coverage",
+          "change",
+          "before",
+          "after"
+        ],
+        "title": "GuidanceReviewDifference",
+        "type": "object"
+      },
+      "GuidanceReviewFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "affected_fact_paths": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Affected Fact Paths",
+            "type": "array"
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CanonicalCoverageRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuidanceReviewSourceCitation"
+            },
+            "maxItems": 64,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "AGREEMENT",
+              "CORRECTION",
+              "ADDITIONAL_CANDIDATE",
+              "EXCEPTION",
+              "CONFLICT"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "publication_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Publication Id"
+          },
+          "reason_codes": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "APPLIED",
+              "AGREEMENT",
+              "OPINION",
+              "REJECTED"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "coverage",
+          "status",
+          "reason_codes"
+        ],
+        "title": "GuidanceReviewFinding",
+        "type": "object"
+      },
       "GuidanceReviewJob": {
         "additionalProperties": false,
         "properties": {
@@ -5970,6 +6158,16 @@
             "title": "Medical Event Id",
             "type": "string"
           },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceReviewResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "schema_version": {
             "const": "1",
             "default": "1",
@@ -5993,6 +6191,16 @@
             ],
             "title": "State",
             "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GuidanceReviewUsage"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -6027,6 +6235,348 @@
           "expected_event_version"
         ],
         "title": "GuidanceReviewRequest",
+        "type": "object"
+      },
+      "GuidanceReviewResult": {
+        "additionalProperties": false,
+        "properties": {
+          "differences": {
+            "items": {
+              "$ref": "#/components/schemas/GuidanceReviewDifference"
+            },
+            "maxItems": 256,
+            "title": "Differences",
+            "type": "array"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/GuidanceReviewFinding"
+            },
+            "maxItems": 16,
+            "title": "Findings",
+            "type": "array"
+          },
+          "guidance": {
+            "$ref": "#/components/schemas/LocalGuidanceResponse"
+          },
+          "reason_codes": {
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "schema_version": {
+            "const": "1",
+            "default": "1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/GuidanceReviewScope"
+          },
+          "source_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Digest",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_digest",
+          "scope",
+          "findings",
+          "differences",
+          "guidance",
+          "reason_codes"
+        ],
+        "title": "GuidanceReviewResult",
+        "type": "object"
+      },
+      "GuidanceReviewScope": {
+        "additionalProperties": false,
+        "properties": {
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "coverages": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GuidanceReviewCoverageScope"
+            },
+            "maxItems": 128,
+            "title": "Coverages",
+            "type": "array"
+          },
+          "expected_regions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Expected Regions",
+            "type": "integer"
+          },
+          "indexed_coverages": {
+            "maximum": 128.0,
+            "minimum": 0.0,
+            "title": "Indexed Coverages",
+            "type": "integer"
+          },
+          "omitted_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Omitted Packets",
+            "type": "integer"
+          },
+          "reason_codes": {
+            "default": [],
+            "items": {
+              "pattern": "^[A-Z][A-Z0-9_]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "reviewed_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Reviewed Packets",
+            "type": "integer"
+          },
+          "supplied_regions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Supplied Regions",
+            "type": "integer"
+          },
+          "total_coverages": {
+            "minimum": 0.0,
+            "title": "Total Coverages",
+            "type": "integer"
+          },
+          "total_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Total Packets",
+            "type": "integer"
+          },
+          "unreviewed_packets": {
+            "maximum": 8.0,
+            "minimum": 0.0,
+            "title": "Unreviewed Packets",
+            "type": "integer"
+          },
+          "unsupplied_regions": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Unsupplied Regions",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_coverages",
+          "indexed_coverages",
+          "total_packets",
+          "reviewed_packets",
+          "unreviewed_packets",
+          "omitted_packets",
+          "complete"
+        ],
+        "title": "GuidanceReviewScope",
+        "type": "object"
+      },
+      "GuidanceReviewSourceCitation": {
+        "additionalProperties": false,
+        "properties": {
+          "bbox": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Bbox",
+            "type": "array"
+          },
+          "citation_id": {
+            "format": "uuid",
+            "title": "Citation Id",
+            "type": "string"
+          },
+          "document_version_id": {
+            "format": "uuid",
+            "title": "Document Version Id",
+            "type": "string"
+          },
+          "end": {
+            "maximum": 262144.0,
+            "minimum": 1.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "REVIEW_SOURCE_CITATION",
+            "default": "REVIEW_SOURCE_CITATION",
+            "title": "Kind",
+            "type": "string"
+          },
+          "packet_id": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Packet Id",
+            "type": "string"
+          },
+          "page_end": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page End",
+            "type": "integer"
+          },
+          "page_start": {
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Page Start",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_layer": {
+            "enum": [
+              "native",
+              "ocr"
+            ],
+            "title": "Source Layer",
+            "type": "string"
+          },
+          "source_node_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Node Id",
+            "type": "string"
+          },
+          "source_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          },
+          "start": {
+            "maximum": 262144.0,
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          },
+          "terms_edition_id": {
+            "format": "uuid",
+            "title": "Terms Edition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "packet_id",
+          "citation_id",
+          "document_version_id",
+          "terms_edition_id",
+          "source_node_id",
+          "page_start",
+          "page_end",
+          "start",
+          "end",
+          "source_layer",
+          "bbox",
+          "source_sha256",
+          "quote"
+        ],
+        "title": "GuidanceReviewSourceCitation",
+        "type": "object"
+      },
+      "GuidanceReviewUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "requests_reserved": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Requests Reserved",
+            "type": "integer"
+          },
+          "reserved_input_tokens": {
+            "maximum": 65536.0,
+            "minimum": 0.0,
+            "title": "Reserved Input Tokens",
+            "type": "integer"
+          },
+          "reserved_output_tokens": {
+            "maximum": 8000.0,
+            "minimum": 0.0,
+            "title": "Reserved Output Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Tokens"
+          },
+          "usage_complete": {
+            "title": "Usage Complete",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "reserved_input_tokens",
+          "reserved_output_tokens",
+          "requests_reserved",
+          "usage_complete"
+        ],
+        "title": "GuidanceReviewUsage",
         "type": "object"
       },
       "GuidanceScenario": {
@@ -6135,6 +6685,18 @@
             "format": "uuid",
             "title": "Publication Id",
             "type": "string"
+          },
+          "review_job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Job Id"
           },
           "root_node_id": {
             "maxLength": 128,

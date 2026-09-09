@@ -2261,6 +2261,19 @@
           "title": "Publication Id",
           "type": "string"
         },
+        "review_job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Job Id"
+        },
         "root_node_id": {
           "maxLength": 128,
           "minLength": 1,

@@ -142,9 +142,8 @@ def test_review_retains_immutable_source_inventory_and_exact_event_snapshot(
         assert row["sources_json"]["family_member_id"] == str(source.snapshot["family_member_id"])
         assert row["event_json"]["id"] == str(source.event_id)
         assert row["sources_json"]["manifest"]["total_coverage_count"] >= 1
-        with pytest.raises(psycopg.errors.CheckViolation):
-            with connection.transaction():
-                connection.execute(
-                    "UPDATE guidance_review_inputs SET sources_json='{}' WHERE review_job_id=%s",
-                    (job.id,),
-                )
+        with pytest.raises(psycopg.errors.CheckViolation), connection.transaction():
+            connection.execute(
+                "UPDATE guidance_review_inputs SET sources_json='{}' WHERE review_job_id=%s",
+                (job.id,),
+            )

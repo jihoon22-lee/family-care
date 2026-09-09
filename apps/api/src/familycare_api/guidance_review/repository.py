@@ -23,12 +23,12 @@ from familycare_api.decisions.errors import (
 )
 from familycare_api.decisions.repository import DecisionRepository, _medical_event
 from familycare_api.guidance.models import LocalGuidanceResponse
-from familycare_api.guidance_review.models import GuidanceReviewJob
+from familycare_api.guidance_review.models import GuidanceReviewJob, GuidanceReviewUsage
 from familycare_api.guidance_review.sources import read_review_sources
 from familycare_api.policies.errors import VersionConflict
 from familycare_api.terms_knowledge.work_repository import _privacy_digest
 
-REVIEW_PROMPT_REVISION = "guidance-review-v1"
+REVIEW_PROMPT_REVISION = "guidance-review-proposals-v1"
 DEFAULT_REVIEW_MODEL = "gpt-5.6-terra"
 
 
@@ -150,8 +150,13 @@ class GuidanceReviewRepository:
                             privacy_digest,
                         ),
                     )
+                    connection.execute(
+                        "INSERT INTO guidance_review_contexts(review_job_id,scope_digest) "
+                        "VALUES(%s,guidance_review_scope_digest(%s))",
+                        (job["id"], job["id"]),
+                    )
                 assert job is not None
-                return _job(job)
+                return _details(connection, job)
         except ValidationError, ValueError:
             raise DecisionInvalid from None
         except psycopg.errors.SerializationFailure, psycopg.errors.UniqueViolation:
@@ -191,7 +196,15 @@ class GuidanceReviewRepository:
                         or stored is None
                         or stored["privacy_digest"] != _privacy_digest(connection, scope)
                     )
-                return _job(row, stale=stale)
+                if not stale:
+                    current = connection.execute(
+                        "SELECT scope_digest=guidance_review_scope_digest(review_job_id) "
+                        "AS current "
+                        "FROM guidance_review_contexts WHERE review_job_id=%s",
+                        (job_id,),
+                    ).fetchone()
+                    stale = current is None or current["current"] is not True
+                return _details(connection, row, stale=stale)
         except ValidationError, ValueError, psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
@@ -211,7 +224,7 @@ class GuidanceReviewRepository:
                     "AND household_space_id=%s AND state IN ('queued','running') RETURNING *",
                     (job_id, scope.household_space_id),
                 ).fetchone()
-                return _job(cancelled or _scoped_job(connection, scope, job_id))
+                return _details(connection, cancelled or _scoped_job(connection, scope, job_id))
         except psycopg.Error:
             raise DecisionRepositoryUnavailable from None
 
@@ -247,4 +260,50 @@ def _job(row: dict[str, Any], *, stale: bool = False) -> GuidanceReviewJob:
             )
         }
         | {"stale": stale}
+    )
+
+
+def _details(
+    connection: psycopg.Connection[dict[str, Any]], row: dict[str, Any], *, stale: bool = False
+) -> GuidanceReviewJob:
+    result = connection.execute(
+        "SELECT result_json FROM guidance_review_results WHERE review_job_id=%s",
+        (row["id"],),
+    ).fetchone()
+    requests = connection.execute(
+        "SELECT input_token_bound,output_token_bound,usage_json FROM guidance_review_requests "
+        "WHERE review_job_id=%s ORDER BY reserved_at,id",
+        (row["id"],),
+    ).fetchall()
+    known = all(
+        isinstance(request["usage_json"], dict)
+        and all(
+            type(request["usage_json"].get(key)) is int and request["usage_json"][key] >= 0
+            for key in ("input_tokens", "output_tokens", "total_tokens")
+        )
+        and request["usage_json"]["input_tokens"] + request["usage_json"]["output_tokens"]
+        == request["usage_json"]["total_tokens"]
+        for request in requests
+    )
+    usage = GuidanceReviewUsage(
+        input_tokens=sum(request["usage_json"]["input_tokens"] for request in requests)
+        if known
+        else None,
+        output_tokens=sum(request["usage_json"]["output_tokens"] for request in requests)
+        if known
+        else None,
+        total_tokens=sum(request["usage_json"]["total_tokens"] for request in requests)
+        if known
+        else None,
+        reserved_input_tokens=sum(request["input_token_bound"] for request in requests),
+        reserved_output_tokens=sum(request["output_token_bound"] for request in requests),
+        requests_reserved=len(requests),
+        usage_complete=known,
+    )
+    return GuidanceReviewJob.model_validate(
+        _job(row, stale=stale).model_dump()
+        | {
+            "result": result["result_json"] if result else None,
+            "usage": usage,
+        }
     )

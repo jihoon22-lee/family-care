@@ -20,6 +20,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 import psycopg
+
 from familycare_api.clauses.errors import RiderClauseLinkInvalid, TermsEditionNotFound
 from familycare_api.clauses.links import validate_rider_clause_link
 from familycare_api.clauses.repository import RiderClauseLinkRepository
@@ -91,6 +92,7 @@ class ReviewCoverageSource:
     enrollment_authority: str
     source_revision_sha256: str
     native_ref: CanonicalCoverageRef | None = None
+    source_document_version_ids: tuple[UUID, ...] = ()
     source_state: Literal["AVAILABLE", "PARTIAL", "UNAVAILABLE"] = "UNAVAILABLE"
     packet_ids: tuple[str, ...] = ()
     reason_codes: tuple[str, ...] = ()
@@ -179,6 +181,9 @@ class ReviewSources:
                     "native_ref": item.native_ref.model_dump(mode="json")
                     if item.native_ref
                     else None,
+                    "source_document_version_ids": [
+                        str(value) for value in item.source_document_version_ids
+                    ],
                     "packet_ids": list(item.packet_ids),
                     "reason_codes": list(item.reason_codes),
                 }
@@ -483,7 +488,8 @@ def read_review_sources(
             if key
         )
     )
-    valid = {e.evidence_id for e in decisions._evidence_many(connection, scope, evidence_ids)}
+    evidence = {e.evidence_id: e for e in decisions._evidence_many(connection, scope, evidence_ids)}
+    valid = set(evidence)
     failures: set[str] = set()
     if total > len(rows):
         failures.add("REVIEW_INDEX_LIMIT")
@@ -521,6 +527,18 @@ def read_review_sources(
                 row["authority"],
                 _digest(row["revision"]),
                 native,
+                source_document_version_ids=tuple(
+                    sorted(
+                        {
+                            evidence[UUID(key)].document_version_id
+                            for key in (
+                                *row["enrollment_evidence_ids"],
+                                *row["subject_evidence_ids"],
+                            )
+                            if key and UUID(key) in evidence
+                        }
+                    )
+                ),
                 reason_codes=reasons,
             )
         )

@@ -1734,6 +1734,38 @@ export interface GuidanceRelevance {
   spans?: Array<GuidanceEventSpan>;
 }
 
+export interface GuidanceReviewCoverageScope {
+  contract_label: string;
+  coverage_label: string;
+  reason_codes?: Array<string>;
+  ref: CanonicalCoverageRef;
+  reviewed_packets: number;
+  source_state: "AVAILABLE" | "PARTIAL" | "UNAVAILABLE";
+  total_packets: number;
+}
+
+export interface GuidanceReviewDifference {
+  after: GuidanceCandidate | null;
+  before: GuidanceCandidate | null;
+  change: "ADDED" | "REMOVED" | "CHANGED";
+  coverage: CanonicalCoverageRef;
+}
+
+export interface GuidanceReviewFinding {
+  affected_fact_paths?: Array<string>;
+  coverage: CanonicalCoverageRef | null;
+  evidence?: Array<GuidanceReviewSourceCitation>;
+  kind:
+    | "AGREEMENT"
+    | "CORRECTION"
+    | "ADDITIONAL_CANDIDATE"
+    | "EXCEPTION"
+    | "CONFLICT";
+  publication_id?: string | null;
+  reason_codes: Array<string>;
+  status: "APPLIED" | "AGREEMENT" | "OPINION" | "REJECTED";
+}
+
 export interface GuidanceReviewJob {
   completed_at?: string | null;
   created_at: string;
@@ -1743,6 +1775,7 @@ export interface GuidanceReviewJob {
   http_attempts: number;
   id: string;
   medical_event_id: string;
+  result?: GuidanceReviewResult | null;
   schema_version?: "1";
   stale?: boolean;
   state:
@@ -1753,11 +1786,64 @@ export interface GuidanceReviewJob {
     | "disagreement"
     | "failed"
     | "cancelled";
+  usage?: GuidanceReviewUsage | null;
 }
 
 export interface GuidanceReviewRequest {
   decision_run_id: string;
   expected_event_version: number;
+}
+
+export interface GuidanceReviewResult {
+  differences: Array<GuidanceReviewDifference>;
+  findings: Array<GuidanceReviewFinding>;
+  guidance: LocalGuidanceResponse;
+  reason_codes: Array<string>;
+  schema_version?: "1";
+  scope: GuidanceReviewScope;
+  source_digest: string;
+}
+
+export interface GuidanceReviewScope {
+  complete: boolean;
+  coverages?: Array<GuidanceReviewCoverageScope>;
+  expected_regions?: number;
+  indexed_coverages: number;
+  omitted_packets: number;
+  reason_codes?: Array<string>;
+  reviewed_packets: number;
+  supplied_regions?: number;
+  total_coverages: number;
+  total_packets: number;
+  unreviewed_packets: number;
+  unsupplied_regions?: number;
+}
+
+export interface GuidanceReviewSourceCitation {
+  bbox: [number, number, number, number];
+  citation_id: string;
+  document_version_id: string;
+  end: number;
+  kind?: "REVIEW_SOURCE_CITATION";
+  packet_id: string;
+  page_end: number;
+  page_start: number;
+  quote: string;
+  source_layer: "native" | "ocr";
+  source_node_id: string;
+  source_sha256: string;
+  start: number;
+  terms_edition_id: string;
+}
+
+export interface GuidanceReviewUsage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  requests_reserved: number;
+  reserved_input_tokens: number;
+  reserved_output_tokens: number;
+  total_tokens: number | null;
+  usage_complete: boolean;
 }
 
 export interface GuidanceScenario {
@@ -1778,6 +1864,7 @@ export interface GuidanceSemanticEvidence {
   page_end: number;
   page_start: number;
   publication_id: string;
+  review_job_id?: string | null;
   root_node_id: string;
   source_layer: "native" | "ocr";
   source_node_id: string;
