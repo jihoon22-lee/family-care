@@ -74,7 +74,11 @@
 
 PR [#92](https://github.com/jihoon22-lee/family-care/pull/92), 첫 source `243dd0a92c888a7c1bf92f5f0ec4d3bf2e9905d4`의
 [CI 34407534320](https://github.com/jihoon22-lee/family-care/actions/runs/34407534320)는 여섯 항목 통과,
-PostgreSQL 진행 중이다. 전체 완료로 합산하지 않는다.
+PostgreSQL 850 통과/1 실패(1514.77s)였다. 위조 index 회귀의 audit row가 compiler v1에
+고정돼 v2 조회에 도달하지 않은 테스트 입력 문제를 수정했다. 동일한 위조/원문 주소
+검사를 현재 compiler에 적용한 PostgreSQL 10 통과(16.22s). 중간 source `a4f4ef2`의
+CI 34410049721은 이 수정 이전 실행이므로 중복 작업을 중단하고 새 소스 검증으로 대체한다.
+실패·중단을 전체 통과로 합산하지 않는다.
 
 같은 bytes의 고립된 예전 `DocumentVersion`이 남은 테스트 DB에서 보조 wire 사전검사가
 원문 연결 전에 실패했다(21 실패/1 통과/실제 HTTP 0). 제품 원문 검증이 잘못된 연결을 거부한
@@ -84,7 +88,7 @@ DB에서 전체 23 통과(264.89s). 실제 SDK 모의 요청 20개에 Standard t
 최종 wire 최대 26,354 bytes가 32,768 한도 안임을 확인했다. pytest 사전 import에 따른
 assert-rewrite 경고 1건을 기록하며 실패나 실제 provider 통과로 바꾸지 않는다.
 공유 endpoint/계정 HTTP 실패 뒤 후속 사례를 전송하지 않는 guard까지 포함해 평가
-단위 검사를 다시 통과했다. 실제 호출용 DB는 별도로 준비했고 아직 wire 예약은 0이다.
+단위 검사 29개가 통과했다(1.91s). 실제 호출용 DB는 별도로 준비했고 아직 wire 예약은 0이다.
 
 실제 모델 평가·최종 PR/CI·릴리스 결과는 실행 뒤 기록한다. 실제 자료는 저장소나
 합성 fixture로 복사하지 않았고, 운영 DB·기존 v0.5.2 이미지·키를 변경하지 않았다. 자동 약관

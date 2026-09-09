@@ -8,6 +8,7 @@ import psycopg
 import pytest
 from familycare_api.clauses.source_regions import ClauseSourceSpan
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.terms_knowledge.core import COMPILER_REVISION
 from familycare_api.terms_knowledge.repository import (
     TermsSemanticRepository,
     read_semantic_root_page,
@@ -146,9 +147,16 @@ def _audit_roots(connection, scope, edition, plan, roots, *, marker):
     publication = connection.execute(
         "INSERT INTO terms_semantic_publications(candidate_id,household_space_id,terms_edition_id,"
         "verifier_revision,compiler_revision,proof_sha256,outcome,processing_complete,result_json) "
-        "VALUES(%s,%s,%s,'terms-semantic-source-v1','terms-semantic-compiler-v1',"
+        "VALUES(%s,%s,%s,'terms-semantic-source-v1',%s,"
         "%s,'VERIFIED',true,%s) RETURNING id",
-        (candidate, scope.household_space_id, edition, "a" * 64, Jsonb({"roots": roots})),
+        (
+            candidate,
+            scope.household_space_id,
+            edition,
+            COMPILER_REVISION,
+            "a" * 64,
+            Jsonb({"roots": roots}),
+        ),
     ).fetchone()["id"]
     with connection.cursor() as cursor:
         cursor.executemany(
