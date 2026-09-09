@@ -83,6 +83,9 @@ def build(source=None, event=None, local=None, **kwargs):
             "candidates": [
                 {
                     "ref": source["index"][0]["ref"],
+                    "source_document_version_ids": source["index"][0].get(
+                        "source_document_version_ids", []
+                    ),
                     "group": "PRIMARY",
                     "condition_result": "MATCH",
                     "assumptions": ["DOCUMENT_CONTINUITY_ASSUMED"],
@@ -393,6 +396,7 @@ def test_local_comparison_retains_bounded_trace_scenarios_and_explicit_omissions
         "candidates": [
             {
                 "ref": original["index"][0]["ref"],
+                "source_document_version_ids": original["index"][0]["source_document_version_ids"],
                 "group": "CONDITIONAL",
                 "condition_result": "UNKNOWN",
                 "estimate": estimate,
@@ -437,3 +441,80 @@ def test_source_and_event_family_scope_mismatch_fails_before_provider():
                 "family_member_id": str(UUID(int=9000, version=4)),
             }
         )
+
+
+def local_candidate(original, documents):
+    return {
+        "ref": original["index"][0]["ref"],
+        "source_document_version_ids": documents,
+        "estimate": {"kind": "FORMULA", "formula": "Synthetic local-only formula 100 × 3"},
+    }
+
+
+def test_local_formula_document_outside_index_and_packets_is_counted_but_not_sent():
+    original = sources()
+    document = UUID(int=9100, version=4)
+    candidate = local_candidate(original, [str(document)])
+    request = build(original, local={"candidates": [candidate]})
+    assert document in request.document_version_ids
+    assert len(request.document_version_ids) == 5
+    assert (
+        request.payload["local_answer"]["candidates"][0]["estimate"]["formula"]
+        == (candidate["estimate"]["formula"])
+    )
+    assert str(document) not in json.dumps(request.payload)
+    assert "source_document_version_ids" not in json.dumps(request.payload)
+    assert request.local_comparison_complete is True
+
+
+@pytest.mark.parametrize(
+    "documents", [None, [], ["synthetic-invalid-uuid"], [str(UUID(int=0))], "synthetic-document"]
+)
+def test_local_formula_without_valid_document_binding_is_omitted_as_partial(documents):
+    original = sources()
+    candidate = local_candidate(original, documents)
+    request = build(original, local={"candidates": [candidate]})
+    assert request.payload["local_answer"]["candidates"] == []
+    assert candidate["estimate"]["formula"] not in json.dumps(request.payload)
+    assert request.local_comparison_complete is False
+    assert request.omitted_local_sections
+    assert len(request.document_version_ids) == 4
+
+
+def test_budget_omitted_local_candidate_does_not_reserve_its_unused_document(monkeypatch):
+    from familycare_worker.ai import guidance_reviewer
+
+    original = sources(1)
+    baseline = build(original, local={"candidates": []})
+    limit = len(guidance_reviewer._wire("synthetic-review-model", baseline.payload).encode()) + 256
+    monkeypatch.setattr(guidance_reviewer, "MAX_REQUEST_BYTES", limit)
+    document = UUID(int=9200, version=4)
+    candidate = local_candidate(original, [str(document)])
+    candidate["assumptions"] = ["Synthetic assumption " * 6] * 32
+    request = build(original, local={"candidates": [candidate]})
+    assert request.payload["local_answer"]["candidates"] == []
+    assert document not in request.document_version_ids
+    assert request.local_comparison_complete is False
+    assert request.payload["source_packets"]
+
+
+def test_local_candidate_document_limit_preserves_independent_source_review():
+    original = sources()
+    documents = [str(UUID(int=10000 + number, version=4)) for number in range(128)]
+    request = build(original, local={"candidates": [local_candidate(original, documents)]})
+    assert request.payload["local_answer"]["candidates"] == []
+    assert len(request.document_version_ids) == 4
+    assert request.local_comparison_complete is False
+    assert len(request.payload["source_packets"]) == 2
+
+
+def test_local_candidate_with_unknown_source_alias_is_partial_without_reserving_documents():
+    original = sources()
+    document = UUID(int=12000, version=4)
+    candidate = local_candidate(original, [str(document)])
+    candidate["ref"] = {**candidate["ref"], "coverage_id": str(UUID(int=12001, version=4))}
+    request = build(original, local={"candidates": [candidate]})
+    assert request.payload["local_answer"]["candidates"] == []
+    assert document not in request.document_version_ids
+    assert request.local_comparison_complete is False
+    assert request.omitted_local_sections

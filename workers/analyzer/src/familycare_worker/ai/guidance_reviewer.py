@@ -502,15 +502,29 @@ def _estimate(
 
 def _local(
     local: Mapping[str, Any], aliases: dict[tuple[str, str, str], str], privacy: _TextMinimizer
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[int, tuple[UUID, ...]]]:
     candidates = []
+    documents: dict[int, tuple[UUID, ...]] = {}
     omitted: set[str] = set()
     rows = local.get("candidates", [])
     if not isinstance(rows, (list, tuple)) or len(rows) > 128:
         raise GuidanceReviewInvalid
-    for row in rows:
+    for number, row in enumerate(rows, 1):
         alias = aliases.get(_ref(row["ref"]))
         if alias is None:
+            omitted.add(f"candidate-{number}.source_binding")
+            continue
+        raw_documents = row.get("source_document_version_ids")
+        if not isinstance(raw_documents, (list, tuple)) or not 1 <= len(raw_documents) <= 128:
+            omitted.add(f"{alias}.source_binding")
+            continue
+        try:
+            versions = {UUID(str(value)) for value in raw_documents}
+        except ValueError, TypeError:
+            omitted.add(f"{alias}.source_binding")
+            continue
+        if any(value.int == 0 for value in versions):
+            omitted.add(f"{alias}.source_binding")
             continue
         summary = _estimate(row.get("estimate", {}), privacy, f"{alias}.estimate", omitted)
         assumptions = row.get("assumptions", [])
@@ -560,6 +574,9 @@ def _local(
         if row.get("cases"):
             omitted.add(f"{alias}.payout_cases")
         candidates.append(candidate)
+        # Bind exact retained objects locally, including duplicate coverage aliases.
+        # These document IDs must never become fields in the provider payload.
+        documents[id(candidate)] = tuple(sorted(versions))
     for section in ("fixed_subtotals", "expenses", "subtotal_omissions"):
         if local.get(section):
             omitted.add(section)
@@ -567,7 +584,7 @@ def _local(
         "candidates": candidates,
         "omitted_candidate_count": len(rows) - len(candidates),
         "omitted_sections": sorted(omitted),
-    }
+    }, documents
 
 
 def _source_index(
@@ -717,18 +734,26 @@ def build_review_request(
         omitted_coverages: list[str] = sorted(unbound_aliases)
         event_payload = _event(event, privacy)
         initially_retained = {row["coverage_alias"] for row in projected_index}
-        local_payload = _local(
+        local_payload, local_documents = _local(
             local_guidance,
             {key: alias for key, alias in aliases.items() if alias in initially_retained},
             privacy,
         )
 
         def used_documents() -> set[UUID]:
-            return {
-                version
-                for row in projected_index
-                for version in index_documents[row["coverage_alias"]]
-            } | {UUID(packet.minimized.envelope.source.document_version_id) for packet in chosen}
+            return (
+                {
+                    version
+                    for row in projected_index
+                    for version in index_documents[row["coverage_alias"]]
+                }
+                | {UUID(packet.minimized.envelope.source.document_version_id) for packet in chosen}
+                | {
+                    version
+                    for candidate in local_payload["candidates"]
+                    for version in local_documents[id(candidate)]
+                }
+            )
 
         def omit_local_candidate() -> None:
             removed = local_payload["candidates"].pop()
@@ -759,9 +784,8 @@ def build_review_request(
             }
 
         while (
-            len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES
-            and local_payload["candidates"]
-        ):
+            len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES or len(used_documents()) > 128
+        ) and local_payload["candidates"]:
             omit_local_candidate()
         while (
             len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES or len(used_documents()) > 128
