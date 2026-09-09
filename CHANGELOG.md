@@ -4,7 +4,20 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+### Fixed
+
+- Browser dependency setup excludes the unused Google Chrome APT repository on CI runners
+  while preserving Playwright system dependency installation and integrity checks.
+- Changelog rendering checks cover every version and require the current package version,
+  catching release-note category order errors before image publication.
+
 ## [0.5.2] - 2026-09-09
+
+### Changed
+
+- The 0.5.1 tag is retained as failed publication history: unit validation passed, while the
+  missing restore container binding caused one integration failure before image publication.
+- Local guidance behavior, retained data, schema and provider request budgets are unchanged.
 
 ### Fixed
 
@@ -14,19 +27,7 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 - Browser flows, OCR language availability and nonembedded Korean PDF rendering now also run
   in the release foundation before image publication, matching the existing CI checks.
 
-### Changed
-
-- The 0.5.1 tag is retained as failed publication history: unit validation passed, while the
-  missing restore container binding caused one integration failure before image publication.
-- Local guidance behavior, retained data, schema and provider request budgets are unchanged.
-
 ## [0.5.1] - 2026-09-09
-
-### Fixed
-
-- Release validation now confines disposable PostgreSQL credentials and destructive-test opt-in
-  to the integration step. Unit tests run without an inherited runtime database, as in normal CI.
-- Workflow policy rejects moving database configuration back into the shared validation job.
 
 ### Changed
 
@@ -34,6 +35,12 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
   published history; its validation failed before any images or GitHub Release were published.
 - Actual document interpretation and source-linking support remain partial; the patch changes
   release validation, not the protected-data acceptance criteria.
+
+### Fixed
+
+- Release validation now confines disposable PostgreSQL credentials and destructive-test opt-in
+  to the integration step. Unit tests run without an inherited runtime database, as in normal CI.
+- Workflow policy rejects moving database configuration back into the shared validation job.
 
 ## [0.5.0] - 2026-09-09
 

@@ -247,3 +247,39 @@ def test_release_policy_requires_package_publish_permission() -> None:
     modified = current_release().replace("packages: write", "packages: read")
 
     assert any("package write permission" in error for error in validate_release(modified))
+
+
+@pytest.mark.parametrize(
+    ("content_loader", "validator"),
+    [(current_ci, validate_ci), (current_release, validate_release)],
+)
+@pytest.mark.parametrize("change", ["repository", "order", "dependencies"])
+def test_browser_dependencies_exclude_only_unused_chrome_repository_first(
+    content_loader: Callable[[], str],
+    validator: Callable[[str], list[str]],
+    change: str,
+) -> None:
+    content = content_loader()
+    exclusion = (
+        "      - name: Exclude unused Google Chrome APT repository\n"
+        "        run: |\n"
+        "          sudo rm -f -- \\\n"
+        "            /etc/apt/sources.list.d/google-chrome.list \\\n"
+        "            /etc/apt/sources.list.d/google-chrome.sources\n"
+    )
+    install = (
+        "      - name: Install synthetic browser test runtime\n"
+        "        run: pnpm --filter @familycare/web exec playwright install --with-deps chromium\n"
+    )
+    if change == "repository":
+        modified = content.replace(
+            "/etc/apt/sources.list.d/google-chrome.sources", "/etc/apt/sources.list"
+        )
+    elif change == "order":
+        modified = content.replace(exclusion, "").replace(install, install + exclusion)
+    else:
+        modified = content.replace(
+            "playwright install --with-deps chromium", "playwright install chromium"
+        )
+
+    assert any("browser dependency boundary" in error for error in validator(modified))

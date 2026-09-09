@@ -132,9 +132,10 @@ ENV_FILE=.env.private make down
 
 게시 성공은 운영 배포 성공을 뜻하지 않습니다. 현재 자동화의 경계는 GHCR 이미지 게시까지이며, Cloud Run을 포함한 운영 배포는 모든 개발이 끝난 뒤 별도로 설계하고 승인합니다. `1.0.0` 이전에는 `latest` 태그를 만들지 않습니다.
 
-현재 릴리스 계열은 `v0.1.0`부터 `v0.4.0`까지입니다. `v0.4.0`은 정리된 CHANGELOG, 일치하는
-Web/API/Worker 버전, 전체 SHA tag와 서로 다른 세 immutable image digest를 tag workflow와
-GitHub Release에서 함께 확인합니다.
+현재 게시·적용 버전은 [v0.5.2](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.2)입니다.
+전체 검증과 세 이미지·digest 게시 후 릴리스 노트 순서 오류를 수동 복구했으며, 자동 workflow의
+실패 기록은 보존합니다. 승인된 WSL 전환·재시작과 실제 HTTPS 검증을 완료했습니다.
+자료 지원의 남은 범위와 정확한 소스·검증 결과는 [v0.5 수용 원장](docs/release/v0.5.0-verification.md)을 확인합니다.
 
 ## License
 
