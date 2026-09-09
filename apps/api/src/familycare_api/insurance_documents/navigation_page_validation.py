@@ -17,14 +17,16 @@ _NUMBER = re.compile(r"^-?\s*(?P<page>[1-9][0-9]{0,2})\s*-?$")
 _SENTENCE = re.compile(r"[.!?。]$|(?:합니다|한다|습니다|말한다|이다)$|\b(?:shall|must)\b", re.I)
 
 
-def is_navigation_page(nodes: list[dict[str, Any]]) -> bool:
+def is_navigation_page(
+    nodes: list[dict[str, Any]], *, metadata_revision: str = "document-metadata-v8"
+) -> bool:
     try:
-        return _is_navigation_page(nodes)
+        return _is_navigation_page(nodes, metadata_revision=metadata_revision)
     except KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError:
         return False
 
 
-def _is_navigation_page(nodes: list[dict[str, Any]]) -> bool:
+def _is_navigation_page(nodes: list[dict[str, Any]], *, metadata_revision: str) -> bool:
     if not 1 <= len(nodes) <= 4096 or sum(len(node["text"]) for node in nodes) > 262144:
         return False
     by_id = {node["node_id"]: node for node in nodes}
@@ -60,7 +62,10 @@ def _is_navigation_page(nodes: list[dict[str, Any]]) -> bool:
             return False
         if node["kind"] != "TEXT_LINE":
             continue
-        if not _lineage_valid(node, by_id) or len(node["source_spans"]) > 4096:
+        if (
+            not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
+            or len(node["source_spans"]) > 4096
+        ):
             return False
         for span in node["source_spans"]:
             if any(

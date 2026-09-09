@@ -81,7 +81,12 @@ def _box(node: dict[str, Any]) -> tuple[float, ...]:
     return tuple(value)
 
 
-def _lineage_valid(node: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> bool:
+def _lineage_valid(
+    node: dict[str, Any],
+    by_id: dict[str, dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
+) -> bool:
     if node["kind"] != "TEXT_LINE":
         return True
     spans = node.get("source_spans", [])
@@ -111,11 +116,15 @@ def _lineage_valid(node: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> bo
         box = _box(block)
         if previous is not None:
             last = _box(previous)
-            height, last_height = box[3] - box[1], last[3] - last[1]
+            # V1–v8 retain their original adjacent-word replay. V9 matches
+            # the constructor: first-word alignment and previous-word adjacency.
+            anchor = boxes[0] if metadata_revision == "document-metadata-v9" else last
+            height, anchor_height = box[3] - box[1], anchor[3] - anchor[1]
             if (
                 block["reading_order"] != previous["reading_order"] + 1
-                or min(box[3], last[3]) - max(box[1], last[1]) < 0.8 * max(height, last_height)
-                or not 0 <= box[0] - last[2] <= 1.5 * min(height, last_height)
+                or min(box[3], anchor[3]) - max(box[1], anchor[1])
+                < 0.8 * max(height, anchor_height)
+                or not 0 <= box[0] - last[2] <= 1.5 * min(height, anchor_height)
             ):
                 return False
         elif block["reading_order"] != node["reading_order"]:
@@ -144,11 +153,14 @@ def _span(node: dict[str, Any], start: int, end: int) -> dict[str, Any]:
 
 
 def body_evidence(
-    page_number: int, nodes: list[dict[str, Any]]
+    page_number: int,
+    nodes: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> tuple[tuple[int, ...], tuple[dict[str, Any], ...], bool] | None:
     """Return complete, bounded source observations, or no supported body route."""
     try:
-        return _body_evidence(page_number, nodes)
+        return _body_evidence(page_number, nodes, metadata_revision=metadata_revision)
     except KeyError, TypeError, ValueError, AttributeError, IndexError:
         return None
 
@@ -168,7 +180,7 @@ def _navigation_instruction(text: str) -> bool:
     )
 
 
-def _instruction_nodes(nodes: list[dict[str, Any]]) -> set[str]:
+def _instruction_nodes(nodes: list[dict[str, Any]], *, metadata_revision: str) -> set[str]:
     by_id = {node["node_id"]: node for node in nodes}
     ignored: set[str] = set()
     if len(by_id) != len(nodes) or len({(n["kind"], n["source_path"]) for n in nodes}) != len(
@@ -199,7 +211,7 @@ def _instruction_nodes(nodes: list[dict[str, Any]]) -> set[str]:
                 )
             ):
                 continue
-            if not _lineage_valid(node, by_id):
+            if not _lineage_valid(node, by_id, metadata_revision=metadata_revision):
                 continue
             spans = node["source_spans"]
             if any(
@@ -246,7 +258,7 @@ def _guide_notice(text: str) -> bool:
 
 
 def _guide_view_sources(
-    node: dict[str, Any], by_id: dict[str, dict[str, Any]]
+    node: dict[str, Any], by_id: dict[str, dict[str, Any]], *, metadata_revision: str
 ) -> tuple[str, ...] | None:
     """Validate one view without suppressing another invalid source on the page."""
     try:
@@ -277,7 +289,7 @@ def _guide_view_sources(
                 for span in spans
                 for key in ("block_start", "block_end", "line_start", "line_end")
             )
-            or not _lineage_valid(node, by_id)
+            or not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
         ):
             return None
         identifiers = tuple(span["block_node_id"] for span in spans)
@@ -298,7 +310,7 @@ def _guide_view_sources(
 
 
 def _guide_source_views(
-    nodes: list[dict[str, Any]],
+    nodes: list[dict[str, Any]], *, metadata_revision: str
 ) -> list[tuple[dict[str, Any], tuple[str, ...]]]:
     """Retain complete logical lines with unique addresses and raw ownership."""
     if (
@@ -315,7 +327,8 @@ def _guide_source_views(
     views = [
         (node, sources)
         for node in nodes
-        if (sources := _guide_view_sources(node, by_id)) is not None
+        if (sources := _guide_view_sources(node, by_id, metadata_revision=metadata_revision))
+        is not None
     ]
     owners: dict[str, int] = {}
     for _, sources in views:
@@ -328,11 +341,13 @@ def _guide_source_views(
     ]
 
 
-def _reading_guide_lines(nodes: list[dict[str, Any]]) -> set[tuple[str, int]]:
+def _reading_guide_lines(
+    nodes: list[dict[str, Any]], *, metadata_revision: str
+) -> set[tuple[str, int]]:
     """Exempt only a legend notice below a proved guide heading in the same source."""
     ignored: set[tuple[str, int]] = set()
     try:
-        views = _guide_source_views(nodes)
+        views = _guide_source_views(nodes, metadata_revision=metadata_revision)
         headings = [
             (node, index)
             for node, _ in views
@@ -375,10 +390,19 @@ def reference_context_present(
     persistent_only: bool = False,
     navigation_instructions: bool = False,
     reading_guides: bool = False,
+    metadata_revision: str = "document-metadata-v8",
 ) -> bool:
     """A visible reference boundary persists until a new document boundary."""
-    ignored = _instruction_nodes(nodes) if navigation_instructions else set()
-    guide_lines = _reading_guide_lines(nodes) if persistent_only and reading_guides else set()
+    ignored = (
+        _instruction_nodes(nodes, metadata_revision=metadata_revision)
+        if navigation_instructions
+        else set()
+    )
+    guide_lines = (
+        _reading_guide_lines(nodes, metadata_revision=metadata_revision)
+        if persistent_only and reading_guides
+        else set()
+    )
     for node in nodes:
         if ignored and node["node_id"] in ignored:
             continue
@@ -466,7 +490,10 @@ def _table_duplicate(node: dict[str, Any], tables: list[dict[str, Any]]) -> bool
 
 
 def _local_nodes(
-    nodes: list[dict[str, Any]], by_id: dict[str, dict[str, Any]]
+    nodes: list[dict[str, Any]],
+    by_id: dict[str, dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     represented: set[str] = set()
     owners: dict[str, list[str]] = {}
@@ -496,7 +523,7 @@ def _local_nodes(
                     "UNRESOLVED" in issue and issue != "LINE_COLUMN_CONTEXT_UNRESOLVED"
                     for issue in node.get("issue_codes", [])
                 )
-                and _lineage_valid(node, by_id)
+                and _lineage_valid(node, by_id, metadata_revision=metadata_revision)
                 and (node["kind"] != "TABLE_ROW" or _table_valid(node, by_id))
             )
         except KeyError, TypeError, ValueError, IndexError:
@@ -612,7 +639,10 @@ def _external_reference_top(
 
 
 def _body_evidence(
-    page_number: int, nodes: list[dict[str, Any]]
+    page_number: int,
+    nodes: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> tuple[tuple[int, ...], tuple[dict[str, Any], ...], bool] | None:
     if type(page_number) is not int or not 1 <= page_number <= 500 or len(nodes) > 4096:
         return None
@@ -626,7 +656,7 @@ def _body_evidence(
         return None
     if any(node["page_number"] != page_number for node in nodes):
         return None
-    selected, barriers = _local_nodes(nodes, by_id)
+    selected, barriers = _local_nodes(nodes, by_id, metadata_revision=metadata_revision)
     regions = _regions(selected, barriers)
     results = []
     article_tops = [

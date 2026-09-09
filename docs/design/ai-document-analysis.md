@@ -149,6 +149,12 @@ Worker 준비·lease·예산 예약·범위 저장과 API의 새 반영은 원�
 provider 요청·약관/검수 작업 또는 retained v2 이력이 있으면 이전 privacy 체계로의
 downgrade를 보수적으로 거부한다.
 
+약관 줄 근거의 후속 `0067_metadata_lineage`는 이 privacy migration 뒤에 연결한다.
+metadata v9는 생성기의 첫 단어 기하 기준을 Worker·API·후속 source reader에서 일치시키며
+v1–v8 검증 이력은 당시 기준으로 보존한다. 이 후속 API/Worker는 schema 0067을 요구하고,
+최소화 v3와 retained 처리 v2를 계속 사용한다. metadata v9 이력이 생기면 0066으로의
+downgrade를 거부하며, 이 변경이 과거 provider 입력의 재사용을 허용하지 않는다.
+
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
 ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고
@@ -357,3 +363,15 @@ global 잠금을 쓰므로 기본 문서당 4회·하루 8회 한도를 두 경�
 확인해 PUBLISHED/STALE/REJECTED receipt를 남긴다. 의미 검증/compiler revision 변경 시
 기존 후보를 재검증하므로 provider를 다시 호출할 필요가 없다. 이러한 성공은 해당 구역의
 지식화이며 전체 상품·실제 문서 판독 품질·Rider 가입 사실을 자동으로 확정하지 않는다.
+
+범위 구조화 지시는 각 disposition의 candidate마다 해당 primary evidence를 실제 근거가
+있는 field에 인용하도록 요구한다. 여러 범위에 배정된 후보는 각 범위의 인용을 따로
+충족해야 하며, 맞추기 위한 근거 없는 field/인용 추가는 금지한다. 프로그램 검증은 그대로
+유지하고 지시 변경은 기존 request fingerprint로 구분한다.
+
+0068의 retained v3는 지원하는 field/date 증명에 맞춘 지시로 같은 원문을 새 작업에서
+처리한다. 기존 v2 결과·계획·provider 이력을 덮어쓰지 않으며, 유효한 v2 source와 게시
+권위는 유지한다. v1의 오래된 개인정보 입력은 계속 거부한다. 새 명시적 enqueue/queue는
+v3를 사용하고 v3 이력이 있으면 0068 downgrade를 거부한다. 선택 날짜는 해당 label과
+단일 날짜 근거가 있을 때만 출력하며, 일반 보험기간이나 실제 계약체결일을 범위의 개시일
+필드로 추측하지 않는다. 미지원 선택 필드는 생략하고 미해석 범위는 UNRESOLVED로 남긴다.

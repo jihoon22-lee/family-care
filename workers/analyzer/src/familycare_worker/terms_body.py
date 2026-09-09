@@ -146,7 +146,9 @@ def _box(node: StructureNode) -> tuple[float, float, float, float]:
         or not (0 <= box[0] < box[2] and 0 <= box[1] < box[3])
     ):
         raise _InvalidPage("SOURCE_GEOMETRY_UNRESOLVED")
-    return box
+    # Stored projections deserialize JSON arrays. Compare their coordinates by
+    # value against the derived union, independent of the container type.
+    return box[0], box[1], box[2], box[3]
 
 
 def _lineage(node: StructureNode, by_id: dict[str, StructureNode]) -> set[str]:
@@ -154,7 +156,7 @@ def _lineage(node: StructureNode, by_id: dict[str, StructureNode]) -> set[str]:
         raise _InvalidPage("SOURCE_LINEAGE_INVALID")
     covered = 0
     blocks: set[str] = set()
-    boxes = []
+    boxes: list[tuple[float, float, float, float]] = []
     previous: StructureNode | None = None
     for span in node.source_spans:
         block = by_id.get(span.block_node_id)
@@ -175,11 +177,14 @@ def _lineage(node: StructureNode, by_id: dict[str, StructureNode]) -> set[str]:
         box = _box(block)
         if previous is not None:
             last = _box(previous)
-            height, last_height = box[3] - box[1], last[3] - last[1]
+            # Match _derive_text_lines: alignment and tolerance use the first
+            # word, while horizontal adjacency and order use the previous word.
+            first = boxes[0]
+            height, first_height = box[3] - box[1], first[3] - first[1]
             if (
                 block.reading_order != previous.reading_order + 1
-                or min(box[3], last[3]) - max(box[1], last[1]) < 0.8 * max(height, last_height)
-                or not 0 <= box[0] - last[2] <= 1.5 * min(height, last_height)
+                or min(box[3], first[3]) - max(box[1], first[1]) < 0.8 * max(height, first_height)
+                or not 0 <= box[0] - last[2] <= 1.5 * min(height, first_height)
             ):
                 raise _InvalidPage("SOURCE_LINEAGE_INVALID")
         elif node.reading_order != block.reading_order:

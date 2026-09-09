@@ -277,6 +277,7 @@ def observe_clause_source_regions(
     page_number: int,
     *,
     component_page_end: int | None = None,
+    metadata_revision: str = "document-metadata-v8",
 ) -> ClauseSourceObservation:
     """Observe one complete page projection without inferring a component end.
 
@@ -290,13 +291,16 @@ def observe_clause_source_regions(
     resolution means one complete retained region, not that its legal text applies.
     """
     try:
-        return _observe(structure, page_number, component_page_end)
+        return _observe(structure, page_number, component_page_end, metadata_revision)
     except KeyError, TypeError, ValueError, IndexError, OverflowError:
         return ClauseSourceObservation((), ("CLAUSE_SOURCE_INPUT_INVALID",))
 
 
 def _observe(
-    structure: Mapping[str, Any], page_number: int, component_page_end: int | None
+    structure: Mapping[str, Any],
+    page_number: int,
+    component_page_end: int | None,
+    metadata_revision: str,
 ) -> ClauseSourceObservation:
     if (
         type(page_number) is not int
@@ -340,7 +344,7 @@ def _observe(
     unresolved = [r for r in structure.get("unresolved", ()) if r["page_number"] == page_number]
     if any(r.get("node_id") is None for r in unresolved):
         return ClauseSourceObservation((), ("CLAUSE_SOURCE_BOUNDARY_UNRESOLVED",))
-    selected, barriers = _local_nodes(nodes, by_id)
+    selected, barriers = _local_nodes(nodes, by_id, metadata_revision=metadata_revision)
     regions = _regions(selected, barriers)
     page_verified = pages is not None and "unresolved" in structure
     article_tops = [

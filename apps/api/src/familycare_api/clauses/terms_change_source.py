@@ -161,12 +161,16 @@ def _table_layout(node: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> dic
     return {**node, "bbox": box}
 
 
-def _field_regions(nodes: list[dict[str, Any]], role_ids: set[str]) -> list[dict[str, Any]]:
+def _field_regions(
+    nodes: list[dict[str, Any]], role_ids: set[str], *, metadata_revision: str
+) -> list[dict[str, Any]]:
     by_id = {node["node_id"]: node for node in nodes}
     represented: set[str] = set()
     for node in nodes:
         try:
-            if node["kind"] == "TEXT_LINE" and _lineage_valid(node, by_id):
+            if node["kind"] == "TEXT_LINE" and _lineage_valid(
+                node, by_id, metadata_revision=metadata_revision
+            ):
                 represented.update(span["block_node_id"] for span in node["source_spans"])
         except KeyError, TypeError, ValueError, IndexError:
             continue
@@ -191,7 +195,7 @@ def _field_regions(nodes: list[dict[str, Any]], role_ids: set[str]) -> list[dict
                     or node["kind"] not in {"BLOCK", "TEXT_LINE", "TABLE_ROW"}
                     or not node.get("schedulable", True)
                     or any("UNRESOLVED" in code for code in node.get("issue_codes", ()))
-                    or not _lineage_valid(node, by_id)
+                    or not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
                 ):
                     raise ValueError("unsupported change node")
                 valid.append(_table_layout(node, by_id) if node["kind"] == "TABLE_ROW" else node)
@@ -207,7 +211,7 @@ def _field_regions(nodes: list[dict[str, Any]], role_ids: set[str]) -> list[dict
 
 
 def _fields(
-    nodes: list[dict[str, Any]], role_spans: list[dict[str, Any]]
+    nodes: list[dict[str, Any]], role_spans: list[dict[str, Any]], *, metadata_revision: str
 ) -> tuple[tuple[ChangeSourceField, ...], frozenset[str]]:
     labels = {_key(label): name for name, names in _LABELS.items() for label in names}
     by_id = {node["node_id"]: node for node in nodes}
@@ -217,7 +221,9 @@ def _fields(
     declared: set[str] = set()
     blocked_pages: set[int] = set()
     started_pages: set[int] = set()
-    for node in _field_regions(nodes, {span["node_id"] for span in role_spans}):
+    for node in _field_regions(
+        nodes, {span["node_id"] for span in role_spans}, metadata_revision=metadata_revision
+    ):
         if node["kind"] == "TABLE_ROW" and _reference_context(node):
             blocked_pages.add(node["page_number"])
         if (
@@ -225,7 +231,7 @@ def _fields(
             or node["kind"] not in {"BLOCK", "TEXT_LINE", "TABLE_ROW"}
             or not node.get("schedulable", True)
             or any("UNRESOLVED" in code for code in node.get("issue_codes", ()))
-            or not _lineage_valid(node, by_id)
+            or not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
         ):
             continue
         if node["page_number"] in blocked_pages:
@@ -362,6 +368,7 @@ def observe_terms_change(
                 if component["page_start"] <= node["page_number"] <= component["page_end"]
             ],
             component["role_spans"],
+            metadata_revision=metadata_revision,
         )
     except KeyError, TypeError, ValueError, AttributeError, IndexError, OverflowError:
         return ObservedTermsChange("UNKNOWN", ("SOURCE_FIELDS_UNSUPPORTED",))

@@ -9,7 +9,7 @@ from uuid import UUID
 
 import pytest
 from familycare_api.insurance_documents.metadata_validation import validate_component_metadata
-from familycare_worker.document_metadata import metadata_proposal
+from familycare_worker.document_metadata import REVISION, metadata_proposal
 from familycare_worker.document_structure import StructureCell
 
 from workers.analyzer.tests.test_document_metadata import (
@@ -123,7 +123,7 @@ def _prefix_component(source: dict[str, Any]) -> dict[str, Any]:
         for span in fact["spans"]:
             span["node_id"] = insurer["node_id"]
     component["unresolved_fields"] = ["edition_date", "product_code"]
-    _legacy_identity(component, source, revision="document-metadata-v8")
+    _legacy_identity(component, source, revision=REVISION)
     return component
 
 
