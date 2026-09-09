@@ -382,6 +382,9 @@ class BudgetedReviewTransport(httpx2.BaseTransport):
             response = self.inner.handle_request(outgoing)
             response_received = True
             response.read()
+            if response.status_code >= 300:
+                # A shared endpoint/account error must not trigger the next 19 cases.
+                self.rejection = "EVALUATION_PROVIDER_HTTP_FAILURE"
             try:
                 from familycare_worker.ai.provider import _response_metadata
 

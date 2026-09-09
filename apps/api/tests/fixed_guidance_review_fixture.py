@@ -370,9 +370,16 @@ def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[s
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         source = connection.execute(
             "SELECT v.id AS version,x.id AS extraction FROM document_versions v "
-            "JOIN extractions x ON x.document_version_id=v.id WHERE v.content_sha256=%s",
-            (digest,),
+            "JOIN extractions x ON x.document_version_id=v.id AND x.status='succeeded' "
+            "JOIN document_batch_items i ON i.processed_document_version_id=v.id "
+            "AND i.document_id=v.document_id AND i.state='succeeded' "
+            "JOIN document_batches b ON b.id=i.batch_id "
+            "WHERE v.content_sha256=%s AND b.household_space_id=%s AND b.family_member_id=%s "
+            "AND b.id=(SELECT batch_id FROM document_batch_items WHERE id=%s)",
+            (digest, job.household_space_id, job.family_member_id, job.batch_item_id),
         ).fetchone()
+        if source is None:
+            raise ValueError("FIXED_REVIEW_POLICY_SOURCE_NOT_RETAINED")
         evidence = _id(f"{case.case_id}:contract-evidence:{key}")
         _insert_evidence(
             connection,

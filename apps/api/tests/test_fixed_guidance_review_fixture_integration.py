@@ -4,6 +4,7 @@ import json
 import os
 from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
+from uuid import uuid4
 
 import httpx2
 import openai
@@ -30,6 +31,66 @@ from workers.analyzer.tests.test_guidance_review_provider import _response
 
 pytestmark = pytest.mark.integration
 CASES = load_cases(DEFAULT_CASES)
+
+
+def test_unattached_older_same_hash_version_cannot_supply_the_policy_source(monkeypatch):
+    from apps.api.tests import fixed_guidance_review_fixture as fixture
+
+    original = CASES[0]
+    parameters = json.loads(json.dumps(original.scenario_parameters))
+    names = {
+        key: f"synthetic-orphan-coverage-{index}"
+        for index, key in enumerate(original.candidate_pool)
+    }
+    for raw in parameters["coverages"]:
+        raw["coverage_key"] = names[raw["coverage_key"]]
+    case = replace(
+        original,
+        case_id="synthetic-orphan-versions",
+        contract_group="synthetic-orphan-versions",
+        scenario_parameters=parameters,
+        candidate_pool=tuple(names.values()),
+        expected_primary=tuple(names[key] for key in original.expected_primary),
+        expected_conditional=tuple(names[key] for key in original.expected_conditional),
+    )
+    add = fixture._add_document
+    orphan_versions = []
+
+    def add_after_retained_orphan(url, job, text, *, kind, digest):
+        if kind == "policy":
+            document, version, extraction = uuid4(), uuid4(), uuid4()
+            with psycopg.connect(_psycopg_url(url)) as connection:
+                connection.execute(
+                    "INSERT INTO documents(id,source_key,document_kind,status,page_count) "
+                    "VALUES(%s,%s,'policy','ready',1)",
+                    (document, f"synthetic/orphan-{document}.pdf"),
+                )
+                connection.execute(
+                    "INSERT INTO document_versions(id,document_id,version_number,"
+                    "content_sha256,byte_size,page_count) "
+                    "VALUES(%s,%s,1,%s,128,1)",
+                    (version, document, digest),
+                )
+                connection.execute(
+                    "INSERT INTO extractions(id,document_version_id,extractor_name,"
+                    "extractor_version,extractor_config_hash,quality_rule_version,"
+                    "status,succeeded_at) "
+                    "VALUES(%s,%s,'synthetic',"
+                    "'v1',%s,'quality-v1','succeeded',clock_timestamp())",
+                    (extraction, version, "f" * 64),
+                )
+            orphan_versions.append(version)
+        add(url, job, text, kind=kind, digest=digest)
+
+    monkeypatch.setattr(fixture, "_add_document", add_after_retained_orphan)
+    sample = seed_fixed_review_case(os.environ["FAMILYCARE_TEST_DATABASE_URL"], case)
+    assert orphan_versions and sample.original.local_guidance is not None
+    with psycopg.connect(_psycopg_url(sample.database_url)) as connection:
+        versions = connection.execute(
+            "SELECT source_document_version_id FROM policy_contracts WHERE household_space_id=%s",
+            (sample.scope.household_space_id,),
+        ).fetchall()
+    assert versions and all(version not in orphan_versions for (version,) in versions)
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case.case_id)

@@ -248,6 +248,30 @@ def test_cost_accounts_cached_and_written_input_without_double_counting() -> Non
     ) == Decimal("0.00432")
 
 
+def test_account_failure_stops_remaining_cases_and_retains_unknown_charge(tmp_path: Path) -> None:
+    from scripts.fixed_review_evaluation import BudgetedReviewTransport, EvaluationJournal
+
+    with EvaluationJournal(
+        tmp_path / "journal.json", source="a" * 64, limit=Decimal("1")
+    ) as journal:
+        transport = BudgetedReviewTransport(
+            journal,
+            httpx2.MockTransport(
+                lambda request: httpx2.Response(
+                    429, json={"error": {"code": "insufficient_quota"}}
+                ),
+            ),
+        )
+        transport.case_id = "synthetic-quota-case"
+        with httpx2.Client(transport=transport) as client:
+            assert (
+                client.post("https://api.openai.com/v1/responses", json=_wire_body()).status_code
+                == 429
+            )
+        assert transport.rejection == "EVALUATION_PROVIDER_HTTP_FAILURE"
+        assert journal.budget.request_count == 1 and journal.budget.committed_cost > 0
+
+
 def test_unknown_usage_retains_the_entire_reservation() -> None:
     budget = EvaluationBudget(Decimal("1"), maximum_requests=20)
     budget.reserve("synthetic-case-a", input_bound=10000, output_bound=4000)
