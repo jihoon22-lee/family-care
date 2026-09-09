@@ -6,52 +6,43 @@ FamilyCare는 가족이 가입한 보험의 증권과 약관을 연결해 상황
 
 ## Current status
 
-`main`은 `v0.4.0` 릴리스 기준으로 정리되어 있습니다. Phase 0 Foundation과 Phase 1 Synthetic
-PDF Ingestion부터 정책 원장·candidate
-review·약관 검색·Rider/규칙 검토·결정론적 판정·조건부 정액/실손 계산·Event/Result
-PWA·수동 Claim workflow·로컬 인증·암호화 문서 batch·선택적 OCR·private import reliability가
-구현되어 있습니다. 이후 immutable private knowledge snapshot, 전체 보험 catalog, publication별
-`PUBLISHED`/`ADVISORY`/`BLOCKED`/`NOT_APPLICABLE` 상태, 조건부 정액 추정, 관련 담보만 보여 주는
-결과와 선택적 one-call assistance까지 `main`에 합쳐졌습니다. 보장 원장은 전체 catalog를 기준으로
-앱 계약 identity·Evidence 준비 상태·미해결 문서 작업을 하나의 대사 projection에서 보여 주며,
-문서 inventory는 별도의 상세 편집 경계로 유지합니다.
+Web/API/Worker의 소스 버전은 `0.5.0`, 지원 DB schema는 `0069_policy_draft_replay`입니다.
+기본 사건 조회는 외부 AI 없이 로컬 서버에서 관련 후보·지원되는 금액/식·가정·부족한 정보를
+제공합니다. 선택 AI 검수는 원래 답변과 분리하며, 검증된 근거만 같은 결정론적 엔진으로
+다시 계산합니다. 결과에서 근거와 조건을 확인하고 청구 준비 기록으로 이어갈 수 있습니다.
 
-Clause search와 분석 결과는 가입 여부나 지급 여부를 확정하지 않으며 Evidence의 페이지는
-1-based PDF physical page입니다. 업무 API는 활성 로컬 session이 없으면
-`401 AUTHENTICATION_REQUIRED`로 fail-closed합니다. Web/API/Worker의 현재 제품 버전은
-`0.4.0`입니다. `v0.1.0`부터 `v0.4.0`까지의 공개 태그·컨테이너·GitHub Release 상태는 각 tag
-workflow와 Release 본문을 권위 있는 증거로 사용합니다. 각 Release 본문은 CHANGELOG 변경사항,
-workflow·commit 증거와 서로 다른 Web/API/Worker digest를 같은 형식으로 기록합니다.
+문서별 보관 구조·범위·가입 원장·약관 지식과 계산 규칙은 출처와 버전을 유지합니다. 명시적
+재처리는 원본 응답과 교정을 보존하며, 로컬 근거 검사를 통과한 파생 초안만 새 독립 검수에
+보낼 수 있습니다. 앱 사용자와 보험 대상자를 분리하고 session·가정 범위·CSRF·암호화·
+앱 셸만 캐시하는 경계를 유지합니다.
 
-WSL Docker Compose private runtime, Tailscale HTTPS, 인증된 브라우저 login·navigation·logout,
-synthetic OpenAI pipeline을 확인했습니다. 저장소 밖의 보호된 package에 대해서는 validation,
-백업·복원 DB rehearsal, atomic apply와 인증된 catalog/result acceptance를 수행했으며 공개
-문서에는 그 경계만 기록합니다. 남은 암호·legacy-font source를 포함한 모든 실제 문서 형식의
-end-to-end import/OCR, Windows 브라우저, 모바일 PWA, 다른 실제 기기와 전체 재해 복구 훈련은
-검증하지 않았습니다. `v0.1.0`의 상세 증거는
-[`docs/release/v0.1.0-verification.md`](docs/release/v0.1.0-verification.md), `v0.2.0` 기록은
-[`workthrough/2026-08-27-v0-2-0-release-metadata.md`](workthrough/2026-08-27-v0-2-0-release-metadata.md)에
-보존합니다.
+기존 자료의 백업/격리 복원과 원본 행 보존, 제한된 실제 가입 원문의 자동 원장 반영,
+AI-off 인증/결과/청구/원문 조회, Windows Chrome headless 사용 경로를 확인했습니다.
+**전체 자료 지원은 PARTIAL**입니다. 읽지 못한 자료와 미처리 구간, 자동 약관 판본/의미 지식,
+과거 별칭의 정확한 원문 연결은 미지원·미해결 범위를 보존합니다. 일부 성공을 전체 자료의
+해석 또는 지급 정확도로 표시하지 않습니다. 모바일 실기기/PWA 설치와 전체 재해 복구 훈련은
+미검증입니다.
 
-2026-09-01 release workflow의 임시 파일 경로는 `runner.temp`를 사용할 수 있는 step-level
-`env`로 한정했고, 저장소 검사도 job-level `runner` context를 거부합니다. `actionlint`와 로컬
-workflow 정책 검사를 통과한 이 경로는 `v0.4.0` tag workflow에서 실제 게시 경계까지 검증하며,
-정확한 run·commit·digest 결과는 GitHub Release 본문에 기록합니다.
+현재 릴리스·실제 적용 상태와 소스별 검증은
+[v0.5 수용 원장](docs/release/v0.5.0-verification.md)에서 확인합니다. 공개 태그의 변경사항,
+workflow와 Web/API/Worker의 immutable digest는
+[GitHub Releases](https://github.com/jihoon22-lee/family-care/releases)에 기록합니다.
+실행체의 데이터 전환·재시작 확인은 이미지 게시와 별도로 기록합니다.
 
-승인된 제품 기준은 `docs/design/v0.1-product.md`, 구현 순서와 단계별 수용 조건은 `docs/plan/000-project-roadmap.md`에서 확인할 수 있습니다. 완료된 Phase 1의 구현 기록은 `docs/plan/002-synthetic-pdf-ingestion.md`에 보존합니다.
+제품 기준은 [v0.5 설계](docs/design/v0.5-local-first-claim-guidance.md), 실행 순서와 과거
+수용 기록은 [로드맵](docs/plan/000-project-roadmap.md)을 따릅니다. 기존 v0.1~v0.4의
+기록과 snapshot 호환성은 유지합니다.
 
-현재 구현·운영 범위에서 제외하는 항목:
+현재 범위에서 제외하는 항목:
 
 - Google Drive 자동 연동
 - 보험사 직접 청구와 의료 문서 file 보관
-- Cloud Run을 포함한 운영 배포
+- Cloud Run과 공개 인터넷 배포
 - LUKS, BitLocker, WSL swap과 고정 크기 암호화 volume 변경
 - 다중 가정, 공개 가입, 계정 초대와 역할 관리
 
-선택적 OpenAI 연동은 기존 WSL의 `OPENAI_API_KEY`를 Worker에서만 사용합니다. 문서·입력
-구조화와 결과 설명을 보조하지만 `MATCH / NO_MATCH / UNKNOWN`이나 보험금 예상액을 직접
-결정하지 않습니다. 약관 Evidence와 검증된 규칙은 결정론적 엔진이 평가하며, 공개 CI는 외부
-AI와 실제 secret을 사용하지 않습니다.
+선택적 OpenAI 연동은 Worker의 기존 키 설정을 사용합니다. AI는 구조화와 설명을 보조하며
+가입 판정이나 지급액을 단독 결정하지 않습니다. 공개 CI는 합성 자료·모의 provider만 사용합니다.
 
 ## Privacy boundary
 

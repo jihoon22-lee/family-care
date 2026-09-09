@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 from pathlib import Path
@@ -142,6 +143,31 @@ def validate_compose() -> list[str]:
     return []
 
 
+def validate_request_logging(api_dockerfile: str, nginx: str) -> list[str]:
+    """Reject defaults that persist private identifiers from request URLs."""
+
+    errors: list[str] = []
+    command = re.search(r"(?m)^CMD\s+(\[.*\])\s*$", final_stage(api_dockerfile))
+    try:
+        arguments = json.loads(command.group(1)) if command else []
+    except ValueError:
+        arguments = []
+    if not isinstance(arguments, list) or "--no-access-log" not in arguments:
+        errors.append("API runtime must disable Uvicorn request access logs")
+    directives = re.sub(r"(?m)#.*$", "", nginx)
+    server_prefix = directives.split("server {", 1)[-1].split("location", 1)[0]
+    if not re.search(r"\baccess_log\s+off\s*;", server_prefix) or any(
+        value.strip() != "off" for value in re.findall(r"\baccess_log\s+([^;]+);", directives)
+    ):
+        errors.append("Web server and locations must disable request access logs")
+    if not re.search(r"\berror_log\s+/dev/null\s+crit\s*;", server_prefix) or any(
+        value.split() != ["/dev/null", "crit"]
+        for value in re.findall(r"\berror_log\s+([^;]+);", directives)
+    ):
+        errors.append("Web request error logs must not persist request URLs")
+    return errors
+
+
 def main() -> int:
     """Run all static container-definition checks."""
 
@@ -149,6 +175,12 @@ def main() -> int:
     for name, path in DOCKERFILES.items():
         errors.extend(validate_dockerfile(name, path))
     errors.extend(validate_compose())
+    errors.extend(
+        validate_request_logging(
+            DOCKERFILES["api"].read_text(encoding="utf-8"),
+            (ROOT / "infra/containers/nginx.conf").read_text(encoding="utf-8"),
+        )
+    )
 
     if errors:
         print("\n".join(errors))

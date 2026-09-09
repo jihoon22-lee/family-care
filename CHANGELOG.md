@@ -4,6 +4,48 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-09
+
+### Added
+
+- Local claim guidance separates documented enrollment, event-date conditions, maintenance
+  assumptions, missing inputs, and independently supported estimates. Relevant candidates and
+  calculable fixed benefits remain available without an external AI request.
+- Complete retained document structure, range accounting, terms metadata and semantic knowledge
+  preserve page, clause, table, and source-generation evidence through local processing.
+- Optional independent AI review preserves the original local answer, records differences and
+  cost limits, and revalidates supported changes before deterministic calculation or publication.
+- Claim drafts retain the selected local result and evidence as an immutable historical snapshot.
+- Version-bound backup, reconstruction, retained policy replay, and readiness checks support an
+  isolated transition while preserving original records and review history.
+
+### Changed
+
+- Results prioritize relevant actions, conditional amounts, missing information, and source
+  evidence. Currentness uncertainty no longer defers every candidate or possible calculation.
+- Explicit policy reprocessing can reduce an earlier draft using local field proofs and request
+  only a new independent verification. Lost facts remain visible as unresolved work.
+
+### Fixed
+
+- Web/API request access logging and Web upstream error logging no longer persist private
+  identifiers from request URLs in the default container configuration.
+- Historical status, payment-count uncertainty, currency mismatches, ambiguous terms, and missing
+  calculation inputs no longer become unsupported eligibility or payment assumptions.
+- Native text-line geometry, JSON coordinates, terms lineage, and compound insured fields now
+  use consistent source checks without overwriting earlier generations or user corrections.
+- Failed optional review, incomplete document ranges, and unsupported fields preserve usable
+  local results and accurate partial-processing status.
+
+### Security
+
+- Provider minimization covers active family names and aliases, compound personal fields, and
+  split identifiers. Retired privacy revisions cannot silently reuse old provider inputs.
+- Source-scoped immutable replay receipts and request budgets prevent stale or unrelated drafts
+  from bypassing independent verification. Default queries do not schedule external AI work.
+- Protected acceptance remains separate from public synthetic CI. Remaining source-format,
+  interpretation, and device limitations are recorded in the release verification boundary.
+
 ## [0.4.0] - 2026-09-01
 
 ### Added

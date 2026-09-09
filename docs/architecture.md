@@ -6,8 +6,10 @@ Event/Result PWA, 수동 Claim workflow, 로컬 인증, 암호화 document batch
 private import reliability, private local Compose와 bounded Tailscale inspection이 `main`에 구현되어
 있다. 현재 구조에는 immutable private knowledge snapshot, 전체 catalog projection, append-only
 rule/calculation publication, advisory decision stream과 선택적 one-call result assistance도 포함된다.
-공개 제품 기준은 `v0.4.0`이다. 상세 초기 제품 기준은
-`docs/design/v0.1-product.md`, 현재 전달 상태는 `docs/plan/000-project-roadmap.md`를 따른다.
+현재 코드 기준은 `v0.5.0`이며 문서 기준 가정·조건·계산 준비를 분리한 로컬 안내, 독립 검수,
+불변 청구 snapshot과 보관 원문 재처리를 포함한다. `docs/design/v0.5-local-first-claim-guidance.md`와
+`docs/release/v0.5.0-verification.md`가 현재 의미와 수용 범위를, `docs/design/v0.1-product.md`와
+`docs/plan/000-project-roadmap.md`가 초기 설계와 과거 기록을 소유한다.
 
 ## Architectural goals
 
@@ -284,5 +286,7 @@ private-document acceptance. 로컬 acceptance에서는 WSL Compose, Tailscale H
 synthetic OpenAI pipeline을 확인했다. 저장소 밖 보호 package에 대해서는 validation,
 backup/restore rehearsal, atomic apply와 authenticated catalog/result 흐름을 검증했지만 그 실제
 내용이나 식별값은 공개 증거에 포함하지 않는다. 남은 암호·legacy-font source를 포함한 모든 실제
-문서 형식의 import/OCR, Windows/mobile, 다른 실제 기기와 전체 재해 복구는 미검증이다. 합성
+문서 형식의 import/OCR, 모바일 실기기/PWA 설치, 다른 실제 기기와 전체 재해 복구는 미검증이다.
+0069 clone의 Windows Chrome headless와 기존 자료·신규 원장·AI-off 경로는 별도 검증했으며,
+전체 자동 약관 해석과 과거 별칭 연결은 PARTIAL로 기록한다. 합성
 permission smoke와 보호된 acceptance는 Cloud Run이나 공개 운영 배포 증거가 아니다.
