@@ -35,8 +35,14 @@ class Adapter:
         self.calls = []
         self.outside = False
 
-    def verify(self, plan):
-        if self.identity != plan.database or self.sources != plan.sources:
+    def verify(self, plan, *, source=None):
+        expected = plan.sources if source is None else (source,)
+        actual = (
+            self.sources
+            if source is None
+            else tuple(item for item in self.sources if item.batch_item_id == source.batch_item_id)
+        )
+        if self.identity != plan.database or actual != expected:
             raise TransitionError("SOURCE_CHANGED")
         if self.outside:
             raise TransitionError("UNAPPROVED_SOURCE")
@@ -263,3 +269,121 @@ def test_plan_capture_uses_readonly_transaction_and_explicit_ids(monkeypatch):
         Adapter()
     )
     assert connection.queries == ["SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"]
+
+
+def test_selected_verification_hashes_one_source_but_checks_full_scope(monkeypatch):
+    from scripts import restructure_existing_documents as module
+
+    approved = ReconstructionPlan(Adapter.identity, (source(), source(2)))
+    hashed = []
+
+    class Connection:
+        queries = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def execute(self, query, values=None):
+            self.queries.append((query, values))
+            return self
+
+        def fetchone(self):
+            return {"outside": False}
+
+    connection = Connection()
+    monkeypatch.setattr(module, "_connect", lambda url: connection)
+    monkeypatch.setattr(module, "_database_identity", lambda conn: approved.database)
+
+    def snapshot(conn, ids, checkpoint):
+        hashed.append(tuple(ids))
+        return tuple(item for item in approved.sources if item.batch_item_id in ids)
+
+    monkeypatch.setattr(module, "_snapshot", snapshot)
+    adapter = module.PostgresReconstructionAdapter("postgresql://synthetic")
+    adapter.verify(approved, source=approved.sources[1])
+    assert hashed == [(source(2).batch_item_id,)]
+    assert connection.queries[-1][1] == ([source().batch_item_id, source(2).batch_item_id],) * 3
+    adapter.verify(approved)
+    assert hashed[-1] == (source().batch_item_id, source(2).batch_item_id)
+
+
+@pytest.mark.parametrize("foreign", [source(3), replace(source(), source_sha256="c" * 64)])
+def test_selected_verification_cannot_replace_approved_source(monkeypatch, foreign):
+    from scripts import restructure_existing_documents as module
+
+    def forbidden(url):
+        raise AssertionError("No connection for an unapproved source")
+
+    monkeypatch.setattr(module, "_connect", forbidden)
+    adapter = module.PostgresReconstructionAdapter("postgresql://synthetic")
+    with pytest.raises(TransitionError, match="UNAPPROVED_SOURCE"):
+        adapter.verify(plan(Adapter()), source=foreign)
+
+
+def test_other_source_change_is_detected_before_any_global_publication():
+    class PerSourceAdapter(Adapter):
+        def __init__(self):
+            super().__init__()
+            self.sources = (source(), source(2))
+            self.states = {item.batch_item_id: SourceProgress("MISSING") for item in self.sources}
+            self.checks = []
+
+        def verify(self, approved, *, source=None):
+            self.checks.append(source)
+            expected = approved.sources if source is None else (source,)
+            actual = (
+                self.sources
+                if source is None
+                else tuple(
+                    item for item in self.sources if item.batch_item_id == source.batch_item_id
+                )
+            )
+            if expected != actual:
+                raise TransitionError("SOURCE_CHANGED")
+
+        def observe(self, item):
+            return self.states[item.batch_item_id]
+
+        def prepare(self, item):
+            self.calls.append(("prepare", item.batch_item_id))
+            self.states[item.batch_item_id] = SourceProgress(
+                "PREPARED", UUID(int=item.batch_item_id.int + 50), "MISSING"
+            )
+            if item.batch_item_id == source(2).batch_item_id:
+                self.sources = (replace(self.sources[0], source_sha256="c" * 64), self.sources[1])
+
+        def metadata(self, generation):
+            item_id = UUID(int=generation.int - 50)
+            self.calls.append(("metadata_prepare", item_id))
+            self.states[item_id] = SourceProgress("PREPARED", generation, "PREPARED", components=1)
+
+    adapter = PerSourceAdapter()
+    result = reconstruct(plan(adapter), adapter=adapter)
+    assert result.status == "SOURCE_CHANGED"
+    assert adapter.checks[0] is None and adapter.checks[-1] is None
+    assert source() in adapter.checks and source(2) in adapter.checks
+    assert adapter.calls == [
+        ("prepare", source().batch_item_id),
+        ("metadata_prepare", source().batch_item_id),
+        ("prepare", source(2).batch_item_id),
+        ("metadata_prepare", source(2).batch_item_id),
+    ]
+
+
+def test_bounded_run_keeps_already_observed_progress_without_extra_reads():
+    adapter = Adapter()
+    original = adapter.observe
+    observed = []
+
+    def observe(item):
+        observed.append(item)
+        return original(item)
+
+    adapter.observe = observe
+    result = reconstruct(plan(adapter), adapter=adapter, max_steps=2)
+    assert result.status == "BOUNDED"
+    assert result.prepared == 1
+    assert len(observed) == 2  # Initial state and the existing post-preparation read.

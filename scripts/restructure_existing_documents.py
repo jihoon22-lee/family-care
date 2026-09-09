@@ -153,7 +153,7 @@ class ReconstructionReport:
 
 
 class ReconstructionAdapter(Protocol):
-    def verify(self, plan: ReconstructionPlan) -> None: ...
+    def verify(self, plan: ReconstructionPlan, *, source: SourceIdentity | None = None) -> None: ...
     def observe(self, source: SourceIdentity) -> SourceProgress: ...
     def prepare(self, source: SourceIdentity) -> None: ...
     def metadata(self, generation: UUID) -> None: ...
@@ -176,7 +176,12 @@ def reconstruct(
     ):
         raise TransitionError("PLAN_INVALID")
     started, steps = clock(), 0
-    observed: list[SourceProgress] = []
+    last_observed: dict[UUID, SourceProgress] = {}
+
+    def observe(source: SourceIdentity) -> SourceProgress:
+        progress = adapter.observe(source)
+        last_observed[source.batch_item_id] = progress
+        return progress
 
     def budget() -> None:
         if stop_requested():
@@ -184,34 +189,34 @@ def reconstruct(
         if clock() - started >= deadline_seconds:
             raise TransitionError("BOUNDED")
 
-    def check(*, mutation: bool = False) -> None:
+    def check(*, mutation: bool = False, source: SourceIdentity | None = None) -> None:
         budget()
         if mutation and steps >= max_steps:
             raise TransitionError("BOUNDED")
-        adapter.verify(plan)
+        adapter.verify(plan, source=source)
 
     try:
         if isinstance(adapter, PostgresReconstructionAdapter):
             adapter.checkpoint = budget
         check()
         for source in plan.sources:
-            check()
-            progress = adapter.observe(source)
+            check(source=source)
+            progress = observe(source)
             if progress.preparation in {"MISSING", "RETRYABLE_FAILED"}:
-                check(mutation=True)
+                check(mutation=True, source=source)
                 adapter.prepare(source)
                 steps += 1
-                check()
-                progress = adapter.observe(source)
+                check(source=source)
+                progress = observe(source)
             if (
                 progress.preparation == "PREPARED"
                 and progress.generation_id is not None
                 and progress.metadata in {"MISSING", "RETRYABLE_FAILED"}
             ):
-                check(mutation=True)
+                check(mutation=True, source=source)
                 adapter.metadata(progress.generation_id)
                 steps += 1
-                check()
+                check(source=source)
         # Existing API operations are global. verify proves this isolated DB's
         # active sources are approved before every operation, including re-entry.
         while True:
@@ -224,7 +229,7 @@ def reconstruct(
             if not changed:
                 break
         check()
-        observed = [adapter.observe(source) for source in plan.sources]
+        observed = [observe(source) for source in plan.sources]
         check()
         unavailable = sum(
             p.preparation != "PREPARED" or p.metadata != "PREPARED" or p.components == 0
@@ -242,6 +247,9 @@ def reconstruct(
         status = error.code
     except Exception:
         status = "SOURCE_UNAVAILABLE"
+    # Keep only reads already completed within the budget. Never issue a final
+    # database inventory after cancellation or deadline just to fill counters.
+    observed = list(last_observed.values())
     return ReconstructionReport(
         status,
         len(plan.sources),
@@ -375,13 +383,17 @@ class PostgresReconstructionAdapter:
         self.checkpoint: Callable[[], None] = lambda: None
         self.plan: ReconstructionPlan | None = None
 
-    def verify(self, plan: ReconstructionPlan) -> None:
+    def verify(self, plan: ReconstructionPlan, *, source: SourceIdentity | None = None) -> None:
+        if source is not None and source not in plan.sources:
+            raise TransitionError("UNAPPROVED_SOURCE")
+        selected = plan.sources if source is None else (source,)
         with _connect(self.database_url) as connection:
             connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
             if _database_identity(connection) != plan.database:
                 raise TransitionError("SOURCE_CHANGED")
             ids = [s.batch_item_id for s in plan.sources]
-            if _snapshot(connection, ids, self.checkpoint) != plan.sources:
+            selected_ids = [s.batch_item_id for s in selected]
+            if _snapshot(connection, selected_ids, self.checkpoint) != selected:
                 raise TransitionError("SOURCE_CHANGED")
             outside = connection.execute(
                 "SELECT EXISTS(SELECT 1 FROM document_batch_items i JOIN documents d "
