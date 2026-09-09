@@ -4,7 +4,7 @@ This must be advanced deliberately with schema changes. The repository test chec
 both distributions against Alembic's single head; runtime needs no checkout files.
 """
 
-SUPPORTED_SCHEMA_REVISION = "0065_retained_policy_jobs"
+SUPPORTED_SCHEMA_REVISION = "0066_metadata_lineage"
 SCHEMA_REVISION_QUERY = "SELECT version_num FROM public.alembic_version LIMIT 2"
 REQUIRED_SCHEMA_QUERY = """
 SELECT snapshot.review_job_id, result.result_json,

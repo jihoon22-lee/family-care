@@ -10,7 +10,7 @@
       "const": "1"
     },
     "revision": {
-      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8"]
+      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9"]
     },
     "generation_id": {
       "type": "string",
@@ -51,7 +51,7 @@
     { "properties": { "revision": { "enum": ["document-metadata-v1", "document-metadata-v2"] } } },
     {
       "properties": {
-        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8"] },
+        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9"] },
         "components": { "items": { "required": ["range_evidence"] } }
       }
     }

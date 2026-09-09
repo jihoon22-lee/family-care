@@ -34,7 +34,7 @@ from familycare_worker.navigation_page import is_navigation_page
 from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v8"
+REVISION = "document-metadata-v9"
 
 
 class DocumentMetadataError(ValueError):
