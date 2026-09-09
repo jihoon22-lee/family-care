@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0067_metadata_lineage"
+REVISION = "0068_range_field_proof"
 
 
 class Result:
@@ -57,8 +57,8 @@ class Engine:
     "rows",
     [
         [],
-        [("0066_provider_privacy_revision",)],
-        [("0068_synthetic_future",)],
+        [("0067_metadata_lineage",)],
+        [("0069_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0067_metadata_lineage"
+REVISION = "0068_range_field_proof"
 
 
 class Result:
@@ -47,8 +47,8 @@ class Connection:
     "rows",
     [
         [],
-        [("0066_provider_privacy_revision",)],
-        [("0068_synthetic_future",)],
+        [("0067_metadata_lineage",)],
+        [("0069_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

@@ -22,7 +22,7 @@ from familycare_worker.policy_jobs import (
 
 # This identifies local association/grounding semantics independently of the immutable IR.
 # Advancing it permits a new explicit run; it never schedules one automatically.
-RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v2"
+RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v3"
 
 
 class RetainedPolicyConflict(RuntimeError):

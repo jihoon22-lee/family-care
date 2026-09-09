@@ -22,7 +22,13 @@ from workers.analyzer.tests.test_retained_policy_resubmission import (
 pytestmark = pytest.mark.integration
 
 
-def test_new_privacy_processing_revision_is_available(retained_source):
+def test_new_privacy_processing_revision_is_available(retained_source, monkeypatch):
+    from familycare_worker import retained_policy
+
+    # This tests the historical v2 producer, independent of the current default.
+    monkeypatch.setattr(
+        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v2"
+    )
     new = _enqueue(retained_source, pipeline_revision="retained-policy-association-v2")
     assert new.pipeline_version == "retained-policy-association-v2"
     _assert_original_preserved(retained_source)
@@ -73,16 +79,31 @@ def test_privacy_upgrade_preserves_old_job_and_packet_but_requires_fresh_process
             (sample.original.household_space_id,),
         ).fetchone()["value"]
     assert _migrate(sample.url, "upgrade", "head").returncode == 0
-    new = _enqueue(sample)
+    with monkeypatch.context() as privacy_v2:
+        privacy_v2.setattr(
+            retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v2"
+        )
+        new = _enqueue(sample, pipeline_revision="retained-policy-association-v2")
+        new_queue = retained_policy.RetainedPolicyJobQueue(
+            sample.url,
+            household_space_id=sample.original.household_space_id,
+            job_id=new.id,
+            pipeline_revision="retained-policy-association-v2",
+        )
     assert new.id != old.id
     assert _target(sample, old.id).claim_next_job(WORKER) is None
-    running = _target(sample, new.id).claim_next_job(WORKER)
+    running = new_queue.claim_next_job(WORKER)
     assert running is not None
     work = policy_range_repository.PolicyRangeRepository(sample.url).next(
         running, WORKER, sensitive_terms=()
     )
     assert work is not None and work.generation_id == sample.generation
     with psycopg.connect(_psycopg_url(sample.url), row_factory=dict_row) as connection:
+        assert connection.execute(
+            "SELECT policy_structuring_source_current(%s) AS old,"
+            "policy_structuring_source_current(%s) AS current",
+            (old.id, new.id),
+        ).fetchone() == {"old": False, "current": True}
         assert (
             connection.execute(
                 "SELECT to_jsonb(j) AS value FROM policy_structuring_jobs j WHERE id=%s",
