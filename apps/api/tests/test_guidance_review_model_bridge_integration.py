@@ -32,7 +32,7 @@ from workers.analyzer.tests.test_guidance_review_provider import _response
 pytestmark = pytest.mark.integration
 
 
-def _wire_graph(sample, packet):
+def _wire_graph(sample, packet, *, missing_relation_citation):
     """Express the fixture's executable meaning using only the actual request aliases."""
     original = sample.packet.to_payload()["envelope"]
     envelope = packet["envelope"]
@@ -68,11 +68,35 @@ def _wire_graph(sample, packet):
             if key in regions
         ],
     }
+    if missing_relation_citation:
+        # Keep the meanings and dependency intact; omit only its original linking proof.
+        by_node = {node["node_id"]: node for node in graph["nodes"]}
+        cross_region = next(
+            edge
+            for edge in graph["edges"]
+            if by_node[edge["from_node_id"]]["region_ids"]
+            != by_node[edge["to_node_id"]]["region_ids"]
+        )
+        source_node = by_node[cross_region["from_node_id"]]
+        references = {
+            citation["citation_id"]
+            for citation in graph["citations"]
+            if citation["citation_id"] in source_node["citation_ids"]
+            and citation["text"] != source_node["statement"]
+        }
+        assert len(references) == 1
+        source_node["citation_ids"] = [
+            key for key in source_node["citation_ids"] if key not in references
+        ]
+        graph["citations"] = [
+            citation for citation in graph["citations"] if citation["citation_id"] not in references
+        ]
     return graph
 
 
+@pytest.mark.parametrize("missing_relation_citation", [False, True])
 def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
-    unreviewed_original, monkeypatch
+    unreviewed_original, monkeypatch, missing_relation_citation
 ):
     sample = unreviewed_original
     with psycopg.connect(_psycopg_url(sample.url), row_factory=dict_row) as connection:
@@ -112,7 +136,9 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
                 {
                     "packet_alias": packet["packet_alias"],
                     "kind": "ADDITIONAL_CANDIDATE",
-                    "graph": _wire_graph(sample, packet),
+                    "graph": _wire_graph(
+                        sample, packet, missing_relation_citation=missing_relation_citation
+                    ),
                     "affected_fact_paths": ["MedicalEvent.admission_days"],
                     "proposed_amount": "999999",
                 }
@@ -152,16 +178,25 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
     assert _project(sample) == 1
     reviewed = repository.get_job(sample.scope, sample.job.id)
     assert len(attempts) == 1
-    assert reviewed.state == "partial" and reviewed.error_code is None
+    assert reviewed.error_code is None
     assert reviewed.result is not None
-    candidate = next(
-        item
-        for item in reviewed.result.guidance.candidates
-        if item.ref == sample.packet.coverage_ref
-    )
-    assert candidate.estimate.amount == "300"
-    assert reviewed.result.differences[0].change == "ADDED"
-    assert reviewed.result.findings[0].status == "APPLIED"
+    assert reviewed.result.findings[0].evidence
+    if missing_relation_citation:
+        assert reviewed.state == "disagreement"
+        assert not reviewed.result.guidance.candidates
+        assert not reviewed.result.differences
+        assert reviewed.result.findings[0].status == "OPINION"
+        assert "REVIEW_INTERPRETATION_UNVERIFIED" in reviewed.result.findings[0].reason_codes
+    else:
+        assert reviewed.state == "partial"
+        candidate = next(
+            item
+            for item in reviewed.result.guidance.candidates
+            if item.ref == sample.packet.coverage_ref
+        )
+        assert candidate.estimate.amount == "300"
+        assert reviewed.result.differences[0].change == "ADDED"
+        assert reviewed.result.findings[0].status == "APPLIED"
     assert "REVIEW_ADVISORY_AMOUNT_IGNORED" in reviewed.result.findings[0].reason_codes
     assert reviewed.usage.requests_reserved == 1 and reviewed.usage.total_tokens == 140
     with psycopg.connect(_psycopg_url(sample.url)) as connection:
@@ -171,7 +206,7 @@ def test_executable_review_crosses_model_wire_and_recomputes_missing_candidate(
         assert connection.execute(
             "SELECT count(*) FROM guidance_review_publications WHERE review_job_id=%s",
             (sample.job.id,),
-        ).fetchone() == (1,)
+        ).fetchone() == (0 if missing_relation_citation else 1,)
         assert connection.execute(
             "SELECT count(*) FROM terms_semantic_publications"
         ).fetchone() == (0,)
