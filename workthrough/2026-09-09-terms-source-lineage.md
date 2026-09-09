@@ -64,3 +64,32 @@ prompt를 명확히 한다. 다중 범위 배정과 반환 전 self-check도 명
 
 보호된 0067 재처리·실제 약관 지원 범위·최종 전환 수용과 릴리스는 진행 중이다.
 보호 진단의 실제 본문·개인정보·수치는 저장소 밖에만 보존한다.
+
+## 보존된 결과와 별도 field 증명 재처리
+
+후속 대표 입력도 한 계약 후보의 primary 인용 누락으로 REVIEW에 보존됐다. 외부 요청을
+추가하기 전에 동일 응답을 프로그램 검사로 재생했으며, 계약의 이름 필드는 증명되지만
+선택 날짜 필드는 현재 증명 계약을 충족하지 못함을 확인했다. 값·본문·개수·식별자는
+비공개 기록에 보존한다. `262d027`은 각 field의 primary 증명과 선택 날짜의 지원 label을
+명시한다. 계약 개시일과 별도 실제 계약체결일을 구분하며, 기존 날짜 origin 호환 계약과
+validator를 변경하지 않는다. 이 지시의 실제 성공을 아직 주장하지 않는다.
+
+`b7cb89e`(통합 `1ed94e1`)의 0068/retained v3는 같은 원문 generation에 별도 작업을
+추가하고 이전 v2의 REVIEW·계획·provider 이력과 유효한 게시를 보존한다. DB의 허용
+revision 비교만 v2/v3로 확장하며 v1은 계속 차단한다. v3 이력이 있으면 downgrade를
+거부하고, 없으면 0067의 v2-only 함수와 privacy 계약을 정확히 복원한다. 0067 파일은
+변경하지 않았다. 새 enqueue/target은 기본 v3이며 자동 예약은 추가하지 않는다.
+
+- v3 부재 실패 1건(2.03초)을 먼저 확인했다. 새/역사 재처리 PostgreSQL 8건 통과
+  (최종 15.07초), resubmission/publication 확장 37건(44.19초), readiness 24건
+  (1.05초), scoped Ruff/mypy·안전·Git 규칙을 통과했다. 테스트용 0068만 적용했다.
+- 날짜 fixture의 CASCADE 실패 수정 후 `8c8ae2c`에서 날짜 origin/native enrollment
+  PostgreSQL 37건(55.56초), 앞서 0066 checkout에서 0067 DB를 해석하지 못했던
+  `test_enrollment_without_classification_retains_its_document_amount`도 1건(2.66초)
+  통과했다. 제품 잠금·게시 가드와 기존 판정 assertions는 유지했다.
+- `1ed94e1` clean source의 전체 Python/계약 재검증: Ruff 881개 파일/check, mypy
+  354개 파일, 기본 pytest 3716건/3 subtests(37.39초; integration 809건 제외),
+  계약·컨테이너/워크플로 정적 정책·diff 통과. Web 입력은 앞선 238건/build와 같다.
+
+PR84의 이전 전체 PG CI 실패와 수정은 해당 workthrough에 보존했다. 현재 두 PR의
+최신 전체 CI와 보호된 0068 적용·재구성·제한된 v3 실행은 별도 수용으로 진행한다.
