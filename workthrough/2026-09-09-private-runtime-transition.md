@@ -94,3 +94,31 @@ The state helper now permits explicit identity-retention tables: excluded large 
 still hash and compare every row exactly, including in append-enabled comparisons. This keeps the
 memory bound without weakening preservation. RED **1 failed** (0.05s), full state PostgreSQL suite
 **10 passed** (0.80s), targeted mypy/Ruff passed at `e571ae7` plus this state/test/document change.
+
+## Protected restoration acceptance
+
+At clean source `5d90fd7`, the approved local operation quiesced the owned old Web/API/Worker,
+exported one repeatable-read PostgreSQL custom snapshot and captured the encrypted archive using
+its separate original key mount. The signed backup and private baseline journal remain outside Git.
+A fresh source transaction matched the capture while writers were stopped; the old services were
+restarted immediately after capture. An isolated database restored from the authenticated inputs
+matched every original row at schema 0024. All restored archive objects authenticated, decrypted
+in memory and matched their document-version content hashes. No plaintext PDF was written.
+
+Only the isolated restoration was migrated to 0063. Every original column/row still matched the
+baseline afterward. Actual API/Worker readiness probes both accepted 0063 and rejected the old
+0024 source. The original runtime database remains unchanged; no external AI was called.
+
+The initial full-corpus reconstruction reached its cooperative bound after nine local steps.
+This exposed repeated whole-corpus hashing at each local source step. Follow-up `c468cf7`
+(integrated as `16d9ae2`) checks the exact current source during local work while retaining
+full-source checks at re-entry, before/after every global projector and at completion. RED **4**
+selective-validation failures plus **1** bounded-progress reporting failure became **25 unit passed**
+(0.19s), Ruff/mypy passed. Root's existing actual PostgreSQL reconstruction/resume/source-change
+regression passed **1 test** (6.31s) after integration. Bounded reports retain only progress actually
+observed before the deadline; unobserved sources are not counted as prepared.
+
+Reconstruction is still in progress. Some retained sources have explicit partial plans, local metadata
+is not yet complete, and package aliases have no exact full-relative-path matches to retained batch
+sources. No filename similarity or summary is promoted to a verified source binding. Authenticated
+application acceptance, final source barrier/activation and full B07 CI remain pending.
