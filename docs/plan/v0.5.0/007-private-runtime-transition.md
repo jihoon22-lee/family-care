@@ -8,7 +8,7 @@
 
 ## Tasks
 
-1. complete — API/Worker는 설치된 지원 schema 0064와 필수 계약을 검사한다. 비밀/개인 자료 runner 생성 전·다음 작업 전과 API 업무 경로를 막으며 AI-off는 정상 준비 상태를 유지한다.
+1. complete — API/Worker는 설치된 지원 schema와 필수 계약을 검사한다. 후속 보관 증권 재처리 코드는 0065를 요구하며 기존 보호 환경의 0064 수용과 구분한다. 비밀/개인 자료 runner 생성 전·다음 작업 전과 API 업무 경로를 막으며 AI-off는 정상 준비 상태를 유지한다.
 2. complete — 기존 backup/import/structure/projector를 재사용한 격리 복원·재구성 계획, source→destination journal, 교정/이력 보존 비교와 source 변경 거부를 구현했다. 실제 activation barrier 적용은 Task 6에 남긴다.
 3. complete — 실제 PostgreSQL custom dump 복원, archive/key 복구, 저디스크·부분 원문 누락·중단/재개·동시 변경 거부를 합성 자료로 검증했다. 전체 행·검수 기반 청구 snapshot·암호화 archive roundtrip과 metadata 이력 보존/downgrade 거부를 통과했다.
 4. complete — 승인된 기존 WSL 자료와 실행체를 보호 환경에서 inventory하고 일관된 백업을 취득했다. 별도 DB/보관소 복원과 전체 원문 복호화·hash 대조 및 0063 migration 후 기존 행 보존을 확인했다. 실제 값은 공개 artifact에 기록하지 않는다.

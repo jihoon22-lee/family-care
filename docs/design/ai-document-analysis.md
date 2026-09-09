@@ -131,6 +131,17 @@ publication하지 않고 재시도한다.
 기본 Worker는 이 범위 경로를 사용한다. 기존 publisher는 과거 합성/호환 경로에 남는다.
 범위 저장 자체는 원장/교정을 덮지 않으며 아래 API projector가 별도로 검증한다.
 
+`0065_retained_policy_jobs`는 같은 원문 세대에 대한 명시적 처리 버전 재실행을 추가한다.
+`RetainedPolicyRepository.enqueue`는 종료된 최초 작업·가정·현재 generation·처리 revision을
+대조해 새 작업을 반환하며 같은 요청은 같은 작업으로 수렴한다. 최초 작업, 완료 범위,
+후보와 교정은 보존한다. 새 extraction을 복제하거나 예전 association을 수정하지 않는다.
+기본 queue의 claim/lease 복구는 이 작업을 제외한다. 호출자가 선택한 작업 ID를
+`RetainedPolicyJobQueue`에 지정하고 기존 범위 runner와 공유 요청 예산으로 실행한다.
+범위 repository 없는 과거 실행 경로는 거부한다. 재처리 요청만으로 외부 provider를 호출하지 않는다.
+Worker 준비·lease·예산 예약·범위 저장과 API의 새 반영은 원문 세대/처리 revision의 최신성을
+검사한다. 재준비 결과가 고정한 세대와 달라지면 transaction을 되돌리고 호출하지 않는다.
+문서별/일일 예산은 새 작업을 만든 뒤에도 이어지며, 재처리 이력이 있는 DB의 downgrade는 거부한다.
+
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
 ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고
@@ -144,6 +155,11 @@ ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/nod
 수익자·이름의 부분 일치·등록 시 선택한 구성원은 피보험자 근거가 아니다. 여러 계약/대상자가
 모호하면 자동 연결하지 않는다. 원문 식별값은 외부 DTO에 넣지 않고 opaque scope와 원문
 위치만 연결 정보에 보존하며, publication 때 전체 구성원 identity/version을 다시 검사한다.
+복합 피보험자 값은 완전한 이름과 형식이 검증된 부가 필드를 구분한다. 구조화된
+이름(마스킹 식별번호) / 나이 / 성별 / (등급) 설명 형식에서도 이름 하위 필드 전체를
+대조하며, 자유 형식 설명을 새 신원·직업 정보로 저장하지 않는다. 설명에 추가 인물 필드,
+식별번호/날짜나 다른 회원명이 있으면 거부하고 원래 필드 전체의 근거 위치를 보존한다.
+표 셀의 줄 경계는 유지하며, 설명을 허용하는 이 분기는 여러 줄 레코드를 받지 않는다.
 `0031_range_enrollment`의 publication 이력은 원본 후보/연결과 실제 원장 ID·반영 당시
 원장 version·사용자/프로그램 권위를 append-only로 묶는다. API는 보관 후보를 durable inbox로
 소비하며 별도 broker나 GET 부작용을 만들지 않는다. Compose API는
