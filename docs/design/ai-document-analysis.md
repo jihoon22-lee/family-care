@@ -149,6 +149,12 @@ Worker 준비·lease·예산 예약·범위 저장과 API의 새 반영은 원�
 provider 요청·약관/검수 작업 또는 retained v2 이력이 있으면 이전 privacy 체계로의
 downgrade를 보수적으로 거부한다.
 
+약관 줄 근거의 후속 `0067_metadata_lineage`는 이 privacy migration 뒤에 연결한다.
+metadata v9는 생성기의 첫 단어 기하 기준을 Worker·API·후속 source reader에서 일치시키며
+v1–v8 검증 이력은 당시 기준으로 보존한다. 이 후속 API/Worker는 schema 0067을 요구하고,
+최소화 v3와 retained 처리 v2를 계속 사용한다. metadata v9 이력이 생기면 0066으로의
+downgrade를 거부하며, 이 변경이 과거 provider 입력의 재사용을 허용하지 않는다.
+
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
 ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고

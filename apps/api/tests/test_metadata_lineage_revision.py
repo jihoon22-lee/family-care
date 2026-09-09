@@ -61,7 +61,7 @@ def test_v9_appends_to_same_generation_and_preserves_v8_history(publication_data
         assert connection.execute(
             "SELECT id,identity_sha256 FROM document_structure_generations"
         ).fetchall() == [{"id": generation, "identity_sha256": identity}]
-    refused = _migrate(url, "downgrade", "0065_retained_policy_jobs")
+    refused = _migrate(url, "downgrade", "0066_provider_privacy_revision")
     assert refused.returncode != 0
     assert "metadata revision history prevents downgrade" in refused.stderr
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:

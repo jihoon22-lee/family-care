@@ -4,8 +4,8 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0066_metadata_lineage"
-down_revision: str | Sequence[str] | None = "0065_retained_policy_jobs"
+revision: str = "0067_metadata_lineage"
+down_revision: str | Sequence[str] | None = "0066_provider_privacy_revision"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
