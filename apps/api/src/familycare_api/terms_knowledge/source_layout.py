@@ -203,7 +203,9 @@ def _table_proof(node: dict[str, Any], by_id: dict[str, dict[str, Any]]) -> None
         raise _InvalidSource("SEMANTIC_TABLE_CONTEXT_UNRESOLVED")
 
 
-def _validated_nodes(source: Mapping[str, Any], start: int, end: int) -> list[dict[str, Any]]:
+def _validated_nodes(
+    source: Mapping[str, Any], start: int, end: int, *, metadata_revision: str
+) -> list[dict[str, Any]]:
     pages = source.get("pages")
     unresolved = source.get("unresolved")
     if not isinstance(pages, (list, tuple)) or not isinstance(unresolved, (list, tuple)):
@@ -265,7 +267,7 @@ def _validated_nodes(source: Mapping[str, Any], start: int, end: int) -> list[di
                     for s in spans
                     for k in ("block_start", "block_end", "line_start", "line_end")
                 )
-                or not _lineage_valid(node, by_id)
+                or not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
             ):
                 raise _InvalidSource("SEMANTIC_SOURCE_LINEAGE_INVALID")
             for span in spans:
@@ -497,7 +499,11 @@ def _parse(nodes: list[dict[str, Any]]) -> list[_Draft]:
 
 
 def observe_semantic_regions(
-    projection: Mapping[str, object], *, component_page_start: int, component_page_end: int
+    projection: Mapping[str, object],
+    *,
+    component_page_start: int,
+    component_page_end: int,
+    metadata_revision: str = "document-metadata-v8",
 ) -> SemanticSourceLayout:
     """Derive original regions only from a complete independently selected component."""
     try:
@@ -515,7 +521,12 @@ def observe_semantic_regions(
                 raise _InvalidSource("SEMANTIC_SOURCE_IDENTITY_INVALID")
         if not lineage["extraction_revision"] or not lineage["structure_version"]:
             raise _InvalidSource("SEMANTIC_SOURCE_IDENTITY_INVALID")
-        nodes = _validated_nodes(projection, component_page_start, component_page_end)
+        nodes = _validated_nodes(
+            projection,
+            component_page_start,
+            component_page_end,
+            metadata_revision=metadata_revision,
+        )
         drafts = _parse(nodes)
         table_rows = {
             node["node_id"]: SemanticTableRow(

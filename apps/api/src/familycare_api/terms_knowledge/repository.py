@@ -205,6 +205,18 @@ def _plan(
     if row is None or row["context"] is None:
         raise TermsEditionNotFound
     context = row["context"]
+    # The immutable publication already belongs to the input context. Resolve its
+    # producer revision without changing historical context digests or jobs.
+    metadata = connection.execute(
+        "SELECT proposal.revision FROM document_metadata_publications publication "
+        "JOIN document_metadata_proposals proposal ON proposal.id=publication.proposal_id "
+        "JOIN document_structure_generations generation ON generation.id=proposal.generation_id "
+        "WHERE publication.id=%s AND publication.outcome='APPLIED' "
+        "AND generation.id=%s AND generation.household_space_id=%s",
+        (context["metadata_publication_id"], context["generation_id"], scope.household_space_id),
+    ).fetchone()
+    if metadata is None:
+        raise SemanticSourceChanged
     reader = ClauseSourceProjectionReader(connection, scope.household_space_id)
     pages = tuple(range(context["page_start"], context["page_end"] + 1))
     projection: dict[str, Any] | None = None
@@ -241,6 +253,7 @@ def _plan(
         {**projection, "nodes": list(nodes.values()), "pages": manifests, "unresolved": unresolved},
         component_page_start=context["page_start"],
         component_page_end=context["page_end"],
+        metadata_revision=metadata["revision"],
     )
     return SemanticSourcePlan(context, row["digest"], SourceSnapshot(source, layout))
 

@@ -70,7 +70,8 @@ def _observe_clause(
 ) -> tuple[dict[str, Any] | None, ClauseSourceRegion | None, str]:
     clause_id = clause["id"]
     source = connection.execute(
-        "SELECT s.*,g.extraction_id,clause_source_input_context(c.id,c.household_space_id)::text "
+        "SELECT s.*,g.extraction_id,proposal.revision AS metadata_revision,"
+        "clause_source_input_context(c.id,c.household_space_id)::text "
         "AS observed_context_json,to_jsonb(c) AS observed_clause,"
         "(SELECT jsonb_agg(to_jsonb(item) ORDER BY item.id) FROM ("
         "SELECT ev.*,x.status AS extraction_status,d.deleted_at AS document_deleted_at "
@@ -84,6 +85,11 @@ def _observe_clause(
         "JOIN terms_applicability_component_sources s ON s.id=e.source_component_id "
         "AND s.household_space_id=e.household_space_id AND s.role='terms' "
         "JOIN document_structure_generations g ON g.id=s.generation_id "
+        "JOIN document_metadata_publications publication "
+        "ON publication.id=s.metadata_publication_id "
+        "AND publication.outcome='APPLIED' "
+        "JOIN document_metadata_proposals proposal ON proposal.id=publication.proposal_id "
+        "AND proposal.generation_id=g.id "
         "WHERE c.id=%s AND c.household_space_id=%s AND c.deleted_at IS NULL "
         "AND e.deleted_at IS NULL AND terms_edition_allows_pages(e.id,e.household_space_id,"
         "c.physical_page_start,c.physical_page_end)",
@@ -115,6 +121,7 @@ def _observe_clause(
                     projection,
                     clause["physical_page_start"],
                     component_page_end=source["page_end"],
+                    metadata_revision=source["metadata_revision"],
                 )
                 evidence = source["observed_evidence"] or []
                 # Normalized text selects candidates, never a physical identity.
