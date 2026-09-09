@@ -410,6 +410,84 @@ def test_single_cell_body_titles_cannot_escape_the_preceding_checklist_cell() ->
     assert analyze_document_metadata(_table_cover(checklist=True)).components == ()
 
 
+def _table_cover_with_overlapping_suffix(
+    *, top: int = 200, checklist: bool = False, missing_bbox: bool = False
+) -> DocumentStructure:
+    raw = _table_cover(checklist=checklist).to_dict()["source_extraction"]
+    raw["pages"][0]["tables"].append(
+        {
+            "bbox": [10, top, 350, top + 180],
+            "cells": [
+                {
+                    "row_index": 0,
+                    "column_index": 0,
+                    "text": "합성 문장 A",
+                    "bbox": None if missing_bbox else [10, top, 350, top + 30],
+                },
+                {
+                    "row_index": 1,
+                    "column_index": 0,
+                    "text": "합성 문장 B",
+                    "bbox": [10, top + 20, 350, top + 50],
+                },
+                {
+                    "row_index": 2,
+                    "column_index": 0,
+                    "text": "보험증권",
+                    "bbox": [10, top + 100, 350, top + 120],
+                },
+                {
+                    "row_index": 3,
+                    "column_index": 0,
+                    "text": "상품코드: SYNTHETIC-UNTRUSTED",
+                    "bbox": [10, top + 130, 350, top + 150],
+                },
+                {
+                    "row_index": 4,
+                    "column_index": 0,
+                    "text": "판본일",
+                    "bbox": [10, top + 160, 110, top + 180],
+                },
+                {
+                    "row_index": 4,
+                    "column_index": 1,
+                    "text": "2024-01-01",
+                    "bbox": [120, top + 160, 350, top + 180],
+                },
+            ],
+        }
+    )
+    return build_document_structure(
+        raw, extraction_id=UUID(int=202), extraction_revision="synthetic-table-prefix-v1"
+    )
+
+
+def test_known_late_overlap_preserves_proven_cover_and_quarantines_the_entire_suffix() -> None:
+    source = _table_cover_with_overlapping_suffix()
+    result = analyze_document_metadata(source)
+    assert len(result.components) == 1
+    component = result.components[0]
+    assert component.role == "terms"
+    assert [(fact.field, fact.value) for fact in component.facts] == [
+        ("insurer", "Sample Assurance")
+    ]
+    assert component.unresolved_fields == ("edition_date", "product_code")
+    assert component.range_evidence[0].article_numbers == ()
+    nodes = {node.node_id: node for node in source.nodes}
+    assert all(nodes[span.node_id].kind == "TABLE_ROW" for span in component.role_spans)
+    assert all(not node.schedulable for node in source.nodes if node.kind == "BLOCK")
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{"top": 1}, {"top": 25}, {"checklist": True}, {"missing_bbox": True}],
+)
+def test_proven_cover_never_guesses_across_an_earlier_or_unbounded_layout_barrier(options) -> None:
+    assert (
+        analyze_document_metadata(_table_cover_with_overlapping_suffix(**options)).components == ()
+    )
+
+
 @pytest.mark.parametrize("table", [False, True])
 def test_an_explicit_reference_label_remains_metadata_without_application_authority(
     table: bool,

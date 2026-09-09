@@ -401,10 +401,12 @@ def _merge_components(pages: list[ComponentProposal]) -> list[ComponentProposal]
     return result
 
 
-def _layout_nodes(nodes: Sequence[StructureNode]) -> tuple[Sequence[StructureNode], bool]:
-    """Interleave proven cell rows with native lines without altering retained IR."""
+def _layout_nodes(
+    nodes: Sequence[StructureNode],
+) -> tuple[Sequence[StructureNode], bool, frozenset[str]]:
+    """Order known geometry and quarantine the suffix starting at its first overlap."""
     if not any(node.kind == "TABLE_ROW" for node in nodes):
-        return nodes, False
+        return nodes, False, frozenset()
     represented = {span.block_node_id for node in nodes for span in node.source_spans}
     positions: list[tuple[float, float, int, StructureNode]] = []
     bottoms: dict[str, float] = {}
@@ -415,27 +417,45 @@ def _layout_nodes(nodes: Sequence[StructureNode]) -> tuple[Sequence[StructureNod
         if node.kind == "TABLE_ROW":
             boxes = [cell.bbox for cell in node.cells]
             if not boxes or any(box is None for box in boxes):
-                return nodes, False
+                return nodes, False, frozenset()
             known = [box for box in boxes if box is not None]
             top = min(box[1] for box in known)
             left = min(box[0] for box in known)
             bottoms[node.node_id] = max(box[3] for box in known)
         else:
             if node.bbox is None:
-                return nodes, False
+                return nodes, False, frozenset()
             left, top = node.bbox[:2]
             bottoms[node.node_id] = node.bbox[3]
             native_order.append(node.node_id)
         positions.append((top, left, index, node))
     ordered = sorted(positions, key=lambda item: item[:3])
     if [item[3].node_id for item in ordered if item[3].kind != "TABLE_ROW"] != native_order:
-        return nodes, False
-    if any(
-        right[0] < bottoms[left[3].node_id]
-        for left, right in zip(ordered, ordered[1:], strict=False)
-    ):
-        return nodes, False
-    return [item[3] for item in ordered], True
+        return nodes, False, frozenset()
+    for index, (previous, following) in enumerate(zip(ordered, ordered[1:], strict=False)):
+        if following[0] < bottoms[previous[3].node_id]:
+            return (
+                [item[3] for item in ordered],
+                True,
+                frozenset(item[3].node_id for item in ordered[index:]),
+            )
+    return [item[3] for item in ordered], True, frozenset()
+
+
+def _quarantined_fields(node: StructureNode) -> set[str]:
+    fields = {
+        field
+        for line in node.text.splitlines()
+        for field, pattern in _LABEL_PATTERNS
+        if pattern.fullmatch(line)
+    }
+    fields.update(
+        field
+        for cell in node.cells
+        for field, labels in _LABELS.items()
+        if _key(cell.text.strip().rstrip(":：")) in labels
+    )
+    return fields
 
 
 def _metadata_row_context(node: StructureNode) -> bool:
@@ -498,7 +518,7 @@ def analyze_metadata_pages(
         has_reference = reference_context_present(
             nodes, persistent_only=True, navigation_instructions=True, reading_guides=True
         )
-        nodes, positioned = _layout_nodes(nodes)
+        nodes, positioned, quarantined = _layout_nodes(nodes)
         line_blocks = {span.block_node_id for node in nodes for span in node.source_spans}
         tables = [node for node in nodes if node.kind == "TABLE_ROW"]
         table_top = min(
@@ -512,6 +532,11 @@ def analyze_metadata_pages(
         insurer_captions: list[MetadataSpan] = []
         unresolved_fields: set[str] = set()
         for node in nodes:
+            if node.node_id in quarantined:
+                title_area_open = False
+                metadata_area_open = False
+                unresolved_fields.update(_quarantined_fields(node))
+                continue
             if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
                 title_area_open = False
                 metadata_area_open = False
