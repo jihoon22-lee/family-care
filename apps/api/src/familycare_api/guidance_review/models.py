@@ -107,6 +107,7 @@ class GuidanceReviewJob(BaseModel):
     id: UUID
     medical_event_id: UUID
     decision_run_id: UUID
+    matched_decision_run_id: UUID | None = None
     event_version: int = Field(ge=1)
     state: ReviewState
     http_attempts: int = Field(ge=0, le=2)

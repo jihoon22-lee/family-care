@@ -49,6 +49,7 @@ export const API_PATHS = [
   "/api/v1/medical-events/{event_id}/calculations",
   "/api/v1/medical-events/{event_id}/claims",
   "/api/v1/medical-events/{event_id}/guidance-reviews",
+  "/api/v1/medical-events/{event_id}/guidance-reviews/current",
   "/api/v1/medical-events/{event_id}/receipt-lines",
   "/api/v1/medical-events/{event_id}/receipt-lines/{line_id}",
   "/api/v1/medical-events/{event_id}/restore",
@@ -372,6 +373,12 @@ export const API_OPERATIONS = [
     path: "/api/v1/medical-events/{event_id}/guidance-reviews",
     operationId:
       "request_guidance_review_api_v1_medical_events__event_id__guidance_reviews_post",
+  },
+  {
+    method: "GET",
+    path: "/api/v1/medical-events/{event_id}/guidance-reviews/current",
+    operationId:
+      "find_guidance_review_api_v1_medical_events__event_id__guidance_reviews_current_get",
   },
   {
     method: "GET",
@@ -1774,6 +1781,7 @@ export interface GuidanceReviewJob {
   event_version: number;
   http_attempts: number;
   id: string;
+  matched_decision_run_id?: string | null;
   medical_event_id: string;
   result?: GuidanceReviewResult | null;
   schema_version?: "1";

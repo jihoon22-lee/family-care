@@ -90,3 +90,67 @@ def test_review_request_rejects_client_controlled_scope_or_result(extra: str) ->
         )
     assert response.status_code == 422
     assert "synthetic-client-value" not in response.text
+
+
+def test_review_reopen_and_alias_bound_reads_never_enqueue():
+    from familycare_api.guidance_review.router import get_review_repository, router
+
+    scope = HouseholdScope(uuid4())
+    event_id, original_run, current_run, job_id = uuid4(), uuid4(), uuid4(), uuid4()
+    job = GuidanceReviewJob(
+        id=job_id,
+        medical_event_id=event_id,
+        decision_run_id=original_run,
+        matched_decision_run_id=current_run,
+        event_version=1,
+        state="cancelled",
+        http_attempts=0,
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+    )
+    calls = []
+
+    class Repository:
+        def enqueue(self, *args, **kwargs):
+            raise AssertionError("read must not queue a review")
+
+        def find_for_run(self, supplied_scope, supplied_event, **kwargs):
+            calls.append(("lookup", supplied_scope, supplied_event, kwargs))
+            return job
+
+        def get_job(self, supplied_scope, supplied_job, **kwargs):
+            calls.append(("read", supplied_scope, supplied_job, kwargs))
+            return job
+
+        def cancel(self, supplied_scope, supplied_job, **kwargs):
+            calls.append(("cancel", supplied_scope, supplied_job, kwargs))
+            return job
+
+    app = FastAPI()
+    install_error_handlers(app)
+    app.include_router(router)
+    app.dependency_overrides[resolve_household_scope] = lambda: scope
+    app.dependency_overrides[get_review_repository] = Repository
+    with TestClient(app) as client:
+        responses = [
+            client.get(
+                f"/api/v1/medical-events/{event_id}/guidance-reviews/current",
+                params={"decision_run_id": str(current_run), "expected_event_version": 1},
+            ),
+            client.get(
+                f"/api/v1/guidance-reviews/{job_id}", params={"decision_run_id": str(current_run)}
+            ),
+            client.post(
+                f"/api/v1/guidance-reviews/{job_id}/cancel",
+                params={"decision_run_id": str(current_run)},
+            ),
+        ]
+    assert all(response.status_code == 200 for response in responses)
+    assert all(response.headers["cache-control"] == "no-store" for response in responses)
+    assert all(
+        response.json()["matched_decision_run_id"] == str(current_run) for response in responses
+    )
+    assert calls == [
+        ("lookup", scope, event_id, {"run_id": current_run, "expected_event_version": 1}),
+        ("read", scope, job_id, {"run_id": current_run}),
+        ("cancel", scope, job_id, {"run_id": current_run}),
+    ]

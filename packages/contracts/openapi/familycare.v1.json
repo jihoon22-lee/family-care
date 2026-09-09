@@ -6153,6 +6153,18 @@
             "title": "Id",
             "type": "string"
           },
+          "matched_decision_run_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Decision Run Id"
+          },
           "medical_event_id": {
             "format": "uuid",
             "title": "Medical Event Id",
@@ -16464,6 +16476,23 @@
               "title": "Job Id",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision Run Id"
+            }
           }
         ],
         "responses": {
@@ -16551,6 +16580,23 @@
               "format": "uuid",
               "title": "Job Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Decision Run Id"
             }
           }
         ],
@@ -17801,6 +17847,122 @@
           }
         ],
         "summary": "Request Guidance Review",
+        "tags": [
+          "guidance review"
+        ]
+      }
+    },
+    "/api/v1/medical-events/{event_id}/guidance-reviews/current": {
+      "get": {
+        "operationId": "find_guidance_review_api_v1_medical_events__event_id__guidance_reviews_current_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "decision_run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Decision Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "expected_event_version",
+            "required": true,
+            "schema": {
+              "minimum": 1,
+              "title": "Expected Event Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/GuidanceReviewJob"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Find Guidance Review Api V1 Medical Events  Event Id  Guidance Reviews Current Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Authentication required"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Scoped record not found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Version conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Sanitized invalid request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionErrorResponse"
+                }
+              }
+            },
+            "description": "Local database unavailable"
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "summary": "Find Guidance Review",
         "tags": [
           "guidance review"
         ]

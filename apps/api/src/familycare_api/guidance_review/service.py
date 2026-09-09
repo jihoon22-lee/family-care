@@ -12,9 +12,30 @@ class GuidanceReviewStore(Protocol):
         self, scope: HouseholdScope, event_id: UUID, *, run_id: UUID, expected_event_version: int
     ) -> GuidanceReviewJob: ...
 
-    def get_job(self, scope: HouseholdScope, job_id: UUID) -> GuidanceReviewJob: ...
+    def find_for_run(
+        self,
+        scope: HouseholdScope,
+        event_id: UUID,
+        *,
+        run_id: UUID,
+        expected_event_version: int,
+    ) -> GuidanceReviewJob | None: ...
 
-    def cancel(self, scope: HouseholdScope, job_id: UUID) -> GuidanceReviewJob: ...
+    def get_job(
+        self,
+        scope: HouseholdScope,
+        job_id: UUID,
+        *,
+        run_id: UUID | None = None,
+    ) -> GuidanceReviewJob: ...
+
+    def cancel(
+        self,
+        scope: HouseholdScope,
+        job_id: UUID,
+        *,
+        run_id: UUID | None = None,
+    ) -> GuidanceReviewJob: ...
 
 
 class GuidanceReviewService:
@@ -29,8 +50,23 @@ class GuidanceReviewService:
             expected_event_version=request.expected_event_version,
         )
 
-    def get(self, job_id: UUID) -> GuidanceReviewJob:
-        return self.repository.get_job(self.scope, job_id)
+    def find_for_run(
+        self,
+        event_id: UUID,
+        *,
+        run_id: UUID,
+        expected_event_version: int,
+    ) -> GuidanceReviewJob | None:
+        return self.repository.find_for_run(
+            self.scope, event_id, run_id=run_id, expected_event_version=expected_event_version
+        )
 
-    def cancel(self, job_id: UUID) -> GuidanceReviewJob:
-        return self.repository.cancel(self.scope, job_id)
+    def get(self, job_id: UUID, *, run_id: UUID | None = None) -> GuidanceReviewJob:
+        if run_id is None:
+            return self.repository.get_job(self.scope, job_id)
+        return self.repository.get_job(self.scope, job_id, run_id=run_id)
+
+    def cancel(self, job_id: UUID, *, run_id: UUID | None = None) -> GuidanceReviewJob:
+        if run_id is None:
+            return self.repository.cancel(self.scope, job_id)
+        return self.repository.cancel(self.scope, job_id, run_id=run_id)
