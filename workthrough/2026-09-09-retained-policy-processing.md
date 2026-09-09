@@ -56,7 +56,10 @@ digest를 갱신해 과거 작업/입력을 보존하면서 새 입력으로 처
   새 privacy 처리 revision 부재도 PG 실패로 확인했다. 최초 후속 실행은 아직 0065였던
   전용 DB에서 v2 삽입을 거부했고, 업그레이드 후 기존 작업/입력 보존과 새 계획을 확인했다.
   추가 head 고정 가정도 설치 head 검증으로 수정했다. 최종 재처리·약관/검수 queue·검수
-  재평가 PG 64건 통과(141.25초); 변경된 Python/계약 입력의 전체 검사는 진행 중이다.
+  재평가 PG 64건 통과(141.25초). `caf2f2f` clean source의 후속 전체 Python 검사는
+  Ruff format/check, mypy 354개 파일, 기본 pytest 3682건/3 subtests
+  (44.24초; integration 800건 제외), 계약·컨테이너 정적 정책·workflow 정책을 통과했다.
+  Web 입력은 앞선 전체 필수 검사와 같으며 전체 PG·이미지 빌드는 최종 CI에서 확인한다.
 - 2026-09-09, `355d15e` + API/Worker 테스트와 계획 문서 변경에서
   `TMPDIR=/tmp uv run pytest -m integration apps/api/tests/test_native_range_enrollment_integration.py -k compound_insured -q`:
   전용 합성 PostgreSQL에서 1 passed, 32 deselected(1.81초).
