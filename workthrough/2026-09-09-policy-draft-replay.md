@@ -45,3 +45,22 @@
 외부 AI의 실제 품질이나 보호 자료의 완전한 지원, 최종 activation·릴리스 성공을 의미하지
 않는다. 해당 수용은 B07/B08에서 별도 소스·schema·환경에 연결한다. 실제 자료·개수·
 식별자·경로·키는 공개 파일에 기록하지 않는다.
+
+## Full CI follow-up
+
+`a6445be`의 [CI 34353082863](https://github.com/jihoon22-lee/family-care/actions/runs/34353082863)는
+6개 검사를 통과했으나 PostgreSQL에서 3 failed/809 passed/11 errors(1669.94s)였다.
+기존 테스트의 `TRUNCATE policy_provider_requests`가 새 receipt FK 때문에 거부됐고,
+남은 요청 행이 후속 fixture의 job 삭제도 막았다. 전용 합성 DB에서 1 passed/1 teardown
+error로 재현했다. 두 테스트 파일의 세 정리 명령에 receipt 자식 테이블을 함께 명시했고
+넓은 CASCADE나 제품 FK/불변 제약 완화는 하지 않았다. 관련 request/range/job/replay/원장
+게시 PostgreSQL 36건 통과(30.37s), scoped Ruff/diff 통과. 새 CI는 후속 push에서 확인한다.
+
+보호된 수용은 위와 구분되는 `a6445be`/schema 0069에서 수행했다. 두 격리 DB의 기존 행
+보존, 동일 승인 원문의 새 계획, 원본 응답의 로컬 축소와 실제 verifier HTTP 1회,
+프로그램 근거 검사·선택 후보의 API 원장 반영 및 다른 작업/사용자 기록 보존을 확인했다.
+새 clone의 인증·기존 결과/청구·원문 조회는 외부 HTTP/AI 예약 0이었다. Windows Chrome
+headless의 320px/1280px 결과·청구 초안/새로고침·예정/부정 사건·뒤로 가기·연결 복귀·
+로그아웃/재로그인도 통과했다. 실제 시간 경과에 의한 세션 만료와 모바일 실기기는
+미검증이다. 전체 문서·담보의 자동 해석/계산 지원은 PARTIAL이며 이 성공에 합산하지 않는다.
+이번 fixture 정리는 제품·provider·schema 입력을 변경하지 않아 위 실제 요청을 반복하지 않는다.
