@@ -12,8 +12,8 @@
 2. complete — 기존 backup/import/structure/projector를 재사용한 격리 복원·재구성 계획, source→destination journal, 교정/이력 보존 비교와 source 변경 거부를 구현했다. 실제 activation barrier 적용은 Task 6에 남긴다.
 3. complete — 실제 PostgreSQL custom dump 복원, archive/key 복구, 저디스크·부분 원문 누락·중단/재개·동시 변경 거부를 합성 자료로 검증했다. 전체 행·검수 기반 청구 snapshot·암호화 archive roundtrip과 metadata 이력 보존/downgrade 거부를 통과했다.
 4. complete — 승인된 기존 WSL 자료와 실행체를 보호 환경에서 inventory하고 일관된 백업을 취득했다. 별도 DB/보관소 복원과 전체 원문 복호화·hash 대조 및 0063 migration 후 기존 행 보존을 확인했다. 실제 값은 공개 artifact에 기록하지 않는다.
-5. in_progress — 격리 복원에서 재구성·교정/청구 snapshot 비교·원문 접근·AI-off 결과·인증된 앱 경로를 검증한다. 첫 부분 구조와 검증된 표 앞부분의 metadata를 보존하며 v8/0064로 이전 이력과 구분한다. 별도 clone의 인증된 ASGI·원문 발췌·기존 사건 로컬 안내/저장 결과 조회를 통과했다. 브라우저·원본 별칭 연결·최종 전환은 별도 확인하며 불완전 자료를 빈 성공으로 처리하지 않는다.
-6. pending — 검증한 기준점을 재확인해 전환하고 재시작·복구를 확인한다. 코드 `04fbbda`의 CI 34318679642 필수 7/7과 PR #82 merge `18dc981`은 완료했다. 실제 자료는 terminal PARTIAL이며 원문 연결 수용·activation을 완료로 집계하지 않는다. B08 수용표에 이 경계를 인계한다.
+5. complete (검증) / PARTIAL (자료 지원) — 격리 복원에서 재구성·교정/청구 snapshot 비교·원문 접근·AI-off 결과·인증된 앱 경로를 검증한다. 첫 부분 구조와 검증된 표 앞부분의 metadata를 보존하며 v8/0064로 이전 이력과 구분한다. 별도 clone의 인증된 ASGI·원문 발췌·기존 사건 로컬 안내/저장 결과 조회를 통과했다. 브라우저·원본 별칭 연결·최종 전환은 별도 확인하며 불완전 자료를 빈 성공으로 처리하지 않는다.
+6. in_progress — 검증한 기준점을 재확인해 전환하고 재시작·복구를 확인한다. 코드 `04fbbda`의 CI 34318679642 필수 7/7과 PR #82 merge `18dc981`은 완료했다. 실제 자료는 terminal PARTIAL이며 원문 연결 수용·activation을 완료로 집계하지 않는다. B08 수용표에 이 경계를 인계한다.
 
 Task 5 후속 구현은 보관 구조의 피보험자 복합 필드와 명시적 재처리 경로를 다룬다. 이름은
 기존 구성원과 정확히 비교하며 허용된 부가 필드에서 새 개인정보를 만들지 않는다. 재처리는
@@ -51,3 +51,18 @@ DB dump의 HMAC은 무결성 검증이다. 평문 dump는 저장소 밖 0700 디
 백업 포장 성공, 실제 DB 복원 성공, 원문 복호화/앱 수용 성공을 각각 구분한다.
 
 현재 단계는 공개 구현·계획이다. 실제 수용·운영 전환은 실행한 뒤에만 완료로 표시한다.
+
+## 0069 protected acceptance update
+
+PR #84는 `4440e33`, #85는 `1df428e`, #86은 `c8938ba`로 병합했다. #86의 최종
+`49e5679`/CI 34356951882는 필수 7/7과 PostgreSQL 822건을 통과했다. `a6445be`/0069의
+격리 DB·새 clone에서 기존 행/교정/청구 이력과 원문 식별·hash를 보존했다. 원본 응답을
+로컬로 축소하고 실제 verifier 1회 후 프로그램 검사·선택 후보 원장 반영을 확인했다.
+미증명 금액·날짜를 추가하지 않았고 과거 v2/v3와 범위 손실을 보존했다.
+
+인증된 AI-off 앱·원문·이력과 Windows Chrome 사용 경로, `49e5679`의 첫 프로세스 조회·
+반복 조회·저장 원문 검증/합성 native 추출 경합·idle을 측정했다. 전체 제공 source identity와
+모든 시도·현재 실패, native/기존 catalog 담보와 연결 미해결을 별도 분모로 남긴다. 자동 약관
+판본/의미 지식은 이 보호 자료에서 등록하지 못했으며 전체 지원은 PARTIAL이다. 이를 성공으로
+숨기거나 원문 전체를 사용자 재검수 과제로 돌리지 않는다. Task 6의 실제 writer barrier·
+최종 image/DB/archive/key 전환과 재시작 증거는 실행 뒤에만 추가한다.
