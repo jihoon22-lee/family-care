@@ -225,3 +225,36 @@ The protected target and the separate acceptance clone subsequently reached 0064
 pre-migration row preserved. The target also passed comparison of all original baseline rows,
 allowing only newly appended records. The private journal stores the evidence; the original live
 database remains unchanged. Full CI, browser acceptance and final activation are still pending.
+
+At clean `5483b7e`, [CI 34316501218](https://github.com/jihoon22-lee/family-care/actions/runs/34316501218)
+passed all seven required jobs, including PostgreSQL integration and the empty database migration
+round trip. Protected Chromium then passed real login, secure/HttpOnly/Strict cookie checks and
+stored-event result pages at 320px and 1280px, with no browser errors, AI POSTs, external browser
+requests, unsafe successful API cache headers or observed sensitive storage/cache writes. No
+screenshots or traces were saved. This used the isolated acceptance clone and a temporary local
+TLS gateway, not the production gateway or actual Windows/mobile devices. Initial service-worker
+registration failed on the temporary self-signed certificate; trusting only its public-key pin in
+the isolated browser fixed that test-environment failure.
+
+An approved, minimal original-header rendering exposed a separate runtime dependency gap: a PDF
+without embedded Korean fonts rendered numbers and rules while dropping Hangul. Supplying a local
+Korean fallback font to the same PDFium image restored the text. The two private diagnostic fragments
+were removed immediately after inspection. No source text, document identity or original layout is
+used in the wholly synthetic font-packaging regression. This one-file A/B observation does not
+establish recovery of all OCR failures or solve missing native source bindings.
+
+The Worker runtime now installs `fonts-noto-cjk`. PDFium's Linux font scanner reads system font
+directories directly; Tesseract's Korean recognition data does not supply PDF rendering fonts.
+The deterministic 2,850-byte `fixtures/synthetic/korean-font-fallback.pdf` uses seven separately
+placed Korean CID-font glyphs and a Latin control without embedding a font. Its generator and
+11 unit cases establish provenance and reject individual empty glyph cells. The standalone image
+smoke uses only installed PDFium/Pillow, writes no image and never skips a missing-font failure;
+the Worker CI job runs it with a read-only filesystem, read-only mounts and networking disabled.
+
+The initial smoke helper exposed unsupported PDFium page context-manager usage; explicit ExitStack
+cleanup fixed that helper before the font comparison. The original v0.4 Worker then failed with
+`Korean glyph cell is blank`; the newly built `familycare-worker:transition-fonts` passed all seven
+glyph cells and the control. Its source is `883ff9f` plus the font Dockerfile, CI smoke and helper
+cleanup changes. Full Ruff/format, mypy **353 files**, default pytest **3,586 passed / 763 integration
+deselected / 3 subtests passed** (37.43s), container/workflow policy and actionlint passed. The unchanged
+Web and schema/DB inputs retain the preceding source-bound results; the new final CI is pending.

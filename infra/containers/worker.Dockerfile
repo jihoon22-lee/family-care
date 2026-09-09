@@ -20,6 +20,7 @@ RUN apt-get update \
         tesseract-ocr \
         tesseract-ocr-eng \
         tesseract-ocr-kor \
+        fonts-noto-cjk \
     && tesseract --list-langs | grep -Fx 'eng' \
     && tesseract --list-langs | grep -Fx 'kor' \
     && rm -rf /var/lib/apt/lists/* \

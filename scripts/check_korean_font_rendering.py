@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import math
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 
 import pypdfium2 as pdfium  # type: ignore[import-untyped]
@@ -72,14 +73,20 @@ def check_fixture(path: Path) -> None:
         data = source.read(_MAX_FIXTURE_BYTES + 1)
     if not data or len(data) > _MAX_FIXTURE_BYTES:
         raise ValueError("Unexpected synthetic fixture size")
-    with pdfium.PdfDocument(data) as document:
+    with ExitStack() as resources:
+        document = pdfium.PdfDocument(data)
+        resources.callback(document.close)
         if len(document) != 1:
             raise ValueError("Unexpected synthetic fixture page count")
-        with document.get_page(0) as page:
-            if page.get_size() != PAGE_SIZE:
-                raise ValueError("Unexpected synthetic fixture page size")
-            with page.render(scale=RENDER_DPI / 72) as bitmap, bitmap.to_pil() as image:
-                validate_rendered_image(image)
+        page = document.get_page(0)
+        resources.callback(page.close)
+        if page.get_size() != PAGE_SIZE:
+            raise ValueError("Unexpected synthetic fixture page size")
+        bitmap = page.render(scale=RENDER_DPI / 72)
+        resources.callback(bitmap.close)
+        image = bitmap.to_pil()
+        resources.callback(image.close)
+        validate_rendered_image(image)
 
 
 def main() -> int:

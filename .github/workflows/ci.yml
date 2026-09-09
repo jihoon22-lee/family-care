@@ -182,3 +182,10 @@ jobs:
           available_languages="$(docker run --rm familycare-worker:ci tesseract --list-langs)"
           grep -Fxq 'eng' <<<"${available_languages}"
           grep -Fxq 'kor' <<<"${available_languages}"
+      - name: Smoke nonembedded Korean PDF rendering
+        if: matrix.name == 'worker'
+        run: |
+          docker run --rm --network none --read-only \
+            --mount "type=bind,src=${PWD}/scripts/check_korean_font_rendering.py,dst=/smoke/check_korean_font_rendering.py,readonly" \
+            --mount "type=bind,src=${PWD}/fixtures/synthetic/korean-font-fallback.pdf,dst=/fixture/korean-font-fallback.pdf,readonly" \
+            familycare-worker:ci python /smoke/check_korean_font_rendering.py /fixture/korean-font-fallback.pdf
