@@ -43,7 +43,13 @@ def _migrate(url: str, operation: str, revision: str) -> subprocess.CompletedPro
 def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_current_history(
     publication_database: Any,
     mode: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    # Preserve the historical navigation revision; v9 replay has its own tests.
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v8")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v8")
     url, job = publication_database
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         connection.execute(

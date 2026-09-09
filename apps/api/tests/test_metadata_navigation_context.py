@@ -111,21 +111,25 @@ def test_native_navigation_is_replayed_without_discarding_hidden_raw_text() -> N
     assert validate_component_metadata(component, forged_source) is None
 
 
-def test_cached_navigation_context_cannot_change_a_legacy_revision() -> None:
+@pytest.mark.parametrize("revision", ["document-metadata-v8", "document-metadata-v9"])
+def test_cached_navigation_context_cannot_change_a_legacy_revision(revision: str) -> None:
     from familycare_api.insurance_documents.metadata_validation import MetadataSourceContext
 
     source = _structure("목차\n상품설명서 .... 9\n보험약관 .... 2", BODY)
     projection = source.to_dict()
     component = metadata_proposal(source, UUID(int=905), "c" * 64)["components"][0]
+    _legacy_identity(component, projection, revision=revision)
     context = MetadataSourceContext(
         projection["lineage"],
         lambda number: {
             "lineage": projection["lineage"],
             "nodes": [node for node in projection["nodes"] if node["page_number"] == number],
         },
-        revision="document-metadata-v8",
+        revision=revision,
     )
-    assert validate_component_metadata(component, projection, source_context=context)
+    assert validate_component_metadata(
+        component, projection, revision=revision, source_context=context
+    )
     _legacy_identity(component, projection, revision="document-metadata-v4")
     assert (
         validate_component_metadata(
