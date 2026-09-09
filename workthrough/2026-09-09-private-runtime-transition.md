@@ -122,3 +122,12 @@ Reconstruction is still in progress. Some retained sources have explicit partial
 is not yet complete, and package aliases have no exact full-relative-path matches to retained batch
 sources. No filename similarity or summary is promoted to a verified source binding. Authenticated
 application acceptance, final source barrier/activation and full B07 CI remain pending.
+
+Draft PR #82 CI 34310699215 passed repository safety, Web and all three container builds; its
+Python job failed strict mypy because new script tests imported the previously untyped API/Worker
+integration fixture graph, and new fake tests lacked annotations. The integration tests are moved
+to `apps/api/tests/test_private_runtime_restore_integration.py` and
+`apps/api/tests/test_restructure_existing_documents_integration.py`, matching their existing fixture
+suite. Script unit mocks now use explicitly typed handles and direct standard-library monkeypatches;
+no required check or typing rule is removed. The coordinator fake adapter also receives complete
+annotations in its follow-up. Full combined verification is rerun after these test-only changes.

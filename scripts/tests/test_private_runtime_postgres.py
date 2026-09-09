@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import BinaryIO, cast
 
 import pytest
 
@@ -15,11 +16,11 @@ def test_dump_uses_environment_credentials_and_private_output(
 
     def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[bytes]:
         calls.append(command)
-        assert kwargs["env"]["PGPASSWORD"] == "synthetic-only"  # type: ignore[index]
-        kwargs["stdout"].write(b"PGDMPsynthetic")  # type: ignore[union-attr]
+        assert cast(dict[str, str], kwargs["env"])["PGPASSWORD"] == "synthetic-only"
+        cast(BinaryIO, kwargs["stdout"]).write(b"PGDMPsynthetic")
         return subprocess.CompletedProcess(command, 0)
 
-    monkeypatch.setattr(postgres.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     destination = tmp_path / "database.pgcustom"
     postgres.PostgresTools("synthetic-db", "postgresql://test:synthetic-only@localhost/test").dump(
         destination, snapshot="00000001-00000002-1"
@@ -39,7 +40,7 @@ def test_failed_dump_removes_only_new_file_and_sanitizes_error(
             raise subprocess.TimeoutExpired(command, 1, stderr=b"synthetic private detail")
         return subprocess.CompletedProcess(command, 1, stderr=b"synthetic private detail")
 
-    monkeypatch.setattr(postgres.subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "run", run)
     destination = tmp_path / "database.pgcustom"
     with pytest.raises(postgres.PostgresToolError, match="^TRANSITION_DATABASE_TOOL_FAILED$"):
         postgres.PostgresTools("synthetic-db", "postgresql://test@localhost/test").dump(

@@ -4,6 +4,7 @@ import errno
 import io
 import json
 import os
+import shutil
 import tarfile
 from pathlib import Path
 from uuid import uuid4
@@ -138,7 +139,7 @@ def test_failed_destination_chmod_removes_only_created_directory(
     def denied(*args: object) -> None:
         raise PermissionError("synthetic permission failure")
 
-    monkeypatch.setattr(backup.os, "chmod", denied)
+    monkeypatch.setattr(os, "chmod", denied)
     destination = tmp_path / "new-backup"
     with pytest.raises(BackupContractError):
         backup._create_destination(destination)
@@ -150,7 +151,7 @@ def test_capture_reports_low_disk_before_creating_output(
 ) -> None:
     database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
     destination = tmp_path / "synthetic-backup"
-    monkeypatch.setattr(backup.shutil, "disk_usage", lambda _: (100, 100, 0))
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: (100, 100, 0))
     with pytest.raises(BackupContractError, match="^BACKUP_DISK_SPACE_INSUFFICIENT$"):
         capture_backup_set(
             database_dump=database_dump,
@@ -170,7 +171,7 @@ def test_disk_exhaustion_during_copy_is_distinct_and_removes_partial_output(
     def exhausted(*args: object, **kwargs: object) -> object:
         raise OSError(errno.ENOSPC, "synthetic detail must not be reported")
 
-    monkeypatch.setattr(backup.os, "fsync", exhausted)
+    monkeypatch.setattr(os, "fsync", exhausted)
     with pytest.raises(BackupContractError, match="^BACKUP_DISK_SPACE_INSUFFICIENT$"):
         capture_backup_set(
             database_dump=database_dump,
