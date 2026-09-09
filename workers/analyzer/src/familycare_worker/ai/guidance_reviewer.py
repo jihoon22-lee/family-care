@@ -69,7 +69,9 @@ _AMOUNT_PATTERN = r"^(?:0|[1-9][0-9]{0,15})(?:\.[0-9]{1,4})?$"
 _AMOUNT = re.compile(_AMOUNT_PATTERN)
 _UUID_TEXT = re.compile(r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b")
 _HASH_TEXT = re.compile(r"\b[0-9a-fA-F]{64}\b")
-_PATH = re.compile(r"(?:[A-Za-z]:[\\/]|/(?:home|tmp|mnt|var|Users)/|\\\\)[^\s\"'<>]+")
+_PATH = re.compile(r"(?<![A-Za-z0-9:/])(?:[A-Za-z]:[\\/]|/(?!/)|\\\\)[^\s\"'<>;,]+")
+_QUOTED_PATH = re.compile(r"([\"'])(?:[A-Za-z]:[\\/]|/(?!/)|\\\\)[^\"'\r\n]+\1")
+_CALCULATION_PATH = re.compile(r"^/calculation(?:/(?:args|[0-9]+))*$")
 _CONFIRMATIONS = frozenset({"user", "ai_structured", "unconfirmed", "conflicting"})
 type SuggestionKind = Literal[
     "AGREEMENT", "CORRECTION", "ADDITIONAL_CANDIDATE", "EXCEPTION", "CONFLICT"
@@ -96,7 +98,7 @@ class _Envelope(BaseModel):
     schema_revision: Literal["guidance-review-proposals-v1"]
     reviewed_packet_aliases: Annotated[list[PacketAlias], Field(max_length=8)]
     unreviewed_packet_aliases: Annotated[list[PacketAlias], Field(max_length=8)]
-    suggestions: Annotated[list[_Suggestion], Field(max_length=16)]
+    suggestions: Annotated[list[_Suggestion], Field(max_length=8)]
 
 
 def guidance_review_schema() -> dict[str, Any]:
@@ -182,6 +184,7 @@ class _TextMinimizer:
         )
         if self.identifiers is not None:
             clean = self.identifiers.sub("[IDENTIFIER]", clean)
+        clean = _QUOTED_PATH.sub("[PATH]", clean)
         return _PATH.sub(
             "[PATH]", _HASH_TEXT.sub("[IDENTIFIER]", _UUID_TEXT.sub("[IDENTIFIER]", clean))
         )
@@ -265,6 +268,8 @@ class GuidanceReviewResult:
     unreviewed_packet_ids: tuple[str, ...]
     omitted_packet_ids: tuple[str, ...]
     omitted_coverage_aliases: tuple[str, ...]
+    local_comparison_complete: bool
+    omitted_local_sections: tuple[str, ...]
 
     def to_payload(self) -> dict[str, Any]:
         """Return neutral proposal data; accounting metadata is retained separately."""
@@ -284,6 +289,8 @@ class GuidanceReviewResult:
             "unreviewed_packet_ids": list(self.unreviewed_packet_ids),
             "omitted_packet_ids": list(self.omitted_packet_ids),
             "omitted_coverage_aliases": list(self.omitted_coverage_aliases),
+            "local_comparison_complete": self.local_comparison_complete,
+            "omitted_local_sections": list(self.omitted_local_sections),
         }
 
 
@@ -298,6 +305,8 @@ class GuidanceReviewRequest:
     document_version_ids: tuple[UUID, ...]
     omitted_packet_ids: tuple[str, ...]
     omitted_coverage_aliases: tuple[str, ...]
+    local_comparison_complete: bool
+    omitted_local_sections: tuple[str, ...]
 
     @property
     def payload(self) -> dict[str, Any]:
@@ -339,12 +348,12 @@ class GuidanceReviewRequest:
             suggestions = []
             seen = set()
             for item in result.suggestions:
-                if (item.packet_alias, item.kind) in seen or (
+                if item.packet_alias in seen or (
                     len(set(item.affected_fact_paths)) != len(item.affected_fact_paths)
                     or not set(item.affected_fact_paths) <= ALLOWED_FACT_PATHS
                 ):
                     raise GuidanceReviewInvalid
-                seen.add((item.packet_alias, item.kind))
+                seen.add(item.packet_alias)
                 packet = by_alias[item.packet_alias]
                 graph = _hydrate(item.graph.model_dump(), packet.minimized, self.model)
                 graph = graph.model_copy(update={"prompt_revision": PROMPT_REVISION})
@@ -368,6 +377,8 @@ class GuidanceReviewRequest:
                 tuple(by_alias[key].packet_id for key in unreviewed),
                 self.omitted_packet_ids,
                 self.omitted_coverage_aliases,
+                self.local_comparison_complete,
+                self.omitted_local_sections,
             )
         except (
             ProviderValidationError,
@@ -419,10 +430,81 @@ def _event(event: Mapping[str, Any], privacy: _TextMinimizer) -> dict[str, Any]:
     return result
 
 
+def _trace(
+    trace: Mapping[str, Any], privacy: _TextMinimizer, section: str, omitted: set[str]
+) -> dict[str, Any]:
+    def item(raw: Mapping[str, Any]) -> dict[str, Any]:
+        output = {
+            key: privacy.text(raw[key], 128)
+            for key in ("value", "unit", "currency", "status", "provenance")
+            if isinstance(raw.get(key), str)
+        }
+        if raw.get("field_path") in ALLOWED_FACT_PATHS:
+            output["field_path"] = raw["field_path"]
+        elif raw.get("field_path") is not None:
+            omitted.add(section)
+        path = raw.get("expression_path")
+        if isinstance(path, str) and _CALCULATION_PATH.fullmatch(path):
+            output["expression_path"] = path
+        elif path is not None:
+            omitted.add(section)
+        return output
+
+    output = item(trace)
+    steps = trace.get("steps", [])
+    if not isinstance(steps, (list, tuple)):
+        raise GuidanceReviewInvalid
+    if len(steps) > 8:
+        omitted.add(section)
+    projected = []
+    for step in steps[:8]:
+        current = item(step)
+        if isinstance(step.get("operation"), str):
+            current["operation"] = privacy.text(step["operation"], 32)
+        operands = step.get("operands", [])
+        if not isinstance(operands, (list, tuple)):
+            raise GuidanceReviewInvalid
+        if len(operands) > 4:
+            omitted.add(section)
+        current["operands"] = [item(operand) for operand in operands[:4]]
+        projected.append(current)
+    output["steps"] = projected
+    return output
+
+
+def _estimate(
+    estimate: Mapping[str, Any], privacy: _TextMinimizer, section: str, omitted: set[str]
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {
+        key: privacy.text(estimate[key], 128)
+        for key in ("kind", "amount", "lower", "upper", "partial_amount", "currency", "basis")
+        if isinstance(estimate.get(key), str)
+    }
+    if isinstance(estimate.get("formula"), str):
+        formula = estimate["formula"]
+        summary["formula"] = privacy.text(formula, 1024)
+        if len(formula) > 1024:
+            omitted.add(f"{section}.formula")
+    paths = estimate.get("missing_inputs", [])
+    assumptions = estimate.get("assumptions", [])
+    if not isinstance(paths, (list, tuple)) or not isinstance(assumptions, (list, tuple)):
+        raise GuidanceReviewInvalid
+    summary["missing_inputs"] = [path for path in paths[:32] if path in ALLOWED_FACT_PATHS]
+    if len(summary["missing_inputs"]) != len(paths):
+        omitted.add(f"{section}.missing_inputs")
+    summary["assumptions"] = [privacy.text(value, 128) for value in assumptions[:32]]
+    if len(assumptions) > 32:
+        omitted.add(f"{section}.assumptions")
+    if isinstance(estimate.get("trace"), Mapping):
+        summary["trace"] = _trace(estimate["trace"], privacy, f"{section}.trace", omitted)
+    return summary
+
+
 def _local(
     local: Mapping[str, Any], aliases: dict[tuple[str, str, str], str], privacy: _TextMinimizer
 ) -> dict[str, Any]:
     candidates = []
+    omitted: set[str] = set()
     rows = local.get("candidates", [])
     if not isinstance(rows, (list, tuple)) or len(rows) > 128:
         raise GuidanceReviewInvalid
@@ -430,31 +512,131 @@ def _local(
         alias = aliases.get(_ref(row["ref"]))
         if alias is None:
             continue
-        estimate = row.get("estimate", {})
-        summary = {
-            key: estimate[key]
-            for key in ("kind", "amount", "lower", "upper", "currency")
-            if key in estimate
+        summary = _estimate(row.get("estimate", {}), privacy, f"{alias}.estimate", omitted)
+        assumptions = row.get("assumptions", [])
+        if len(assumptions) > 32:
+            omitted.add(f"{alias}.assumptions")
+        candidate: dict[str, Any] = {
+            "coverage_alias": alias,
+            "source_kind": row["ref"]["kind"],
+            "group": privacy.text(row.get("group", "UNKNOWN"), 32),
+            "condition_result": privacy.text(row.get("condition_result", "UNKNOWN"), 32),
+            "estimate": summary,
+            "assumptions": [privacy.text(value, 128) for value in assumptions[:32]],
         }
-        summary = {
-            key: privacy.text(value, 128)
-            for key, value in summary.items()
-            if isinstance(value, str)
-        }
-        if isinstance(estimate.get("formula"), str):
-            summary["formula"] = privacy.text(estimate["formula"], 512)
-        candidates.append(
-            {
-                "coverage_alias": alias,
-                "group": privacy.text(row.get("group", "UNKNOWN"), 32),
-                "condition_result": privacy.text(row.get("condition_result", "UNKNOWN"), 32),
-                "estimate": summary,
-                "assumptions": [
-                    privacy.text(value, 128) for value in row.get("assumptions", [])[:32]
-                ],
-            }
-        )
-    return {"candidates": candidates, "omitted_candidate_count": len(rows) - len(candidates)}
+        scenarios = row.get("scenarios", [])
+        if len(scenarios) > 2:
+            omitted.add(f"{alias}.scenarios")
+        candidate["scenarios"] = []
+        for number, scenario in enumerate(scenarios[:2], 1):
+            section = f"{alias}.scenario-{number}"
+            hypotheses = scenario.get("hypotheses", [])
+            projected = []
+            if len(hypotheses) > 8:
+                omitted.add(f"{section}.hypotheses")
+            for hypothesis in hypotheses[:8]:
+                path = hypothesis.get("field_path")
+                value = hypothesis.get("value")
+                if path not in ALLOWED_FACT_PATHS or (
+                    value is not None and type(value) not in (str, int, bool)
+                ):
+                    omitted.add(f"{section}.hypotheses")
+                    continue
+                projected.append(
+                    {
+                        "field_path": path,
+                        "value": privacy.text(value, 240) if isinstance(value, str) else value,
+                        "provenance": "SCENARIO_ASSUMPTION",
+                    }
+                )
+            candidate["scenarios"].append(
+                {
+                    "scenario_alias": f"scenario-{number}",
+                    "kind": privacy.text(scenario.get("kind", "UNKNOWN"), 32),
+                    "hypotheses": projected,
+                    "estimate": _estimate(scenario.get("estimate", {}), privacy, section, omitted),
+                }
+            )
+        if row.get("cases"):
+            omitted.add(f"{alias}.payout_cases")
+        candidates.append(candidate)
+    for section in ("fixed_subtotals", "expenses", "subtotal_omissions"):
+        if local.get(section):
+            omitted.add(section)
+    return {
+        "candidates": candidates,
+        "omitted_candidate_count": len(rows) - len(candidates),
+        "omitted_sections": sorted(omitted),
+    }
+
+
+def _source_index(
+    index: list[dict[str, Any]], privacy: _TextMinimizer
+) -> tuple[
+    dict[tuple[str, str, str], str], list[dict[str, Any]], dict[str, tuple[UUID, ...]], set[str]
+]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    seen = set()
+    for row in index:
+        own = _ref(row["ref"])
+        native = _ref(row["native_ref"]) if row.get("native_ref") is not None else None
+        if own in seen or (
+            native is not None
+            and (
+                native[0] != "OPERATIONAL_RIDER"
+                or (own[0] == "OPERATIONAL_RIDER" and own != native)
+            )
+        ):
+            raise GuidanceReviewInvalid
+        seen.add(own)
+        grouped.setdefault(native or own, []).append(row)
+    aliases: dict[tuple[str, str, str], str] = {}
+    projected = []
+    documents: dict[str, tuple[UUID, ...]] = {}
+    omitted = set()
+    for number, (canonical, rows) in enumerate(grouped.items(), 1):
+        alias = f"coverage-{number}"
+        for ref in (canonical, *(_ref(row["ref"]) for row in rows)):
+            if ref in aliases and aliases[ref] != alias:
+                raise GuidanceReviewInvalid
+            aliases[ref] = alias
+        variants = []
+        used_documents: set[UUID] = set()
+        for row in rows:
+            raw_documents = row.get("source_document_version_ids", [])
+            if not isinstance(raw_documents, (list, tuple)) or len(raw_documents) > 128:
+                raise GuidanceReviewInvalid
+            if not raw_documents:
+                omitted.add(alias)
+                continue
+            versions = {UUID(str(value)) for value in raw_documents}
+            if any(value.int == 0 for value in versions):
+                raise GuidanceReviewInvalid
+            used_documents.update(versions)
+            variants.append(
+                {
+                    "source_kind": row["ref"]["kind"],
+                    "contract_label": privacy.text(row.get("contract_label", ""), 240),
+                    "coverage_label": privacy.text(row.get("coverage_label", ""), 240),
+                    "enrollment_decision": privacy.text(
+                        row.get("enrollment_decision", "UNKNOWN"), 32
+                    ),
+                    "enrollment_authority": privacy.text(
+                        row.get("enrollment_authority", "UNKNOWN"), 128
+                    ),
+                    "retrieval_state": privacy.text(row.get("source_state", "UNAVAILABLE"), 32),
+                }
+            )
+        if variants:
+            projected.append(
+                {
+                    "coverage_alias": alias,
+                    "variants": variants,
+                    "omitted_variant_count": len(rows) - len(variants),
+                }
+            )
+            documents[alias] = tuple(sorted(used_documents))
+    return aliases, projected, documents, omitted
 
 
 def build_review_request(
@@ -472,6 +654,17 @@ def build_review_request(
             or _TOKEN.fullmatch(model) is None
             or sources.get("schema_revision") != "guidance-review-sources-v1"
             or len(_json(sources).encode()) > 524288
+        ):
+            raise GuidanceReviewInvalid
+        for event_key, source_key in (
+            ("id", "medical_event_id"),
+            ("household_space_id", "household_space_id"),
+            ("family_member_id", "family_member_id"),
+        ):
+            if event_key in event and UUID(str(event[event_key])) != UUID(str(sources[source_key])):
+                raise GuidanceReviewInvalid
+        if "version" in event and (
+            type(event["version"]) is not int or event["version"] != sources["event_version"]
         ):
             raise GuidanceReviewInvalid
         index, originals = sources["index"], sources["packets"]
@@ -493,27 +686,7 @@ def build_review_request(
         )
         # Validate caller privacy configuration even when all text fields are empty.
         SourceWindowMinimizer("synthetic", sensitive_terms=sensitive_terms)
-        aliases: dict[tuple[str, str, str], str] = {}
-        projected_index = []
-        for number, row in enumerate(index, 1):
-            alias = f"coverage-{number}"
-            for ref in (row["ref"], row.get("native_ref")):
-                if ref is not None:
-                    key = _ref(ref)
-                    if key in aliases and aliases[key] != alias:
-                        raise GuidanceReviewInvalid
-                    aliases[key] = alias
-            projected_index.append(
-                {
-                    "coverage_alias": alias,
-                    "contract_label": privacy.text(row.get("contract_label", ""), 240),
-                    "coverage_label": privacy.text(row.get("coverage_label", ""), 240),
-                    "enrollment_decision": privacy.text(
-                        row.get("enrollment_decision", "UNKNOWN"), 32
-                    ),
-                    "retrieval_state": privacy.text(row.get("source_state", "UNAVAILABLE"), 32),
-                }
-            )
+        aliases, projected_index, index_documents, unbound_aliases = _source_index(index, privacy)
         prepared = []
         packet_ids = set()
         for number, packet in enumerate(originals, 1):
@@ -541,12 +714,33 @@ def build_review_request(
                 )
             )
         chosen: list[_Packet] = []
-        omitted_coverages: list[str] = []
+        omitted_coverages: list[str] = sorted(unbound_aliases)
         event_payload = _event(event, privacy)
-        local_payload = _local(local_guidance, aliases, privacy)
+        initially_retained = {row["coverage_alias"] for row in projected_index}
+        local_payload = _local(
+            local_guidance,
+            {key: alias for key, alias in aliases.items() if alias in initially_retained},
+            privacy,
+        )
+
+        def used_documents() -> set[UUID]:
+            return {
+                version
+                for row in projected_index
+                for version in index_documents[row["coverage_alias"]]
+            } | {UUID(packet.minimized.envelope.source.document_version_id) for packet in chosen}
+
+        def omit_local_candidate() -> None:
+            removed = local_payload["candidates"].pop()
+            local_payload["omitted_candidate_count"] += 1
+            local_payload["omitted_sections"].append(f"{removed['coverage_alias']}.candidate")
 
         def payload() -> dict[str, Any]:
             included = {packet.alias for packet in chosen}
+            local_payload["comparison_complete"] = (
+                not local_payload["omitted_sections"]
+                and local_payload["omitted_candidate_count"] == 0
+            )
             return {
                 "schema_revision": "guidance-review-input-v1",
                 "prompt_revision": PROMPT_REVISION,
@@ -564,7 +758,14 @@ def build_review_request(
                 },
             }
 
-        while len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES and projected_index:
+        while (
+            len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES
+            and local_payload["candidates"]
+        ):
+            omit_local_candidate()
+        while (
+            len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES or len(used_documents()) > 128
+        ) and projected_index:
             removed = projected_index.pop()["coverage_alias"]
             omitted_coverages.append(removed)
             previous_count = len(local_payload["candidates"])
@@ -574,6 +775,8 @@ def build_review_request(
             local_payload["omitted_candidate_count"] += previous_count - len(
                 local_payload["candidates"]
             )
+            if previous_count != len(local_payload["candidates"]):
+                local_payload["omitted_sections"].append(f"{removed}.candidate")
         if len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES:
             raise GuidanceReviewInvalid
         retained_aliases = {row["coverage_alias"] for row in projected_index}
@@ -581,8 +784,21 @@ def build_review_request(
             if packet.coverage_alias not in retained_aliases:
                 continue
             chosen.append(packet)
-            if len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES:
+            if (
+                len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES
+                or len(used_documents()) > 128
+            ):
                 chosen.pop()
+        while not chosen and local_payload["candidates"]:
+            omit_local_candidate()
+            for packet in prepared:
+                if packet.coverage_alias in retained_aliases:
+                    chosen.append(packet)
+                    if (
+                        len(_wire(model, payload()).encode()) > MAX_REQUEST_BYTES
+                        or len(used_documents()) > 128
+                    ):
+                        chosen.pop()
         supplied = {packet.alias for packet in chosen}
         omitted = tuple(packet.packet_id for packet in prepared if packet.alias not in supplied)
         omitted_coverages[:] = sorted(
@@ -606,13 +822,11 @@ def build_review_request(
             len(wire),
             len(wire),
             hashlib.sha256(wire).hexdigest(),
-            tuple(
-                dict.fromkeys(
-                    UUID(packet.minimized.envelope.source.document_version_id) for packet in chosen
-                )
-            ),
+            tuple(sorted(used_documents())),
             omitted,
             tuple(omitted_coverages),
+            local_payload["comparison_complete"],
+            tuple(sorted(set(local_payload["omitted_sections"]))),
         )
     except (
         ProviderValidationError,

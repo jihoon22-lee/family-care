@@ -33,6 +33,7 @@ def sources(count=2):
                 "source_state": "AVAILABLE",
                 "packet_ids": [packet_id],
                 "reason_codes": [],
+                "source_document_version_ids": [str(UUID(int=6000 + number, version=4))],
             }
         )
         packets.append(
@@ -150,7 +151,7 @@ def test_independent_index_survives_local_candidate_filter_and_hydrates_one_call
         assert suggestion.proposed_amount == "999.50"
     assert set(request.document_version_ids) == {
         UUID(item["envelope"]["source"]["document_version_id"]) for item in original["packets"]
-    }
+    } | {UUID(value) for item in original["index"] for value in item["source_document_version_ids"]}
     assert result.omitted_packet_ids == ()
     stored = result.to_payload()
     assert "metadata" not in stored and "request_id" not in stored
@@ -287,3 +288,152 @@ def test_index_coverage_without_original_packet_is_reported_as_unreviewed_scope(
     assert len(request.payload["independent_source_index"]) == 3
     result = request.call(FakeProvider())
     assert "coverage-3" in result.to_payload()["omitted_coverage_aliases"]
+
+
+def test_canonical_source_variants_share_alias_without_losing_enrollment_provenance():
+    original = sources()
+    variant = deepcopy(original["index"][0])
+    variant["native_ref"] = deepcopy(variant["ref"])
+    variant["ref"] = {
+        "kind": "PRIVATE_KNOWLEDGE_COVERAGE",
+        "contract_id": str(UUID(int=7000, version=4)),
+        "coverage_id": str(UUID(int=7001, version=4)),
+    }
+    variant["enrollment_authority"] = "CERTIFICATE_SNAPSHOT"
+    variant["source_document_version_ids"] = [str(UUID(int=7002, version=4))]
+    packet = deepcopy(original["packets"][0])
+    packet.update(packet_id="internal-private-variant-packet", coverage_ref=variant["ref"])
+    variant["packet_ids"] = [packet["packet_id"]]
+    original["index"].append(variant)
+    original["packets"].append(packet)
+    request = build(original)
+    index = request.payload["independent_source_index"]
+    assert len(index) == 2
+    assert {row["enrollment_authority"] for row in index[0]["variants"]} == {
+        "POLICY_LEDGER",
+        "CERTIFICATE_SNAPSHOT",
+    }
+    packets = request.payload["source_packets"]
+    assert packets[0]["coverage_alias"] == packets[2]["coverage_alias"]
+    assert UUID(int=7002, version=4) in request.document_version_ids
+    assert len(request.call(FakeProvider()).suggestions) == 3
+
+
+def test_duplicate_packet_proposals_with_different_kinds_are_rejected():
+    from familycare_worker.ai.guidance_reviewer import GuidanceReviewInvalid
+
+    def duplicate(result):
+        second = deepcopy(result["suggestions"][0])
+        second["kind"] = "CONFLICT"
+        result["suggestions"].append(second)
+
+    provider = FakeProvider(duplicate)
+    with pytest.raises(GuidanceReviewInvalid):
+        build().call(provider)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/srv/private/policy.pdf",
+        "/data/member/document.pdf",
+        "/opt/private/source.pdf",
+        "/secret.pdf",
+        r"C:\private\policy.pdf",
+        r"\\server\private\policy.pdf",
+    ],
+)
+def test_all_absolute_paths_are_minimized_without_removing_arithmetic(path):
+    request = build(
+        event={"situation": f"Synthetic context {path}; calculate 100 / 2.", "facts": {}}
+    )
+    sent = json.dumps(request.payload)
+    assert path not in request.payload["event"]["situation"]
+    assert "100 / 2" in sent
+
+
+def test_unbound_index_variant_is_not_sent_or_counted_against_another_document():
+    original = sources()
+    original["index"][0].pop("source_document_version_ids")
+    request = build(original)
+    assert "Sample Coverage 0" not in json.dumps(request.payload)
+    assert "coverage-1" in request.omitted_coverage_aliases
+    assert UUID(int=3000, version=4) not in request.document_version_ids
+    assert set(request.document_version_ids) == {
+        UUID(int=3001, version=4),
+        UUID(int=6001, version=4),
+    }
+
+
+def test_local_comparison_retains_bounded_trace_scenarios_and_explicit_omissions():
+    original = sources()
+    estimate = {
+        "kind": "FORMULA",
+        "formula": "100 × (days − 2)",
+        "currency": "KRW",
+        "missing_inputs": ["MedicalEvent.admission_days"],
+        "assumptions": ["DOCUMENT_CONTINUITY_ASSUMED"],
+        "trace": {
+            "publication_id": str(UUID(int=8000, version=4)),
+            "steps": [
+                {
+                    "step_number": 1,
+                    "operation": "subtract",
+                    "expression_path": "/calculation/args/1",
+                    "value": "3",
+                    "unit": "DAYS",
+                    "operands": [
+                        {"field_path": "MedicalEvent.admission_days", "value": "5", "unit": "DAYS"}
+                    ],
+                }
+            ],
+        },
+    }
+    local = {
+        "candidates": [
+            {
+                "ref": original["index"][0]["ref"],
+                "group": "CONDITIONAL",
+                "condition_result": "UNKNOWN",
+                "estimate": estimate,
+                "assumptions": [],
+                "scenarios": [
+                    {
+                        "kind": "PLANNED_CARE",
+                        "hypotheses": [{"field_path": "MedicalEvent.admission_days", "value": 5}],
+                        "estimate": {
+                            "kind": "POINT",
+                            "amount": "300",
+                            "currency": "KRW",
+                            "formula": "100 × 3",
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+    request = build(original, local=local)
+    candidate = request.payload["local_answer"]["candidates"][0]
+    assert candidate["estimate"]["missing_inputs"] == ["MedicalEvent.admission_days"]
+    assert candidate["estimate"]["assumptions"] == ["DOCUMENT_CONTINUITY_ASSUMED"]
+    assert candidate["estimate"]["trace"]["steps"][0]["value"] == "3"
+    assert candidate["scenarios"][0]["estimate"]["amount"] == "300"
+    assert str(UUID(int=8000, version=4)) not in json.dumps(request.payload)
+    assert request.call(FakeProvider()).to_payload()["local_comparison_complete"] is True
+    local["candidates"][0]["estimate"]["formula"] = "synthetic expression " * 100
+    result = build(original, local=local).call(FakeProvider()).to_payload()
+    assert result["local_comparison_complete"] is False
+    assert result["omitted_local_sections"]
+
+
+def test_source_and_event_family_scope_mismatch_fails_before_provider():
+    from familycare_worker.ai.guidance_reviewer import GuidanceReviewInvalid
+
+    with pytest.raises(GuidanceReviewInvalid):
+        build(
+            event={
+                "situation": "Synthetic event",
+                "facts": {},
+                "family_member_id": str(UUID(int=9000, version=4)),
+            }
+        )
