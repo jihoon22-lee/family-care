@@ -10,6 +10,11 @@ import psycopg
 
 from familycare_worker import __version__
 from familycare_worker.archive.keys import MasterKey, MasterKeyError
+from familycare_worker.runtime_schema import (
+    REQUIRED_SCHEMA_QUERY,
+    SCHEMA_REVISION_QUERY,
+    SUPPORTED_SCHEMA_REVISION,
+)
 
 DatabaseProbe = Callable[[], bool]
 RuntimeProbe = Callable[[], bool]
@@ -36,7 +41,7 @@ class HealthPayload(TypedDict):
 
 
 def database_is_ready(database_url: str | None = None) -> bool:
-    """Return whether PostgreSQL and the worker queue table are available."""
+    """Require one supported schema and the queue contracts shipped with this worker."""
 
     url = database_url or os.getenv("FAMILYCARE_DATABASE_URL")
     if not url:
@@ -44,8 +49,16 @@ def database_is_ready(database_url: str | None = None) -> bool:
 
     psycopg_url = url.replace("postgresql+psycopg://", "postgresql://", 1)
     try:
-        with psycopg.connect(psycopg_url) as connection:
-            connection.execute("SELECT 1")
+        with psycopg.connect(
+            psycopg_url,
+            connect_timeout=2,
+            options="-c default_transaction_read_only=on -c statement_timeout=1000 "
+            "-c lock_timeout=1000",
+        ) as connection:
+            revisions = connection.execute(SCHEMA_REVISION_QUERY).fetchall()
+            if [row[0] for row in revisions] != [SUPPORTED_SCHEMA_REVISION]:
+                return False
+            connection.execute(REQUIRED_SCHEMA_QUERY)
             result = connection.execute(_ANALYSIS_JOBS_TABLE_QUERY)
             row = result.fetchone()
     except psycopg.Error:

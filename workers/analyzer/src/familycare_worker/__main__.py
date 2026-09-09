@@ -175,12 +175,23 @@ def run_idle(stop_event: Event, *, interval_seconds: float = 30.0) -> int:
     return 0
 
 
+def _database_schema_available(probe: DatabaseProbe) -> bool:
+    try:
+        compatible = probe() is True
+    except Exception:
+        compatible = False
+    if not compatible:
+        LOGGER.error("worker_database_schema_unavailable")
+    return compatible
+
+
 def run_worker_loop(
     stop_event: Event,
     runner: JobRunner,
     *,
     worker_id: str,
     poll_interval_seconds: float = 1.0,
+    database_probe: DatabaseProbe | None = None,
 ) -> int:
     """Run one claimed job at a time until a bounded shutdown is requested."""
 
@@ -191,8 +202,16 @@ def run_worker_loop(
         or poll_interval_seconds < 0
     ):
         raise ValueError("poll interval must be non-negative")
+    compatibility = database_probe or database_is_ready
     try:
         while not stop_event.is_set():
+            # Recheck even after a successful job, before consuming another one.
+            # Deployment must still quiesce in-flight jobs before schema changes;
+            # this readiness check is not a transaction-wide migration lock.
+            if not _database_schema_available(compatibility):
+                return 1
+            if stop_event.is_set():
+                break
             try:
                 processed = runner.run_once(worker_id)
             except Exception:
@@ -398,10 +417,21 @@ def main(
         if stop_event is None:
             install_signal_handlers(event)
         print(json.dumps(health_payload(), sort_keys=True), flush=True)
+        compatibility = database_probe or database_is_ready
+        if event.is_set() and job_runner is None:
+            return 0
+        # Private runner construction may load keys, inspect active batches, or
+        # start its secret receiver. Reject incompatible storage before any of it.
+        if (
+            job_runner is None
+            and os.getenv("FAMILYCARE_DATABASE_URL")
+            and not _database_schema_available(compatibility)
+        ):
+            return 1
         runner = job_runner or _runner_from_environment(event)
         if runner is not None:
             identity = worker_id or f"worker-{os.getpid()}"
-            return run_worker_loop(event, runner, worker_id=identity)
+            return run_worker_loop(event, runner, worker_id=identity, database_probe=compatibility)
         return run_idle(event)
     if arguments == ["--health"]:
         database_readiness = database_probe or database_is_ready
