@@ -33,7 +33,7 @@ class TableState:
     name: str
     columns: tuple[str, ...]
     identity_columns: tuple[str, ...]
-    identity_digests: tuple[str, ...]
+    identity_digests: tuple[str, ...] | None
     row_count: int
     sha256: str
 
@@ -108,6 +108,7 @@ def _fingerprint(
     identity_columns: tuple[str, ...] | None = None,
     retained_identities: tuple[str, ...] | None = None,
     identity_limit: int = _MAX_IDENTITY_ROWS,
+    retain_identity_digests: bool = True,
 ) -> TableState:
     if not _NAME.fullmatch(table) or not columns or any(not _NAME.fullmatch(c) for c in columns):
         raise RuntimeStateError("TRANSITION_SCHEMA_CONTRACT_MISSING")
@@ -150,19 +151,31 @@ def _fingerprint(
         for row in cursor:
             digest.update(bytes.fromhex(row[0]))
             count += 1
-            if row[1] is not None:
+            if retain_identity_digests and row[1] is not None:
                 if len(identity_digests) >= identity_limit:
                     raise RuntimeStateError("TRANSITION_INVENTORY_LIMIT_EXCEEDED")
                 identity_digests.append(row[1])
     return TableState(
-        table, columns, identities, tuple(identity_digests), count, digest.hexdigest()
+        table,
+        columns,
+        identities,
+        tuple(identity_digests) if retain_identity_digests else None,
+        count,
+        digest.hexdigest(),
     )
 
 
 def capture_database_state(
-    connection: psycopg.Connection[Any], *, tables: Sequence[str] | None = None
+    connection: psycopg.Connection[Any],
+    *,
+    tables: Sequence[str] | None = None,
+    identity_tables: Sequence[str] | None = None,
 ) -> DatabaseState:
-    """Capture exact table contents; no row payload or credential is returned."""
+    """Capture every row; retain bounded IDs only for tables allowed future appends.
+
+    Tables excluded from identity_tables remain subject to exact row comparison,
+    including when allow_new_rows is requested. None retains IDs for every table.
+    """
     try:
         revision = _require_snapshot(connection)
         selected = _tables(connection) if tables is None else tuple(sorted(tables))
@@ -176,10 +189,14 @@ def capture_database_state(
         remaining = _MAX_IDENTITY_ROWS
         for table in selected:
             value = _fingerprint(
-                connection, table, _columns(connection, table), identity_limit=remaining
+                connection,
+                table,
+                _columns(connection, table),
+                identity_limit=remaining,
+                retain_identity_digests=identity_tables is None or table in identity_tables,
             )
             state.append(value)
-            remaining -= len(value.identity_digests)
+            remaining -= len(value.identity_digests or ())
         return DatabaseState(revision, tuple(state), tables is None)
     except psycopg.Error, ValueError, TypeError:
         raise RuntimeStateError("TRANSITION_STATE_UNAVAILABLE") from None
@@ -225,6 +242,7 @@ def require_preserved_state(
                 table.columns,
                 identity_columns=table.identity_columns,
                 retained_identities=table.identity_digests if allow_new_rows else None,
+                retain_identity_digests=table.identity_digests is not None,
             )
             if current != table:
                 raise RuntimeStateError("TRANSITION_PRESERVED_DATA_CHANGED")

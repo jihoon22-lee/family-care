@@ -131,3 +131,19 @@ def test_identity_inventory_budget_is_enforced_while_streaming(
     monkeypatch.setattr(private_runtime_state, "_MAX_IDENTITY_ROWS", 1)
     with pytest.raises(RuntimeStateError, match="^TRANSITION_INVENTORY_LIMIT_EXCEEDED$"):
         capture_database_state(connection, tables=("synthetic_transition_records",))
+
+
+def test_large_strict_tables_need_no_retained_identity_list(
+    connection: psycopg.Connection[tuple[object, ...]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import private_runtime_state
+
+    monkeypatch.setattr(private_runtime_state, "_MAX_IDENTITY_ROWS", 1)
+    baseline = capture_database_state(
+        connection, tables=("synthetic_transition_records",), identity_tables=()
+    )
+    assert baseline.tables[0].identity_digests is None
+    require_preserved_state(connection, baseline, require_same_schema=True)
+    connection.execute("INSERT INTO synthetic_transition_records VALUES (3, '{}')")
+    with pytest.raises(RuntimeStateError, match="^TRANSITION_PRESERVED_DATA_CHANGED$"):
+        require_preserved_state(connection, baseline, allow_new_rows=True)

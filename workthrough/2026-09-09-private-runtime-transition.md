@@ -84,3 +84,13 @@ At `03414d4` plus PostgreSQL tools, cancellation fixes, CI/test/document changes
 - Ruff/format on seven affected files, workflow policy and targeted mypy with source MYPYPATH passed.
   CI now passes its PostgreSQL service container ID at the database-test step. Full B07 required
   suite, protected recovery and activation have not yet been completed.
+
+Protected backup preflight found the separate key readable only within its original container mount;
+operations now use a network-disabled, read-only utility container with the original key mount and
+only the newly created backup destination writable. The key is never copied into the backup.
+The first quiesced capture exceeded the bounded retained-identity inventory and was refused;
+old API/Worker/Web were restarted and healthy, with no migration or activation.
+The state helper now permits explicit identity-retention tables: excluded large extraction/OCR tables
+still hash and compare every row exactly, including in append-enabled comparisons. This keeps the
+memory bound without weakening preservation. RED **1 failed** (0.05s), full state PostgreSQL suite
+**10 passed** (0.80s), targeted mypy/Ruff passed at `e571ae7` plus this state/test/document change.
