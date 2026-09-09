@@ -1,11 +1,13 @@
 """Optional review failures and late responses do not replace the local answer."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from threading import Event
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
+from familycare_worker.ai.guidance_reviewer import PROMPT_REVISION
 from familycare_worker.ai.provider import ProviderRateLimitError
 from familycare_worker.guidance_review_jobs import (
     ReviewLease,
@@ -29,7 +31,7 @@ class Queue:
             source_digest=source["digest_sha256"],
             input_digest="a" * 64,
             model="synthetic-review-model",
-            prompt_revision="guidance-review-proposals-v1",
+            prompt_revision=PROMPT_REVISION,
             lease_token=uuid4(),
             deadline_at=datetime.now(UTC) + timedelta(seconds=100),
         )
@@ -138,6 +140,18 @@ def test_only_one_explicit_job_call_reserves_before_wire_and_saves_proposal():
 def test_unconfigured_review_spends_nothing_and_keeps_original():
     sample = runner()
     sample.worker.configured = lambda: False
+    assert sample.worker.run_once("worker-a")
+    assert not sample.provider.calls and not sample.budget.reservations
+    assert sample.queue.error == "REVIEW_PROVIDER_CONFIGURATION"
+    assert sample.queue.work.local_guidance["candidates"] == []
+
+
+@pytest.mark.parametrize(
+    "revision", ["guidance-review-proposals-v1", "guidance-review-proposals-v2"]
+)
+def test_older_prompt_job_is_not_silently_run_under_revised_instructions(revision):
+    sample = runner()
+    sample.queue.job = replace(sample.queue.job, prompt_revision=revision)
     assert sample.worker.run_once("worker-a")
     assert not sample.provider.calls and not sample.budget.reservations
     assert sample.queue.error == "REVIEW_PROVIDER_CONFIGURATION"

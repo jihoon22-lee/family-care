@@ -36,7 +36,7 @@ from familycare_worker.generated_terms_semantic import (
 )
 
 SCHEMA_NAME = "guidance_review_proposals_v1"
-PROMPT_REVISION = "guidance-review-proposals-v1"
+PROMPT_REVISION = "guidance-review-proposals-v3"
 MAX_REQUEST_BYTES = 32768
 OUTPUT_TOKEN_LIMIT = 4000
 REQUEST_TIMEOUT_SECONDS = 40.0
@@ -49,7 +49,18 @@ REVIEW_INSTRUCTION = (
     "a medical fact, eligibility or payment; proposed_amount is advisory only. Use only supplied "
     "packet aliases. Each graph uses exactly that packet's source, region and citation objects, "
     "with exact quoted text and addresses. Never borrow aliases from another packet. Use original "
-    "statements and data-only semantic nodes; unresolved meaning stays unresolved. Account for "
+    "statements and data-only semantic nodes; unresolved meaning stays unresolved. Set "
+    "processing.expected_region_ids to exactly that packet's supplied region_id aliases. Every "
+    "node belongs to exactly one supplied region and cites only that region's exact citation "
+    "objects. node.statement must equal one exact supplied citation text; never join or paraphrase "
+    "multiple spans into a statement. Keep connecting reference citations in citation_ids without "
+    "appending their text to node.statement. Every root references a node in a supplied "
+    "primary_region_id. A cross-region "
+    "DEPENDS_ON edge requires the source node to cite the supplied connecting reference that "
+    "names the target region, alongside its own statement citation. For OVERRIDES, cite the "
+    "supplied statement explicitly saying that the source region overrides the target region. "
+    "Merely including two regions does not prove a relationship; keep unproved relationships "
+    "unresolved. Account for "
     "each supplied graph region as consumed or unresolved, and each primary region by a node or "
     "as unresolved. Partition supplied packet aliases into reviewed and unreviewed, without "
     "duplicates. Every reviewed packet has a suggestion graph; never claim review of omitted "
