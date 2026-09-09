@@ -1,5 +1,6 @@
 """Structure-preserving, minimized, bounded provider inputs from synthetic sources."""
 
+import pytest
 from familycare_worker.ai.policy_ranges import build_policy_envelopes
 from familycare_worker.document_structure import plan_structure_chunks
 
@@ -88,6 +89,45 @@ def test_source_window_redaction_precedes_chunk_and_block_boundaries() -> None:
     texts = [item.text for envelope in result.envelopes for item in envelope.evidence]
     assert all("Family" not in value and "Member A" not in value for value in texts)
     assert any("317" in value for value in texts)
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "(010203-1******)",
+        "31세 (남성) (010203-1******)",
+        "(010203-1******) / 31세 / 남성 / (2급) Sample Occupation (Synthetic role, duties)",
+    ],
+)
+def test_compound_insured_identity_is_redacted_before_provider_ranges(suffix: str) -> None:
+    source = _build(
+        _extraction(
+            _page(
+                1,
+                [_block("보험증권 가입금액")],
+                tables=[
+                    _table(
+                        [
+                            ["피보험자", f"Family Member A {suffix}"],
+                            ["담보명", "Sample Rider"],
+                            ["가입금액", "317 KRW"],
+                        ]
+                    )
+                ],
+            )
+        )
+    )
+    plan = plan_structure_chunks(
+        source, max_content_chars=208, max_context_chars=4096, max_chunks=256
+    )
+    result = build_policy_envelopes(source, plan, sensitive_terms=("Family Member A",))
+    assert result.envelopes and not result.unprocessed
+    texts = [item.text for envelope in result.envelopes for item in envelope.evidence]
+    assert all("Family Member A" not in text and "010203" not in text for text in texts)
+    assert all("31세" not in text and "남성" not in text for text in texts)
+    assert all("Sample Occupation" not in text and "2급" not in text for text in texts)
+    assert any("Sample Rider" in text for text in texts)
+    assert any("317" in text for text in texts)
 
 
 def test_envelope_budget_retains_every_unprocessed_source_range() -> None:

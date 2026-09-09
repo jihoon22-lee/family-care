@@ -82,6 +82,87 @@ def test_recognized_insured_qualifier_keeps_whole_original_line_anchor() -> None
 
 
 @pytest.mark.parametrize(
+    "suffix",
+    [
+        "(010203-1******) (남/31세)",
+        "(여성) / (010203-*******)",
+        "(010203-1******) 남성 31세",
+        "31세 (남성) (010203-1******)",
+        "(2001-02-03) (여성/만31세)",
+    ],
+)
+def test_entire_typed_demographic_suffix_keeps_exact_member_and_whole_anchor(suffix: str) -> None:
+    member = _member()
+    value = f"Family Member A {suffix}"
+    source, row = _insured_cell(value)
+    item = associate_policy_sources(source, members=(member,), expected_member_id=member.id)[
+        row.node_id
+    ]
+    assert item.state == "RESOLVED" and item.family_member_id == member.id
+    anchor = next(ref for ref in item.anchor_refs if ref.kind == "insured")
+    assert row.text[anchor.start : anchor.end] == f"피보험자 | {value}"
+    assert value not in repr(item.to_dict())
+
+
+def test_structured_person_fields_separate_exact_name_from_class_description() -> None:
+    member = _member()
+    value = (
+        "Family Member A (010203-1******) / 31세 / 남성 / (2급) "
+        "Sample Occupation (Synthetic role, sample duties)"
+    )
+    source, row = _insured_cell(value)
+    item = associate_policy_sources(source, members=(member,), expected_member_id=member.id)[
+        row.node_id
+    ]
+    assert item.state == "RESOLVED" and item.family_member_id == member.id
+    anchor = next(ref for ref in item.anchor_refs if ref.kind == "insured")
+    assert row.text[anchor.start : anchor.end] == f"피보험자 | {value}"
+    assert value not in repr(item.to_dict())
+
+
+@pytest.mark.parametrize("ambiguous", [False, True])
+def test_structured_person_fields_keep_wrong_and_ambiguous_member_outcomes(ambiguous: bool) -> None:
+    selected = _member()
+    other = _member("Family Member A" if ambiguous else "Family Member B")
+    source, row = _insured_cell(
+        f"{other.display_name} (010203-1******) / 31세 / 남성 / (2급) Sample Occupation"
+    )
+    item = associate_policy_sources(
+        source, members=(selected, other), expected_member_id=selected.id
+    )[row.node_id]
+    assert item.state == ("AMBIGUOUS" if ambiguous else "WRONG_MEMBER")
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Family Member A Plus (010203-1******) / 31세 / 남 / (2급) Sample Occupation",
+        "Family Member A and Family Member B (010203-1******) / 31세 / 남 / (2급)",
+        "Family Member A (010203-1******, other) / 31세 / 남 / (2급)",
+        "Family Member A (010203-1******) / 남 / 31세 / (2급)",
+        "Family Member A (010203-1******) / 999세 / 남 / (2급)",
+        "Family Member A (010203-1******) / 31세 / 남 / ((2급))",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) 피보험자: Other Person",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) 수익자: Other Person",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) 피 보 험 자: Other Person",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) 수 익 자: Other Person",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) 생년월일: 2001년 2 월 3 일",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) (010203-1******)",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) (2001-02-03)",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) (Family Member B)",
+        "Family Member A (010203-1******) / 31세 / 남 / (2급) Sample Occupation\nOther Person",
+    ],
+)
+def test_structured_person_field_rejects_ambiguous_or_additional_identity(value: str) -> None:
+    member, other = _member(), _member("Family Member B")
+    source, row = _insured_cell(value)
+    item = associate_policy_sources(source, members=(member, other), expected_member_id=member.id)[
+        row.node_id
+    ]
+    assert item.state == "UNRESOLVED" and item.family_member_id is None
+
+
+@pytest.mark.parametrize(
     "value",
     [
         "Family Member A Plus (010203-1******)",
@@ -101,6 +182,16 @@ def test_recognized_insured_qualifier_keeps_whole_original_line_anchor() -> None
         "Family Member A (2001-13-03)",
         "Family Member A (2001-02/03)",
         "Family Member A (age 20)",
+        "Family Member A (남/31세)",
+        "Family Member A (010203-1******) (남/여)",
+        "Family Member A (010203-1******) (31세/32세)",
+        "Family Member A (010203-1******) (남/999세)",
+        "Family Member A (010203-1******) (Family Member B/31세)",
+        "Family Member A (010203-1******) (남/other text)",
+        "Family Member A (010203-1******) ()",
+        "Family Member A (010203-1******)(남/31세",
+        "Family Member A (010203-1******) /",
+        "Family Member A Plus (010203-1******) (남/31세)",
     ],
 )
 def test_unrecognized_or_compound_insured_values_do_not_match_a_member(value: str) -> None:
@@ -122,6 +213,15 @@ def test_recognized_qualifier_does_not_hide_wrong_or_ambiguous_member() -> None:
     source, row = _insured_cell("Family Member A (010203-1******)")
     result = associate_policy_sources(
         source, members=(selected, _member()), expected_member_id=selected.id
+    )
+    assert result[row.node_id].state == "AMBIGUOUS"
+
+
+def test_typed_suffix_does_not_choose_between_overlapping_complete_member_names() -> None:
+    selected, longer = _member(), _member("Family Member A 남성")
+    source, row = _insured_cell("Family Member A 남성 (010203-1******)")
+    result = associate_policy_sources(
+        source, members=(selected, longer), expected_member_id=selected.id
     )
     assert result[row.node_id].state == "AMBIGUOUS"
 
