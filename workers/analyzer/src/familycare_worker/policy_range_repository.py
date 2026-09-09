@@ -321,8 +321,28 @@ class PolicyRangeRepository:
         *,
         review: bool,
     ) -> None:
+        from familycare_worker.policy_draft_replay import validate_replay_receipt
+
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             _lock(connection, job, worker_id)
+            receipt = (
+                validate_replay_receipt(connection, job, work)
+                if job.pipeline_version == "retained-policy-association-v4"
+                else None
+            )
+            if receipt is not None:
+                if "result" in payload and payload.get("batch") != receipt["normalized_batch_json"]:
+                    raise PolicyRangeConflict
+                review = review or receipt["partial"]
+                payload = {
+                    **payload,
+                    "draft_replay": {
+                        "source_provider_request_id": str(receipt["source_provider_request_id"]),
+                        "source_response_hash": receipt["source_response_hash"],
+                        "normalization_revision": receipt["normalization_revision"],
+                        "partial": receipt["partial"],
+                    },
+                }
             source = connection.execute(
                 "SELECT document_structure_projection(g.id,g.household_space_id,%s) "
                 "AS structure_json "

@@ -25,8 +25,6 @@ from workers.analyzer.tests.test_policy_range_repository import WORKER, _no_fact
 from workers.analyzer.tests.test_policy_structuring_jobs import _psycopg_url
 from workers.analyzer.tests.test_retained_policy_resubmission import (
     _assert_original_preserved,
-    _enqueue,
-    _target,
     ranges_database,  # noqa: F401
     seeded_policy_database,  # noqa: F401
     structure_database,  # noqa: F401
@@ -39,6 +37,26 @@ pytestmark = pytest.mark.integration
 
 V2 = "retained-policy-association-v2"
 V3 = "retained-policy-association-v3"
+
+
+@pytest.fixture(autouse=True)
+def historical_v3_producer(monkeypatch):
+    monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", V3)
+
+
+def _enqueue(sample, **overrides):
+    from workers.analyzer.tests.test_retained_policy_resubmission import _enqueue as enqueue
+
+    return enqueue(sample, **{"pipeline_revision": V3, **overrides})
+
+
+def _target(sample, job_id):
+    return retained_policy.RetainedPolicyJobQueue(
+        sample.url,
+        household_space_id=sample.original.household_space_id,
+        job_id=job_id,
+        pipeline_revision=V3,
+    )
 
 
 def _v2_job(sample, monkeypatch):

@@ -155,6 +155,23 @@ v1–v8 검증 이력은 당시 기준으로 보존한다. 이 후속 API/Worker
 최소화 v3와 retained 처리 v2를 계속 사용한다. metadata v9 이력이 생기면 0066으로의
 downgrade를 거부하며, 이 변경이 과거 provider 입력의 재사용을 허용하지 않는다.
 
+`0069_policy_draft_replay`는 별도의 명시적 retained v4 작업에 한해 과거 최소화 v3
+응답을 로컬 파생 초안의 입력으로 선택할 수 있게 한다. 원본의 가정·구성원·문서·추출·
+현재 원문 세대·최소화 fingerprint·전체 envelope가 새 작업과 일치해야 한다. 현재
+구성원 fingerprint와 lease를 준비·전송 직전·저장 시 다시 확인한다. 원본은 현재 prompt의
+cache hit가 아니며 원본 response hash와 변경 이유를 불변 receipt에 보존한다.
+
+기존 필드 근거 검사로 증명하지 못한 선택 필드는 파생 초안에서 제외한다. 필수값을
+증명하지 못한 후보와 primary 인용이 사라진 범위는 미해석으로 남긴다. 누락된 내부
+`rider_key`만 증명된 `rider_name`의 값·인용을 그대로 복사할 수 있다. 원문 사실이나
+추가 인용·승인 상태는 생성하지 않는다. 필드·후보 손실은 남은 후보가 검증되어도 해당
+범위를 REVIEW로 유지한다.
+
+파생 초안은 공유 요청 예산 안에서 독립 verifier를 거치고 기존 validator·grounder·API
+게시 검증을 다시 통과한다. 기본 Worker에는 이 경로를 자동 연결하지 않는다. v2/v3
+이력과 유효한 기존 원장 권위는 유지하며 v4 작업 또는 replay receipt가 있으면 0068로의
+downgrade를 거부한다. API/Worker의 현재 지원 schema는 0069다.
+
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래
 ID를 provenance에 보존한다. 인용은 실제 Evidence FK와 generation/node/문자 위치로 연결하고

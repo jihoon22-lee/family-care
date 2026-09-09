@@ -35,6 +35,16 @@ def publish_range_candidates(
     current_identity = member_identity_fingerprint(members) == associations.get(
         "member_fingerprint"
     )
+    replay = (
+        connection.execute(
+            "SELECT normalization_revision FROM policy_range_replay_sources "
+            "WHERE job_id=%s AND envelope_id=%s",
+            (job.id, envelope.envelope_id),
+        ).fetchone()
+        if job.pipeline_version == "retained-policy-association-v4"
+        else None
+    )
+    generator = "policy-range-structurer-v3" if replay is None else replay["normalization_revision"]
     for candidate in result.candidates:
         version_id = uuid4()
         scoped_source_id = uuid5(job.id, f"{envelope.envelope_id}:{candidate.candidate_id}")
@@ -43,7 +53,7 @@ def publish_range_candidates(
             "candidate_kind, aggregate_id, version, is_current, status, schema_version, "
             "generator_version, verifier_version, provider_request_id, issues, "
             "structuring_job_id, source_candidate_id) "
-            "VALUES (%s,%s,%s,%s,%s,1,true,%s,'1','policy-range-structurer-v3', "
+            "VALUES (%s,%s,%s,%s,%s,1,true,%s,'1',%s, "
             "'policy-batch-verifier-v2',%s,%s,%s,%s)",
             (
                 version_id,
@@ -52,6 +62,7 @@ def publish_range_candidates(
                 candidate.candidate_kind,
                 job.policy_aggregate_id,
                 candidate.status,
+                generator,
                 candidate.provider_request_ids[-1] if candidate.provider_request_ids else None,
                 Jsonb([{"code": code, "field_id": None} for code in candidate.issue_codes[:8]]),
                 job.id,

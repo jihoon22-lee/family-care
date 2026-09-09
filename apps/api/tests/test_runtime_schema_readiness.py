@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0068_range_field_proof"
+REVISION = "0069_policy_draft_replay"
 
 
 class Result:
@@ -57,8 +57,8 @@ class Engine:
     "rows",
     [
         [],
-        [("0067_metadata_lineage",)],
-        [("0069_synthetic_future",)],
+        [("0068_range_field_proof",)],
+        [("0070_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],
@@ -82,6 +82,10 @@ def test_api_checks_current_contract_without_ai_or_checkout_access(monkeypatch, 
     assert any("alembic_version" in q and "LIMIT 2" in q for q in connection.queries)
     assert any("review_job_id" in q and "WHERE false" in q for q in connection.queries)
     assert any("policy_structuring_source_current" in q for q in connection.queries)
+    assert any(
+        "policy_range_replay_sources" in q and "source_response_hash" in q
+        for q in connection.queries
+    )
     assert engine.disposed
 
 

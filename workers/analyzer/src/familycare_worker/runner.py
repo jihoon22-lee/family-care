@@ -79,6 +79,7 @@ from familycare_worker.policy_candidates import (
     PolicyCandidateJobConflict,
     PolicyCandidateRepositoryUnavailable,
 )
+from familycare_worker.policy_draft_replay import PolicyDraftReplayRepository
 from familycare_worker.policy_jobs import (
     PolicyStructuringErrorCode,
     PolicyStructuringJobNotFound,
@@ -251,6 +252,7 @@ class PolicyStructuringJobRunner:
         lease_seconds: int = 180,
         request_budget: PolicyRequestBudget | None = None,
         range_repository: PolicyRangeRepository | None = None,
+        replay_repository: PolicyDraftReplayRepository | None = None,
     ) -> None:
         if (
             not isinstance(structurer_model, str)
@@ -260,10 +262,15 @@ class PolicyStructuringJobRunner:
             or isinstance(lease_seconds, bool)
             or not isinstance(lease_seconds, int)
             or not 1 <= lease_seconds <= 3_600
+            or (
+                replay_repository is not None
+                and (request_budget is None or range_repository is None)
+            )
         ):
             raise ValueError("invalid policy structuring runner configuration")
         self.request_budget = request_budget
         self.range_repository = range_repository
+        self.replay_repository = replay_repository
         self.queue = queue
         self.evidence_loader = evidence_loader
         self.provider = provider
@@ -377,25 +384,29 @@ class PolicyStructuringJobRunner:
         work = self.range_repository.next(job, worker_id, sensitive_terms=member_terms)
         if work is None:
             return
+        replay = self.replay_repository
+        draft = None if replay is None else replay.prepare(job, worker_id, work)
         provider: AiProvider = self.provider
         if self.request_budget is not None:
             provider = BudgetedPolicyProvider(
                 provider=provider, budget=self.request_budget, job=job, worker_id=worker_id
             )
-        leased = _LeasedPolicyProvider(
-            provider,
-            lambda: self.queue.heartbeat(
-                job.id,
-                worker_id,
-                lease_seconds=self.lease_seconds,
-            ),
-        )
+
+        def current() -> bool:
+            if replay is not None:
+                replay.assert_current(job, worker_id, work)
+            return self.queue.heartbeat(job.id, worker_id, lease_seconds=self.lease_seconds)
+
+        leased = _LeasedPolicyProvider(provider, current)
         try:
-            batch, request_id = structure_policy_range(
-                envelope=work.envelope,
-                provider=leased,
-                model=self.structurer_model,
-            )
+            if draft is None:
+                batch, request_id = structure_policy_range(
+                    envelope=work.envelope,
+                    provider=leased,
+                    model=self.structurer_model,
+                )
+            else:
+                batch, request_id = draft.batch, draft.request_id
         except PolicyBudgetExhausted:
             assert self.request_budget is not None
             self.request_budget.pause(job, worker_id)
