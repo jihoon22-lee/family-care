@@ -59,6 +59,7 @@ from familycare_api.decisions.structuring_repository import (
 )
 from familycare_api.decisions.terms import RulesForEvent
 from familycare_api.decisions.terms_snapshots import decode_selections, encode_selections
+from familycare_api.guidance.domain import GuidanceContext
 from familycare_api.guidance.engine import LocalGuidanceEngine
 from familycare_api.guidance.models import LocalGuidanceResponse
 from familycare_api.guidance.private_adapter import adapt_private_guidance
@@ -473,6 +474,7 @@ class DecisionRepository:
                 )
                 knowledge_result = None
                 local_guidance = None
+                private_guidance_context: GuidanceContext | None = None
                 knowledge_failures: tuple[str, ...] = ()
                 try:
                     with connection.transaction():
@@ -482,12 +484,15 @@ class DecisionRepository:
                             event,
                         )
                         if knowledge_read.context is not None:
+                            private_guidance_context = adapt_private_guidance(
+                                knowledge_read.context
+                            )
                             local_guidance = LocalGuidanceEngine().evaluate(
                                 scope,
                                 event,
                                 combine_guidance_contexts(
                                     read_subject_guidance(connection, scope, event),
-                                    adapt_private_guidance(knowledge_read.context),
+                                    private_guidance_context,
                                 ),
                             )
                             knowledge_result = self.knowledge_engine.evaluate(
@@ -503,9 +508,7 @@ class DecisionRepository:
                         operational = read_operational_guidance(connection, scope, event, self)
                         shared_context = combine_guidance_contexts(
                             operational,
-                            adapt_private_guidance(knowledge_read.context)
-                            if knowledge_read.context is not None
-                            else None,
+                            private_guidance_context,
                         )
                         local_guidance = LocalGuidanceEngine().evaluate(
                             scope, event, shared_context
