@@ -28,6 +28,7 @@ from familycare_worker.runner import (
     PolicyStructuringJobRunner,
     RecommendationJobRunner,
 )
+from familycare_worker.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from pytest import CaptureFixture, MonkeyPatch
 
 
@@ -37,6 +38,9 @@ class _FakeResult:
 
     def fetchone(self) -> tuple[bool]:
         return (self.value,)
+
+    def fetchall(self) -> list[tuple[str]]:
+        return [(SUPPORTED_SCHEMA_REVISION,)]
 
 
 class _FakeConnection:
@@ -105,7 +109,7 @@ def test_database_probe_checks_public_analysis_jobs_table(
     monkeypatch: MonkeyPatch,
 ) -> None:
     connection = _FakeConnection(analysis_jobs_exists=True)
-    monkeypatch.setattr(psycopg, "connect", lambda _: connection)
+    monkeypatch.setattr(psycopg, "connect", lambda *args, **kwargs: connection)
 
     assert database_is_ready("postgresql://synthetic") is True
     assert any("public" in query and "analysis_jobs" in query for query in connection.queries)
@@ -115,7 +119,7 @@ def test_database_probe_is_unavailable_when_analysis_jobs_table_is_missing(
     monkeypatch: MonkeyPatch,
 ) -> None:
     connection = _FakeConnection(analysis_jobs_exists=False)
-    monkeypatch.setattr(psycopg, "connect", lambda _: connection)
+    monkeypatch.setattr(psycopg, "connect", lambda *args, **kwargs: connection)
 
     assert database_is_ready("postgresql://synthetic") is False
 
@@ -254,6 +258,7 @@ def test_worker_loop_runs_one_job_at_a_time_and_stops_cleanly() -> None:
             runner,
             worker_id="worker-a",
             poll_interval_seconds=0,
+            database_probe=lambda: True,
         )
         == 0
     )

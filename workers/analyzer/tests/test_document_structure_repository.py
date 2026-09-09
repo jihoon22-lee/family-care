@@ -369,3 +369,80 @@ def test_stored_ocr_is_used_only_with_its_actual_source_digest(
                 family_member_id=job.family_member_id,
                 batch_item_id=job.batch_item_id,
             )
+
+
+def test_first_partial_generation_exposes_anchored_metadata_without_range_completion(
+    structure_database: tuple[str, Any],
+) -> None:
+    from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
+    from familycare_worker.document_metadata_repository import DocumentMetadataRunner
+
+    from workers.analyzer.tests.test_document_metadata_repository import _source
+
+    url, job = structure_database
+    source = _source(job)
+    plan = plan_structure_chunks(
+        source, max_content_chars=4096, max_context_chars=4096, max_chunks=0
+    )
+    repository = DocumentStructureRepository(url)
+    generation = _prepare(repository, job, source, plan)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT is_current,range_plan_complete FROM document_structure_generations WHERE id=%s",
+            (generation,),
+        ).fetchone() == (True, False)
+    assert DocumentMetadataRunner(url, generation_id=generation).run_once("synthetic-worker")
+    assert DocumentMetadataProjector(url).project_pending(limit=1) == 1
+    assert not repository.progress(
+        job.household_space_id, job.family_member_id, generation
+    ).processing_complete
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT outcome FROM document_metadata_publications"
+        ).fetchall() == [("APPLIED",)]
+        assert connection.execute("SELECT count(*) FROM policy_contracts").fetchone() == (0,)
+    assert _prepare(repository, job, source, plan) == generation
+
+
+@pytest.mark.parametrize("cancelled", [False, True])
+def test_existing_partial_reentry_does_not_activate_empty_or_cancelled_source(
+    structure_database: tuple[str, Any],
+    cancelled: bool,
+) -> None:
+    url, job = structure_database
+    repository = DocumentStructureRepository(url)
+    if cancelled:
+        source, plan = _inputs(job, maximum_chunks=2)
+    else:
+        source = build_document_structure(
+            {
+                "document_version_id": str(job.document_version_id),
+                "content_sha256": "a" * 64,
+                "page_count": 1,
+                "pages": [
+                    {
+                        "page_number": 1,
+                        "quality": {"classification": "OCR_REQUIRED"},
+                        "blocks": [],
+                        "tables": [],
+                    }
+                ],
+            },
+            extraction_id=job.extraction_id,
+            extraction_revision="synthetic-empty-v1",
+        )
+        plan = plan_structure_chunks(
+            source, max_content_chars=4096, max_context_chars=4096, max_chunks=16384
+        )
+    generation = _prepare(repository, job, source, plan)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        # Model an existing non-current partial from the previous preparation policy.
+        connection.execute(
+            "UPDATE document_structure_generations SET is_current=false,cancelled=%s WHERE id=%s",
+            (cancelled, generation),
+        )
+    assert _prepare(repository, job, source, plan) == generation
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT is_current FROM document_structure_generations WHERE id=%s", (generation,)
+        ).fetchone() == (False,)

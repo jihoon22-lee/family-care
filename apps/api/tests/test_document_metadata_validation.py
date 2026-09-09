@@ -12,7 +12,11 @@ from familycare_api.insurance_documents.metadata_validation import validate_comp
 from familycare_worker.document_metadata import metadata_proposal
 from familycare_worker.document_structure import StructureCell
 
-from workers.analyzer.tests.test_document_metadata import _structure, _table_cover
+from workers.analyzer.tests.test_document_metadata import (
+    _structure,
+    _table_cover,
+    _table_cover_with_overlapping_suffix,
+)
 
 
 def _inputs(
@@ -96,6 +100,78 @@ def test_api_rechecks_the_table_cell_title_and_preceding_cells() -> None:
     row["cells"][1]["bbox"] = [120, 1, 350, 15]
     row["text"] = "청구 제출서류\tSample Assurance"
     assert validate_component_metadata(component, source) is None
+
+
+def _prefix_component(source: dict[str, Any]) -> dict[str, Any]:
+    """Build the claimed prefix from exact retained source nodes, independently of analysis."""
+    title = next(
+        node
+        for node in source["nodes"]
+        if node["kind"] == "TABLE_ROW" and node["text"] == "보험약관"
+    )
+    insurer = next(
+        node
+        for node in source["nodes"]
+        if node["kind"] == "TABLE_ROW" and node["text"] == "보험회사\tSample Assurance"
+    )
+    component = deepcopy(
+        metadata_proposal(_table_cover(), UUID(int=205), "c" * 64)["components"][0]
+    )
+    for span in component["role_spans"]:
+        span["node_id"] = title["node_id"]
+    for fact in component["facts"]:
+        for span in fact["spans"]:
+            span["node_id"] = insurer["node_id"]
+    component["unresolved_fields"] = ["edition_date", "product_code"]
+    _legacy_identity(component, source, revision="document-metadata-v8")
+    return component
+
+
+def test_api_accepts_only_the_proven_prefix_before_a_known_late_overlap() -> None:
+    source = _table_cover_with_overlapping_suffix().to_dict()
+    component = _prefix_component(source)
+    checked = validate_component_metadata(component, source)
+    assert checked is not None and checked.role == "terms"
+    assert checked.facts == {"insurer": ("Sample Assurance",)}
+    assert checked.unresolved_fields == ("edition_date", "product_code")
+
+
+@pytest.mark.parametrize("field", ["product_code", "edition_date"])
+def test_api_rejects_real_but_quarantined_suffix_metadata(field: str) -> None:
+    source = _table_cover_with_overlapping_suffix().to_dict()
+    component = _prefix_component(source)
+    text = "SYNTHETIC-UNTRUSTED" if field == "product_code" else "2024-01-01"
+    node = next(
+        node for node in source["nodes"] if node["kind"] == "TABLE_ROW" and text in node["text"]
+    )
+    start = node["text"].index(text)
+    component["facts"].append(
+        {
+            "field": field,
+            "value": text,
+            "spans": [
+                {
+                    "node_id": node["node_id"],
+                    "page_number": 1,
+                    "start": start,
+                    "end": start + len(text),
+                    "text": text,
+                    "anchor_start": 0,
+                    "anchor_end": len(node["text"]),
+                }
+            ],
+        }
+    )
+    assert validate_component_metadata(component, source) is None
+
+
+@pytest.mark.parametrize(
+    "options",
+    [{"top": 1}, {"top": 25}, {"checklist": True}, {"missing_bbox": True}],
+)
+def test_api_refuses_prefix_claims_crossing_earlier_or_unbounded_layout(options) -> None:
+    source = _table_cover_with_overlapping_suffix(**options).to_dict()
+    assert validate_component_metadata(_prefix_component(source), source) is None
 
 
 @pytest.mark.parametrize("change", ["header", "mixed_checklist"])

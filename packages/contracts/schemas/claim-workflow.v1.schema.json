@@ -3047,6 +3047,30 @@
     },
     "ClaimGuidanceGuidanceEvidence": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "OPERATIONAL_EVIDENCE"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "page_start": {
+                "maximum": 500
+              },
+              "page_end": {
+                "maximum": 500
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "kind": {
           "enum": [
@@ -3062,13 +3086,11 @@
           "type": "string"
         },
         "page_start": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page Start",
           "type": "integer"
         },
         "page_end": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page End",
           "type": "integer"
@@ -3414,13 +3436,11 @@
           "type": "string"
         },
         "page_start": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page Start",
           "type": "integer"
         },
         "page_end": {
-          "maximum": 500,
           "minimum": 1,
           "title": "Page End",
           "type": "integer"

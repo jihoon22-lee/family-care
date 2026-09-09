@@ -21,7 +21,7 @@ def test_review_consumer_runs_without_ingestion_opt_in_and_stops(monkeypatch):
         return 0
 
     monkeypatch.setattr(GuidanceReviewProjector, "project_pending", project)
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(readiness_probe=lambda: True)) as client:
         assert called.wait(timeout=2)
         assert client.get("/health/live").status_code == 200
     assert stops and stops[0]()
@@ -39,7 +39,7 @@ def test_review_projection_error_is_sanitized_and_does_not_stop_app(monkeypatch,
         raise RuntimeError("synthetic-private-proposal-must-not-be-logged")
 
     monkeypatch.setattr(GuidanceReviewProjector, "project_pending", fail)
-    with TestClient(create_app()) as client:
+    with TestClient(create_app(readiness_probe=lambda: True)) as client:
         assert called.wait(timeout=2)
         assert client.get("/health/live").status_code == 200
     assert "synthetic-private-proposal" not in caplog.text

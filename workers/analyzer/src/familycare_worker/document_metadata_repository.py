@@ -93,8 +93,9 @@ def _store(
 class DocumentMetadataRunner:
     """Use generation row locks; metadata failure never mutates an existing IR."""
 
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, *, generation_id: UUID | None = None) -> None:
         self.database_url = psycopg_database_url(database_url)
+        self.generation_id = generation_id
 
     def run_once(self, worker_id: str) -> bool:
         del worker_id
@@ -120,13 +121,14 @@ class DocumentMetadataRunner:
                     LEFT JOIN document_metadata_proposals proposal
                       ON proposal.generation_id=g.id AND proposal.revision=%s
                     WHERE g.is_current AND item.state='succeeded'
+                      AND (%s::uuid IS NULL OR g.id=%s)
                       AND (item.processed_document_version_id IS NULL
                         OR item.processed_document_version_id=version.id)
                       AND (proposal.id IS NULL OR (proposal.state='RETRYABLE_FAILED'
                         AND proposal.attempts<3 AND proposal.available_at<=clock_timestamp()))
                     ORDER BY g.created_at,g.id FOR UPDATE OF g SKIP LOCKED LIMIT 1
                 """,
-                    (REVISION,),
+                    (REVISION, self.generation_id, self.generation_id),
                 ).fetchone()
                 if row is None:
                     return False

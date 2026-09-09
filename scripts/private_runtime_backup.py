@@ -10,6 +10,7 @@ archive master key, replaces an existing destination, or writes inside the repos
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import hmac
 import json
@@ -104,6 +105,21 @@ class _ArchiveSource:
 
 def _raise(code: str) -> Never:
     raise BackupContractError(code) from None
+
+
+def _raise_os(error: OSError, fallback: str) -> Never:
+    if error.errno in {errno.ENOSPC, errno.EDQUOT}:
+        _raise("BACKUP_DISK_SPACE_INSUFFICIENT")
+    _raise(fallback)
+
+
+def _require_disk_space(parent: Path, required_bytes: int) -> None:
+    try:
+        # A preflight estimate is not a reservation; write-time errors remain checked.
+        if shutil.disk_usage(parent)[2] < required_bytes + 1024 * 1024:
+            _raise("BACKUP_DISK_SPACE_INSUFFICIENT")
+    except OSError as error:
+        _raise_os(error, "BACKUP_DESTINATION_INVALID")
 
 
 def _is_within(path: Path, parent: Path) -> bool:
@@ -214,8 +230,8 @@ def _exclusive_private_writer(path: Path) -> Iterator[BinaryIO]:
             os.fsync(destination.fileno())
     except BackupContractError:
         raise
-    except OSError:
-        _raise("BACKUP_OPERATION_FAILED")
+    except OSError as error:
+        _raise_os(error, "BACKUP_OPERATION_FAILED")
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -370,7 +386,9 @@ def _write_archive_tar(archive_root: Path, destination_path: Path) -> ArchiveDig
                             _raise("BACKUP_SOURCE_INVALID")
                 except BackupContractError:
                     raise
-                except OSError, tarfile.TarError:
+                except OSError as error:
+                    _raise_os(error, "BACKUP_SOURCE_INVALID")
+                except tarfile.TarError:
                     _raise("BACKUP_SOURCE_INVALID")
                 finally:
                     if source_descriptor >= 0:
@@ -510,11 +528,18 @@ def _cleanup_created_directory(path: Path) -> None:
 
 
 def _create_destination(path: Path) -> None:
+    created = False
+    complete = False
     try:
         os.mkdir(path, PRIVATE_DIRECTORY_MODE)
+        created = True
         os.chmod(path, PRIVATE_DIRECTORY_MODE)
-    except OSError:
-        _raise("BACKUP_DESTINATION_INVALID")
+        complete = True
+    except OSError as error:
+        _raise_os(error, "BACKUP_DESTINATION_INVALID")
+    finally:
+        if created and not complete:
+            _cleanup_created_directory(path)
 
 
 def _fsync_directory(path: Path) -> None:
@@ -522,8 +547,8 @@ def _fsync_directory(path: Path) -> None:
     try:
         descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
         os.fsync(descriptor)
-    except OSError:
-        _raise("BACKUP_OPERATION_FAILED")
+    except OSError as error:
+        _raise_os(error, "BACKUP_OPERATION_FAILED")
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -570,7 +595,19 @@ def capture_backup_set(
     ):
         _raise("BACKUP_DESTINATION_INVALID")
     master_key = _load_master_key(master_key_file)
+    with _private_reader(database_dump, code="BACKUP_SOURCE_INVALID") as (_, database_details):
+        database_size = database_details.st_size
+    archive_descriptor = _open_archive_directory(archive_root)
+    try:
+        archive_sources, _ = _scan_archive_sources(archive_descriptor)
+        archive_size = sum(((item.size + 511) // 512 + 1) * 512 for item in archive_sources)
+    finally:
+        os.close(archive_descriptor)
+    _require_disk_space(
+        destination_path.parent, database_size + archive_size + 10240 + MAX_MANIFEST_BYTES
+    )
     _create_destination(destination_path)
+    complete = False
     try:
         database = _copy_database_dump(
             database_dump,
@@ -588,13 +625,17 @@ def capture_backup_set(
         _write_manifest(destination_path / MANIFEST_NAME, manifest)
         _fsync_directory(destination_path)
         _fsync_directory(destination_path.parent)
+        complete = True
         return manifest
     except BackupContractError:
-        _cleanup_created_directory(destination_path)
         raise
-    except OSError, tarfile.TarError:
-        _cleanup_created_directory(destination_path)
+    except OSError as error:
+        _raise_os(error, "BACKUP_OPERATION_FAILED")
+    except tarfile.TarError:
         _raise("BACKUP_OPERATION_FAILED")
+    finally:
+        if not complete:
+            _cleanup_created_directory(destination_path)
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -744,7 +785,9 @@ def _inspect_archive_tar(path: Path, *, expected_count: int, expected_size: int)
                 sizes.append(member.size)
     except BackupContractError:
         raise
-    except OSError, tarfile.TarError, EOFError:
+    except OSError as error:
+        _raise_os(error, "BACKUP_INTEGRITY_ERROR")
+    except tarfile.TarError, EOFError:
         _raise("BACKUP_INTEGRITY_ERROR")
     if len(seen) != expected_count or _expected_tar_size(sizes) != expected_size:
         _raise("BACKUP_INTEGRITY_ERROR")
@@ -920,8 +963,10 @@ def materialize_restore_inputs(
         backup_resolved, destination_resolved
     ):
         _raise("BACKUP_DESTINATION_INVALID")
+    _require_disk_space(destination_path.parent, manifest.database.size + manifest.archive.size)
     _create_destination(destination_path)
     archive_destination = destination_path / "archive"
+    complete = False
     try:
         os.mkdir(archive_destination, PRIVATE_DIRECTORY_MODE)
         os.chmod(archive_destination, PRIVATE_DIRECTORY_MODE)
@@ -941,13 +986,17 @@ def materialize_restore_inputs(
         _fsync_directory(archive_destination)
         _fsync_directory(destination_path)
         _fsync_directory(destination_path.parent)
+        complete = True
         return RestoreInputs(database_dump=database_destination, archive_root=archive_destination)
     except BackupContractError:
-        _cleanup_created_directory(destination_path)
         raise
-    except OSError, tarfile.TarError:
-        _cleanup_created_directory(destination_path)
+    except OSError as error:
+        _raise_os(error, "BACKUP_OPERATION_FAILED")
+    except tarfile.TarError:
         _raise("BACKUP_OPERATION_FAILED")
+    finally:
+        if not complete:
+            _cleanup_created_directory(destination_path)
 
 
 def _parser() -> argparse.ArgumentParser:

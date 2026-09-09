@@ -52,6 +52,7 @@ def test_worker_runtime_includes_local_korean_english_ocr_only() -> None:
     assert "tesseract-ocr" in content
     assert "tesseract-ocr-eng" in content
     assert "tesseract-ocr-kor" in content
+    assert "fonts-noto-cjk" in content
     assert "tesseract --list-langs" in content
     assert "ghostscript" not in content.casefold()
     assert "imagemagick" not in content.casefold()
@@ -65,3 +66,4 @@ def test_ci_smokes_worker_ocr_language_availability() -> None:
 
     assert "load: true" in workflow
     assert "familycare-worker:ci tesseract --list-langs" in workflow
+    assert "check_korean_font_rendering.py /fixture/korean-font-fallback.pdf" in workflow

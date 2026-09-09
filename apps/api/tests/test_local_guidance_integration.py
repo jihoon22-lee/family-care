@@ -403,3 +403,68 @@ def test_private_source_fallback_preserves_other_family_member_scope(
         assert result.local_guidance is not None
         assert len(result.local_guidance.candidates) == expected_count
         assert "OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE" in result.source_failure_codes
+
+
+@pytest.mark.parametrize("failed_source", ["private", "operational", None])
+def test_source_guidance_failure_keeps_other_source_and_adapts_private_once(
+    database_url: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failed_source: str | None,
+) -> None:
+    from familycare_api.decisions import repository as module
+    from familycare_api.decisions.knowledge_domain import KnowledgeDecisionContext
+    from familycare_api.guidance.domain import GuidanceContext
+
+    seed = _seed(database_url)
+    _seed_private_publication(database_url, seed, tmp_path)
+    original = module.adapt_private_guidance
+    adapted = 0
+
+    def private_adapter(context: KnowledgeDecisionContext) -> GuidanceContext:
+        nonlocal adapted
+        adapted += 1
+        if failed_source == "private":
+            raise ValueError("SYNTHETIC_PRIVATE_ADAPTER_UNAVAILABLE")
+        return original(context)
+
+    monkeypatch.setattr(module, "adapt_private_guidance", private_adapter)
+    if failed_source == "operational":
+
+        def unavailable(*args: object, **kwargs: object) -> NoReturn:
+            raise ValueError("SYNTHETIC_OPERATIONAL_SOURCE_UNAVAILABLE")
+
+        monkeypatch.setattr(module, "read_operational_guidance", unavailable)
+
+    service = DecisionService(seed.scope_a, DecisionRepository(database_url))
+    event = service.create_medical_event(
+        family_member_id=seed.member_a,
+        mode="post_treatment",
+        situation="Synthetic independent source failure",
+        event_date=date(2025, 6, 15),
+        facts={
+            "MedicalEvent.classification": "injury"
+            if failed_source == "private"
+            else "sample_category"
+        },
+        confirmation={"MedicalEvent.classification": "user"},
+    )
+    result = service.analyze_medical_event(event.id)
+    assert result.local_guidance is not None
+    assert adapted == 1
+    expected_kind = (
+        "OPERATIONAL_RIDER" if failed_source == "private" else "PRIVATE_KNOWLEDGE_COVERAGE"
+    )
+    assert any(
+        candidate.ref.kind == expected_kind for candidate in result.local_guidance.candidates
+    )
+    assert ("KNOWLEDGE_SOURCE_UNAVAILABLE" in result.source_failure_codes) == (
+        failed_source == "private"
+    )
+    assert ("OPERATIONAL_GUIDANCE_SOURCE_UNAVAILABLE" in result.source_failure_codes) == (
+        failed_source == "operational"
+    )
+    with psycopg.connect(_psycopg_url(database_url)) as connection:
+        assert connection.execute(
+            "SELECT local_guidance_json FROM decision_runs WHERE id=%s", (result.run_id,)
+        ).fetchone() == (result.local_guidance.model_dump(mode="json"),)

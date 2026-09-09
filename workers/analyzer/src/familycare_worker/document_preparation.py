@@ -15,7 +15,9 @@ from familycare_worker.document_structure_repository import (
 from familycare_worker.document_structure_source import load_stored_structure
 from familycare_worker.jobs import psycopg_database_url
 
-PREPARATION_REVISION = "stored-structure-geometry-v3-ch4096-context4096-max16384"
+# Revisit retained terminal records once, without rewriting their history, so
+# an existing first partial generation can gain source availability safely.
+PREPARATION_REVISION = "stored-structure-availability-v4-ch4096-context4096-max16384"
 
 
 class DocumentPreparationRunner:

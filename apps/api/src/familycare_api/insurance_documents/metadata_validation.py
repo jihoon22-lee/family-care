@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Callable
@@ -193,9 +194,11 @@ def _table(node: dict[str, Any], observed: _Observed, metadata_area_open: bool) 
         offset += len(left["text"]) + 1
 
 
-def _source_layout(nodes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+def _source_layout(
+    nodes: list[dict[str, Any]], *, proven_prefix: bool = True
+) -> tuple[list[dict[str, Any]], bool, frozenset[str]]:
     if not any(node["kind"] == "TABLE_ROW" for node in nodes):
-        return nodes, False
+        return nodes, False, frozenset()
     represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
     positioned = []
     bottoms: dict[str, float] = {}
@@ -207,29 +210,61 @@ def _source_layout(nodes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], b
             continue
         if node["kind"] == "TABLE_ROW":
             cells = node["cells"]
-            if not cells or any(cell.get("bbox") is None for cell in cells):
-                return nodes, False
+            if not cells or any(
+                cell.get("bbox") is None or (proven_prefix and not _positionable_box(cell["bbox"]))
+                for cell in cells
+            ):
+                return nodes, False, frozenset()
             top, left = (
                 min(cell["bbox"][1] for cell in cells),
                 min(cell["bbox"][0] for cell in cells),
             )
             bottoms[node["node_id"]] = max(cell["bbox"][3] for cell in cells)
         else:
-            if node.get("bbox") is None:
-                return nodes, False
+            if node.get("bbox") is None or (proven_prefix and not _positionable_box(node["bbox"])):
+                return nodes, False, frozenset()
             left, top = node["bbox"][:2]
             bottoms[node["node_id"]] = node["bbox"][3]
             native_order.append(node["node_id"])
         positioned.append((top, left, index, node))
     ordered = sorted(positioned, key=lambda item: item[:3])
     if [item[3]["node_id"] for item in ordered if item[3]["kind"] != "TABLE_ROW"] != native_order:
-        return nodes, False
-    if any(
-        right[0] < bottoms[left[3]["node_id"]]
-        for left, right in zip(ordered, ordered[1:], strict=False)
-    ):
-        return nodes, False
-    return [item[3] for item in ordered], True
+        return nodes, False, frozenset()
+    for index, (previous, following) in enumerate(zip(ordered, ordered[1:], strict=False)):
+        if following[0] < bottoms[previous[3]["node_id"]]:
+            if not proven_prefix:
+                return nodes, False, frozenset()
+            return (
+                [item[3] for item in ordered],
+                True,
+                frozenset(item[3]["node_id"] for item in ordered[index:]),
+            )
+    return [item[3] for item in ordered], True, frozenset()
+
+
+def _positionable_box(box: list[float]) -> bool:
+    return (
+        len(box) == 4
+        and all(math.isfinite(value) for value in box)
+        and 0 <= box[0] < box[2]
+        and 0 <= box[1] < box[3]
+    )
+
+
+def _quarantined_fields(node: dict[str, Any], patterns: dict[str, re.Pattern[str]]) -> set[str]:
+    fields = {
+        name
+        for line in node["text"].splitlines()
+        for name, pattern in patterns.items()
+        if pattern.fullmatch(line)
+    }
+    fields.update(
+        name
+        for cell in node.get("cells", [])
+        for name, labels in METADATA_FIELD_LABELS.items()
+        if _key(cell["text"].strip().rstrip(":：")) in labels
+    )
+    return fields
 
 
 def _metadata_row_context(node: dict[str, Any]) -> bool:
@@ -255,11 +290,19 @@ def _metadata_row_context(node: dict[str, Any]) -> bool:
 
 
 def _observe(
-    nodes: list[dict[str, Any]], *, legacy: bool = False, issuer_captions: bool = False
+    nodes: list[dict[str, Any]],
+    *,
+    legacy: bool = False,
+    issuer_captions: bool = False,
+    proven_prefix: bool = True,
 ) -> _Observed:
     observed = _Observed()
     patterns = _LEGACY_PATTERNS if legacy else _PATTERNS
-    nodes, positioned = (nodes, False) if legacy else _source_layout(nodes)
+    nodes, positioned, quarantined = (
+        (nodes, False, frozenset())
+        if legacy
+        else _source_layout(nodes, proven_prefix=proven_prefix)
+    )
     title_area_open = True
     metadata_area_open = True
     tables = [node for node in nodes if node["kind"] == "TABLE_ROW"]
@@ -270,6 +313,11 @@ def _observe(
     represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
     for node in nodes:
         if node["source_layer"] not in {"native", "ocr"}:
+            continue
+        if node["node_id"] in quarantined:
+            title_area_open = False
+            metadata_area_open = False
+            observed.unresolved.update(_quarantined_fields(node, patterns))
             continue
         if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.get("issue_codes", []):
             title_area_open = False
@@ -552,12 +600,14 @@ class MetadataSourceContext:
                 set(
                     _observe(
                         nodes,
+                        proven_prefix=self.revision == "document-metadata-v8",
                         issuer_captions=self.revision
                         in {
                             "document-metadata-v4",
                             "document-metadata-v5",
                             "document-metadata-v6",
                             "document-metadata-v7",
+                            "document-metadata-v8",
                         },
                     ).roles
                 ),
@@ -572,6 +622,7 @@ class MetadataSourceContext:
             "document-metadata-v5",
             "document-metadata-v6",
             "document-metadata-v7",
+            "document-metadata-v8",
         } and is_navigation_page(nodes):
             self.states[number] = restricted
             self.last_page = number
@@ -588,10 +639,11 @@ class MetadataSourceContext:
                 "document-metadata-v5",
                 "document-metadata-v6",
                 "document-metadata-v7",
+                "document-metadata-v8",
             },
             navigation_instructions=self.revision
-            in {"document-metadata-v6", "document-metadata-v7"},
-            reading_guides=self.revision == "document-metadata-v7",
+            in {"document-metadata-v6", "document-metadata-v7", "document-metadata-v8"},
+            reading_guides=self.revision in {"document-metadata-v7", "document-metadata-v8"},
         )
         self.last_page = number
 
@@ -601,7 +653,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v7",
+    revision: str = "document-metadata-v8",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -630,6 +682,7 @@ def _validate(
         "document-metadata-v5",
         "document-metadata-v6",
         "document-metadata-v7",
+        "document-metadata-v8",
     }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
@@ -639,6 +692,7 @@ def _validate(
         "document-metadata-v5",
         "document-metadata-v6",
         "document-metadata-v7",
+        "document-metadata-v8",
     }:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
@@ -695,6 +749,7 @@ def _validate(
         "document-metadata-v5",
         "document-metadata-v6",
         "document-metadata-v7",
+        "document-metadata-v8",
     }:
 
         def context_page(number: int) -> dict[str, Any]:
@@ -723,6 +778,7 @@ def _validate(
         "document-metadata-v5",
         "document-metadata-v6",
         "document-metadata-v7",
+        "document-metadata-v8",
     } and len(span_indices) != len(component["role_spans"]):
         return None
     previous_numbers: tuple[int, ...] = ()
@@ -742,10 +798,12 @@ def _validate(
             "document-metadata-v5",
             "document-metadata-v6",
             "document-metadata-v7",
+            "document-metadata-v8",
         } and is_navigation_page(page_nodes):
             return None
         page = _observe(
             page_nodes,
+            proven_prefix=revision == "document-metadata-v8",
             legacy=revision == "document-metadata-v1",
             issuer_captions=revision
             in {
@@ -753,6 +811,7 @@ def _validate(
                 "document-metadata-v5",
                 "document-metadata-v6",
                 "document-metadata-v7",
+                "document-metadata-v8",
             },
         )
         restricted = False
@@ -772,6 +831,7 @@ def _validate(
                 "document-metadata-v5",
                 "document-metadata-v6",
                 "document-metadata-v7",
+                "document-metadata-v8",
             }
             else None
         )
@@ -786,6 +846,7 @@ def _validate(
             "document-metadata-v5",
             "document-metadata-v6",
             "document-metadata-v7",
+            "document-metadata-v8",
         }:
             _bind_insurer_captions(page, page_nodes)
         numbers = body[0] if body is not None and role == "terms" else ()
@@ -801,6 +862,7 @@ def _validate(
                     "document-metadata-v5",
                     "document-metadata-v6",
                     "document-metadata-v7",
+                    "document-metadata-v8",
                 }
                 and role == "terms"
                 and bool(numbers)
@@ -832,6 +894,7 @@ def _validate(
             "document-metadata-v5",
             "document-metadata-v6",
             "document-metadata-v7",
+            "document-metadata-v8",
         }:
             range_evidence.append(
                 {
@@ -856,6 +919,7 @@ def _validate(
         "document-metadata-v5",
         "document-metadata-v6",
         "document-metadata-v7",
+        "document-metadata-v8",
     }:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:

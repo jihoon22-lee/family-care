@@ -10,6 +10,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 
 from familycare_api import __version__
+from familycare_api.runtime_schema import (
+    REQUIRED_SCHEMA_QUERY,
+    SCHEMA_REVISION_QUERY,
+    SUPPORTED_SCHEMA_REVISION,
+)
 
 ReadinessProbe = Callable[[], bool]
 
@@ -31,7 +36,7 @@ def liveness() -> HealthResponse:
 
 
 def database_is_ready(database_url: str | None = None) -> bool:
-    """Return whether PostgreSQL accepts a minimal query."""
+    """Require the installed schema revision and critical read/write contracts."""
 
     url = database_url or os.getenv("FAMILYCARE_DATABASE_URL")
     if not url:
@@ -39,9 +44,22 @@ def database_is_ready(database_url: str | None = None) -> bool:
 
     engine: Engine | None = None
     try:
-        engine = create_engine(url, pool_pre_ping=True)
+        engine = create_engine(
+            url,
+            pool_pre_ping=True,
+            connect_args={
+                "connect_timeout": 2,
+                "options": "-c default_transaction_read_only=on -c statement_timeout=1000 "
+                "-c lock_timeout=1000",
+            },
+        )
         with engine.connect() as connection:
-            connection.execute(text("SELECT 1"))
+            revisions = connection.execute(text(SCHEMA_REVISION_QUERY)).fetchall()
+            if [row[0] for row in revisions] != [SUPPORTED_SCHEMA_REVISION]:
+                return False
+            # Parse required columns without reading application rows. A database
+            # stamped to the right revision but missing these contracts is not ready.
+            connection.execute(text(REQUIRED_SCHEMA_QUERY))
     except SQLAlchemyError:
         return False
     finally:

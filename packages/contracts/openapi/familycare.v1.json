@@ -5363,6 +5363,30 @@
       },
       "GuidanceEvidence": {
         "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "OPERATIONAL_EVIDENCE"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "then": {
+              "properties": {
+                "page_end": {
+                  "maximum": 500.0
+                },
+                "page_start": {
+                  "maximum": 500.0
+                }
+              }
+            }
+          }
+        ],
         "properties": {
           "evidence_id": {
             "format": "uuid",
@@ -5378,13 +5402,11 @@
             "type": "string"
           },
           "page_end": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page End",
             "type": "integer"
           },
           "page_start": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page Start",
             "type": "integer"
@@ -5505,13 +5527,11 @@
             "title": "Evidence"
           },
           "page_end": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page End",
             "type": "integer"
           },
           "page_start": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page Start",
             "type": "integer"
@@ -6045,13 +6065,11 @@
             "type": "string"
           },
           "page_end": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page End",
             "type": "integer"
           },
           "page_start": {
-            "maximum": 500.0,
             "minimum": 1.0,
             "title": "Page Start",
             "type": "integer"

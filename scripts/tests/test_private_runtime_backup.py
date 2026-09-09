@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import errno
 import io
 import json
 import os
+import shutil
 import tarfile
 from pathlib import Path
 from uuid import uuid4
@@ -94,6 +96,90 @@ def test_capture_verify_and_materialize_synthetic_backup_set(tmp_path: Path) -> 
     assert restore_destination.stat().st_mode & 0o777 == 0o700
     assert restored.archive_root.stat().st_mode & 0o777 == 0o700
     assert restored.database_dump.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("operation", ["capture", "restore"])
+def test_interruption_removes_partial_owned_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
+    destination = tmp_path / "synthetic-backup"
+
+    def interrupted(*args: object, **kwargs: object) -> None:
+        raise KeyboardInterrupt
+
+    if operation == "capture":
+        monkeypatch.setattr(backup, "_write_archive_tar", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            capture_backup_set(
+                database_dump=database_dump,
+                archive_root=archive_root,
+                master_key_file=key_file,
+                destination=destination,
+            )
+    else:
+        capture_backup_set(
+            database_dump=database_dump,
+            archive_root=archive_root,
+            master_key_file=key_file,
+            destination=destination,
+        )
+        monkeypatch.setattr(backup, "_extract_archive_tar", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            materialize_restore_inputs(
+                backup_root=destination, master_key_file=key_file, destination=tmp_path / "restore"
+            )
+        destination = tmp_path / "restore"
+    assert not destination.exists()
+
+
+def test_failed_destination_chmod_removes_only_created_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def denied(*args: object) -> None:
+        raise PermissionError("synthetic permission failure")
+
+    monkeypatch.setattr(os, "chmod", denied)
+    destination = tmp_path / "new-backup"
+    with pytest.raises(BackupContractError):
+        backup._create_destination(destination)
+    assert not destination.exists()
+
+
+def test_capture_reports_low_disk_before_creating_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
+    destination = tmp_path / "synthetic-backup"
+    monkeypatch.setattr(shutil, "disk_usage", lambda _: (100, 100, 0))
+    with pytest.raises(BackupContractError, match="^BACKUP_DISK_SPACE_INSUFFICIENT$"):
+        capture_backup_set(
+            database_dump=database_dump,
+            archive_root=archive_root,
+            master_key_file=key_file,
+            destination=destination,
+        )
+    assert not destination.exists()
+
+
+def test_disk_exhaustion_during_copy_is_distinct_and_removes_partial_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_dump, archive_root, key_file, _ = _synthetic_sources(tmp_path)
+    destination = tmp_path / "synthetic-backup"
+
+    def exhausted(*args: object, **kwargs: object) -> object:
+        raise OSError(errno.ENOSPC, "synthetic detail must not be reported")
+
+    monkeypatch.setattr(os, "fsync", exhausted)
+    with pytest.raises(BackupContractError, match="^BACKUP_DISK_SPACE_INSUFFICIENT$"):
+        capture_backup_set(
+            database_dump=database_dump,
+            archive_root=archive_root,
+            master_key_file=key_file,
+            destination=destination,
+        )
+    assert not destination.exists()
 
 
 def test_verify_rejects_tampered_artifact_with_sanitized_error(tmp_path: Path) -> None:

@@ -40,7 +40,7 @@ def _migrate(url: str, operation: str, revision: str) -> subprocess.CompletedPro
 
 
 @pytest.mark.parametrize("mode", ["contents", "instruction", "reading_guide"])
-def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v7_history(
+def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_current_history(
     publication_database: Any,
     mode: str,
 ) -> None:
@@ -136,11 +136,11 @@ def test_navigation_reprocessing_preserves_prior_metadata_and_refuses_loss_of_v7
             assert connection.execute(
                 "SELECT validator_revision,outcome FROM document_metadata_publications"
             ).fetchall() == [
-                {"validator_revision": "document-metadata-api-v7", "outcome": "APPLIED"}
+                {"validator_revision": "document-metadata-api-v8", "outcome": "APPLIED"}
             ]
             current = connection.execute(
                 "SELECT id,to_jsonb(p)::text AS snapshot FROM document_metadata_proposals p "
-                "WHERE revision='document-metadata-v7'"
+                "WHERE revision='document-metadata-v8'"
             ).fetchone()
         refused = _migrate(url, "downgrade", prior_schema)
         assert (

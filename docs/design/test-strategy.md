@@ -102,6 +102,7 @@ TMPDIR=/tmp uv run pytest -m integration apps/api/tests workers/analyzer/tests -
 - 실제 image build
 - 비특권 runtime UID
 - healthcheck
+- Worker의 비내장 한글 PDF 렌더링: 합성 CID-font fixture의 한글 각 글자 영역과 영문 대조군을 실제 이미지 안에서 검사하며, 글꼴 누락을 skip으로 숨기지 않는다.
 - Dockerfile build context
 - `.env`와 Git metadata 미포함
 - Web static cache header
