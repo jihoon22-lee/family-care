@@ -28,6 +28,8 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Fixed
 
+- Web/API request access logging and Web upstream error logging no longer persist private
+  identifiers from request URLs in the default container configuration.
 - Historical status, payment-count uncertainty, currency mismatches, ambiguous terms, and missing
   calculation inputs no longer become unsupported eligibility or payment assumptions.
 - Native text-line geometry, JSON coordinates, terms lineage, and compound insured fields now

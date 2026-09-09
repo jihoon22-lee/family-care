@@ -106,6 +106,7 @@ TMPDIR=/tmp uv run pytest -m integration apps/api/tests workers/analyzer/tests -
 - Dockerfile build context
 - `.env`와 Git metadata 미포함
 - Web static cache header
+- Uvicorn/Web request access logs disabled; Web upstream errors do not persist request URLs.
 - Dockerfile의 정확한 stage 수·순서와 완전한 patch 태그: Node 24 Alpine, Python 3.14 slim, uv 0.12
 - Web runtime image pin `nginxinc/nginx-unprivileged:1.31.2-alpine3.23`과 `scripts/check_containers.py` exact expectation
 

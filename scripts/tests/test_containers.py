@@ -1,4 +1,23 @@
-from scripts.check_containers import DOCKERFILES, validate_image_references
+from scripts.check_containers import (
+    DOCKERFILES,
+    ROOT,
+    validate_image_references,
+    validate_request_logging,
+)
+
+
+def test_runtime_request_logging_excludes_private_url_fields() -> None:
+    api = DOCKERFILES["api"].read_text(encoding="utf-8")
+    nginx = (ROOT / "infra/containers/nginx.conf").read_text(encoding="utf-8")
+
+    assert validate_request_logging(api, nginx) == []
+    assert validate_request_logging(api.replace(', "--no-access-log"', ""), nginx)
+    assert validate_request_logging(
+        api, nginx.replace("access_log off;", "access_log /dev/stdout;")
+    )
+    assert validate_request_logging(
+        api, nginx.replace("error_log /dev/null crit;", "error_log /dev/stderr warn;")
+    )
 
 
 def test_image_policy_accepts_supported_fully_pinned_updates() -> None:
