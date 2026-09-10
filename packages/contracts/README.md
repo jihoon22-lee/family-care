@@ -91,3 +91,19 @@ stored revision through Clause and semantic source readers. Covered-person
 conditional sentences identify content only. Product captions retain their full
 bounded variant suffixes; neither classification establishes enrollment or edition
 applicability. A v10 proposal or publication prevents downgrade to 0071.
+
+
+Metadata v11 / `0073_metadata_header_regions` adds an independently proven first
+header flow for separated physical columns. A strict company/product caption or
+valid explicit field may precede the required formal title through the same bounded
+adjacent flow; a broad cover prelude alone cannot authorize it. It preserves complete source spans,
+original page reference context, unresolved fields outside the flow, and all prior
+revision semantics. Both consumers bound table representation and flow comparison
+work; exhausted proofs never return a truncated success. A role without printed
+identity remains role-only, and v11 proposal/publication history blocks downgrade.
+
+The schema's `x-insurer-caption-vocabulary` records exact public association captions,
+source sections, observation date and vocabulary version. Generated API/Worker
+consumers use it only in v11, with complete header proof and existing caption/role
+adjacency. It is not a legal-name/alias registry or an applicability decision; source
+links and the inference boundary are in [the design](../../docs/design/clause-linking-search.md).

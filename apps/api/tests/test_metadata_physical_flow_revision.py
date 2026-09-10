@@ -25,6 +25,15 @@ from workers.analyzer.tests.test_document_structure_repository import _psycopg_u
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def _historical_v10_producer(monkeypatch):
+    """Keep the v10 source-flow acceptance independent of later producers."""
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v10")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v10")
+
+
 def test_v10_appends_to_same_generation_and_preserves_v9_history(publication_database: Any) -> None:
     url, job, generation = _seed(publication_database)
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:

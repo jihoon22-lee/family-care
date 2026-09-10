@@ -62,7 +62,7 @@ def _operative(text: str, *, metadata_revision: str = "document-metadata-v8") ->
         + r"(?:The\s+)?(?:insured|policyholder|beneficiary|insurance\s+benefit)\s+"
         + r"(?:means|is\s+defined\s+as)\s+[^.!?\n]{1,180}[.]?",
     )
-    if metadata_revision == "document-metadata-v10":
+    if metadata_revision in {"document-metadata-v10", "document-metadata-v11"}:
         patterns += (
             _ITEM
             + r"(?:피보험자|보험대상자)(?:가|는)"
@@ -131,7 +131,8 @@ def _lineage_valid(
             # the constructor: first-word alignment and previous-word adjacency.
             anchor = (
                 boxes[0]
-                if metadata_revision in {"document-metadata-v9", "document-metadata-v10"}
+                if metadata_revision
+                in {"document-metadata-v9", "document-metadata-v10", "document-metadata-v11"}
                 else last
             )
             height, anchor_height = box[3] - box[1], anchor[3] - anchor[1]
@@ -564,7 +565,7 @@ def _continues(
         and min(a[2], b[2]) - max(a[0], b[0]) >= min(a[2] - a[0], b[2] - b[0]) * 0.5
         and 0 <= b[1] - a[3] <= min(48, height * 3)
         and (
-            metadata_revision == "document-metadata-v10"
+            metadata_revision in {"document-metadata-v10", "document-metadata-v11"}
             or left["kind"] == "TABLE_ROW"
             or right["kind"] == "TABLE_ROW"
             or left["reading_order"] < right["reading_order"]
@@ -615,7 +616,7 @@ def _regions(
                         < barrier["reading_order"]
                         < max(region[-1]["reading_order"], node["reading_order"])
                     )
-                    if metadata_revision == "document-metadata-v10"
+                    if metadata_revision in {"document-metadata-v10", "document-metadata-v11"}
                     else (
                         barrier["kind"] in {"BLOCK", "TEXT_LINE"}
                         and region[-1]["reading_order"]

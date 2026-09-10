@@ -14,10 +14,12 @@ from typing import Any, cast
 
 from familycare_api.documents.generated_metadata import (
     METADATA_FIELD_LABELS,
+    METADATA_INSURER_CAPTIONS_V11,
     METADATA_ROLE_TITLES,
     DocumentMetadataComponent,
     DocumentMetadataFact,
 )
+from familycare_api.insurance_documents.metadata_header_validation import header_selection
 from familycare_api.insurance_documents.navigation_page_validation import is_navigation_page
 from familycare_api.insurance_documents.terms_body_validation import (
     _lineage_valid,
@@ -69,7 +71,7 @@ def _product_caption(text: str, *, metadata_revision: str = "document-metadata-v
         and not re.search(r"(?:생명보험|손해보험|화재해상보험|주식회사)$", text)
         and re.fullmatch(
             r".+(?:보\s*험|\bpolicy)(?:\s*(?:\([^()（）]{1,40}\)|（[^()（）]{1,40}）)){0,4}(?:\s*[0-9]{1,3}\s*(?:종|형))?"
-            if metadata_revision == "document-metadata-v10"
+            if metadata_revision in {"document-metadata-v10", "document-metadata-v11"}
             else r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?",
             text,
             re.IGNORECASE,
@@ -83,6 +85,10 @@ def _cover_caption(text: str, *, metadata_revision: str = "document-metadata-v8"
         and not _REFERENCE_HEADING.search(text)
         and (
             _product_caption(text, metadata_revision=metadata_revision)
+            or (
+                metadata_revision == "document-metadata-v11"
+                and text in METADATA_INSURER_CAPTIONS_V11
+            )
             or re.fullmatch(
                 r"(?:\(?무배당\)?|\(?갱신형\)?|\S+(?:생명|화재|손해보험|생명보험|주식회사)|"
                 r"[\w ]+(?:Assurance|Life|Insurance Company))",
@@ -213,7 +219,7 @@ def _source_layout(
     metadata_revision: str = "document-metadata-v8",
 ) -> tuple[list[dict[str, Any]], bool, frozenset[str]]:
     has_tables = any(node["kind"] == "TABLE_ROW" for node in nodes)
-    physical = metadata_revision == "document-metadata-v10"
+    physical = metadata_revision in {"document-metadata-v10", "document-metadata-v11"}
     if not has_tables and not physical:
         return nodes, False, frozenset()
     represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
@@ -352,6 +358,56 @@ def _metadata_row_context(node: dict[str, Any]) -> bool:
     return True
 
 
+def _header_title(node: dict[str, Any], revision: str) -> bool:
+    if node["kind"] == "TABLE_ROW" and (
+        node.get("row_role") != "data"
+        or len(node["cells"]) != 1
+        or node["cells"][0]["text"] != node["text"]
+    ):
+        return False
+    lines = [line.strip(" \t[]【】") for line in node["text"].splitlines() if line.strip()]
+    return len(lines) == 1 and _cover_role(lines[0], metadata_revision=revision) is not None
+
+
+def _header_metadata(node: dict[str, Any], revision: str) -> bool:
+    if node["kind"] == "TABLE_ROW" and len(node["cells"]) != 1:
+        return _metadata_row_context(node)
+    if node["kind"] == "TABLE_ROW" and node.get("row_role") != "data":
+        return False
+    return all(
+        not line.strip()
+        or _cover_caption(line.strip(), metadata_revision=revision)
+        or _insurer_caption(line.strip(), metadata_revision=revision)
+        or any(pattern.fullmatch(line) for pattern in _PATTERNS.values())
+        for line in node["text"].splitlines()
+    )
+
+
+def _header_prelude(node: dict[str, Any], revision: str) -> bool:
+    if node["kind"] == "TABLE_ROW" and len(node["cells"]) != 1:
+        return _metadata_row_context(node) and all(
+            any(
+                _key(left["text"].strip().rstrip(":：")) in labels
+                and _value(field, right["text"].strip()) is not None
+                for field, labels in METADATA_FIELD_LABELS.items()
+            )
+            for left, right in zip(node["cells"][::2], node["cells"][1::2], strict=True)
+        )
+    if node["kind"] == "TABLE_ROW" and node.get("row_role") != "data":
+        return False
+    return all(
+        not line.strip()
+        or _insurer_caption(line.strip(), metadata_revision=revision)
+        or _product_caption(line.strip(), metadata_revision=revision)
+        or any(
+            (matched := pattern.fullmatch(line)) is not None
+            and _value(field, matched.group("value")) is not None
+            for field, pattern in _PATTERNS.items()
+        )
+        for line in node["text"].splitlines()
+    )
+
+
 def _observe(
     nodes: list[dict[str, Any]],
     *,
@@ -362,11 +418,41 @@ def _observe(
 ) -> _Observed:
     observed = _Observed()
     patterns = _LEGACY_PATTERNS if legacy else _PATTERNS
+    source_nodes = nodes
     nodes, positioned, quarantined = (
         (nodes, False, frozenset())
         if legacy
         else _source_layout(nodes, proven_prefix=proven_prefix, metadata_revision=metadata_revision)
     )
+    header_nodes: frozenset[str] = frozenset()
+    if metadata_revision == "document-metadata-v11":
+        selection = header_selection(
+            source_nodes,
+            title=lambda node: _header_title(node, metadata_revision),
+            metadata=lambda node: _header_metadata(node, metadata_revision),
+            prelude=lambda node: _header_prelude(node, metadata_revision),
+            reference=lambda node: (
+                reference_context_present([node])
+                or bool(_REFERENCE_HEADING.search(unicodedata.normalize("NFKC", node["text"])))
+            ),
+        )
+        if selection is not None:
+            selected, header_sources = selection
+            header_nodes = frozenset(selected)
+            by_id = {node["node_id"]: node for node in source_nodes}
+            if any(
+                identifier in quarantined
+                or "LINE_COLUMN_CONTEXT_UNRESOLVED" in by_id[identifier].get("issue_codes", [])
+                for identifier in selected
+            ):
+                remainder = [
+                    node
+                    for node in source_nodes
+                    if node["node_id"] not in header_nodes | header_sources
+                ]
+                nodes = [*(by_id[identifier] for identifier in selected), *remainder]
+                positioned = True
+                quarantined = frozenset(node["node_id"] for node in remainder)
     title_area_open = True
     metadata_area_open = True
     tables = [node for node in nodes if node["kind"] == "TABLE_ROW"]
@@ -383,7 +469,10 @@ def _observe(
             metadata_area_open = False
             observed.unresolved.update(_quarantined_fields(node, patterns))
             continue
-        if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.get("issue_codes", []):
+        if (
+            "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.get("issue_codes", [])
+            and node["node_id"] not in header_nodes
+        ):
             title_area_open = False
             metadata_area_open = False
             observed.unresolved.update(
@@ -441,7 +530,10 @@ def _observe(
                 labelled = False
             prelude = not legacy and (
                 _cover_caption(trimmed, metadata_revision=metadata_revision)
-                or (issuer_captions and _insurer_caption(trimmed))
+                or (
+                    issuer_captions
+                    and _insurer_caption(trimmed, metadata_revision=metadata_revision)
+                )
             )
             if raw.strip() and not known_title and not labelled and not prelude:
                 title_area_open = False
@@ -495,7 +587,12 @@ def _observe(
                 and metadata_area_open
                 and not table_barrier
                 and not labelled
-                and _insurer_caption(trimmed)
+                and _insurer_caption(trimmed, metadata_revision=metadata_revision)
+                and (
+                    metadata_revision != "document-metadata-v11"
+                    or trimmed not in METADATA_INSURER_CAPTIONS_V11
+                    or node["node_id"] in header_nodes
+                )
             ):
                 observed.insurer_captions.append(
                     _span(
@@ -526,7 +623,7 @@ def _observe(
     return observed
 
 
-def _insurer_caption(text: str) -> bool:
+def _insurer_caption(text: str, *, metadata_revision: str = "document-metadata-v8") -> bool:
     if not 3 < len(text) <= 160 or _REFERENCE_HEADING.search(text):
         return False
     if re.search(
@@ -537,7 +634,8 @@ def _insurer_caption(text: str) -> bool:
     ):
         return False
     return bool(
-        re.fullmatch(
+        (metadata_revision == "document-metadata-v11" and text in METADATA_INSURER_CAPTIONS_V11)
+        or re.fullmatch(
             r"(?:\S+(?:생명보험|손해보험|화재해상보험)|"
             r"[\w ]+\s(?:Assurance|Life Insurance|Insurance Company))",
             text,
@@ -597,7 +695,7 @@ def _caption_region_adjacent(
     overlap = min(left[2], right[2]) - max(left[0], right[0])
     return (
         (
-            metadata_revision == "document-metadata-v10"
+            metadata_revision in {"document-metadata-v10", "document-metadata-v11"}
             or left_node["reading_order"] < right_node["reading_order"]
         )
         and overlap >= 0.5 * min(left[2] - left[0], right[2] - right[0])
@@ -639,7 +737,7 @@ def _caption_interrupted(
             text = line.strip()
             if text and not (
                 _cover_caption(text, metadata_revision=metadata_revision)
-                or _insurer_caption(text)
+                or _insurer_caption(text, metadata_revision=metadata_revision)
                 or _cover_role(text, metadata_revision=metadata_revision)
                 or any(pattern.fullmatch(line) for pattern in _PATTERNS.values())
             ):
@@ -700,6 +798,7 @@ class MetadataSourceContext:
                             "document-metadata-v8",
                             "document-metadata-v9",
                             "document-metadata-v10",
+                            "document-metadata-v11",
                         },
                         issuer_captions=self.revision
                         in {
@@ -710,6 +809,7 @@ class MetadataSourceContext:
                             "document-metadata-v8",
                             "document-metadata-v9",
                             "document-metadata-v10",
+                            "document-metadata-v11",
                         },
                     ).roles
                 ),
@@ -727,6 +827,7 @@ class MetadataSourceContext:
             "document-metadata-v8",
             "document-metadata-v9",
             "document-metadata-v10",
+            "document-metadata-v11",
         } and is_navigation_page(nodes, metadata_revision=self.revision):
             self.states[number] = restricted
             self.last_page = number
@@ -747,6 +848,7 @@ class MetadataSourceContext:
                 "document-metadata-v8",
                 "document-metadata-v9",
                 "document-metadata-v10",
+                "document-metadata-v11",
             },
             navigation_instructions=self.revision
             in {
@@ -755,6 +857,7 @@ class MetadataSourceContext:
                 "document-metadata-v8",
                 "document-metadata-v9",
                 "document-metadata-v10",
+                "document-metadata-v11",
             },
             reading_guides=self.revision
             in {
@@ -762,6 +865,7 @@ class MetadataSourceContext:
                 "document-metadata-v8",
                 "document-metadata-v9",
                 "document-metadata-v10",
+                "document-metadata-v11",
             },
         )
         self.last_page = number
@@ -772,7 +876,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v10",
+    revision: str = "document-metadata-v11",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -804,6 +908,7 @@ def _validate(
         "document-metadata-v8",
         "document-metadata-v9",
         "document-metadata-v10",
+        "document-metadata-v11",
     }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
@@ -816,6 +921,7 @@ def _validate(
         "document-metadata-v8",
         "document-metadata-v9",
         "document-metadata-v10",
+        "document-metadata-v11",
     }:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
@@ -875,6 +981,7 @@ def _validate(
         "document-metadata-v8",
         "document-metadata-v9",
         "document-metadata-v10",
+        "document-metadata-v11",
     }:
 
         def context_page(number: int) -> dict[str, Any]:
@@ -906,6 +1013,7 @@ def _validate(
         "document-metadata-v8",
         "document-metadata-v9",
         "document-metadata-v10",
+        "document-metadata-v11",
     } and len(span_indices) != len(component["role_spans"]):
         return None
     previous_numbers: tuple[int, ...] = ()
@@ -928,13 +1036,19 @@ def _validate(
             "document-metadata-v8",
             "document-metadata-v9",
             "document-metadata-v10",
+            "document-metadata-v11",
         } and is_navigation_page(page_nodes, metadata_revision=revision):
             return None
         page = _observe(
             page_nodes,
             metadata_revision=revision,
             proven_prefix=revision
-            in {"document-metadata-v8", "document-metadata-v9", "document-metadata-v10"},
+            in {
+                "document-metadata-v8",
+                "document-metadata-v9",
+                "document-metadata-v10",
+                "document-metadata-v11",
+            },
             legacy=revision == "document-metadata-v1",
             issuer_captions=revision
             in {
@@ -945,6 +1059,7 @@ def _validate(
                 "document-metadata-v8",
                 "document-metadata-v9",
                 "document-metadata-v10",
+                "document-metadata-v11",
             },
         )
         restricted = False
@@ -967,6 +1082,7 @@ def _validate(
                 "document-metadata-v8",
                 "document-metadata-v9",
                 "document-metadata-v10",
+                "document-metadata-v11",
             }
             else None
         )
@@ -984,6 +1100,7 @@ def _validate(
             "document-metadata-v8",
             "document-metadata-v9",
             "document-metadata-v10",
+            "document-metadata-v11",
         }:
             _bind_insurer_captions(page, page_nodes, metadata_revision=revision)
         numbers = body[0] if body is not None and role == "terms" else ()
@@ -1002,6 +1119,7 @@ def _validate(
                     "document-metadata-v8",
                     "document-metadata-v9",
                     "document-metadata-v10",
+                    "document-metadata-v11",
                 }
                 and role == "terms"
                 and bool(numbers)
@@ -1036,6 +1154,7 @@ def _validate(
             "document-metadata-v8",
             "document-metadata-v9",
             "document-metadata-v10",
+            "document-metadata-v11",
         }:
             range_evidence.append(
                 {
@@ -1063,6 +1182,7 @@ def _validate(
         "document-metadata-v8",
         "document-metadata-v9",
         "document-metadata-v10",
+        "document-metadata-v11",
     }:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:

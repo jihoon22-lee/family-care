@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0072_metadata_physical_flow"
+REVISION = "0073_metadata_header_regions"
 
 
 class Result:
@@ -49,7 +49,8 @@ class Connection:
         [],
         [("0069_policy_draft_replay",)],
         [("0071_source_calculations",)],
-        [("0073_synthetic_future",)],
+        [("0072_metadata_physical_flow",)],
+        [("0074_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

@@ -1,6 +1,6 @@
 # v0.5 B03: Detailed terms knowledge and compilation
 
-- 상태: in_progress — 고정 S07/S08의 원문 조건부 감액·실손 compiler 수용 보완; 기존 PR #78의 완료 기록 보존
+- 상태: completed — PR #95에서 고정 S07/S08 원문 compiler 수용 완료; 실제 자료 연결은 #63/#69에서 추적
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP04 #64](https://github.com/jihoon22-lee/family-care/issues/64)
 - 코드 기반: [B02 PR #76](https://github.com/jihoon22-lee/family-care/pull/76), merge `bc727928a0030332452fb7b3bf639beba6b9e60e`
@@ -13,7 +13,7 @@
 3. completed — 후보/검증/compiled root의 불변 저장과 현재 조회, 실제 원문 재대조, root별 부분 성공·실패/재시도·동시성과 마지막 정상 결과 보존을 연결한다. legacy 지식을 새 사용자 확인으로 가장하지 않는 adapter를 제공한다.
 4. completed — 공유 정의/별표의 변경 영향을 의존 root에 전파하고 의미 재사용과 새 source proof를 구분한다. 사용자 교정·기존 계약/담보·청구 snapshot을 유지하며 로컬 질의/계산 reader에 인계한다.
 5. completed — 같은 합성 문서로 주규칙→별표/각주→compiler→저장/조회→로컬 계산을 검증한다. 전체 필수 검사·통합/브라우저 경계·CI와 보호된 수용 결과를 구분해 기록하고 B03을 통합한다.
-6. in_progress — 원문 조건부 감액·확인 비용 기반 실손 compiler v3/0071과 로컬 필수 검증을 완료했다. 없는 비율·상한·사건 사실을 만들지 않고 #66/#70의 고정 33/30/60을 원문→정상 게시→안내에서 확인했다. [검증 기록](../../../workthrough/2026-09-10-fixed-guidance-review-evaluation.md#source-calculation-completion)의 PR CI·통합을 마친다.
+6. completed — 원문 조건부 감액·확인 비용 기반 실손 compiler v3/0071과 로컬 필수 검증을 완료했다. 없는 비율·상한·사건 사실을 만들지 않고 #66/#70의 고정 33/30/60을 원문→정상 게시→안내에서 확인했다. [검증 기록](../../../workthrough/2026-09-10-fixed-guidance-review-evaluation.md#source-calculation-completion)의 PR #95와 main CI 필수 7/7 후 `ee732db`로 통합했고 #64를 완료 처리했다.
 
 ## B02 acceptance handoff
 
