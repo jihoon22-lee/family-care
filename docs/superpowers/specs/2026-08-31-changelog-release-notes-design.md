@@ -1,7 +1,7 @@
 # Changelog-derived GitHub Release Notes Design
 
 - 상태: PR #49 기반 Release 정비와 job-level `runner.temp` 회귀 수정 완료;
-  v0.5.2의 제한된 메타데이터 복구와 모든 CHANGELOG 버전 검증 반영
+  조기 게시본(`2370761`)의 제한된 메타데이터 복구와 모든 CHANGELOG 버전 검증 반영
 - 작성일: 2026-08-31
 - 적용 범위: `CHANGELOG.md`, 릴리스 노트 생성 도구, GHCR 태그 검증, GitHub Release 게시, 기존 v0.1.0~v0.3.2 본문 정비
 
@@ -18,7 +18,7 @@ FamilyCare의 GitHub Release 본문을 버전마다 수기로 다시 쓰거나 G
 - renderer, digest evidence, release audit, workflow policy와 v0.1.0 CHANGELOG 정규화는 구현됐다.
 - 후속 검토에서 확인한 `publish-release` job-level `env`의 `${{ runner.temp }}` 오류는 해당
   경로를 step-level `env`로 이동하고 저장소 validator에 회귀 검사를 추가해 수정했다. 기존
-  Release 정비 결과는 유지했으며 당시 다음 실제 tag-run 검증은 미실행이었다. v0.5.2의
+  Release 정비 결과는 유지했으며 당시 다음 실제 tag-run 검증은 미실행이었다. 조기 게시본(`2370761`)의
   실제 결과와 제한된 복구는 아래에 별도로 기록한다.
 
 ## 결정
@@ -91,9 +91,9 @@ job은 태그 checkout에서 image evidence와 Release Markdown을 다시 생성
 
 태그, 커밋, 이미지, 배포된 FamilyCare runtime은 변경하지 않는다.
 
-### v0.5.2 범주 순서 오류의 제한된 복구
+### 조기 게시본(`2370761`) 범주 순서 오류의 제한된 복구
 
-v0.5.2의 게시 전 검증·세 이미지 게시·registry digest 검증은 성공했지만 태그 CHANGELOG의
+조기 게시본(`2370761`)의 게시 전 검증·세 이미지 게시·registry digest 검증은 성공했지만 태그 CHANGELOG의
 `Fixed`→`Changed` 순서 때문에 마지막 자동 노트 생성이 실패했다. 승인된 릴리스 작업에서
 이 버전의 메타데이터를 복구할 때에만 범주 순서 보존 규칙에 다음 예외를 적용한다.
 

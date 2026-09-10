@@ -1,6 +1,6 @@
 # v0.5 B08: Final acceptance and release preparation
 
-- 상태: in_progress — v0.5.2 게시·WSL 배포 검증 완료; 보호 자료/AI·기기 수용 잔여로 마일스톤 OPEN
+- 상태: in_progress — 개발·최종 릴리스 버전을 v0.5.0으로 통일; 남은 제품 보완·사용 검증 후 릴리스
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP10 #70](https://github.com/jihoon22-lee/family-care/issues/70), R01–R20 / S01–S14
 - 선행: [B07 계획](007-private-runtime-transition.md), [merged PR #82](https://github.com/jihoon22-lee/family-care/pull/82)
@@ -14,7 +14,7 @@
 3. complete (분모·한계 기록) / PARTIAL (자료 지원) — 제공 source identity·이전/현재 실패·native/기존 catalog 가입과 해석/설명/계산 가능 범위를 분리했다. 정확한 별칭 대응표와 자동 약관 판본/의미 지식은 미해결이다. 이전의 전량 처리 해소와 #60/#70의 지원 범위 측정을 같은 완료 조건으로 취급하지 않는다. 미지원 데이터를 분모에서 빼거나 해석 성공으로 바꾸지 않는다.
 4. complete (측정) — source `b270a7d`의 고정 dev/holdout 20건 실제 HTTP 평가와 사용량 정산을 완료했다. 후보·고정 금액의 개선/새 오류는 0이며 3건의 처리 실패는 원답을 보존했다. 고정 금액 3건 미산정과 원문 범위 PARTIAL을 성공으로 바꾸지 않는다. [실제 평가 보고](../../release/v0.5-fixed-review-evaluation.md)에 분모·비용·지연·한계를 기록했다.
 5. complete (명시된 환경) — 기존 clone의 인증/Windows 흐름·API 첫 조회/warm/idle·원문/native 경합에 더해 2370761 새 이미지의 합성 암호 해제/native/OCR 경합과 실제 HTTPS 전환·재시작 후 조회·짧은 세션 만료를 확인했다. cold DB/OS cache, 전체 DB intake/archive/AI 부하, 실제 비밀번호 로그인·7/30일 전체 시간 경과·모바일 실기기/PWA 설치는 미검증이다.
-6. in_progress (v0.5.3 패치 검증) — 게시 전 audit에서 Python 런타임 버전 누락을 확인해 패키지와 정렬하고 일반 CI의 현재 저장소 검사로 재발을 막는다. PR #90/2370761의 PR·main CI 각 7/7과 v0.5.2 foundation·이미지 게시/digest 검증을 확인했다. 자동 노트 생성의 범주 순서 오류는 기존 태그·범주 본문을 보존한 명시적 수동 메타데이터 복구로 게시했다. 원본 0024/HMAC 비교 뒤 대상 0069 전환·재시작·실제 HTTPS·새 이미지 archive 검증을 통과했다. 이전 두 태그의 게시 전 실패와 v0.5.2의 두 시도 실패 지점은 보존한다.
+6. in_progress (v0.5.0 버전 복구) — 사용자 지시에 따라 조기 게시한 v0.5.x 릴리스·태그를 제거하고 패키지·런타임·생성 계약·CHANGELOG를 v0.5.0으로 통일한다. 구현 기능을 유지하며 남은 제품 보완과 사용 검증 뒤 v0.5.0으로 최종 릴리스·배포한다. 이전 게시/전환 증거는 역사이며 마일스톤 완료로 합산하지 않는다.
 7. complete (종료 판단 기록) — #59/#60/#62/#63/#69/#70에 실제 게시/전환·수동 메타데이터 복구와 남은 수용을 동기화했다. 자료 지원·넓은 AI 평가·실기기 등의 필수 기준이 남아 관련 이슈와 마일스톤을 OPEN으로 유지한다. 배포 성공을 전체 지급/판독 품질 PASS로 올리지 않는다.
 
 ## Current acceptance boundary
