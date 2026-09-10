@@ -143,8 +143,14 @@ def test_separate_cells_do_not_share_the_retained_whole_table_region() -> None:
     assert validate_component_metadata(component, source.to_dict())
 
 
+@pytest.mark.parametrize("revision", ["document-metadata-v9", "document-metadata-v10"])
 @pytest.mark.parametrize("middle", ["Sample Policy", "서로 관계없는 합성 본문"])
-def test_spatially_intervening_content_must_belong_to_the_caption_area(middle: str) -> None:
+def test_spatially_intervening_content_must_belong_to_the_caption_area(
+    middle, revision, monkeypatch
+) -> None:
+    from familycare_worker import document_metadata
+
+    monkeypatch.setattr(document_metadata, "REVISION", revision)
     source = _structure("보험약관")
     role = replace(source.nodes[0], bbox=(10, 60, 250, 80), reading_order=1)
     caption = replace(
@@ -163,11 +169,15 @@ def test_spatially_intervening_content_must_belong_to_the_caption_area(middle: s
     )
     source = replace(source, nodes=(caption, role, between))
     payload = metadata_proposal(source, UUID(int=905), "c" * 64)
+    if revision == "document-metadata-v10" and middle != "Sample Policy":
+        # Physical reading encounters unrelated content before the title.
+        assert payload["components"] == []
+        return
     component = payload["components"][0]
     assert any(fact["field"] == "insurer" for fact in component["facts"]) is (
         middle == "Sample Policy"
     )
-    assert validate_component_metadata(component, source.to_dict())
+    assert validate_component_metadata(component, source.to_dict(), revision=revision)
 
 
 def test_caption_and_explicit_insurer_disagreement_remain_visible() -> None:

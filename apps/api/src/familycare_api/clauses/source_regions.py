@@ -345,7 +345,7 @@ def _observe(
     if any(r.get("node_id") is None for r in unresolved):
         return ClauseSourceObservation((), ("CLAUSE_SOURCE_BOUNDARY_UNRESOLVED",))
     selected, barriers = _local_nodes(nodes, by_id, metadata_revision=metadata_revision)
-    regions = _regions(selected, barriers)
+    regions = _regions(selected, barriers, metadata_revision=metadata_revision)
     page_verified = pages is not None and "unresolved" in structure
     article_tops = [
         _layout_box(node)[1]

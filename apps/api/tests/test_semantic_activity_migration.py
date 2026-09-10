@@ -22,6 +22,15 @@ from workers.analyzer.tests.test_document_structure_repository import (
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def historical_metadata_v9(monkeypatch):
+    """Keep the activity migration's source in its original metadata revision."""
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v9")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v9")
+
+
 def test_compiler_upgrade_retains_v1_and_prevents_downgrade_with_v2_history(
     semantic_database, monkeypatch
 ):

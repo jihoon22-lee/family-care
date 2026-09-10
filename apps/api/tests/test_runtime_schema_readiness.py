@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0071_source_calculations"
+REVISION = "0072_metadata_physical_flow"
 
 
 class Result:
@@ -58,7 +58,8 @@ class Engine:
     [
         [],
         [("0069_policy_draft_replay",)],
-        [("0071_synthetic_future",)],
+        [("0071_source_calculations",)],
+        [("0073_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

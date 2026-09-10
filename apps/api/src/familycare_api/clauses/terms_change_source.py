@@ -201,7 +201,7 @@ def _field_regions(
                 valid.append(_table_layout(node, by_id) if node["kind"] == "TABLE_ROW" else node)
             except KeyError, TypeError, ValueError, IndexError:
                 barriers.append(node)
-        for region in _regions(valid, barriers):
+        for region in _regions(valid, barriers, metadata_revision=metadata_revision):
             if any(node["node_id"] in role_ids for node in region):
                 if _preceding_reference(region, page):
                     continue

@@ -82,3 +82,12 @@ branch; Boolean values never become numeric amounts. Guidance traces retain the 
 Boolean and the selected branch's original AST address. The explicit user event fact uses
 the existing `facts` object and does not expand AI structuring fields. Covered receipt
 amounts still require the normal confirmed receipt source and matching currency.
+
+Metadata v10 / `0072_metadata_physical_flow` separates retained extractor ordinals
+from independently proven physical reading order. Original words, geometry and
+component history remain unchanged. The API inherits v9 word-lineage checks,
+validates the new physical prefix and body flow independently, and passes the
+stored revision through Clause and semantic source readers. Covered-person
+conditional sentences identify content only. Product captions retain their full
+bounded variant suffixes; neither classification establishes enrollment or edition
+applicability. A v10 proposal or publication prevents downgrade to 0071.

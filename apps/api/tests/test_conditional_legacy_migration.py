@@ -8,6 +8,7 @@ from familycare_api.private_knowledge.publication_package import load_rule_publi
 from familycare_api.private_knowledge.publication_repository import (
     PostgresRulePublicationRepository,
 )
+from familycare_api.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from psycopg.rows import dict_row
 
 from apps.api.tests.private_knowledge_publication_fixtures import (
@@ -88,7 +89,7 @@ def test_imported_if_calculation_blocks_downgrade_without_semantic_or_event_hist
         ).fetchone() == (0,)
         assert connection.execute("SELECT count(*) FROM medical_events").fetchone() == (0,)
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0071_source_calculations",
+            SUPPORTED_SCHEMA_REVISION,
         )
     try:
         refused = _migrate(url, "downgrade", "0070_semantic_activity")
@@ -97,7 +98,7 @@ def test_imported_if_calculation_blocks_downgrade_without_semantic_or_event_hist
         assert "conditional calculation history prevents downgrade" in refused.stderr
         with psycopg.connect(_psycopg_url(url)) as connection:
             assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-                "0071_source_calculations",
+                SUPPORTED_SCHEMA_REVISION,
             )
         assert retained() == before
     finally:

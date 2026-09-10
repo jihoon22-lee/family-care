@@ -308,10 +308,11 @@ def _validated_nodes(
             key=lambda n: (_footprint(n)[1], _footprint(n)[0]),
         )
         native = [n for n in local if n["kind"] != "TABLE_ROW"]
-        if any(
+        reordered = any(
             b["reading_order"] <= a["reading_order"]
             for a, b in zip(native, native[1:], strict=False)
-        ):
+        )
+        if reordered and metadata_revision != "document-metadata-v10":
             raise _InvalidSource("SEMANTIC_SOURCE_ORDER_UNRESOLVED")
         table_positions: dict[str, int] = {}
         for node in local:
@@ -321,8 +322,16 @@ def _validated_nodes(
                 table_positions[node["table_id"]] = node["row_index"]
         for left, right in zip(local, local[1:], strict=False):
             a, b = _footprint(left), _footprint(right)
-            if b[1] < a[3] or min(a[2], b[2]) - max(a[0], b[0]) < 0.5 * min(
-                a[2] - a[0], b[2] - b[0]
+            height = min(a[3] - a[1], b[3] - b[1])
+            if (
+                b[1] < a[3]
+                or min(a[2], b[2]) - max(a[0], b[0]) < 0.5 * min(a[2] - a[0], b[2] - b[0])
+                or (
+                    reordered
+                    and (
+                        abs(a[0] - b[0]) > min(48, 2 * height) or b[1] - a[3] > min(48, 3 * height)
+                    )
+                )
             ):
                 raise _InvalidSource("SEMANTIC_SOURCE_ORDER_UNRESOLVED")
         ordered.extend(local)
