@@ -197,6 +197,12 @@ def _rule_input(
 ) -> tuple[CompiledExpression, tuple[CodeScope, ...], tuple[GuidanceCitation, ...]]:
     if not isinstance(rule, GuidanceRuleInput) or rule.rule_kind not in _KINDS:
         raise RuleValidationError("INVALID_RULE_KIND")
+    if rule.terms_applicability != "MATCH" and not (
+        rule.terms_applicability == "UNKNOWN"
+        and rule.source_kind == "OPERATIONAL_RULE_VERSION"
+        and rule.uncertain_terms_relevance_supported is True
+    ):
+        raise RuleValidationError("TERMS_APPLICABILITY_UNRESOLVED")
     if not isinstance(rule.publication_id, UUID) or not rule.publication_id.int:
         raise RuleValidationError("RULE_METADATA_MISMATCH")
     if type(rule.rule_key) is not str or not 1 <= len(rule.rule_key) <= 256:

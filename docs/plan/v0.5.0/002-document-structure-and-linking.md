@@ -100,6 +100,13 @@
 
 ## Acceptance evidence
 
+2026-09-10 [PR #97](https://github.com/jihoon22-lee/family-care/pull/97)은 `80c9cd0`과
+필수 CI 7/7(PostgreSQL 873개)로 통합했다. 다중 표/단위·각주·복합/손상/중복 비교와
+실패한 새 추출의 기존 가입/구조/게시 보존, 승인 원문의 0073 재처리·전체 행 보존·
+인증된 AI-off 조회를 대사해 #62를 완료 처리했다. [상세 기록](../../../workthrough/2026-09-10-metadata-header-regions.md#integration-and-isolated-schema-0073-acceptance)에
+따라 #63의 실제 가입/신원·판본 적용, 실제 document-structuring provider 품질, 최종 기기
+수용은 완료로 확대하지 않는다. B02 전체와 위 Task 3/4는 이 인계 범위를 계속 추적한다.
+
 IR 구현은 별도 worktree commit `e9c0cd1`(통합 `195bb36`)에서 시작했다. 새 모듈 부재
 RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22개와 기존 PDF 추출
 14개 합성 테스트가 통과했다. 이 증거는 순수 adapter 범위이며 DB/실제 import/외부 전달

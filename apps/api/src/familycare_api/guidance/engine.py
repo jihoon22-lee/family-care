@@ -359,9 +359,16 @@ class LocalGuidanceEngine:
         )
         if not relevance:
             return None, not any(failed for _, failed in outcomes)
+        relevance_sources = {(item.publication_id, item.rule_key) for item in relevance}
+        terms_unresolved = any(
+            rule.terms_applicability != "MATCH"
+            and (rule.required or (rule.publication_id, rule.rule_key) in relevance_sources)
+            for rule in coverage.rules
+        )
         conditions: Literal["MATCH", "UNKNOWN"] = (
             "UNKNOWN"
-            if coverage.knowledge_incomplete
+            if terms_unresolved
+            or coverage.knowledge_incomplete
             or not any(item.kind == "CONFIRMED_EVENT" for item in relevance)
             or any(item.result == "UNKNOWN" for item in required)
             else "MATCH"
@@ -389,6 +396,7 @@ class LocalGuidanceEngine:
             assumptions=assumptions,
             supporting_sources=supporting_sources,
             partial_costs=partial_costs,
+            terms_applicability_unresolved=terms_unresolved,
         )
         question_paths = _unique(
             [
@@ -412,6 +420,7 @@ class LocalGuidanceEngine:
             condition_result=conditions,
             reason_codes=_unique(
                 ["DOCUMENTED_RELEVANT_COVERAGE"]
+                + (["TERMS_APPLICABILITY_UNRESOLVED"] if terms_unresolved else [])
                 + (["OPERATIONAL_SOURCE_FIELD_CONFLICT"] if field_conflicts else [])
                 + (["SEMANTIC_KNOWLEDGE_PARTIAL"] if coverage.knowledge_incomplete else [])
                 + [
@@ -447,7 +456,7 @@ class LocalGuidanceEngine:
                 event_read,
                 assumptions=assumptions,
             )
-            if any(item.kind == "PLANNED_EVENT" for item in relevance)
+            if not terms_unresolved and any(item.kind == "PLANNED_EVENT" for item in relevance)
             else (),
             questions=tuple(
                 GuidanceQuestion(field_path=path, reason_code="EVENT_FACT_NEEDED")

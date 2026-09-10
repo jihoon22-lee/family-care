@@ -190,6 +190,7 @@ def estimate_coverage(
     supporting_sources: Mapping[str, tuple[CalculationSourceRef, ...]] | None = None,
     partial_costs: bool = False,
     scenario_inputs: Mapping[str, CalculationInput] | None = None,
+    terms_applicability_unresolved: bool = False,
 ) -> GuidanceEstimate:
     publication = coverage.calculation
     if publication is None:
@@ -210,6 +211,20 @@ def estimate_coverage(
         formula = formula_text(calculation)
         currency = calculation_currency(coverage)
         binding = bind_calculation_source(publication, currency=currency)
+        if (
+            terms_applicability_unresolved
+            or publication.terms_applicability != "MATCH"
+            or any(rule.required and rule.terms_applicability != "MATCH" for rule in coverage.rules)
+        ):
+            return GuidanceEstimate(
+                kind="FORMULA",
+                currency=currency,
+                formula=formula,
+                missing_inputs=("Rider.currency",) if binding.status != "BOUND" else (),
+                assumptions=estimate_assumptions,
+                reason_code="TERMS_APPLICABILITY_UNRESOLVED",
+                evidence=evidence,
+            )
     except CalculationSourceError as error:
         if error.reason_code == "CALCULATION_CURRENCY_MISMATCH":
             return GuidanceEstimate(

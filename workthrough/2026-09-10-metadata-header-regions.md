@@ -95,3 +95,38 @@ PR CI/image builds and the clean-source protected replay remain pending.
 The separate v10/schema0072 protected acceptance is recorded in
 [its existing workthrough](2026-09-10-retained-terms-linking.md#integration-and-isolated-schema-0072-acceptance).
 Actual v11 support/publication, final devices, tag and deployment are not yet verified.
+
+## Integration and isolated schema 0073 acceptance
+
+[PR #97](https://github.com/jihoon22-lee/family-care/pull/97), clean source
+`db04d0e2a703d00c8599bf035d3d83566419f4e0`, passed all seven required checks in
+[CI 34441733314](https://github.com/jihoon22-lee/family-care/actions/runs/34441733314),
+including 873 PostgreSQL tests (1,965.13s), and merged as
+`80c9cd0cc900062ccad1b793449649add0ee0ccb` on 2026-09-10.
+
+The previously verified development clone upgraded 0072→0073 while preserving every
+previous row and column (87.227s). New API/Worker binaries rejected 0072 and accepted
+0073. Bounded metadata/edition replay used the same 58 approved source identities
+(300.074s): 13 new proposals passed the API source check but remained DEFERRED by
+existing overlapping components. No new insurer fact or terms identity was published.
+Original raw sources, corrections, claims and previous publication rows were
+preserved; current derived component pointers were excluded from that replay's
+immutable-row comparison. An aggregate diagnostic confirmed strict refinement was
+not available, with six program and seven user-confirmed overlapping components.
+
+A host restart erased temporary code/checkouts. Committed source and protected
+receipts survived, but the in-flight app check had no completion receipt and was
+not counted as passed. The same source was restored into a persistent worktree,
+its reviewed helper was restored and its pointer updated, and a new app check
+completed. Authenticated evidence/claim-history reads, frozen-event AI-off analysis
+and matching stored results passed. A fresh complete pre-query snapshot proved all
+prior rows unchanged afterward; only new result/session rows were permitted. The
+new session logged out. External HTTP and provider jobs stayed zero.
+
+An independent acceptance audit matched source-retention/layout/intake/enrollment
+assertions to the two remaining #62 criteria. Together with the approved-source
+replay and app preservation evidence, #62 was completed. Actual enrollment/contract
+identity and terms applicability remain with #63; full application and final support
+remain with #69/#70. This remains PARTIAL protected linking support. No tag, live
+schema switch, deployment, document-structuring provider or actual-device acceptance
+was performed by these checks.

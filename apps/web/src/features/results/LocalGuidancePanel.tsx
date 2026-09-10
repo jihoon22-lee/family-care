@@ -81,6 +81,9 @@ function Candidate({
   ) => void;
 }) {
   const titleId = useId();
+  const termsUnresolved =
+    candidate.reason_codes.includes("TERMS_APPLICABILITY_UNRESOLVED") ||
+    candidate.estimate.reason_code === "TERMS_APPLICABILITY_UNRESOLVED";
   const evidence = [
     ...new Map(
       [
@@ -131,9 +134,11 @@ function Candidate({
           </span>
         </div>
         <p className={styles.cardCopy}>
-          {candidate.condition_result === "MATCH"
-            ? "입력한 사건과 가입 문서의 보장 조건이 관련됩니다."
-            : "입력한 사건과 관련된 담보이며, 추가 사건 정보에 따라 적용 조건이 달라질 수 있습니다."}
+          {termsUnresolved
+            ? "입력한 사건과 관련된 담보지만, 이 약관 판본이 계약에 적용되는지 확인이 필요합니다."
+            : candidate.condition_result === "MATCH"
+              ? "입력한 사건과 가입 문서의 보장 조건이 관련됩니다."
+              : "입력한 사건과 관련된 담보이며, 추가 사건 정보에 따라 적용 조건이 달라질 수 있습니다."}
         </p>
         {candidate.estimate.kind === "FORMULA" &&
         candidate.canonical_identity?.field_conflicts?.includes(
