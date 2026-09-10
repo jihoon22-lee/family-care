@@ -27,7 +27,7 @@
   cache-write 상세 미상은 알려진 cached input을 제외한 입력에 $2.50/M 상한을 쓴다.
   같은 case 재호출은 금지하고, 기존 job 결과를 전송 없이 회수한다. 응답 없는 retained
   queued/running 작업은 자동 재호출하지 않고 실행을 중단한다.
-- v0.5.3 및 dependency lock/OpenAPI/Web 소비자를 함께 갱신한다. 실제 배포는 아직 v0.5.2다.
+- 당시 PR #92에서 v0.5.3으로 올렸던 메타데이터는 아래 사용자 지시에 따른 복구에서 v0.5.0으로 통일한다. 이전 실행 환경과 최종 릴리스를 구분한다.
 
 ## Verification
 
@@ -126,3 +126,85 @@ container 정의·workflow 정책·문서/저장소 안전·diff 검사를 통�
 31 files/240 tests(49.88s), format/lint/type/build를 통과했다. 이 후속 변경에는
 새 DB 동작이 없으며 전체 PostgreSQL과 세 이미지 빌드는 새 PR CI에서 확인한다.
 실제 provider 입력이 같아 앞선 20건 평가를 반복하지 않았다.
+
+[PR #93](https://github.com/jihoon22-lee/family-care/pull/93)의 source
+`5e8d9b777e025efb2705d377a250bb12b1ded53d`,
+[CI 34414461889](https://github.com/jihoon22-lee/family-care/actions/runs/34414461889)는
+필수 7/7을 통과했다. Python 3836/3 subtests(51.31s), PostgreSQL 852(1947.57s)·빈 DB 왕복,
+Web 240/build·Chromium mock 27(31.0s), 세 이미지 빌드를 확인했다.
+`8a7f289abb3b5c89b4bd8e4ad23ac724aa51497b`로 병합한 뒤 동일 파일 트리·clean 상태와
+release audit를 확인하고 annotated v0.5.3 tag를 게시했다. 앞선 PR #92 merge의
+[main CI 34413056673](https://github.com/jihoon22-lee/family-care/actions/runs/34413056673)도
+필수 7/7, PostgreSQL 852(1897.81s)를 통과했다.
+
+## 합성 동시 실행 측정과 패치 적용 준비
+
+2026-09-09 UTC, clean source `5e8d9b777e025efb2705d377a250bb12b1ded53d`, schema 0070의
+새 합성 DB에서 고정 20개 사례의 서비스→DB 조회 200건을 측정했다. 첫 측정/반복/
+검수 병행/PDF 처리 실행의 p95는 각각 0.985/0.946/1.043/1.017초였다.
+기존 후보 기대값 일치, 모의 검수 20건·합성 native PDF 10개/250쪽 완료,
+문서 작업 임시 파일 정리와 외부 HTTP 0을 확인했다. PDF 구간의 실제 중첩은 24/60회여서
+전체 분포를 중첩한 조회만의 분포로 해석하지 않는다. 명령·환경·측정 범위는
+[측정 보고](../docs/release/v0.5-service-contention-measurement.md)에 기록했다.
+실제 자료/기기·암호화 batch/OCR·실제 모델의 부하 결과를 대신하지 않는다.
+
+별도의 비공개 패치 helper는 원본 DB 보존, 중단 시 기존 앱 복구, 복원 rehearsal 후
+대상 migration, migration 이후 이전 앱 자동 재시작 금지를 준비했다. 읽기 전용 검토에서
+stage 이후 호출 환경/target env가 Compose의 DB를 바꿀 수 있는 경로를 발견했다.
+검증된 해석 결과를 0600 Compose로 고정하고 이후 실행에서 env-file을 제거했으며,
+관리 명령에도 Compose hash 검사를 넣었다. 합성 실제 `docker compose config` 왕복에서
+환경/target env 변경과 literal dollar 보존을 대조하고 이전의 미고정 recipe도 거부한다.
+private guard 17개 통과(0.55s),
+세 helper의 `py_compile` 통과와 정적 재검토로 해당 경로 해소를 확인했다.
+최종 merge `8a7f289`를 helper의 적용 소스로 고정한 뒤 같은 guard 17개가 통과했다(0.53s).
+이 준비 검증을 실제 backup/migration/activation 성공으로 기록하지 않는다.
+
+잔여 약관 형식의 읽기 전용 정적 검토에서는 region 전체의 heading 계수와 body sentence의
+prefix 계수를 같은 위치의 증거로 해석할 수 없음을 확인했다. 항목 marker 제거 후에도
+기존 추가 어휘 검사는 적용돼 있어 marker 누락으로 인한 진단 오류는 아니었다.
+clean `2370761`/0069의 같은 후보 경계/heading 관계를 확인하는 제한된 후속 진단은 기존 승인 source snapshot과
+lineage 검증, DB 쓰기·외부 요청 0으로 완료했다. 제목 뒤 본문 분리만으로 기존 지급
+문법을 통과한다는 실제 원인은 입증하지 못했으며, 부분 단어에 대한 company 검색을
+근거로 판독 문법을 넓히지 않았다. 별도의 순수 합성 입력에서는 독립 제목 줄은 지원되고
+제목·본문을 같은 줄에 붙인 두 형식은 미지원임을 확인했다. 이를 보호 자료 문제의 해결이나
+새 metadata 버전의 검증 결과로 주장하지 않는다.
+
+
+## 사용자 지시에 따른 v0.5.0 버전 복구
+
+2026-09-10 UTC, 사용자는 조기 게시한 버전을 제거하고 개발·최종 릴리스를 v0.5.0으로
+맞추도록 명시했다. 릴리스 실패를 이유로 패치 버전을 늘리거나 이를 v0.5.0의 프리뷰로
+표시한 판단을 철회했다. 기존 0.5.0–0.5.3 Git 태그 4개와 GitHub Release 2개를 삭제하고
+원격에서 잔여 v0.5.x 태그·Release가 0임을 확인했다. 원래 태그 대상과 공개 메타데이터는
+작업 기록에 보존했다. 소스 커밋이나 구현 기능은 되돌리지 않았다.
+
+Web/API/Worker의 패키지·런타임 버전, lock, health 기대값과 생성 OpenAPI를 0.5.0으로
+통일했다. CHANGELOG의 조기 패치 항목은 0.5.0 개발 기록에 합쳤고 README/로드맵/B08/
+수용 원장의 현재 목표를 정정했다. schema는 기존 구현이 요구하는 0070을 유지한다.
+이전 실제 모델 평가를 다시 호출하지 않았다.
+
+v0.5.3 source `8a7f289`는 PR/main CI와 게시 실행 34417126200의 필수 7/7을 통과했던
+기록이다. 게시 실행의 Python 3836/3 subtests(46.30s), PostgreSQL 852(1844.04s), Web
+240/build·Chromium mock 27(31.1s), OCR/한글 glyph와 이미지·digest·노트 검증을 확인했다.
+원격 태그·CHANGELOG 본문도 대조했지만 이는 삭제한 조기 게시 이력이다. 실제 앱은
+전환하지 않았으며 기존 DB·자료·키를 변경하지 않았다. release workflow는 최종 0.5.0
+준비 전까지 비활성화했다. 새 태그는 마일스톤 완료 후 생성한다.
+
+
+버전 복구 검증은 2026-09-10 UTC, base `8a7f289`와 이 PR의 메타데이터·health 기대값·
+생성 계약·문서 diff, Python 3.14.7/WSL에서 실행했다. 별도 환경의 `uv lock --offline`와
+`uv sync --frozen --offline --all-packages --group dev`를 통과했다. `check_contracts.py
+--write-openapi`와 Web 소비자 생성 뒤 `release_audit.py --version 0.5.0 --commit-sha
+8a7f289abb3b5c89b4bd8e4ad23ac724aa51497b`를 통과했다.
+`corepack pnpm install --offline --frozen-lockfile` 및 `corepack pnpm web:check`는
+31 files/240 tests(54.03s), format/lint/type/build를 통과했다. 전체 기본 Python은
+3836 passed/852 integration 제외/3 subtests passed(41.04s), Ruff format 904/lint,
+mypy 361 files, 계약·container 정의·workflow·문서·저장소 안전·diff 검사가 통과했다.
+외부 AI 호출이나 실제 데이터 migration을 수행하지 않았다. 새 소스의 필수 CI는 PR에서 확인한다.
+
+GitHub 마일스톤 설명과 연결 이슈 12개를 전수 대조했다. 잘못된 패치 버전 기록이 있던
+#59/#60/#62/#63/#69/#70의 활성 본문을 v0.5.0 기준으로 정리하고 다시 읽어 해당 번호가
+남지 않았음을 확인했다. 원래 요구사항과 체크리스트는 보존했다. SECURITY와 architecture의
+현재 버전도 함께 정정했다. 이미지 6개는 공개 코드 artifact만 별도 보관했으나 GHCR 삭제는
+토큰의 `delete:packages` 권한 부재로 403을 반환했다. GitHub Release/Git 태그 삭제와
+이미지 삭제를 구분하며 인증 갱신 후 실제 결과를 추가한다.

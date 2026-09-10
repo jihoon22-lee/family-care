@@ -2,70 +2,17 @@
 
 FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)를 따르고, 버전은 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)을 사용합니다.
 
+v0.5.0은 개발 중입니다. 아래 날짜는 준비 기록이며 최종 릴리스 게시일이 아닙니다.
+
 ## [Unreleased]
 
-## [0.5.3] - 2026-09-10
+## [0.5.0] - 2026-09-10
 
 ### Added
 
-- The frozen twenty-case local guidance benchmark can run through synthetic originals,
-  PostgreSQL, the real review Worker and an explicitly invoked provider evaluation with
-  durable per-case reservations and a conservative USD ceiling.
-
-### Fixed
-
-- API and Worker runtime version reports align with package metadata and OpenAPI;
-  ordinary CI now rejects a current-repository release version mismatch.
-
-- Confirmed diagnosis can be entered, corrected and reviewed consistently in Web, API and
-  Worker inputs. Explicit local diagnosis statements remain subject to uncertainty, person,
-  time and contradiction checks; changed interpretation makes prior guidance stale.
-- Source-proven treatment activities retain their eligibility meaning through semantic
-  compilation, so an explicit negative surgery observation can exclude a surgery condition.
-  Schema 0070 admits compiler v2 without rewriting v1 publication history.
-- Equivalent source-verified classification rules no longer become review disagreements
-  merely because the local planner and model assigned different node identifiers.
-
-- Browser dependency setup excludes the unused Google Chrome APT repository on CI runners
-  while preserving Playwright system dependency installation and integrity checks.
-- Changelog rendering checks cover every version and require the current package version,
-  catching release-note category order errors before image publication.
-
-## [0.5.2] - 2026-09-09
-
-### Changed
-
-- The 0.5.1 tag is retained as failed publication history: unit validation passed, while the
-  missing restore container binding caused one integration failure before image publication.
-- Local guidance behavior, retained data, schema and provider request budgets are unchanged.
-
-### Fixed
-
-- Release database integration now receives its PostgreSQL service container ID for the actual
-  custom-format dump, restore and encrypted-archive roundtrip test. Workflow policy requires the
-  binding in both CI and release validation.
-- Browser flows, OCR language availability and nonembedded Korean PDF rendering now also run
-  in the release foundation before image publication, matching the existing CI checks.
-
-## [0.5.1] - 2026-09-09
-
-### Changed
-
-- This patch carries the local guidance changes listed under 0.5.0. The 0.5.0 tag is retained as
-  published history; its validation failed before any images or GitHub Release were published.
-- Actual document interpretation and source-linking support remain partial; the patch changes
-  release validation, not the protected-data acceptance criteria.
-
-### Fixed
-
-- Release validation now confines disposable PostgreSQL credentials and destructive-test opt-in
-  to the integration step. Unit tests run without an inherited runtime database, as in normal CI.
-- Workflow policy rejects moving database configuration back into the shared validation job.
-
-## [0.5.0] - 2026-09-09
-
-### Added
-
+- The frozen twenty-case local guidance benchmark runs through synthetic originals, PostgreSQL,
+  the review Worker and an explicitly invoked provider evaluation with durable reservations and
+  a conservative cost ceiling.
 - Local claim guidance separates documented enrollment, event-date conditions, maintenance
   assumptions, missing inputs, and independently supported estimates. Relevant candidates and
   calculable fixed benefits remain available without an external AI request.
@@ -86,6 +33,13 @@ FamilyCare의 주요 변경사항은 이 파일에 기록합니다. 형식은 [K
 
 ### Fixed
 
+- Confirmed diagnosis and source-proven treatment activities retain their meaning across Web,
+  API, Worker and semantic compilation; schema 0070 preserves earlier publication history.
+- Equivalent source-verified rules are compared by meaning rather than producer node identifiers.
+- Release validation scopes database configuration to integration checks, binds its restore
+  container, and runs browser, OCR and Korean font checks before publication.
+- Browser setup excludes the unused Chrome APT source. Current package/runtime versions and
+  every changelog version are checked before publication.
 - Web/API request access logging and Web upstream error logging no longer persist private
   identifiers from request URLs in the default container configuration.
 - Historical status, payment-count uncertainty, currency mismatches, ambiguous terms, and missing
