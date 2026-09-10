@@ -162,7 +162,7 @@ def _resolve_local_ref(root_schema: dict[str, Any], reference: str) -> dict[str,
 
 
 def validate_schema_instance(
-    schema: dict[str, Any],
+    schema: dict[str, Any] | bool,
     value: Any,
     *,
     root_schema: dict[str, Any] | None = None,
@@ -170,6 +170,8 @@ def validate_schema_instance(
 ) -> list[str]:
     """Validate the supported JSON Schema subset used by the three v1 contracts."""
 
+    if isinstance(schema, bool):
+        return [] if schema else [f"{path}: false schema"]
     root = root_schema or schema
     if "$ref" in schema:
         resolved = _resolve_local_ref(root, str(schema["$ref"]))
@@ -184,6 +186,17 @@ def validate_schema_instance(
         ]
         if not any(not branch_errors for branch_errors in branches):
             errors.append(f"{path}: no anyOf branch matched")
+    if "oneOf" in schema:
+        matches = sum(
+            not validate_schema_instance(branch, value, root_schema=root, path=path)
+            for branch in schema["oneOf"]
+        )
+        if matches != 1:
+            errors.append(f"{path}: expected exactly one oneOf branch")
+    if "not" in schema and not validate_schema_instance(
+        schema["not"], value, root_schema=root, path=path
+    ):
+        errors.append(f"{path}: forbidden schema matched")
     expected_type = schema.get("type")
     type_matches = {
         "object": isinstance(value, dict),
@@ -255,13 +268,14 @@ def validate_schema_instance(
             errors.append(f"{path}: fewer than minItems")
         if "maxItems" in schema and len(value) > int(schema["maxItems"]):
             errors.append(f"{path}: more than maxItems")
-        if "items" in schema:
-            for index, child in enumerate(value):
-                errors.extend(
-                    validate_schema_instance(
-                        schema["items"], child, root_schema=root, path=f"{path}[{index}]"
-                    )
+        prefix = schema.get("prefixItems", [])
+        for index, child in enumerate(value):
+            item_schema = prefix[index] if index < len(prefix) else schema.get("items", True)
+            errors.extend(
+                validate_schema_instance(
+                    item_schema, child, root_schema=root, path=f"{path}[{index}]"
                 )
+            )
     return errors
 
 

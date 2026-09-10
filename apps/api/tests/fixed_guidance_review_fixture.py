@@ -4,11 +4,17 @@ This adapter owns an additive, case-scoped fixture, never a database reset. It
 does not read expected labels, call a provider, or edit an existing review job.
 The companion source prose retains unsupported formulas without declaring them
 executable. Generic ledger amounts deliberately do not impersonate independently
-published certificate amount evidence.
+published certificate amount evidence. Daily and ratio sources use the normal range
+grounding and enrollment publication pipeline to retain that independent proof.
+An explicit eligible-cost input is registered through receipt CRUD before the
+first local answer; a legacy event-fact number never substitutes for that source.
 
 Companion conventions, not additions to the frozen benchmark contract: event.kind
 is encoded without changing its value in the wholly synthetic taxonomy
-synthetic-event-kind/v1. Whole TST amounts use half-up rounding. The exact fixed
+synthetic-event-kind/v1. Synthetic-credit inputs are represented one-for-one as
+wholly invented whole KRW amounts, with no exchange-rate conversion. This is a
+new companion source convention, not the earlier TST evaluation input. Whole
+KRW amounts use half-up rounding. The exact fixed
 inputs have integral supported fixed/daily results, so that rounding changes no
 value; the tests prove this without consulting embedded expected_amount labels.
 """
@@ -18,6 +24,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections import defaultdict
 from collections.abc import Mapping
 from datetime import date
 from decimal import Decimal
@@ -31,13 +38,28 @@ from familycare_api.clauses.repository import RiderClauseLinkRepository
 from familycare_api.clauses.source_repository import ClauseSourceProjector
 from familycare_api.clauses.terms_applicability_repository import TermsApplicabilityProjector
 from familycare_api.common.scope import HouseholdScope
+from familycare_api.decisions.calculation_repository import CalculationRepository
+from familycare_api.decisions.calculation_schemas import ReceiptLineCreateRequest
+from familycare_api.decisions.calculation_service import CalculationService
 from familycare_api.decisions.repository import DecisionRepository
 from familycare_api.decisions.schemas import MedicalEventUpdateRequest, StructuredFactInput
 from familycare_api.decisions.service import DecisionService
 from familycare_api.guidance_review.sources import read_review_sources
+from familycare_api.insurance_documents.metadata_publication import DocumentMetadataProjector
 from familycare_api.insurance_documents.repository import InsuranceDocumentRepository
+from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 from familycare_api.terms_knowledge.projector import TermsSemanticProjector
 from familycare_api.terms_knowledge.source_meaning import observe_statement
+from familycare_worker.ai.range_structurer import PolicyRangeBatch
+from familycare_worker.ai.schemas import (
+    CandidateField,
+    CandidatePipelineResult,
+    PolicyCandidate,
+    StructurerCandidate,
+)
+from familycare_worker.document_metadata_repository import DocumentMetadataRunner
+from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+from familycare_worker.policy_range_repository import PolicyRangeRepository
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -49,8 +71,10 @@ from scripts.claim_guidance_benchmark import BenchmarkCase
 from scripts.fixed_review_fixture import FixedReviewFixture
 from scripts.integration_test_database import configure_integration_test_database
 from scripts.run_claim_guidance_benchmark import _FIELD_PATHS, _value
+from workers.analyzer.tests.test_document_text_lines import _words
+from workers.analyzer.tests.test_policy_range_repository import _no_facts
 
-REVISION = "fixed-review-database-fixture-v2"
+REVISION = "fixed-review-database-fixture-v5-krw-source-receipt"
 EVENT_KIND_SYSTEM = "synthetic-event-kind"
 EVENT_KIND_VERSION = "v1"
 _NAMESPACE = UUID("00000000-0000-4000-8000-000000009094")
@@ -123,12 +147,12 @@ def _source_body(raw: Mapping[str, Any]) -> str:
     kind = spec.get("kind")
     if kind == "fixed":
         lines.append(
-            f"The benefit is TST {spec['amount']}, rounded half up to whole currency units."
+            f"The benefit is KRW {spec['amount']}, rounded half up to whole currency units."
         )
     elif kind == "daily":
         lines.extend(
             (
-                "For each payable admission day, pay the insured amount in TST; "
+                "For each payable admission day, pay the insured amount in KRW; "
                 "multiply first, then round the total half up to whole currency units.",
                 f"Exclude the first {spec['deduct_days']} admission days.",
                 f"The maximum is {spec['cap_days']} payable days.",
@@ -136,17 +160,28 @@ def _source_body(raw: Mapping[str, Any]) -> str:
         )
     elif kind == "ratio":
         lines.append(
-            f"Pay {spec['rate']} of the insured amount in TST, "
+            f"Pay {spec['rate']} of the insured amount in KRW, "
             "rounded half up to whole currency units."
         )
         if "reduction" in spec:
-            # The real recognizer has no conditional reduction primitive.
-            # Do not fold an event-dependent condition into the insurance source.
+            # Preserve the event-dependent branch instead of pre-applying its
+            # factor to the insured amount or the unconditional payment rate.
             lines.append(
-                f"Apply reduction factor {spec['reduction']} when event.reduction_applies is true."
+                "When the event reduction condition is true, multiply the gross benefit by "
+                f"{spec['reduction']}; otherwise keep the gross benefit, "
+                "before deduction, amount cap and rounding."
             )
         if "cap" in spec:
-            lines.append(f"The maximum benefit is TST {spec['cap']}.")
+            lines.append(f"The maximum benefit is KRW {spec['cap']}.")
+    elif kind == "indemnity" and spec.get("cost_field") == "event.eligible_cost":
+        lines.extend(
+            (
+                "Reimburse the covered receipt amount in KRW, rounded half up "
+                "to whole currency units.",
+                f"Deduct KRW {spec['deductible']} from the gross benefit before applying "
+                "the amount cap and rounding; floor at zero.",
+            )
+        )
     elif spec:
         lines.append(f"Synthetic calculation specification: {_json(spec)}.")
     return "\n".join(lines)
@@ -339,6 +374,156 @@ def _bootstrap(url: str, case: BenchmarkCase, fingerprint: str) -> Any:
     )
 
 
+def _published_amount_policy(
+    url: str, job: Any, source: Mapping[str, Any], rows: list[dict[str, Any]], lines: list[str]
+) -> UUID:
+    """Replay synthetic field proposals; only production grounding grants amount authority."""
+    if any(raw["status"] != "unknown" for raw in rows):
+        raise ValueError("FIXED_REVIEW_AMOUNT_STATUS_SOURCE_UNSUPPORTED")
+    worker = "synthetic-fixed-amount-worker"
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        # The original fixture retains IR only. Preserve the same invented input
+        # in its extraction layer so the normal range loader can reconstruct it.
+        for block in _words(lines):
+            connection.execute(
+                "INSERT INTO extraction_blocks(page_id,text,bbox,reading_order) "
+                "SELECT id,%s,%s,%s FROM extraction_pages WHERE extraction_id=%s",
+                (block["text"], Jsonb(block["bbox"]), block["reading_order"], source["extraction"]),
+            )
+        queued = connection.execute(
+            "INSERT INTO policy_structuring_jobs(household_space_id,family_member_id,"
+            "batch_item_id,document_version_id,extraction_id,pipeline_version) "
+            "VALUES(%s,%s,%s,%s,%s,'synthetic-fixed-amount-v1') RETURNING id",
+            (
+                job.household_space_id,
+                job.family_member_id,
+                source["item"],
+                source["version"],
+                source["extraction"],
+            ),
+        ).fetchone()[0]
+    claim = PolicyStructuringJobQueue(url).claim_next_job(worker)
+    if claim is None or claim.id != queued:
+        raise ValueError("FIXED_REVIEW_POLICY_JOB_SCOPE_MISMATCH")
+    repository = PolicyRangeRepository(url)
+    work = repository.next(claim, worker, sensitive_terms=())
+    if work is None:
+        raise ValueError("FIXED_REVIEW_POLICY_SOURCE_RANGE_UNSUPPORTED")
+    evidence_by_text = {item.text: item for item in work.envelope.evidence if item.primary}
+
+    def proposal(key: str, kind: str, values: Mapping[str, tuple[Any, str]]) -> StructurerCandidate:
+        return StructurerCandidate.model_validate(
+            {
+                "schema_version": "1",
+                "candidate_id": _id(f"{queued}:{key}"),
+                "candidate_kind": kind,
+                "fields": tuple(
+                    CandidateField(
+                        field_id=field,
+                        value=value,
+                        evidence_ids=(evidence_by_text[line].evidence_id,),
+                    )
+                    for field, (value, line) in values.items()
+                ),
+            }
+        )
+
+    candidates = [
+        proposal(
+            "policy",
+            "policy_contract",
+            {
+                "insurer": ("Sample Insurer", "보험사: Sample Insurer"),
+                "product_name": ("Sample Plan", "상품명: Sample Plan"),
+                "contract_start": ("2026-01-01", "contract start: 2026-01-01"),
+                "contract_end": ("2026-12-31", "contract end: 2026-12-31"),
+            },
+        )
+    ]
+    for raw in rows:
+        if raw["enrollment"] != "confirmed":
+            continue
+        line = next(
+            line for line in lines if line.startswith(raw["_fixture_label"] + " enrollment:")
+        )
+        values = {
+            "rider_name": (raw["_fixture_label"], line),
+            "rider_key": (raw["_fixture_label"].casefold().replace(" ", "-"), line),
+            "benefit_type": (raw["benefit_type"].lower(), line),
+        }
+        if raw.get("calculation", {}).get("kind") in {"fixed", "daily", "ratio"}:
+            values.update(sum_assured=(int(_insured_amount(raw)), line), currency=("KRW", line))
+        candidates.append(proposal(raw["coverage_key"], "rider", values))
+    assigned = defaultdict(set)
+    for candidate in candidates:
+        for field in candidate.fields:
+            for evidence in field.evidence_ids:
+                assigned[evidence].add(candidate.candidate_id)
+    primary = dict(
+        zip(work.envelope.primary_chunk_ids, work.envelope.primary_evidence_ids, strict=True)
+    )
+    batch = PolicyRangeBatch(
+        schema_version="3",
+        candidates=tuple(candidates),
+        ranges=tuple(
+            disposition.model_copy(
+                update={
+                    "outcome": "CANDIDATES",
+                    "candidate_ids": tuple(
+                        sorted(assigned[primary[disposition.chunk_id]], key=str)
+                    ),
+                }
+            )
+            if primary[disposition.chunk_id] in assigned
+            else disposition
+            for disposition in _no_facts(work).ranges
+        ),
+    )
+    result = CandidatePipelineResult(
+        classification="SUCCESS",
+        candidates=tuple(
+            PolicyCandidate(
+                candidate_id=candidate.candidate_id,
+                candidate_kind=candidate.candidate_kind,
+                fields=candidate.fields,
+                status="AI_VERIFIED",
+                issue_codes=(),
+                provider_request_ids=("synthetic-fixture-structure", "synthetic-fixture-verify"),
+            )
+            for candidate in candidates
+        ),
+    )
+    repository.save(claim, worker, work, batch, result)
+    if RangeEnrollmentProjector(url).project_pending() != len(candidates):
+        raise ValueError("FIXED_REVIEW_POLICY_FIELDS_NOT_PUBLISHED")
+    # Range preparation creates a constructor-consistent generation from the
+    # retained extraction; publish its metadata through the same normal path.
+    if not DocumentMetadataRunner(url).run_once(worker):
+        raise ValueError("FIXED_REVIEW_POLICY_METADATA_UNAVAILABLE")
+    DocumentMetadataProjector(url).project_pending()
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+        publications = connection.execute(
+            "SELECT p.policy_contract_id,p.rider_id,p.field_values "
+            "FROM range_enrollment_publications p JOIN analysis_candidate_versions c "
+            "ON c.id=p.source_candidate_version_id WHERE c.structuring_job_id=%s",
+            (queued,),
+        ).fetchall()
+    policies = {row["policy_contract_id"] for row in publications}
+    if len(policies) != 1:
+        raise ValueError("FIXED_REVIEW_POLICY_IDENTITY_AMBIGUOUS")
+    for raw in rows:
+        if raw["enrollment"] == "confirmed":
+            matches = [
+                row["rider_id"]
+                for row in publications
+                if row["field_values"].get("rider_name") == raw["_fixture_label"]
+            ]
+            if len(matches) != 1 or matches[0] is None:
+                raise ValueError("FIXED_REVIEW_RIDER_IDENTITY_AMBIGUOUS")
+            raw["_fixture_rider_id"] = matches[0]
+    return policies.pop()
+
+
 def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[str, Any]]) -> UUID:
     policy = _id(f"{case.case_id}:contract:{key}")
     subject = rows[0]["subject"]
@@ -354,11 +539,15 @@ def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[s
         f"피보험자: {name}",
         "보험기간: 2026-01-01 ~ 2026-12-31",
     ]
+    amount_proof = any(raw.get("calculation", {}).get("kind") in {"daily", "ratio"} for raw in rows)
+    if amount_proof:
+        lines.extend(("contract start: 2026-01-01", "contract end: 2026-12-31", "가입금액"))
     for raw in rows:
         amount = _insured_amount(raw)
         lines.append(
             f"{raw['_fixture_label']} enrollment: {raw['enrollment']}; "
-            f"sum assured: {amount} TST; source status: {raw['status']}."
+            f"sum assured: {amount} KRW; source status: {raw['status']}."
+            + (f" benefit type: {raw['benefit_type'].lower()}." if amount_proof else "")
         )
     digest = _digest(lines)
     _add_document(url, job, "\n".join(lines), kind="policy", digest=digest)
@@ -369,7 +558,7 @@ def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[s
             _add_document(url, job, duplicate_text, kind="policy", digest=_digest(duplicate_text))
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         source = connection.execute(
-            "SELECT v.id AS version,x.id AS extraction FROM document_versions v "
+            "SELECT v.id AS version,x.id AS extraction,i.id AS item FROM document_versions v "
             "JOIN extractions x ON x.document_version_id=v.id AND x.status='succeeded' "
             "JOIN document_batch_items i ON i.processed_document_version_id=v.id "
             "AND i.document_id=v.document_id AND i.state='succeeded' "
@@ -391,6 +580,11 @@ def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[s
             page=1,
         )
         connection.execute("UPDATE evidence SET x0=10,y0=10,x1=500,y1=700 WHERE id=%s", (evidence,))
+    if amount_proof:
+        for raw in rows:
+            raw["_fixture_terms_code"] = policy.hex
+        return _published_amount_policy(url, job, source, rows, lines)
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         connection.execute(
             "INSERT INTO policy_contracts(id,household_space_id,source_document_version_id,"
             "source_evidence_id,insurer_display,insurer_key,product_display,product_key,"
@@ -429,7 +623,7 @@ def _policy(url: str, case: BenchmarkCase, job: Any, key: str, rows: list[dict[s
                 "INSERT INTO riders(id,household_space_id,policy_contract_id,source_evidence_id,"
                 "display_name,normalized_key,benefit_type,insured_amount,currency,"
                 "coverage_start_date,coverage_end_date,status) "
-                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'TST','2026-01-01','2026-12-31',%s)",
+                "VALUES(%s,%s,%s,%s,%s,%s,%s,%s,'KRW','2026-01-01','2026-12-31',%s)",
                 (
                     rider,
                     job.household_space_id,
@@ -535,7 +729,7 @@ def _refresh_terms(url: str, job: Any, policy: UUID) -> None:
 
 def _terms(url: str, job: Any, policy: UUID, raw: dict[str, Any]) -> None:
     body = _source_body(raw)
-    code = policy.hex
+    code = raw.get("_fixture_terms_code", policy.hex)
     text = (
         "보험약관\n보험사: Sample Insurer\n상품명: Sample Plan\n상품코드: SAMPLE-P\n"
         f"약관코드: TERMS-{code}\n판본코드: EDITION-{code}\n"
@@ -612,7 +806,7 @@ def _terms(url: str, job: Any, policy: UUID, raw: dict[str, Any]) -> None:
         link = _native_link(
             connection,
             job.household_space_id,
-            _id(raw["coverage_key"]),
+            raw.get("_fixture_rider_id", _id(raw["coverage_key"])),
             clause,
             edition["id"],
         )
@@ -681,6 +875,11 @@ def seed_fixed_review_case(database_url: str, case: BenchmarkCase) -> FixedRevie
                     for key, value in raw_facts.items()
                     if key in supported
                 }
+                if "event.reduction_applies" in raw_facts:
+                    reduction = raw_facts["event.reduction_applies"]
+                    if type(reduction) is not bool:
+                        raise ValueError("FIXED_REVIEW_REDUCTION_FACT_MUST_BE_BOOLEAN")
+                    facts["MedicalEvent.reduction_applies"] = reduction
                 event = service.create_medical_event(
                     family_member_id=job.family_member_id,
                     mode="post_treatment",
@@ -716,6 +915,24 @@ def seed_fixed_review_case(database_url: str, case: BenchmarkCase) -> FixedRevie
                             structured_facts=overrides,
                         ),
                     )
+                if "event.eligible_cost" in raw_facts:
+                    category = {"admission": "inpatient", "outpatient": "outpatient"}.get(
+                        raw_facts.get("event.kind")
+                    )
+                    if category is None:
+                        raise ValueError("FIXED_REVIEW_RECEIPT_CATEGORY_SOURCE_UNSUPPORTED")
+                    CalculationService(
+                        scope, CalculationRepository(database_url)
+                    ).create_receipt_line(
+                        event.id,
+                        ReceiptLineCreateRequest(
+                            category=category,
+                            coverage_category="covered",
+                            amount=raw_facts["event.eligible_cost"],
+                            currency="KRW",
+                            confirmation_level="user",
+                        ),
+                    )
                 service.analyze_medical_event(event.id)
                 with psycopg.connect(_psycopg_url(database_url)) as connection:
                     connection.execute(
@@ -737,6 +954,19 @@ def seed_fixed_review_case(database_url: str, case: BenchmarkCase) -> FixedRevie
                 raise ValueError("FIXED_REVIEW_EVENT_CHANGED")
             with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
                 sources = read_review_sources(connection, scope, event, service.repository)
+                retained = connection.execute(
+                    "SELECT id,display_name FROM riders WHERE household_space_id=%s "
+                    "AND deleted_at IS NULL",
+                    (scope.household_space_id,),
+                ).fetchall()
+                names = {
+                    f"Sample Benefit {ordinal}": raw["coverage_key"]
+                    for ordinal, raw in enumerate(parameters["coverages"], 1)
+                }
+                for rider in retained:
+                    key = names[rider["display_name"]]
+                    keys.pop(_id(key), None)
+                    keys[rider["id"]] = key
             return FixedReviewFixture(database_url, scope, event, original, keys, sources, service)
         finally:
             lock.execute("SELECT pg_advisory_unlock(hashtextextended(%s,0))", (case.case_id,))

@@ -35,13 +35,16 @@ _DECIMAL_FIELDS = frozenset(
     {"Rider.insured_amount", "Receipt.confirmed_amount", "Receipt.covered_amount"}
 )
 _INTEGER_FIELDS = frozenset({"MedicalEvent.admission_days", "ClaimHistory.counted_occurrence"})
-_BOOLEAN_FIELDS = frozenset({"MedicalEvent.separately_billed_treatment"})
+_BOOLEAN_FIELDS = frozenset(
+    {"MedicalEvent.separately_billed_treatment", "MedicalEvent.reduction_applies"}
+)
 _KNOWN_FIELDS = frozenset(
     {
         "MedicalEvent.event_date",
         "MedicalEvent.visit_date",
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
+        "MedicalEvent.reduction_applies",
         "MedicalEvent.diagnosis_code",
         "MedicalEvent.procedure_code",
         "MedicalEvent.anatomical_site_code",

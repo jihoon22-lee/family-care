@@ -72,3 +72,13 @@ Explicit `MedicalEvent.treatment_kind` semantic conditions use only `equals`, no
 clinical classification codes and generic performed observations. Compiler v2 requires schema
 `0070_semantic_activity`; earlier publications stay immutable. `diagnosis_confirmed` event
 inputs accept only true, false or unknown, and AI proposals still require user confirmation.
+
+Compiler v3 / meaning v4 additionally preserve source-backed covered-receipt reimbursement
+and conditional reduction before deduction, amount cap and rounding. Schema
+`0071_source_calculations` admits v3 publications without changing v1/v2 history.
+The data-only `if` calculation takes exactly a `MedicalEvent.reduction_applies` Boolean
+field and two numeric branches. A missing, stale or unconfirmed condition cannot select a
+branch; Boolean values never become numeric amounts. Guidance traces retain the actual
+Boolean and the selected branch's original AST address. The explicit user event fact uses
+the existing `facts` object and does not expand AI structuring fields. Covered receipt
+amounts still require the normal confirmed receipt source and matching currency.

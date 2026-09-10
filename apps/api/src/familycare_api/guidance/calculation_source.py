@@ -27,7 +27,7 @@ from familycare_api.guidance.calculation_runtime import (
 from familycare_api.guidance.domain import GuidanceCalculationInput, GuidanceCitation
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceSemanticEvidence
 
-CALCULATION_SOURCE_REVISION = "guidance-calculation-source-v1"
+CALCULATION_SOURCE_REVISION = "guidance-calculation-source-v2"
 _CURRENCY = re.compile(r"[A-Z]{3}")
 _SHA = re.compile(r"[0-9a-f]{64}")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}")
@@ -38,6 +38,12 @@ _FIELDS: dict[str, CalculationUnit] = {
     "MedicalEvent.admission_days": "DAYS",
     "ClaimHistory.counted_occurrence": "COUNT",
     "ClaimHistory.remaining_occurrences": "COUNT",
+    "MedicalEvent.reduction_applies": "BOOLEAN",
+    "MedicalEvent.admission": "BOOLEAN",
+    "MedicalEvent.performed": "BOOLEAN",
+    "MedicalEvent.planned": "BOOLEAN",
+    "MedicalEvent.diagnosis_confirmed": "BOOLEAN",
+    "MedicalEvent.separately_billed_treatment": "BOOLEAN",
 }
 type CalculationBasis = Literal[
     "FIXED_AMOUNT",
@@ -358,10 +364,34 @@ class _UnitBinder:
         elif isinstance(value, Decimal):
             unit = expected or "NUMBER"
         elif isinstance(value, CompiledCalculation):
+            if value.operator == "if":
+                _require(
+                    len(value.operands) == 3 and isinstance(value.operands[0], str),
+                    "CALCULATION_SOURCE_UNIT_UNSUPPORTED",
+                )
+                predicate = value.operands[0]
+                assert isinstance(predicate, str)
+                _require(_FIELDS.get(predicate) == "BOOLEAN", "CALCULATION_SOURCE_UNIT_UNSUPPORTED")
+                self.infer(predicate, f"{path}/args/0", "BOOLEAN")
+                branch_units = [
+                    self.infer(value.operands[index], f"{path}/args/{index}") for index in (1, 2)
+                ]
+                _require("BOOLEAN" not in branch_units, "CALCULATION_UNIT_MISMATCH")
+                dimensions = set(branch_units) - {"NUMBER", "RATIO"}
+                _require(len(dimensions) <= 1, "CALCULATION_UNIT_MISMATCH")
+                unit = next(iter(dimensions)) if dimensions else expected or "NUMBER"
+                _require(expected is None or unit == expected, "CALCULATION_UNIT_MISMATCH")
+                for index, branch_unit in zip((1, 2), branch_units, strict=True):
+                    if branch_unit != unit:
+                        _require(not _fields(value.operands[index]), "CALCULATION_UNIT_MISMATCH")
+                        self.infer(value.operands[index], f"{path}/args/{index}", unit)
+                self.hint(path, unit)
+                return unit
             units = [
                 self.infer(operand, f"{path}/args/{index}")
                 for index, operand in enumerate(value.operands)
             ]
+            _require("BOOLEAN" not in units, "CALCULATION_UNIT_MISMATCH")
             dimensioned = [u for u in units if u not in {"NUMBER", "RATIO"}]
             if value.operator == "multiply":
                 if len(dimensioned) > 1:

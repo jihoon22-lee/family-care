@@ -445,7 +445,8 @@ def test_every_calculation_operator_compiles_decimal_operands_without_evaluation
 
 def test_calculation_operator_allowlist_is_exact_and_versioned() -> None:
     assert (
-        frozenset({"add", "subtract", "multiply", "min", "max", "round"}) == CALCULATION_OPERATORS
+        frozenset({"add", "subtract", "multiply", "min", "max", "round", "if"})
+        == CALCULATION_OPERATORS
     )
 
 

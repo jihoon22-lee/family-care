@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-MEANING_REVISION = "terms-source-meaning-v3"
+MEANING_REVISION = "terms-source-meaning-v4"
 _NUMBER = r"(?:0|[1-9][0-9]{0,17})(?:\.[0-9]{1,12})?"
 _INTEGER = r"(?:0|[1-9][0-9]{0,4})"
 _CURRENCY = r"[A-Z]{3}"
@@ -100,6 +100,25 @@ def observe_statement(text: str) -> dict[str, Any] | None:
         return _calculation(
             "insured_ratio", match[2], match[3], basis="insured_amount", ratio=match[1]
         )
+    match = _match(
+        rf"Reimburse the covered receipt amount in ({_CURRENCY}), "
+        rf"rounded ({_ROUNDING}) to whole currency units\.",
+        value,
+    )
+    if match:
+        return _calculation("indemnity", *match.groups(), basis="covered_receipt_amount")
+    match = _match(
+        rf"When the event reduction condition is true, multiply the gross benefit by ({_NUMBER}); "
+        r"otherwise keep the gross benefit, before deduction, amount cap and rounding\.",
+        value,
+    )
+    if match:
+        return {
+            "kind": "reduction",
+            "field": "MedicalEvent.reduction_applies",
+            "factor": match[1],
+            "stage": "before_deduction_amount_cap_and_rounding",
+        }
     match = _match(rf"Exclude the first ({_INTEGER}) admission days\.", value) or _match(
         rf"최초 입원 ({_INTEGER})일은 지급일수에서 제외합니다\.",
         value,

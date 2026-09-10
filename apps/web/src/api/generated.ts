@@ -1483,7 +1483,7 @@ export interface ExtractorConfigRequest {
 
 export interface FactInput {
   confirmation: "user" | "ai_structured" | "unconfirmed" | "conflicting";
-  value: string | number | null;
+  value: string | boolean | number | null;
 }
 
 export interface FactIssueResponse {
@@ -1500,7 +1500,7 @@ export interface FactIssueResponse {
 
 export interface FactResponse {
   confirmation: "user" | "ai_structured" | "unconfirmed" | "conflicting";
-  value: string | number | null;
+  value: string | boolean | number | null;
 }
 
 export interface FamilyMemberCreateRequest {
@@ -1526,7 +1526,7 @@ export interface GuidanceCalculatedComponent {
   currency?: string | null;
   expression_path: string;
   parent_path: string;
-  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "BOOLEAN" | "UNKNOWN";
   value: string;
 }
 
@@ -1541,21 +1541,21 @@ export interface GuidanceCalculationOperand {
   source_refs?: Array<GuidanceSourceReference>;
   stale?: boolean;
   status: "AVAILABLE" | "UNAVAILABLE" | "FAILED";
-  supplied_value?: string | null;
-  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
-  value?: string | null;
+  supplied_value?: string | boolean | null;
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "BOOLEAN" | "UNKNOWN";
+  value?: string | boolean | null;
 }
 
 export interface GuidanceCalculationStep {
   currency?: string | null;
   expression_path: string;
   operands: Array<GuidanceCalculationOperand>;
-  operation: "add" | "subtract" | "multiply" | "min" | "max" | "round";
+  operation: "add" | "subtract" | "multiply" | "min" | "max" | "round" | "if";
   reason_codes?: Array<string>;
   rounding_rule?: "half_up" | "half_even" | "up" | "down" | null;
   status: "AVAILABLE" | "UNAVAILABLE" | "FAILED";
   step_number: number;
-  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "BOOLEAN" | "UNKNOWN";
   unit_source_refs?: Array<GuidanceSourceReference>;
   value?: string | null;
 }
@@ -1573,7 +1573,7 @@ export interface GuidanceCalculationTrace {
   source_revision: string;
   status: "COMPLETE" | "PARTIAL" | "UNAVAILABLE" | "FAILED";
   steps?: Array<GuidanceCalculationStep>;
-  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "UNKNOWN";
+  unit: "MONEY" | "DAYS" | "COUNT" | "RATIO" | "NUMBER" | "BOOLEAN" | "UNKNOWN";
   value?: string | null;
 }
 

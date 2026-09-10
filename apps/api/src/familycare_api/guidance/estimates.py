@@ -32,6 +32,7 @@ from familycare_api.guidance.trace_projection import (
 _LABELS = {
     "Rider.insured_amount": "가입금액",
     "MedicalEvent.admission_days": "입원 일수",
+    "MedicalEvent.reduction_applies": "약관의 감액 조건 해당 여부",
     "Receipt.confirmed_amount": "보장대상 확인 비용",
     "Receipt.covered_amount": "보장대상 비용",
     "ClaimHistory.counted_occurrence": "이전 지급 횟수",
@@ -39,6 +40,7 @@ _LABELS = {
 _UNITS: dict[str, CalculationUnit] = {
     "Rider.insured_amount": "MONEY",
     "MedicalEvent.admission_days": "DAYS",
+    "MedicalEvent.reduction_applies": "BOOLEAN",
     "Receipt.confirmed_amount": "MONEY",
     "Receipt.covered_amount": "MONEY",
     "ClaimHistory.counted_occurrence": "COUNT",
@@ -62,11 +64,47 @@ def formula_text(node: CompiledCalculation) -> str:
         return "(" + symbols[node.operator].join(values) + ")"
     if node.operator == "round":
         return f"반올림[{node.rounding}]({', '.join(values)})"
+    if node.operator == "if":
+        return f"조건[{values[0]}](참: {values[1]}, 거짓: {values[2]})"
     return f"{'최솟값' if node.operator == 'min' else '최댓값'}({', '.join(values)})"
 
 
 def _number(value: object) -> Decimal | None:
     return Decimal(value) if type(value) is int else value if isinstance(value, Decimal) else None
+
+
+def calculation_currency(coverage: GuidanceCoverageInput) -> str | None:
+    """Choose a source denomination without manufacturing contract currency proof."""
+    publication = coverage.calculation
+    if (
+        coverage.canonical_identity is not None
+        and "currency" in coverage.canonical_identity.field_conflicts
+    ):
+        return None
+    if publication is None or publication.source_currency is None:
+        return coverage.currency
+    try:
+        document = validate_rule_document(
+            publication.calculation_document, tuple(c.citation_key for c in publication.citations)
+        )
+    except ValueError:
+        return coverage.currency
+    fields = set(document.referenced_fields)
+    if not fields & {"Rider.insured_amount", *RECEIPT_FIELDS}:
+        return publication.source_currency
+    if (
+        coverage.currency is None
+        and publication.source_kind == "SEMANTIC_NODE"
+        and publication.calculation_kind == "INDEMNITY"
+        and "Rider.insured_amount" not in fields
+        and fields & RECEIPT_FIELDS
+        and publication.citations
+        and all(c.lineage_valid for c in publication.citations)
+    ):
+        # The caller selects only registered costs in this currency. A missing or
+        # differently denominated receipt remains unavailable, never converted.
+        return publication.source_currency
+    return coverage.currency
 
 
 def calculation_inputs(
@@ -78,10 +116,11 @@ def calculation_inputs(
     supporting_sources: Mapping[str, tuple[CalculationSourceRef, ...]],
 ) -> dict[str, CalculationInput]:
     result = {}
+    source_currency = calculation_currency(coverage)
     for path in fields:
         unit = _UNITS.get(path, "UNKNOWN")
-        currency = coverage.currency if unit == "MONEY" else None
-        value = None
+        currency = source_currency if unit == "MONEY" else None
+        value: Decimal | bool | None = None
         provenance = "UNCONFIRMED"
         stale = False
         refs: tuple[CalculationSourceRef, ...] = ()
@@ -110,7 +149,12 @@ def calculation_inputs(
             if path == "ClaimHistory.counted_occurrence":
                 fact = coverage.claim_history_counted_occurrence or fact
             if fact is not None:
-                value, provenance, stale = _number(fact.value), fact.provenance, fact.stale
+                value = (
+                    fact.value
+                    if unit == "BOOLEAN" and type(fact.value) is bool
+                    else _number(fact.value)
+                )
+                provenance, stale = fact.provenance, fact.stale
                 refs = supporting_sources.get(path, ())
                 if path.startswith("MedicalEvent."):
                     local = path in event_read.local_fact_paths
@@ -164,16 +208,7 @@ def estimate_coverage(
         if calculation is None or publication.calculation_kind != coverage.benefit_type:
             raise ValueError("CALCULATION_METADATA_MISMATCH")
         formula = formula_text(calculation)
-        monetary_fields = set(calculation.referenced_fields) & {
-            "Rider.insured_amount",
-            "Receipt.confirmed_amount",
-            "Receipt.covered_amount",
-        }
-        currency = (
-            publication.source_currency
-            if publication.source_currency is not None and not monetary_fields
-            else coverage.currency
-        )
+        currency = calculation_currency(coverage)
         binding = bind_calculation_source(publication, currency=currency)
     except CalculationSourceError as error:
         if error.reason_code == "CALCULATION_CURRENCY_MISMATCH":

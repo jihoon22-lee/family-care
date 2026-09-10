@@ -105,6 +105,16 @@ class SemanticCondition(SemanticContract):
     )
 
 
+class SemanticConditionalReduction(SemanticContract):
+    factor: Annotated[
+        str,
+        Field(min_length=1, max_length=64, pattern="^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$"),
+    ]
+    field: Literal["MedicalEvent.reduction_applies"]
+    kind: Literal["reduction"]
+    stage: Literal["before_deduction_amount_cap_and_rounding"]
+
+
 class SemanticDailyCalculation(SemanticContract):
     basis: Literal["insured_amount_per_payable_day"]
     currency: Annotated[str, Field(min_length=1, max_length=3, pattern="^[A-Z]{3}$")]
@@ -157,6 +167,14 @@ class SemanticFootnote(SemanticContract):
     kind: Literal["footnote"]
 
 
+class SemanticIndemnityCalculation(SemanticContract):
+    basis: Literal["covered_receipt_amount"]
+    currency: Annotated[str, Field(min_length=1, max_length=3, pattern="^[A-Z]{3}$")]
+    kind: Literal["calculation"]
+    mode: Literal["indemnity"]
+    rounding: Literal["half_up", "half_even", "up", "down"]
+
+
 class SemanticInformation(SemanticContract):
     effect: Literal["explanation_only", "unsupported_condition", "unsupported_calculation"]
     kind: Literal["information"]
@@ -205,6 +223,8 @@ class SemanticNode(SemanticContract):
         | SemanticInformation
         | SemanticCodeDefinition
         | SemanticDeductible
+        | SemanticIndemnityCalculation
+        | SemanticConditionalReduction
     )
     region_ids: Annotated[
         list[
@@ -364,12 +384,14 @@ SemanticCitation.model_rebuild()
 SemanticClassification.model_rebuild()
 SemanticCodeDefinition.model_rebuild()
 SemanticCondition.model_rebuild()
+SemanticConditionalReduction.model_rebuild()
 SemanticDailyCalculation.model_rebuild()
 SemanticDeductible.model_rebuild()
 SemanticDefinition.model_rebuild()
 SemanticEdge.model_rebuild()
 SemanticFixedCalculation.model_rebuild()
 SemanticFootnote.model_rebuild()
+SemanticIndemnityCalculation.model_rebuild()
 SemanticInformation.model_rebuild()
 SemanticLimit.model_rebuild()
 SemanticNode.model_rebuild()

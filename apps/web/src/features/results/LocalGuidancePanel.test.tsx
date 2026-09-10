@@ -611,6 +611,121 @@ function point(amount: string): GuidanceEstimate {
 }
 
 describe("source-preserving guidance details", () => {
+  it.each([true, false])(
+    "shows actual Boolean condition %s and its selected calculation branch",
+    async (applies) => {
+      const amount = applies ? "30" : "60";
+      const calculation = trace();
+      calculation.value = amount;
+      calculation.unit = "MONEY";
+      calculation.currency = "KRW";
+      calculation.steps = [
+        {
+          step_number: 1,
+          expression_path: "/calculation",
+          operation: "if",
+          operands: [
+            {
+              expression_path: "/calculation/args/0",
+              kind: "FIELD",
+              field_path: "MedicalEvent.reduction_applies",
+              value: applies,
+              unit: "BOOLEAN",
+              provenance: "USER_CONFIRMED",
+              status: "AVAILABLE",
+            },
+            {
+              expression_path: `/calculation/args/${applies ? 1 : 2}`,
+              kind: "CHILD",
+              value: amount,
+              unit: "MONEY",
+              currency: "KRW",
+              status: "AVAILABLE",
+            },
+          ],
+          value: amount,
+          unit: "MONEY",
+          currency: "KRW",
+          status: "AVAILABLE",
+        },
+      ];
+      show(
+        result(
+          guidance([
+            candidate("Sample Conditional", {
+              ...point(amount),
+              trace: calculation,
+            }),
+          ]),
+        ),
+      );
+      await userEvent.click(screen.getByText("계산 과정과 근거"));
+      expect(
+        screen.getByText(
+          new RegExp(
+            `조건 ${applies ? "해당함" : "해당하지 않음"}.*선택한 값 ${amount}원`,
+          ),
+        ),
+      ).toBeVisible();
+      expect(
+        screen.getByText(
+          new RegExp(
+            `감액 조건 해당 여부: ${applies ? "해당함" : "해당하지 않음"}`,
+          ),
+        ),
+      ).toBeVisible();
+      expect(
+        screen.queryByText(/작은 값 선택|큰 값 선택|MedicalEvent|undefined/),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("keeps an untrusted Boolean input visible without describing it as a selected branch", async () => {
+    const calculation = trace();
+    calculation.status = "UNAVAILABLE";
+    calculation.value = null;
+    calculation.unit = "UNKNOWN";
+    calculation.steps = [
+      {
+        step_number: 1,
+        expression_path: "/calculation",
+        operation: "if",
+        operands: [
+          {
+            expression_path: "/calculation/args/0",
+            kind: "FIELD",
+            field_path: "MedicalEvent.reduction_applies",
+            value: null,
+            supplied_value: true,
+            unit: "BOOLEAN",
+            provenance: "AI_SUGGESTED",
+            status: "UNAVAILABLE",
+          },
+        ],
+        value: null,
+        unit: "UNKNOWN",
+        status: "UNAVAILABLE",
+      },
+    ];
+    show(
+      result(
+        guidance([
+          candidate("Sample Unconfirmed", {
+            kind: "FORMULA",
+            reason_code: "CALCULATION_INPUT_NEEDED",
+            trace: calculation,
+          }),
+        ]),
+      ),
+    );
+    await userEvent.click(screen.getByText("계산 과정과 근거"));
+    expect(screen.getByText(/조건 미확인.*선택 보류/)).toBeVisible();
+    expect(
+      screen.getByText(/입력값\(해당함\)은 계산에 사용하지 않음/),
+    ).toBeVisible();
+    expect(screen.queryByText(/선택한 값/)).not.toBeInTheDocument();
+  });
+
   it("separates certificate 100 from expected payout 300 and labels authority", () => {
     const value = candidate("Sample Detail", point("300"));
     value.contract_amount = {

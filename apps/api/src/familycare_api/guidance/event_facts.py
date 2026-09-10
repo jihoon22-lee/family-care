@@ -59,7 +59,7 @@ _FIELDS = {
     "admission_days": "MedicalEvent.admission_days",
     "diagnosis_confirmed": "MedicalEvent.diagnosis_confirmed",
 }
-_EVENT_FIELDS = frozenset(_FIELDS.values())
+_EVENT_FIELDS = frozenset({*_FIELDS.values(), "MedicalEvent.reduction_applies"})
 _BOOLEANS = frozenset(
     {
         "MedicalEvent.admission",
@@ -68,6 +68,7 @@ _BOOLEANS = frozenset(
         "MedicalEvent.pharmacy",
         "MedicalEvent.separately_billed_treatment",
         "MedicalEvent.diagnosis_confirmed",
+        "MedicalEvent.reduction_applies",
     }
 )
 _DATES = frozenset({"MedicalEvent.event_date", "MedicalEvent.visit_date"})

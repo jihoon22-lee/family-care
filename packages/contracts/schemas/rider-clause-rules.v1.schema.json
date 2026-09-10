@@ -149,7 +149,10 @@
         "PolicyContract.contract_end",
         "Rider.status",
         "Rider.insured_amount",
-        "ClaimHistory.counted_occurrence"
+        "ClaimHistory.counted_occurrence",
+        "MedicalEvent.reduction_applies",
+        "Receipt.covered_amount",
+        "Receipt.confirmed_amount"
       ],
       "title": "FieldPath",
       "type": "string"
@@ -508,7 +511,8 @@
         "multiply",
         "min",
         "max",
-        "round"
+        "round",
+        "if"
       ],
       "title": "CalculationOperator",
       "type": "string"
@@ -532,7 +536,9 @@
               "enum": [
                 "MedicalEvent.admission_days",
                 "Rider.insured_amount",
-                "ClaimHistory.counted_occurrence"
+                "ClaimHistory.counted_occurrence",
+                "Receipt.covered_amount",
+                "Receipt.confirmed_amount"
               ],
               "type": "string"
             }
@@ -572,7 +578,14 @@
         },
         "args": {
           "items": {
-            "$ref": "#/$defs/CalculationOperand"
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CalculationOperand"
+              },
+              {
+                "$ref": "#/$defs/CalculationCondition"
+              }
+            ]
           },
           "maxItems": 16,
           "minItems": 1,
@@ -595,7 +608,10 @@
           },
           "properties": {
             "args": {
-              "minItems": 2
+              "minItems": 2,
+              "items": {
+                "$ref": "#/$defs/CalculationOperand"
+              }
             },
             "op": {
               "enum": [
@@ -612,7 +628,10 @@
           "properties": {
             "args": {
               "maxItems": 1,
-              "minItems": 1
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/CalculationOperand"
+              }
             },
             "op": {
               "const": "round"
@@ -621,6 +640,34 @@
           "required": [
             "rounding"
           ]
+        },
+        {
+          "properties": {
+            "op": {
+              "const": "if"
+            },
+            "args": {
+              "minItems": 3,
+              "maxItems": 3,
+              "prefixItems": [
+                {
+                  "$ref": "#/$defs/CalculationCondition"
+                },
+                {
+                  "$ref": "#/$defs/CalculationOperand"
+                },
+                {
+                  "$ref": "#/$defs/CalculationOperand"
+                }
+              ],
+              "items": false
+            }
+          },
+          "not": {
+            "required": [
+              "rounding"
+            ]
+          }
         }
       ],
       "title": "RuleCalculation",
@@ -915,6 +962,19 @@
     },
     "PublishRuleRequest": {
       "$ref": "#/$defs/PublishCoverageRuleRequest"
+    },
+    "CalculationCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "const": "MedicalEvent.reduction_applies",
+          "type": "string"
+        }
+      },
+      "required": [
+        "field"
+      ]
     }
   }
 }

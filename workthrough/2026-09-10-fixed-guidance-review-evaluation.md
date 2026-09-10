@@ -206,5 +206,47 @@ GitHub 마일스톤 설명과 연결 이슈 12개를 전수 대조했다. 잘못
 #59/#60/#62/#63/#69/#70의 활성 본문을 v0.5.0 기준으로 정리하고 다시 읽어 해당 번호가
 남지 않았음을 확인했다. 원래 요구사항과 체크리스트는 보존했다. SECURITY와 architecture의
 현재 버전도 함께 정정했다. 이미지 6개는 공개 코드 artifact만 별도 보관했으나 GHCR 삭제는
-토큰의 `delete:packages` 권한 부재로 403을 반환했다. GitHub Release/Git 태그 삭제와
+당시 토큰의 `delete:packages` 권한 부재로 403을 반환했다. GitHub Release/Git 태그 삭제와
 이미지 삭제를 구분하며 인증 갱신 후 실제 결과를 추가한다.
+
+사용자가 권한을 부여한 뒤 정확한 digest/tag 대조를 거쳐 Web/API/Worker의 조기 게시
+이미지 버전 6개를 삭제했다. 세 패키지에서 v0.5.x 태그가 남지 않은 것을 재조회했다.
+버전 복구 PR #94는 CI `34425055193` 필수 7/7 후 merge
+`ea335ed5f3f55c4f5aa535b8d7021272fd9bea23`으로 통합했다. 최종 릴리스·배포는 아직 하지 않았다.
+
+## Source calculation completion
+
+#64/#66의 완료 상태를 다시 열고 원문 경로에서 누락됐던 일당 33·조건부 감액 30·실손 60을
+보완했다. 원래 20개 사례·숫자·기대값·split은 수정하지 않았다. 새 합성 adapter v5는
+정상 증권 필드 게시의 가입금액·KRW 근거와 정상 비용 등록의 확인된 보장대상 비용을
+사용한다. TST companion을 KRW 정수 단위로 바꾼 새 평가 입력이며 과거 유료 실행과
+동일한 입력으로 주장하지 않는다. 과거 유료 DB·journal·보고서는 다시 실행하거나 수정하지 않았다.
+
+compiler v3 / meaning v4는 원문 감액 조건·계수·순서를 유지하고 확인 비용 기반 실손
+산식을 생성한다. 새 `if`는 실제 Boolean과 선택된 수치 분기만 실행·기록한다. 미상·AI
+제안·오래된 조건은 계산하지 않으며, 기존 private engine의 문장 normalizer도 감액의
+명시적 사용자 확인을 대신할 수 없다. 화면은 해당 여부·선택값·확인 전 상태를 표시한다.
+`0071_source_calculations`는 이전 게시 행을 보존하고 새 의미/검수 게시·기존 계산 저장소·
+사건/결과/청구의 신규 조건 이력이 있으면 downgrade를 차단한다.
+
+2026-09-10 UTC, base `08cf06d` + 이 절의 미커밋 변경, WSL/Python 3.14.7/전용 합성 PG 18.6:
+
+- 원문/입력 RED 7 실패 → 13 통과; Boolean runtime RED 10 실패 → 관련 109 통과.
+- 실제 증권/비용→안내 금액 8 통과(41.85s). 실손은 영수증 등록 후에도 통화 연결이 없어
+  실패한 것을 확인하고, 원문 통화와 등록 비용 통화를 대조하도록 수정했다. 가입금액 권한을 만들지 않았다.
+- 정상 private publication의 `if` 이력만 있어도 downgrade를 거부해야 한다는 RED를
+  확인했다. 신규/기존 compiler 보존과 조건 이력의 rollback 검사 3 통과(9.21s).
+- 기존 engine의 자동 감액 추정/structured alias RED 8 실패 → 관련 227 통과(0.63s).
+- 중립 계약의 조건·수치 분기 검사는 RED 5 실패 → 문서 계약 회귀 포함 12 통과.
+- 전체 Web 31개 파일/249 tests 및 format/lint/type/build 통과(49.80s); 새 질문/표시 9개를 포함한다.
+- 전체 Python `uv run pytest apps/api/tests workers/analyzer/tests scripts/tests -q`:
+  **3882 passed / 862 deselected / 3 subtests**, 34.13s. 최초 기존 operator 목록 기대값
+  1 실패는 신규 `if` 계약에 맞게 수정했으며 나머지 성공을 최초 전체 성공으로 표현하지 않았다.
+- 고정 20건 실제 DB/SDK MockTransport와 정상 금액·의미지식→안내·비용 통합:
+  `pytest test_fixed_guidance_review_fixture_integration.py test_fixed_guidance_amount_proof_integration.py
+  test_semantic_local_guidance_integration.py test_guidance_expenses_integration.py -m integration -q`
+  (모두 `apps/api/tests` 경로), **38 passed**, 268.26s. 외부 요청은 0건이다.
+- 최종 Ruff format 912 files/lint, mypy 362 files, 계약·컨테이너 정의·workflow·문서 50·
+  저장소 안전 1128 paths와 `git diff --check` 통과. 이미지 빌드와 실제 환경 수용은 별도다.
+- `corepack pnpm --filter @familycare/web test:e2e`: Chromium API mock **27 passed**,
+  29.4s. 실제 기기·보호 자료·배포 검증과 구분한다. PR CI는 게시 후 결과를 기록한다.

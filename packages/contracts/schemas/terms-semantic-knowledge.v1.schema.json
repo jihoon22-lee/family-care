@@ -279,6 +279,36 @@
       ],
       "type": "object"
     },
+    "SemanticConditionalReduction": {
+      "additionalProperties": false,
+      "properties": {
+        "factor": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^(?:0|[1-9][0-9]{0,17})(?:\\.[0-9]{1,12})?$",
+          "type": "string"
+        },
+        "field": {
+          "const": "MedicalEvent.reduction_applies",
+          "type": "string"
+        },
+        "kind": {
+          "const": "reduction",
+          "type": "string"
+        },
+        "stage": {
+          "const": "before_deduction_amount_cap_and_rounding",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "field",
+        "factor",
+        "stage"
+      ],
+      "type": "object"
+    },
     "SemanticDailyCalculation": {
       "additionalProperties": false,
       "properties": {
@@ -478,6 +508,46 @@
       ],
       "type": "object"
     },
+    "SemanticIndemnityCalculation": {
+      "additionalProperties": false,
+      "properties": {
+        "basis": {
+          "const": "covered_receipt_amount",
+          "type": "string"
+        },
+        "currency": {
+          "maxLength": 3,
+          "minLength": 1,
+          "pattern": "^[A-Z]{3}$",
+          "type": "string"
+        },
+        "kind": {
+          "const": "calculation",
+          "type": "string"
+        },
+        "mode": {
+          "const": "indemnity",
+          "type": "string"
+        },
+        "rounding": {
+          "enum": [
+            "half_up",
+            "half_even",
+            "up",
+            "down"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "mode",
+        "basis",
+        "currency",
+        "rounding"
+      ],
+      "type": "object"
+    },
     "SemanticInformation": {
       "additionalProperties": false,
       "properties": {
@@ -611,6 +681,12 @@
             },
             {
               "$ref": "#/$defs/SemanticDeductible"
+            },
+            {
+              "$ref": "#/$defs/SemanticIndemnityCalculation"
+            },
+            {
+              "$ref": "#/$defs/SemanticConditionalReduction"
             }
           ]
         },

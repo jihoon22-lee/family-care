@@ -175,6 +175,10 @@ def normalize_private_event_facts(
     situation_tokens = normalized_tokens(event.situation)
     matches: dict[str, list[KnowledgeFactNormalizer]] = defaultdict(list)
     for normalizer in normalizers:
+        if normalizer.field_path == "MedicalEvent.reduction_applies":
+            # An insurance reduction condition requires the explicit event fact;
+            # matching words cannot replace the user's confirmation of that fact.
+            continue
         expected = tuple(
             token for raw in normalizer.normalized_tokens for token in normalized_tokens(raw)
         )

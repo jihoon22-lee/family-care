@@ -118,7 +118,11 @@ def bind_semantic_root(
     payloads = [n["payload"] for n in nodes.values() if n["payload"]["kind"] == "calculation"]
     modes = {p["mode"] for p in payloads}
     benefit: Literal["FIXED", "INDEMNITY", "UNKNOWN"] = (
-        "FIXED" if modes and modes <= {"daily", "fixed", "insured_ratio"} else "UNKNOWN"
+        "FIXED"
+        if modes and modes <= {"daily", "fixed", "insured_ratio"}
+        else "INDEMNITY"
+        if modes == {"indemnity"}
+        else "UNKNOWN"
     )
     if primary["payload"].get("mode") == "daily":
         # The original daily basis establishes admission relevance, not code eligibility.

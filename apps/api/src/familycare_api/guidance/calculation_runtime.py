@@ -29,14 +29,14 @@ from uuid import UUID
 
 from familycare_api.clauses.dsl import CompiledCalculation
 
-CALCULATION_RUNTIME_REVISION = "guidance-calculation-v2"
+CALCULATION_RUNTIME_REVISION = "guidance-calculation-v3"
 MAX_CALCULATION_NODES = 256
 MAX_CALCULATION_STEPS = 256
 MAX_CALCULATION_DEPTH = 16
 MAX_CALCULATION_MAGNITUDE = Decimal("1e60")
 DECIMAL_PRECISION = 80
 _ROOT = "/calculation"
-_UNITS = frozenset({"MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "UNKNOWN"})
+_UNITS = frozenset({"MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "BOOLEAN", "UNKNOWN"})
 _TRUSTED = frozenset(
     {"USER_CONFIRMED", "DOCUMENT_REVIEWED", "DERIVED_CONFIRMED", "PROGRAM_VERIFIED"}
 )
@@ -46,11 +46,11 @@ _ROUNDING = {
     "up": ROUND_UP,
     "down": ROUND_DOWN,
 }
-_OPERATIONS = frozenset({"add", "subtract", "multiply", "min", "max", "round"})
+_OPERATIONS = frozenset({"add", "subtract", "multiply", "min", "max", "round", "if"})
 _SCENARIO_FIELD = "MedicalEvent.admission_days"
 _CURRENCY = re.compile(r"[A-Z]{3}")
 _SHA = re.compile(r"[0-9a-f]{64}")
-type CalculationUnit = Literal["MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "UNKNOWN"]
+type CalculationUnit = Literal["MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "BOOLEAN", "UNKNOWN"]
 type EvaluationStatus = Literal["COMPLETE", "PARTIAL", "UNAVAILABLE", "FAILED"]
 type OperandStatus = Literal["AVAILABLE", "UNAVAILABLE", "FAILED"]
 
@@ -136,7 +136,7 @@ class CalculationSource:
 
 @dataclass(frozen=True, slots=True, repr=False)
 class CalculationInput:
-    value: Decimal | None
+    value: Decimal | bool | None
     unit: CalculationUnit
     currency: str | None
     provenance: str
@@ -144,7 +144,13 @@ class CalculationInput:
     stale: bool = False
 
     def __post_init__(self) -> None:
-        _require(self.value is None or isinstance(self.value, Decimal))
+        _require(
+            self.value is None
+            or type(self.value) is bool
+            and self.unit == "BOOLEAN"
+            or isinstance(self.value, Decimal)
+            and self.unit != "BOOLEAN"
+        )
         _require(_unit_valid(self.unit, self.currency))
         _require(isinstance(self.provenance, str) and 1 <= len(self.provenance) <= 64)
         _require(_refs_valid(self.source_refs) and type(self.stale) is bool)
@@ -171,8 +177,8 @@ class CalculationOperand:
     kind: Literal["FIELD", "LITERAL", "CHILD"]
     field_path: str | None
     child_path: str | None
-    value: Decimal | None
-    supplied_value: Decimal | None
+    value: Decimal | bool | None
+    supplied_value: Decimal | bool | None
     unit: CalculationUnit
     currency: str | None
     provenance: str | None
@@ -266,6 +272,13 @@ def _paths(root: CompiledCalculation) -> set[str]:
             if value.operator == "round":
                 if len(value.operands) != 1 or value.rounding not in _ROUNDING:
                     raise _Failure("CALCULATION_ROUNDING_INVALID")
+            elif value.operator == "if":
+                if (
+                    len(value.operands) != 3
+                    or not isinstance(value.operands[0], str)
+                    or value.rounding is not None
+                ):
+                    raise _Failure("CALCULATION_TREE_INVALID")
             elif len(value.operands) < 2 or value.rounding is not None:
                 raise _Failure("CALCULATION_TREE_INVALID")
             active.add(id(value))
@@ -291,6 +304,8 @@ def _result_unit(
         raise _Failure("CALCULATION_CURRENCY_MISMATCH")
     currency = next(iter(currencies), None)
     units = {item.unit for item in operands}
+    if "BOOLEAN" in units or hint is not None and hint.unit == "BOOLEAN":
+        raise _Failure("CALCULATION_UNIT_MISMATCH")
     if "UNKNOWN" in units:
         return "UNKNOWN", None
     dimensions = units - {"NUMBER", "RATIO"}
@@ -333,7 +348,7 @@ def _scenario_accepted(
         or item.stale
         or item.unit != "DAYS"
         or item.currency is not None
-        or item.value is None
+        or not isinstance(item.value, Decimal)
         or not item.value.is_finite()
         or not 0 <= item.value <= 36500
         or item.value != item.value.to_integral_value()
@@ -367,7 +382,7 @@ class _Runtime:
         self.missing: list[str] = []
         self.addends: list[CompletedAddend] = []
 
-    def operand(self, value: object, path: str) -> CalculationOperand:
+    def operand(self, value: object, path: str, *, boolean: bool = False) -> CalculationOperand:
         if isinstance(value, CompiledCalculation):
             step = self.evaluate(value, path)
             return CalculationOperand(
@@ -400,12 +415,19 @@ class _Runtime:
                     reasons.append("CALCULATION_INPUT_SOURCE_MISSING")
                 if item.unit == "MONEY" and item.currency is None:
                     reasons.append("CALCULATION_CURRENCY_UNRESOLVED")
-            numeric = None
-            supplied = None
+            numeric: Decimal | bool | None = None
+            supplied: Decimal | bool | None = None
             status: OperandStatus = "UNAVAILABLE" if reasons else "AVAILABLE"
             if item is not None and item.value is not None:
                 try:
-                    supplied = _checked(item.value)
+                    if boolean:
+                        if item.unit != "BOOLEAN" or type(item.value) is not bool:
+                            raise _Failure("CALCULATION_UNIT_MISMATCH")
+                        supplied = item.value
+                    else:
+                        if not isinstance(item.value, Decimal) or item.unit == "BOOLEAN":
+                            raise _Failure("CALCULATION_UNIT_MISMATCH")
+                        supplied = _checked(item.value)
                     if status == "AVAILABLE":
                         numeric = supplied
                     if (
@@ -448,6 +470,8 @@ class _Runtime:
             )
         if not isinstance(value, Decimal):
             raise _Failure("CALCULATION_TREE_INVALID")
+        if boolean or hint is not None and hint.unit == "BOOLEAN":
+            raise _Failure("CALCULATION_UNIT_MISMATCH")
         reasons = []
         numeric = None
         try:
@@ -476,9 +500,20 @@ class _Runtime:
         )
 
     def evaluate(self, node: CompiledCalculation, path: str) -> CalculationStep:
-        operands = tuple(
-            self.operand(value, f"{path}/args/{index}") for index, value in enumerate(node.operands)
-        )
+        operands: tuple[CalculationOperand, ...]
+        if node.operator == "if":
+            predicate = self.operand(node.operands[0], f"{path}/args/0", boolean=True)
+            operands = (predicate,)
+            if predicate.status == "AVAILABLE":
+                if type(predicate.value) is not bool:
+                    raise _Failure("CALCULATION_TREE_INVALID")
+                selected = 1 if predicate.value else 2
+                operands += (self.operand(node.operands[selected], f"{path}/args/{selected}"),)
+        else:
+            operands = tuple(
+                self.operand(value, f"{path}/args/{index}")
+                for index, value in enumerate(node.operands)
+            )
         reasons = _unique(tuple(code for operand in operands for code in operand.reason_codes))
         status: OperandStatus = (
             "FAILED"
@@ -493,9 +528,16 @@ class _Runtime:
         hint = self.hints.get(path)
         if status == "AVAILABLE":
             try:
-                unit, currency = _result_unit(node.operator, operands, hint)
-                values = tuple(item.value for item in operands if item.value is not None)
-                if node.operator == "add":
+                numeric_operands = operands[1:] if node.operator == "if" else operands
+                unit, currency = _result_unit(node.operator, numeric_operands, hint)
+                values = tuple(
+                    item.value for item in numeric_operands if isinstance(item.value, Decimal)
+                )
+                if len(values) != len(numeric_operands):
+                    raise _Failure("CALCULATION_TREE_INVALID")
+                if node.operator == "if":
+                    output = values[0]
+                elif node.operator == "add":
                     output = sum(values, Decimal(0))
                 elif node.operator == "subtract":
                     output = values[0] - sum(values[1:], Decimal(0))
@@ -547,7 +589,7 @@ class _Runtime:
             self.addends.extend(
                 CompletedAddend(path, operand.path, operand.value, operand.unit, operand.currency)
                 for operand in operands
-                if operand.status == "AVAILABLE" and operand.value is not None
+                if operand.status == "AVAILABLE" and isinstance(operand.value, Decimal)
             )
         return step
 

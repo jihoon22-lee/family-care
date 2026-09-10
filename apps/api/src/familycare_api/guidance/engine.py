@@ -25,7 +25,7 @@ from familycare_api.guidance.domain import (
     GuidancePayoutCaseInput,
     GuidanceRuleEvaluation,
 )
-from familycare_api.guidance.estimates import estimate_coverage
+from familycare_api.guidance.estimates import calculation_currency, estimate_coverage
 from familycare_api.guidance.event_facts import CodeScope, EventFactRead, build_event_facts
 from familycare_api.guidance.expense_projection import (
     RECEIPT_FIELDS,
@@ -173,12 +173,7 @@ class LocalGuidanceEngine:
                 cost = covered_cost_input(
                     context.expenses,
                     event,
-                    None
-                    if (
-                        coverage.canonical_identity is not None
-                        and "currency" in coverage.canonical_identity.field_conflicts
-                    )
-                    else coverage.currency,
+                    calculation_currency(coverage),
                 )
                 # The old private context aggregated confirmed excluded costs too.
                 # The v2 runtime uses the receipt reader's covered subset and real refs.
