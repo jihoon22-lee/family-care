@@ -250,3 +250,12 @@ compiler v3 / meaning v4는 원문 감액 조건·계수·순서를 유지하고
   저장소 안전 1128 paths와 `git diff --check` 통과. 이미지 빌드와 실제 환경 수용은 별도다.
 - `corepack pnpm --filter @familycare/web test:e2e`: Chromium API mock **27 passed**,
   29.4s. 실제 기기·보호 자료·배포 검증과 구분한다. PR CI는 게시 후 결과를 기록한다.
+
+
+2026-09-10 후속 통합: [PR #95](https://github.com/jihoon22-lee/family-care/pull/95)의
+source `6b96529743c35c5044b6ae08663b1099f20cf4bd`는
+[CI 34429292906](https://github.com/jihoon22-lee/family-care/actions/runs/34429292906) 필수
+7/7 통과 후 `ee732db952ec984d35989ec6ac7ac18afa6301b7`로 병합했다.
+[main CI 34431549815](https://github.com/jihoon22-lee/family-care/actions/runs/34431549815)도
+필수 7/7 통과했다. #64/#66의 후속 고정 수용 checkbox와 완료 상태를 근거에 맞춰 갱신했다.
+실제 자료 연결과 최종 수용은 #63/#69/#70에서 계속하며 추가 태그·배포는 하지 않았다.

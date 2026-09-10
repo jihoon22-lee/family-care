@@ -312,7 +312,10 @@ def _validated_nodes(
             b["reading_order"] <= a["reading_order"]
             for a, b in zip(native, native[1:], strict=False)
         )
-        if reordered and metadata_revision != "document-metadata-v10":
+        if reordered and metadata_revision not in {
+            "document-metadata-v10",
+            "document-metadata-v11",
+        }:
             raise _InvalidSource("SEMANTIC_SOURCE_ORDER_UNRESOLVED")
         table_positions: dict[str, int] = {}
         for node in local:

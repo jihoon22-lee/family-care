@@ -10,7 +10,7 @@
       "const": "1"
     },
     "revision": {
-      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9", "document-metadata-v10"]
+      "enum": ["document-metadata-v1", "document-metadata-v2", "document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9", "document-metadata-v10", "document-metadata-v11"]
     },
     "generation_id": {
       "type": "string",
@@ -51,7 +51,7 @@
     { "properties": { "revision": { "enum": ["document-metadata-v1", "document-metadata-v2"] } } },
     {
       "properties": {
-        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9", "document-metadata-v10"] },
+        "revision": { "enum": ["document-metadata-v3", "document-metadata-v4", "document-metadata-v5", "document-metadata-v6", "document-metadata-v7", "document-metadata-v8", "document-metadata-v9", "document-metadata-v10", "document-metadata-v11"] },
         "components": { "items": { "required": ["range_evidence"] } }
       }
     }
@@ -354,6 +354,65 @@
     "edition_reference": [
       "적용판본코드",
       "edition reference"
+    ]
+  },
+  "x-insurer-caption-vocabulary": {
+    "vocabulary_version": "association-captions-2026-09-10",
+    "metadata_revision": "document-metadata-v11",
+    "entity_kind": "posted_insurer_caption",
+    "observed_on": "2026-09-10",
+    "matching": "exact_literal_caption_only",
+    "authority": "Entity-kind vocabulary only; header source proof is still required. No alias, legal succession, active license, enrollment or applicability inference.",
+    "sources": [
+      {
+        "source_url": "https://www.klia.or.kr/klia/company/member/list.do",
+        "source_section": "정회원",
+        "captions": [
+          "한화생명",
+          "ABL생명",
+          "삼성생명",
+          "흥국생명",
+          "교보생명",
+          "iM라이프생명",
+          "미래에셋생명",
+          "KDB생명",
+          "DB생명",
+          "동양생명",
+          "메트라이프생명",
+          "KB라이프생명",
+          "신한라이프생명",
+          "처브라이프생명",
+          "하나생명",
+          "BNP파리바카디프생명",
+          "푸본현대생명",
+          "라이나생명",
+          "AIA생명",
+          "NH농협생명"
+        ]
+      },
+      {
+        "source_url": "https://consumer.knia.or.kr/m/main.do",
+        "source_section": "회사별 공시정보",
+        "captions": [
+          "메리츠화재",
+          "한화손보",
+          "롯데손보",
+          "흥국화재",
+          "삼성화재",
+          "현대해상",
+          "KB손보",
+          "DB손해보험",
+          "서울보증",
+          "AXA손해보험",
+          "하나손보",
+          "AIG손보",
+          "라이나손보",
+          "신한EZ손해보험",
+          "농협손해보험",
+          "예별손보",
+          "카카오페이손해보험"
+        ]
+      }
     ]
   },
   "x-maximum-local-payload-bytes": 8388608

@@ -81,3 +81,35 @@ applicability and protected semantic acceptance remain pending.
 PR #95's separate source-calculation work passed all seven CI checks and merged
 as `ee732db952ec984d35989ec6ac7ac18afa6301b7`. This task does not create a release,
 tag, deployment or protected-data publication. The final version remains v0.5.0.
+
+
+## Integration and isolated schema 0072 acceptance
+
+[PR #96](https://github.com/jihoon22-lee/family-care/pull/96), source
+`d537c4065a94f903f3abc9ed81707d7a75d68930`, passed all seven required checks in
+[CI 34434554492](https://github.com/jihoon22-lee/family-care/actions/runs/34434554492)
+and merged as `e3de9f4ffac6779b838f3397b4907b5f3f059227`.
+The matching [main CI](https://github.com/jihoon22-lee/family-care/actions/runs/34436945840)
+also passed all seven checks.
+
+On 2026-09-10 UTC, the same clean source created a separate development clone of
+the already approved acceptance database. Schema 0069→0072 preserved every original
+row and column; a fresh comparison also proved its parent clone unchanged (182.272s).
+New API/Worker readiness rejected 0069 and accepted 0072. The initial disk preflight
+used an unsupported BusyBox option and failed before creating or changing a database;
+the corrected preflight and preparation then passed.
+The previous clean source `2370761` API/Worker also rejected the new 0072 clone in
+a separate read-only check. This covers both directions for those actual binaries.
+
+Authenticated AI-off requests read the frozen existing events, original evidence,
+claim history, and matching stored results. Every original row remained unchanged
+afterward, with new result/session rows allowed. External HTTP and provider job
+creation stayed zero. The new session was logged out.
+
+A bounded metadata/edition phase used the unchanged approved full input identities,
+appended v10 proposals and independently checked them in the API (300.498s).
+New publications were deferred by existing component overlap; no new terms identity
+was established. Original source, correction, claim and earlier publication rows
+were preserved, while current derived component pointers were excluded from that
+immutable-row comparison. The result remains PARTIAL. No tag, live schema change,
+runtime switch, device acceptance or additional provider call occurred.

@@ -26,10 +26,12 @@ from familycare_worker.document_structure import (
 )
 from familycare_worker.generated_metadata import (
     METADATA_FIELD_LABELS,
+    METADATA_INSURER_CAPTIONS_V11,
     METADATA_ROLE_TITLES,
     DocumentMetadataProposal,
     DocumentMetadataRole,
 )
+from familycare_worker.metadata_header import header_selection
 from familycare_worker.navigation_page import is_navigation_page
 from familycare_worker.terms_body import (
     _InvalidPage,
@@ -41,7 +43,7 @@ from familycare_worker.terms_body import (
 )
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v10"
+REVISION = "document-metadata-v11"
 
 
 class DocumentMetadataError(ValueError):
@@ -139,7 +141,7 @@ def _product_heading(raw: str) -> bool:
         and not re.search(r"(?:생명보험|손해보험|화재해상보험|주식회사)$", raw)
         and re.fullmatch(
             r".+(?:보\s*험|\bpolicy)(?:\s*(?:\([^()（）]{1,40}\)|（[^()（）]{1,40}）)){0,4}(?:\s*[0-9]{1,3}\s*(?:종|형))?"
-            if REVISION == "document-metadata-v10"
+            if REVISION in {"document-metadata-v10", "document-metadata-v11"}
             else r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?",
             raw,
             re.IGNORECASE,
@@ -175,11 +177,14 @@ def _insurer_heading(raw: str) -> bool:
             raw,
             re.IGNORECASE,
         )
-        and re.fullmatch(
-            r"(?:\S+(?:생명보험|손해보험|화재해상보험)|"
-            r"[\w ]+\s(?:Assurance|Life Insurance|Insurance Company))",
-            raw,
-            re.IGNORECASE,
+        and (
+            (REVISION == "document-metadata-v11" and raw in METADATA_INSURER_CAPTIONS_V11)
+            or re.fullmatch(
+                r"(?:\S+(?:생명보험|손해보험|화재해상보험)|"
+                r"[\w ]+\s(?:Assurance|Life Insurance|Insurance Company))",
+                raw,
+                re.IGNORECASE,
+            )
         )
     )
 
@@ -198,7 +203,7 @@ def _caption_shares_role_region(
             left, right = right, left
             left_node, right_node = right_node, left_node
         if (
-            REVISION != "document-metadata-v10"
+            REVISION not in {"document-metadata-v10", "document-metadata-v11"}
             and left_node.reading_order >= right_node.reading_order
         ) or not 0 <= right[1] - left[3] <= min(
             48, 3 * min(left[3] - left[1], right[3] - right[1])
@@ -423,7 +428,7 @@ def _layout_nodes(
 ) -> tuple[Sequence[StructureNode], bool, frozenset[str]]:
     """Order known geometry and quarantine the suffix starting at its first overlap."""
     has_tables = any(node.kind == "TABLE_ROW" for node in nodes)
-    physical = REVISION == "document-metadata-v10"
+    physical = REVISION in {"document-metadata-v10", "document-metadata-v11"}
     if not has_tables and not physical:
         return nodes, False, frozenset()
     represented = {span.block_node_id for node in nodes for span in node.source_spans}
@@ -551,6 +556,90 @@ def _metadata_row_context(node: StructureNode) -> bool:
     return True
 
 
+def _header_title(node: StructureNode) -> bool:
+    if node.kind == "TABLE_ROW" and (
+        node.row_role != "data" or len(node.cells) != 1 or node.cells[0].text != node.text
+    ):
+        return False
+    lines = [line.strip(" \t[]【】") for line in node.text.splitlines() if line.strip()]
+    return len(lines) == 1 and _role_title(lines[0]) is not None
+
+
+def _header_metadata(node: StructureNode) -> bool:
+    if node.kind == "TABLE_ROW" and len(node.cells) != 1:
+        return _metadata_row_context(node)
+    if node.kind == "TABLE_ROW" and node.row_role != "data":
+        return False
+    return all(
+        not line.strip()
+        or _cover_prelude(line.strip())
+        or any(pattern.fullmatch(line) for _, pattern in _LABEL_PATTERNS)
+        for line in node.text.splitlines()
+    )
+
+
+def _header_prelude(node: StructureNode) -> bool:
+    """Only existing identity captions and valid explicit fields may precede a title."""
+    if node.kind == "TABLE_ROW" and len(node.cells) != 1:
+        return _metadata_row_context(node) and all(
+            any(
+                _key(left.text.strip().rstrip(":：")) in labels
+                and _value(field, right.text.strip()) is not None
+                for field, labels in _LABELS.items()
+            )
+            for left, right in zip(node.cells[::2], node.cells[1::2], strict=True)
+        )
+    if node.kind == "TABLE_ROW" and node.row_role != "data":
+        return False
+    return all(
+        not line.strip()
+        or _insurer_heading(line.strip())
+        or _product_heading(line.strip())
+        or any(
+            (matched := pattern.fullmatch(line)) is not None
+            and _value(field, matched.group("value")) is not None
+            for field, pattern in _LABEL_PATTERNS
+        )
+        for line in node.text.splitlines()
+    )
+
+
+def _metadata_layout(
+    source: Sequence[StructureNode],
+) -> tuple[Sequence[StructureNode], bool, frozenset[str], frozenset[str]]:
+    nodes, positioned, quarantined = _layout_nodes(source)
+    if REVISION != "document-metadata-v11":
+        return nodes, positioned, quarantined, frozenset()
+    selection = header_selection(
+        source,
+        title=_header_title,
+        metadata=_header_metadata,
+        prelude=_header_prelude,
+        reference=lambda node: (
+            reference_context_present([node])
+            or bool(_REFERENCE_HEADING.search(unicodedata.normalize("NFKC", node.text)))
+        ),
+    )
+    if selection is None:
+        return nodes, positioned, quarantined, frozenset()
+    selected, represented = selection
+    by_id = {node.node_id: node for node in source}
+    if not any(
+        identifier in quarantined
+        or "LINE_COLUMN_CONTEXT_UNRESOLVED" in by_id[identifier].issue_codes
+        for identifier in selected
+    ):
+        return nodes, positioned, quarantined, frozenset(selected)
+    proven = frozenset(selected)
+    remainder = [node for node in source if node.node_id not in proven | represented]
+    return (
+        [*(by_id[identifier] for identifier in selected), *remainder],
+        True,
+        frozenset(node.node_id for node in remainder),
+        proven,
+    )
+
+
 def analyze_document_metadata(structure: DocumentStructure) -> DocumentMetadata:
     """Propose only pages with explicit role titles and retain conflicting facts.
 
@@ -589,7 +678,7 @@ def analyze_metadata_pages(
         has_reference = reference_context_present(
             nodes, persistent_only=True, navigation_instructions=True, reading_guides=True
         )
-        nodes, positioned, quarantined = _layout_nodes(nodes)
+        nodes, positioned, quarantined, header_nodes = _metadata_layout(nodes)
         line_blocks = {span.block_node_id for node in nodes for span in node.source_spans}
         tables = [node for node in nodes if node.kind == "TABLE_ROW"]
         table_top = min(
@@ -608,7 +697,10 @@ def analyze_metadata_pages(
                 metadata_area_open = False
                 unresolved_fields.update(_quarantined_fields(node))
                 continue
-            if "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes:
+            if (
+                "LINE_COLUMN_CONTEXT_UNRESOLVED" in node.issue_codes
+                and node.node_id not in header_nodes
+            ):
                 title_area_open = False
                 metadata_area_open = False
                 for line in node.text.splitlines():
@@ -757,6 +849,11 @@ def analyze_metadata_pages(
                     and not table_barrier
                     and not labelled
                     and _insurer_heading(trimmed)
+                    and (
+                        REVISION != "document-metadata-v11"
+                        or trimmed not in METADATA_INSURER_CAPTIONS_V11
+                        or node.node_id in header_nodes
+                    )
                 ):
                     insurer_captions.append(
                         _span(

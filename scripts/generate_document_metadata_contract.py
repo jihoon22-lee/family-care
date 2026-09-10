@@ -42,6 +42,15 @@ def render() -> str:
                 result += f"        {json.dumps(label, ensure_ascii=False)},\n"
             result += "    ),\n"
         result += "}\n"
+    vocabulary = schema["x-insurer-caption-vocabulary"]
+    assert vocabulary["metadata_revision"] == "document-metadata-v11"
+    captions = [caption for source in vocabulary["sources"] for caption in source["captions"]]
+    assert len(captions) == len(set(captions))
+    assert all(isinstance(caption, str) and caption == caption.strip() for caption in captions)
+    result += "\n\nMETADATA_INSURER_CAPTIONS_V11: frozenset[str] = frozenset(\n    {\n"
+    for caption in captions:
+        result += f"        {json.dumps(caption, ensure_ascii=False)},\n"
+    result += "    }\n)\n"
     return result
 
 

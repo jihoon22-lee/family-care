@@ -1092,3 +1092,90 @@ def test_removed_primary_insured_blocks_later_automatic_publications(
     second = _reextract(url, job, reimport=reimport)
     _retain_native(url, second)
     assert RangeEnrollmentProjector(url).project_pending() == 0
+
+
+@pytest.mark.parametrize("failure", ["extraction_failed", "incomplete_source"])
+def test_failed_reanalysis_preserves_published_enrollment_and_source(
+    native_database: Any, failure: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from familycare_worker.document_preparation import DocumentPreparationRunner
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                "Policy number: synthetic-policy-001",
+                "Insured: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    retained = _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    scope = HouseholdScope(job.household_space_id)
+    ledger = PolicyLedgerRepository(url)
+    original_policies = ledger.list_policies(scope)
+    original_riders = ledger.list_policy_riders(scope, original_policies[0].id)
+    assert len(original_riders) == 1
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        original_structure = connection.execute(
+            "SELECT to_jsonb(g) FROM document_structure_generations g WHERE id=%s",
+            (retained.generation_id,),
+        ).fetchone()[0]
+        original_publications = connection.execute(
+            "SELECT to_jsonb(p) FROM range_enrollment_publications p "
+            "WHERE policy_contract_id=%s ORDER BY source_candidate_version_id",
+            (original_policies[0].id,),
+        ).fetchall()
+    assert len(original_publications) == 2
+    second = _reextract(url, job)
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        if failure == "extraction_failed":
+            connection.execute(
+                "UPDATE extractions SET status='failed',succeeded_at=NULL WHERE id=%s",
+                (second.extraction_id,),
+            )
+            connection.execute(
+                "UPDATE document_batch_items SET state='permanently_failed', "
+                "error_code='EXTRACTION_FAILED' WHERE id=%s",
+                (second.batch_item_id,),
+            )
+        else:
+            connection.execute(
+                "DELETE FROM extraction_pages WHERE extraction_id=%s", (second.extraction_id,)
+            )
+    runner = DocumentPreparationRunner(url, batch_item_id=second.batch_item_id)
+    assert runner.run_once(WORKER) is (failure == "incomplete_source")
+    assert not runner.run_once(WORKER)
+    assert RangeEnrollmentProjector(url).project_pending() == 0
+    assert ledger.list_policies(scope) == original_policies
+    assert ledger.list_policy_riders(scope, original_policies[0].id) == original_riders
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute(
+                "SELECT to_jsonb(g) FROM document_structure_generations g WHERE id=%s",
+                (retained.generation_id,),
+            ).fetchone()[0]
+            == original_structure
+        )
+        assert (
+            connection.execute(
+                "SELECT to_jsonb(p) FROM range_enrollment_publications p "
+                "WHERE policy_contract_id=%s ORDER BY source_candidate_version_id",
+                (original_policies[0].id,),
+            ).fetchall()
+            == original_publications
+        )
+        attempts = connection.execute(
+            "SELECT state,error_code,generation_id FROM document_structure_preparations "
+            "WHERE batch_item_id=%s",
+            (second.batch_item_id,),
+        ).fetchall()
+        assert attempts == (
+            [("FAILED", "STRUCTURE_SOURCE_INVALID", None)] if failure == "incomplete_source" else []
+        )

@@ -27,6 +27,15 @@ from workers.analyzer.tests.test_document_structure_repository import (
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def _historical_v10_producer(monkeypatch):
+    """Keep the v10 source-flow acceptance independent of later producers."""
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v10")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v10")
+
+
 @pytest.mark.parametrize("labelled_insurer", [False, True])
 def test_v10_physical_prefix_reaches_published_clause_and_semantic_sources(
     publication_database, labelled_insurer

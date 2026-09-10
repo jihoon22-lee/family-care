@@ -33,6 +33,10 @@ v0.5.0은 개발 중입니다. 아래 날짜는 준비 기록이며 최종 릴�
 
 ### Fixed
 
+- Source-backed daily benefits, conditional reductions, and confirmed receipt costs now reach
+  local estimates without treating an insured amount or an AI guess as payout authority.
+- Independent first-header geometry recovers metadata beside separated columns while preserving
+  source ownership, reference context, bounded processing, and earlier publication history.
 - Confirmed diagnosis and source-proven treatment activities retain their meaning across Web,
   API, Worker and semantic compilation; schema 0070 preserves earlier publication history.
 - Equivalent source-verified rules are compared by meaning rather than producer node identifiers.

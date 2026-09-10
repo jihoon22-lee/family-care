@@ -11,6 +11,15 @@ from apps.api.tests.test_document_metadata_validation import _legacy_identity
 from workers.analyzer.tests.test_document_metadata import _structure
 
 
+@pytest.fixture(autouse=True)
+def _historical_v10_producer(monkeypatch):
+    """Keep the v10 source-flow acceptance independent of later producers."""
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v10")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v10")
+
+
 @pytest.mark.parametrize(
     "caption",
     [
