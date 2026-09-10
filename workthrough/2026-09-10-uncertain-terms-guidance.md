@@ -50,10 +50,17 @@ this task's API/Web/documentation changes.
 - `corepack pnpm --filter @familycare/web test:e2e`: 27 Chromium tests passed
   (27.3s), using mocked API responses. This is separate from the real PostgreSQL
   integration path and does not claim actual-device validation.
-- PR CI and protected application support for this guidance change remain pending.
+- [PR #98](https://github.com/jihoon22-lee/family-care/pull/98) passed all seven
+  required checks in [CI 34477630281](https://github.com/jihoon22-lee/family-care/actions/runs/34477630281),
+  including 875 PostgreSQL tests (1,604.18s; 4,021 deselected). It merged as
+  `a0b91d5f97ba29a1fe2d4b29f40119734d554b45` on 2026-09-10 UTC.
+  [Main CI 34480493504](https://github.com/jihoon22-lee/family-care/actions/runs/34480493504)
+  also completed successfully. The separate protected application check is recorded below.
 
-No real-data access, provider request, runtime mutation, tag or deployment is part
-of this implementation. Separate protected v11 metadata acceptance belongs to PR #97.
+The implementation tests used synthetic data. Separate protected v11 metadata
+acceptance belongs to PR #97; the authorized application check below reused its
+isolated validation DB. No provider request, live runtime change, tag or deployment
+was performed for this guidance change.
 
 Current completion commands were `corepack pnpm web:check`,
 `TMPDIR=/tmp uv run ruff format --check .`, `TMPDIR=/tmp uv run ruff check .`,
@@ -75,3 +82,29 @@ identity participates in the operational status digest, so changed support inval
 current-result freshness while stored result and claim snapshots stay immutable.
 
 Final documentation, repository safety and diff checks are run on the completed record before commit. No code changes followed the successful full suites.
+
+## Isolated protected application acceptance
+
+On 2026-09-10 UTC, clean source `9019094e61a450e98ad61a3ebec908aef176061a`
+passed the reviewed `app_acceptance_guidance73.py` helper (SHA-256
+`447369c916243ef31fce8d3a220a4cf2426ffbdec9962461008e5c1054672742`).
+The existing separate schema-0073 validation DB was prepared under source
+`db04d0e2a703d00c8599bf035d3d83566419f4e0`; that receipt was explicitly
+checked as a data preparation receipt, independently of the current application SHA.
+
+The helper authenticated a disposable session, read retained evidence and claim
+history, analyzed the same ten approved baseline events with external HTTP blocked
+and API keys removed, and read back identical stored guidance for all ten.
+A fresh complete pre-query database baseline was preserved after the queries,
+allowing only newly appended rows; logout returned 204. External HTTP requests
+and provider jobs created were both zero. Fixed aggregate candidate/estimate counts
+matched the preceding v11 application check, so this is compatibility/preservation
+evidence, not a claim of increased real-document support or validated new links.
+
+The command used the clean checkout's locked environment with `PYTHONPATH` set
+to that checkout and the reviewed private helper directory, `TMPDIR=/tmp`,
+`FAMILYCARE_EXPECTED_SOURCE_SHA=9019094e61a450e98ad61a3ebec908aef176061a`,
+and `TRANSITION_PERF_BASELINE_ONLY=true`, then `uv run python` with the helper.
+Private configuration, credentials and result payloads stayed outside Git.
+This was direct authenticated ASGI/API execution, not a Windows/mobile browser
+check or a switch of the live schema-0069 runtime.

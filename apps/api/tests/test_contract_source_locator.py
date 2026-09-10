@@ -214,3 +214,35 @@ def test_noncontract_anchor_is_not_part_of_the_contract_identity() -> None:
         {"kind": "insured", "node_id": "other-node", "page": 1, "start": 0, "end": 10}
     )
     assert contract_source_locator(source, association) == expected
+
+
+@pytest.mark.parametrize("label", ["계 약 번 호", "증 권 번 호", "계약  번호"])
+@pytest.mark.parametrize("kind", ["BLOCK", "TEXT_LINE", "TABLE_ROW"])
+def test_spaced_contract_labels_keep_the_existing_opaque_identity(label, kind):
+    source, association = _source(table=kind == "TABLE_ROW")
+    expected = contract_source_locator(source, association)
+    assert expected is not None
+    node = source["nodes"][0]
+    node["kind"] = kind
+    node["text"] = f"{label}\t{NUMBER}" if kind == "TABLE_ROW" else f"{label}: {NUMBER}"
+    if kind == "TABLE_ROW":
+        node["cells"][0]["text"] = label
+    association["anchor_refs"][0].update(start=0, end=len(node["text"]))
+    before = deepcopy((source, association))
+    assert contract_source_locator(source, association) == expected
+    assert (source, association) == before
+
+
+@pytest.mark.parametrize("number", [NUMBER, "synthetic-policy-002"])
+def test_an_additional_spaced_table_label_is_not_silently_ignored(number):
+    source, association = _source(table=True)
+    node = source["nodes"][0]
+    node["cells"].extend(
+        [
+            {"row_index": 1, "column_index": 2, "text": "증 권 번 호"},
+            {"row_index": 1, "column_index": 3, "text": number},
+        ]
+    )
+    node["text"] = "\t".join(cell["text"] for cell in node["cells"])
+    association["anchor_refs"][0].update(end=len(node["text"]))
+    assert contract_source_locator(source, association) is None

@@ -17,7 +17,8 @@ from typing import Any
 from uuid import UUID, uuid5
 
 _CONTRACT_LABEL = re.compile(
-    r"^(?:증권번호|계약번호|policy number|contract number)$", re.IGNORECASE
+    r"^(?:증\s*권\s*번\s*호|계\s*약\s*번\s*호|policy\s+number|contract\s+number)$",
+    re.IGNORECASE,
 )
 
 
