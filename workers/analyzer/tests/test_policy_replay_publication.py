@@ -1,4 +1,4 @@
-"""A retained draft reaches native enrollment only after fresh budgeted verification."""
+"""Historical v4 draft replay publishes only after fresh budgeted verification."""
 
 from uuid import uuid4
 
@@ -42,6 +42,11 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
     enrollment_database,
     monkeypatch,
 ):
+    # v5 deliberately rejects earlier privacy packets; this exercises the
+    # historical v4 replay/publication contract without weakening that fence.
+    monkeypatch.setattr(
+        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v4"
+    )
     url, original = enrollment_database
     _retain_contract(url, original)
     ranges = PolicyRangeRepository(url)
@@ -131,7 +136,9 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
             (old.id, "e" * 64, Jsonb(batch.model_dump(mode="json")), old.document_version_id),
         ).fetchone()[0]
     ranges.reject(old, WORKER, work)
-    target = retained_policy.RetainedPolicyRepository(url).enqueue(**arguments)
+    target = retained_policy.RetainedPolicyRepository(url).enqueue(
+        **arguments, pipeline_revision="retained-policy-association-v4"
+    )
     calls = []
 
     class Verifier:
@@ -161,7 +168,10 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
             )
 
     queue = retained_policy.RetainedPolicyJobQueue(
-        url, household_space_id=target.household_space_id, job_id=target.id
+        url,
+        household_space_id=target.household_space_id,
+        job_id=target.id,
+        pipeline_revision="retained-policy-association-v4",
     )
     runner = PolicyStructuringJobRunner(
         queue=queue,

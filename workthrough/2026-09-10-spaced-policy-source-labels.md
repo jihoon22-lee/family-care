@@ -61,8 +61,26 @@ this bundle's documentation. All implementation fixtures are wholly synthetic.
   Full Python passed 4,052 tests plus three subtests (40.08s), with 880 integration
   tests excluded. Whole-tree Ruff format/check passed (937 files), and mypy passed
   365 source files. Contract, static container/workflow and diff checks passed.
-- PR CI and protected post-change schema/application acceptance remain pending.
-  No provider request, live runtime change, tag or deployment was performed.
+- PR CI on `328fd13` passed six jobs and 879 PostgreSQL cases; one historical
+  replay/publication test failed because its default target had advanced to v5,
+  which correctly rejects old privacy packets. The test now explicitly runs its
+  original v4 producer/queue contract, retaining every verifier/publication
+  assertion. That test plus all three v5 privacy/migration controls passed
+  (4 tests, 10.32s). Complete replacement PR CI remains pending.
+  Full Python after this test-only correction passed again: 4,052 tests and three
+  subtests (31.61s), with 880 integration cases excluded. Ruff, documentation,
+  repository safety and diff checks passed. Prior Web/type/contract/container
+  results retain identical implementation/configuration inputs.
+- The isolated 0073→0074 upgrade on clean `328fd13` preserved every old row/column
+  and processing count. New API/Worker rejected 0073 and accepted 0074; the
+  preceding clean `9019094` binaries rejected 0074. Authenticated evidence and
+  claim-history reads, AI-off analysis and identical stored results passed for
+  the same ten approved events, preserving every original row. The aggregate
+  remained 34 candidates, 17 point estimates and 9 formulas; this establishes
+  compatibility, not additional source linkage. External HTTP and new provider
+  jobs were zero. No provider request, live runtime change, tag or deployment
+  was performed. The subsequent changes affect only a historical test and this
+  evidence record; production and migration inputs remain those of `328fd13`.
 
 Commands used Python 3.14.7, Node 24.18.0 and locked pnpm 11.22.0 on 2026-09-10 UTC.
 The dedicated disposable PostgreSQL 18 test database is separate from all protected
