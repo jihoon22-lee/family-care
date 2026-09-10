@@ -83,6 +83,22 @@ _EXAMPLE_START = re.compile(
 _ITEM = r"(?:[①-⑳]\s*|[0-9]{1,2}[.)]\s*)?"
 _COMPANY = r"(?:회사|보험회사|보험자)(?:는|가)"
 _MIDDLE = r"[^.!?。\n]{0,180}"
+_INSURED_CONDITION = (
+    _ITEM
+    + r"(?:피보험자|보험대상자)(?:가|는)"
+    + _MIDDLE
+    + r"(?:경우(?:에는|에만|에)?|때(?:에는|에만|에)?|하면|되면|이면)"
+)
+_INSURED_PAY = re.compile(
+    _INSURED_CONDITION + _MIDDLE + r"보험금" + _MIDDLE + r"지급(?:합니다|한다)[.]?"
+)
+_INSURED_EXCLUDE = re.compile(
+    _INSURED_CONDITION
+    + _MIDDLE
+    + r"보험금"
+    + _MIDDLE
+    + r"지급하지\s*(?:않습니다|않는다|아니합니다|아니한다)[.]?"
+)
 _PAY = re.compile(
     _ITEM
     + _COMPANY
@@ -435,15 +451,17 @@ def _regions(
                     and _shares_column(boxes[b.node_id], right)
                     for b in barriers
                 )
-                barrier = barrier or (
-                    previous.kind != "TABLE_ROW"
-                    and node.kind != "TABLE_ROW"
-                    and any(
-                        b.kind != "TABLE_ROW"
-                        and b.source_layer == node.source_layer
-                        and previous.reading_order < b.reading_order < node.reading_order
-                        for b in unlocated
+                barrier = barrier or any(
+                    b.source_layer == node.source_layer
+                    and (
+                        # Row indices and extractor ordinals are distinct namespaces.
+                        "TABLE_ROW" in {previous.kind, node.kind, b.kind}
+                        or previous.reading_order > node.reading_order
+                        or min(previous.reading_order, node.reading_order)
+                        < b.reading_order
+                        < max(previous.reading_order, node.reading_order)
                     )
+                    for b in unlocated
                 )
                 if (
                     barrier
@@ -463,9 +481,9 @@ def _semantic_kinds(text: str) -> tuple[SemanticKind, ...]:
     # Sentence boundaries prevent assembling a subject in a description with an
     # unrelated quoted predicate. A wrapped sentence may span original nodes.
     for sentence in re.split(r"(?<=[.!?。])\s+", text):
-        if _EXCLUDE.fullmatch(sentence):
+        if _EXCLUDE.fullmatch(sentence) or _INSURED_EXCLUDE.fullmatch(sentence):
             kinds.add("EXCLUSION")
-        elif _PAY.fullmatch(sentence):
+        elif _PAY.fullmatch(sentence) or _INSURED_PAY.fullmatch(sentence):
             kinds.add("PAYMENT")
         if _PARTIES.fullmatch(sentence):
             kinds.add("PARTIES")
@@ -704,12 +722,14 @@ def _observe_region(page_number: int, nodes: Sequence[StructureNode]) -> TermsBo
         return TermsBodyObservation(page_number, "AMBIGUOUS", ("SOURCE_PAGE_INVALID",))
     try:
         ordered = list(nodes)
-        native = [node for node in ordered if node.kind != "TABLE_ROW"]
-        if any(
-            right.reading_order <= left.reading_order
-            for left, right in zip(native, native[1:], strict=False)
-        ):
-            raise _InvalidPage("SOURCE_LAYOUT_UNRESOLVED")
+        for left, right in zip(ordered, ordered[1:], strict=False):
+            a, b = _placement(left), _placement(right)
+            if (
+                left.source_layer != right.source_layer
+                or not _shares_column(a, b)
+                or not 0 <= b[1] - a[3] <= min(48, 3 * min(a[3] - a[1], b[3] - b[1]))
+            ):
+                raise _InvalidPage("SOURCE_LAYOUT_UNRESOLVED")
         provisions: list[BodyProvision] = []
         heading: BodySpan | None = None
         body: list[BodySpan] = []

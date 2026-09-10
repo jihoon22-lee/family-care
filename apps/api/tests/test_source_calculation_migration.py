@@ -2,6 +2,7 @@
 
 import psycopg
 import pytest
+from familycare_api.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from familycare_api.terms_knowledge import core
 from familycare_api.terms_knowledge import repository as semantic_repository
 from psycopg.rows import dict_row
@@ -16,6 +17,15 @@ from workers.analyzer.tests.test_document_structure_repository import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def historical_metadata_v9(monkeypatch):
+    """This older compiler migration must not introduce future metadata history."""
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v9")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v9")
 
 
 def test_calculation_upgrade_retains_v2_and_blocks_downgrade_with_v3_history(
@@ -63,5 +73,5 @@ def test_calculation_upgrade_retains_v2_and_blocks_downgrade_with_v3_history(
     assert "source calculation history prevents downgrade" in refused.stderr
     with psycopg.connect(_psycopg_url(url)) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "0071_source_calculations",
+            SUPPORTED_SCHEMA_REVISION,
         )

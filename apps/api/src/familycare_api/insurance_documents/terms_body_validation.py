@@ -35,8 +35,8 @@ _COMPANY = r"(?:회사|보험회사|보험자)(?:는|가)"
 _MIDDLE = r"[^.!?。\n]{0,180}"
 
 
-def _operative(text: str) -> bool:
-    patterns = (
+def _operative(text: str, *, metadata_revision: str = "document-metadata-v8") -> bool:
+    patterns: tuple[str, ...] = (
         _ITEM
         + _COMPANY
         + _MIDDLE
@@ -62,6 +62,17 @@ def _operative(text: str) -> bool:
         + r"(?:The\s+)?(?:insured|policyholder|beneficiary|insurance\s+benefit)\s+"
         + r"(?:means|is\s+defined\s+as)\s+[^.!?\n]{1,180}[.]?",
     )
+    if metadata_revision == "document-metadata-v10":
+        patterns += (
+            _ITEM
+            + r"(?:피보험자|보험대상자)(?:가|는)"
+            + _MIDDLE
+            + r"(?:경우(?:에는|에만|에)?|때(?:에는|에만|에)?|하면|되면|이면)"
+            + _MIDDLE
+            + r"보험금"
+            + _MIDDLE
+            + r"(?:지급(?:합니다|한다)|지급하지\s*(?:않습니다|않는다|아니합니다|아니한다))[.]?",
+        )
     return any(
         re.fullmatch(pattern, sentence, re.IGNORECASE)
         for sentence in re.split(r"(?<=[.!?。])\s+", text)
@@ -118,7 +129,11 @@ def _lineage_valid(
             last = _box(previous)
             # V1–v8 retain their original adjacent-word replay. V9 matches
             # the constructor: first-word alignment and previous-word adjacency.
-            anchor = boxes[0] if metadata_revision == "document-metadata-v9" else last
+            anchor = (
+                boxes[0]
+                if metadata_revision in {"document-metadata-v9", "document-metadata-v10"}
+                else last
+            )
             height, anchor_height = box[3] - box[1], anchor[3] - anchor[1]
             if (
                 block["reading_order"] != previous["reading_order"] + 1
@@ -538,7 +553,9 @@ def _intersects(left: tuple[float, ...], right: tuple[float, ...]) -> bool:
     )
 
 
-def _continues(left: dict[str, Any], right: dict[str, Any]) -> bool:
+def _continues(
+    left: dict[str, Any], right: dict[str, Any], *, metadata_revision: str = "document-metadata-v8"
+) -> bool:
     a, b = _layout_box(left), _layout_box(right)
     height = min(a[3] - a[1], b[3] - b[1])
     return (
@@ -547,7 +564,8 @@ def _continues(left: dict[str, Any], right: dict[str, Any]) -> bool:
         and min(a[2], b[2]) - max(a[0], b[0]) >= min(a[2] - a[0], b[2] - b[0]) * 0.5
         and 0 <= b[1] - a[3] <= min(48, height * 3)
         and (
-            left["kind"] == "TABLE_ROW"
+            metadata_revision == "document-metadata-v10"
+            or left["kind"] == "TABLE_ROW"
             or right["kind"] == "TABLE_ROW"
             or left["reading_order"] < right["reading_order"]
         )
@@ -555,7 +573,10 @@ def _continues(left: dict[str, Any], right: dict[str, Any]) -> bool:
 
 
 def _regions(
-    nodes: list[dict[str, Any]], barriers: list[dict[str, Any]]
+    nodes: list[dict[str, Any]],
+    barriers: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> list[list[dict[str, Any]]]:
     obstacles = []
     unlocated = []
@@ -582,12 +603,26 @@ def _regions(
     ):
         candidates = []
         for region in regions:
-            if not _continues(region[-1], node):
+            if not _continues(region[-1], node, metadata_revision=metadata_revision):
                 continue
             if any(
-                barrier["kind"] in {"BLOCK", "TEXT_LINE"}
-                and barrier["source_layer"] == node["source_layer"]
-                and region[-1]["reading_order"] < barrier["reading_order"] < node["reading_order"]
+                barrier["source_layer"] == node["source_layer"]
+                and (
+                    (
+                        "TABLE_ROW" in {region[-1]["kind"], node["kind"], barrier["kind"]}
+                        or region[-1]["reading_order"] > node["reading_order"]
+                        or min(region[-1]["reading_order"], node["reading_order"])
+                        < barrier["reading_order"]
+                        < max(region[-1]["reading_order"], node["reading_order"])
+                    )
+                    if metadata_revision == "document-metadata-v10"
+                    else (
+                        barrier["kind"] in {"BLOCK", "TEXT_LINE"}
+                        and region[-1]["reading_order"]
+                        < barrier["reading_order"]
+                        < node["reading_order"]
+                    )
+                )
                 for barrier in unlocated
             ):
                 continue
@@ -657,7 +692,7 @@ def _body_evidence(
     if any(node["page_number"] != page_number for node in nodes):
         return None
     selected, barriers = _local_nodes(nodes, by_id, metadata_revision=metadata_revision)
-    regions = _regions(selected, barriers)
+    regions = _regions(selected, barriers, metadata_revision=metadata_revision)
     results = []
     article_tops = [
         _layout_box(node)[1]
@@ -673,7 +708,11 @@ def _body_evidence(
     for region in regions:
         if _preceding_reference(region, nodes):
             continue
-        result = _region_evidence(region, _external_reference_top(region, [*selected, *barriers]))
+        result = _region_evidence(
+            region,
+            _external_reference_top(region, [*selected, *barriers]),
+            metadata_revision=metadata_revision,
+        )
         if result is not None:
             results.append(result)
     if not results:
@@ -696,6 +735,8 @@ def _body_evidence(
 def _region_evidence(
     ordered: list[dict[str, Any]],
     external_reference_top: float | None = None,
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> tuple[tuple[int, ...], tuple[dict[str, Any], ...], bool] | None:
     numbers: list[int] = []
     evidence: list[dict[str, Any]] = []
@@ -706,7 +747,13 @@ def _region_evidence(
     line_count = 0
 
     def finish() -> None:
-        if current is None or not body or not _operative(" ".join(span["text"] for span in body)):
+        if (
+            current is None
+            or not body
+            or not _operative(
+                " ".join(span["text"] for span in body), metadata_revision=metadata_revision
+            )
+        ):
             return
         if len(body) > 32 or any(len(span["text"]) > 240 for span in (current[1], *body)):
             raise ValueError("evidence budget exceeded")
@@ -718,7 +765,8 @@ def _region_evidence(
                         body[start : start + length]
                         for start in range(len(body) - length + 1)
                         if _operative(
-                            " ".join(span["text"] for span in body[start : start + length])
+                            " ".join(span["text"] for span in body[start : start + length]),
+                            metadata_revision=metadata_revision,
                         )
                     ),
                     None,

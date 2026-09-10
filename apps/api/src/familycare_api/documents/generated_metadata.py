@@ -65,6 +65,7 @@ class DocumentMetadataProposal(TypedDict):
     generation_id: str
     revision: Literal[
         "document-metadata-v1",
+        "document-metadata-v10",
         "document-metadata-v2",
         "document-metadata-v3",
         "document-metadata-v4",

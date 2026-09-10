@@ -1,4 +1,4 @@
-"""Constructor-valid native words reach durable API source readers through metadata v9."""
+"""Constructor-valid native words reach durable API source readers through metadata v10."""
 
 import psycopg
 import pytest
@@ -16,7 +16,7 @@ from apps.api.tests.test_clause_source_publication import _clause
 from apps.api.tests.test_document_metadata_publication import (
     publication_database as publication_database,
 )
-from apps.api.tests.test_terms_metadata_lineage_revision import _source
+from apps.api.tests.test_metadata_physical_prefix import BODY, _source
 from workers.analyzer.tests.test_document_structure_repository import (
     _prepare,
     _psycopg_url,
@@ -27,30 +27,13 @@ from workers.analyzer.tests.test_document_structure_repository import (
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.parametrize("change", ["alternating-baselines", "short-middle-word"])
-def test_native_lineage_revision_reaches_published_clause_and_semantic_sources(
-    publication_database, change, monkeypatch
+@pytest.mark.parametrize("labelled_insurer", [False, True])
+def test_v10_physical_prefix_reaches_published_clause_and_semantic_sources(
+    publication_database, labelled_insurer
 ):
-    from familycare_worker import document_metadata, document_metadata_repository
-
-    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v9")
-    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v9")
     url, job = publication_database
-    extraction = _source(change).to_dict()["source_extraction"]
+    extraction = _source(labelled_insurer=labelled_insurer).to_dict()["source_extraction"]
     extraction["document_version_id"] = str(job.document_version_id)
-    blocks = extraction["pages"][0]["blocks"]
-    for block in blocks:
-        block["reading_order"] += 1
-        block["bbox"][1] += 60
-        block["bbox"][3] += 60
-    blocks.insert(
-        0,
-        {
-            "text": "보험약관\n보험사: Sample Assurance\n상품코드: SAMPLE-LINEAGE",
-            "reading_order": 0,
-            "bbox": [10, 10, 400, 70],
-        },
-    )
     source = build_document_structure(
         extraction,
         extraction_id=job.extraction_id,
@@ -77,11 +60,11 @@ def test_native_lineage_revision_reaches_published_clause_and_semantic_sources(
         edition = connection.execute("SELECT id FROM terms_editions").fetchone()["id"]
         assert connection.execute(
             "SELECT validator_revision,outcome FROM document_metadata_publications"
-        ).fetchone() == {"validator_revision": "document-metadata-api-v9", "outcome": "APPLIED"}
+        ).fetchone() == {"validator_revision": "document-metadata-api-v10", "outcome": "APPLIED"}
     plan = TermsSemanticRepository(url).source_plan(HouseholdScope(job.household_space_id), edition)
     article = next(region for region in plan.snapshot.layout.regions if region.kind == "article")
     assert article.complete, article.reason_codes
-    body = "회사는 보험수익자에게 보험금을 지급합니다."
+    body = BODY
     assert article.body_text == body
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(

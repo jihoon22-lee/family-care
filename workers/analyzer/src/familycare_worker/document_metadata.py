@@ -31,10 +31,17 @@ from familycare_worker.generated_metadata import (
     DocumentMetadataRole,
 )
 from familycare_worker.navigation_page import is_navigation_page
-from familycare_worker.terms_body import observe_terms_body, reference_context_present, role_witness
+from familycare_worker.terms_body import (
+    _InvalidPage,
+    _lineage,
+    _shares_column,
+    observe_terms_body,
+    reference_context_present,
+    role_witness,
+)
 
 ComponentRole = DocumentMetadataRole
-REVISION = "document-metadata-v9"
+REVISION = "document-metadata-v10"
 
 
 class DocumentMetadataError(ValueError):
@@ -130,7 +137,13 @@ def _product_heading(raw: str) -> bool:
         and not _REFERENCE_HEADING.search(raw)
         and not re.search(r"[:：.!?。]|제\s*\d+\s*조", raw)
         and not re.search(r"(?:생명보험|손해보험|화재해상보험|주식회사)$", raw)
-        and re.fullmatch(r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?", raw, re.IGNORECASE)
+        and re.fullmatch(
+            r".+(?:보\s*험|\bpolicy)(?:\s*(?:\([^()（）]{1,40}\)|（[^()（）]{1,40}）)){0,4}(?:\s*[0-9]{1,3}\s*(?:종|형))?"
+            if REVISION == "document-metadata-v10"
+            else r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?",
+            raw,
+            re.IGNORECASE,
+        )
     )
 
 
@@ -184,9 +197,12 @@ def _caption_shares_role_region(
         if left[1] > right[1]:
             left, right = right, left
             left_node, right_node = right_node, left_node
-        if left_node.reading_order >= right_node.reading_order or not 0 <= right[1] - left[
-            3
-        ] <= min(48, 3 * min(left[3] - left[1], right[3] - right[1])):
+        if (
+            REVISION != "document-metadata-v10"
+            and left_node.reading_order >= right_node.reading_order
+        ) or not 0 <= right[1] - left[3] <= min(
+            48, 3 * min(left[3] - left[1], right[3] - right[1])
+        ):
             continue
         if min(left[2], right[2]) - max(left[0], right[0]) >= 0.5 * min(
             left[2] - left[0], right[2] - right[0]
@@ -406,7 +422,9 @@ def _layout_nodes(
     nodes: Sequence[StructureNode],
 ) -> tuple[Sequence[StructureNode], bool, frozenset[str]]:
     """Order known geometry and quarantine the suffix starting at its first overlap."""
-    if not any(node.kind == "TABLE_ROW" for node in nodes):
+    has_tables = any(node.kind == "TABLE_ROW" for node in nodes)
+    physical = REVISION == "document-metadata-v10"
+    if not has_tables and not physical:
         return nodes, False, frozenset()
     represented = {span.block_node_id for node in nodes for span in node.source_spans}
     positions: list[tuple[float, float, int, StructureNode]] = []
@@ -431,16 +449,59 @@ def _layout_nodes(
             native_order.append(node.node_id)
         positions.append((top, left, index, node))
     ordered = sorted(positions, key=lambda item: item[:3])
-    if [item[3].node_id for item in ordered if item[3].kind != "TABLE_ROW"] != native_order:
+    reordered = [item[3].node_id for item in ordered if item[3].kind != "TABLE_ROW"] != native_order
+    if reordered and not physical:
         return nodes, False, frozenset()
+    if not reordered and not has_tables:
+        return nodes, False, frozenset()
+    if reordered:
+        by_id = {node.node_id: node for node in nodes}
+        try:
+            for _, _, _, node in ordered:
+                if node.kind == "TEXT_LINE":
+                    _lineage(node, by_id)
+        except _InvalidPage:
+            return nodes, False, frozenset(by_id)
     for index, (previous, following) in enumerate(zip(ordered, ordered[1:], strict=False)):
-        if following[0] < bottoms[previous[3].node_id]:
+        left_box = (
+            previous[1],
+            previous[0],
+            _metadata_right(previous[3]),
+            bottoms[previous[3].node_id],
+        )
+        right_box = (
+            following[1],
+            following[0],
+            _metadata_right(following[3]),
+            bottoms[following[3].node_id],
+        )
+        if following[0] < bottoms[previous[3].node_id] or (
+            reordered
+            and (
+                previous[3].source_layer != following[3].source_layer
+                or not _shares_column(left_box, right_box)
+                or right_box[1] - left_box[3]
+                > min(48, 3 * min(left_box[3] - left_box[1], right_box[3] - right_box[1]))
+            )
+        ):
             return (
                 [item[3] for item in ordered],
                 True,
-                frozenset(item[3].node_id for item in ordered[index:]),
+                frozenset(
+                    item[3].node_id
+                    for item in ordered[
+                        index if following[0] < bottoms[previous[3].node_id] else index + 1 :
+                    ]
+                ),
             )
     return [item[3] for item in ordered], True, frozenset()
+
+
+def _metadata_right(node: StructureNode) -> float:
+    if node.kind == "TABLE_ROW":
+        return max(cell.bbox[2] for cell in node.cells if cell.bbox is not None)
+    assert node.bbox is not None
+    return node.bbox[2]
 
 
 def _positionable_box(box: tuple[float, float, float, float] | None) -> bool:

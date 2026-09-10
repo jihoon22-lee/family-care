@@ -25,7 +25,14 @@ from workers.analyzer.tests.test_document_structure_repository import _psycopg_u
 pytestmark = pytest.mark.integration
 
 
-def test_v9_appends_to_same_generation_and_preserves_v8_history(publication_database: Any) -> None:
+def test_v9_appends_to_same_generation_and_preserves_v8_history(
+    publication_database: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from familycare_worker import document_metadata, document_metadata_repository
+
+    monkeypatch.setattr(document_metadata, "REVISION", "document-metadata-v9")
+    monkeypatch.setattr(document_metadata_repository, "REVISION", "document-metadata-v9")
     url, job, generation = _seed(publication_database)
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
         identity = connection.execute(

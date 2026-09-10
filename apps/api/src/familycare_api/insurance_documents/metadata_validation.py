@@ -10,7 +10,7 @@ import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from familycare_api.documents.generated_metadata import (
     METADATA_FIELD_LABELS,
@@ -20,6 +20,7 @@ from familycare_api.documents.generated_metadata import (
 )
 from familycare_api.insurance_documents.navigation_page_validation import is_navigation_page
 from familycare_api.insurance_documents.terms_body_validation import (
+    _lineage_valid,
     body_evidence,
     reference_context_present,
 )
@@ -60,22 +61,28 @@ _REFERENCE_HEADING = re.compile(
 )
 
 
-def _product_caption(text: str) -> bool:
+def _product_caption(text: str, *, metadata_revision: str = "document-metadata-v8") -> bool:
     return bool(
         3 < len(text) <= 200
         and not _REFERENCE_HEADING.search(text)
         and not re.search(r"[:：.!?。]|제\s*\d+\s*조", text)
         and not re.search(r"(?:생명보험|손해보험|화재해상보험|주식회사)$", text)
-        and re.fullmatch(r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?", text, re.IGNORECASE)
+        and re.fullmatch(
+            r".+(?:보\s*험|\bpolicy)(?:\s*(?:\([^()（）]{1,40}\)|（[^()（）]{1,40}）)){0,4}(?:\s*[0-9]{1,3}\s*(?:종|형))?"
+            if metadata_revision == "document-metadata-v10"
+            else r".+(?:보험|\bpolicy)(?:\s*\([^()]{1,40}\))?",
+            text,
+            re.IGNORECASE,
+        )
     )
 
 
-def _cover_caption(text: str) -> bool:
+def _cover_caption(text: str, *, metadata_revision: str = "document-metadata-v8") -> bool:
     return bool(
         len(text) <= 160
         and not _REFERENCE_HEADING.search(text)
         and (
-            _product_caption(text)
+            _product_caption(text, metadata_revision=metadata_revision)
             or re.fullmatch(
                 r"(?:\(?무배당\)?|\(?갱신형\)?|\S+(?:생명|화재|손해보험|생명보험|주식회사)|"
                 r"[\w ]+(?:Assurance|Life|Insurance Company))",
@@ -86,7 +93,9 @@ def _cover_caption(text: str) -> bool:
     )
 
 
-def _cover_role(text: str) -> tuple[str, int, int, int] | None:
+def _cover_role(
+    text: str, *, metadata_revision: str = "document-metadata-v8"
+) -> tuple[str, int, int, int] | None:
     for role, titles in METADATA_ROLE_TITLES.items():
         for title in sorted(titles, key=len, reverse=True):
             pattern = (
@@ -97,7 +106,10 @@ def _cover_role(text: str) -> tuple[str, int, int, int] | None:
             match = re.search(pattern + r"$", text, re.IGNORECASE)
             if match is not None:
                 prefix = text[: match.start()].rstrip()
-                if not prefix or (role == "terms" and _product_caption(prefix)):
+                if not prefix or (
+                    role == "terms"
+                    and _product_caption(prefix, metadata_revision=metadata_revision)
+                ):
                     return role, match.start(), match.end(), len(prefix)
     return None
 
@@ -195,9 +207,14 @@ def _table(node: dict[str, Any], observed: _Observed, metadata_area_open: bool) 
 
 
 def _source_layout(
-    nodes: list[dict[str, Any]], *, proven_prefix: bool = True
+    nodes: list[dict[str, Any]],
+    *,
+    proven_prefix: bool = True,
+    metadata_revision: str = "document-metadata-v8",
 ) -> tuple[list[dict[str, Any]], bool, frozenset[str]]:
-    if not any(node["kind"] == "TABLE_ROW" for node in nodes):
+    has_tables = any(node["kind"] == "TABLE_ROW" for node in nodes)
+    physical = metadata_revision == "document-metadata-v10"
+    if not has_tables and not physical:
         return nodes, False, frozenset()
     represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
     positioned = []
@@ -228,18 +245,64 @@ def _source_layout(
             native_order.append(node["node_id"])
         positioned.append((top, left, index, node))
     ordered = sorted(positioned, key=lambda item: item[:3])
-    if [item[3]["node_id"] for item in ordered if item[3]["kind"] != "TABLE_ROW"] != native_order:
+    reordered = [
+        item[3]["node_id"] for item in ordered if item[3]["kind"] != "TABLE_ROW"
+    ] != native_order
+    if reordered and not physical:
         return nodes, False, frozenset()
+    if not reordered and not has_tables:
+        return nodes, False, frozenset()
+    if reordered:
+        by_id = {node["node_id"]: node for node in nodes}
+        if any(
+            not _lineage_valid(node, by_id, metadata_revision=metadata_revision)
+            for _, _, _, node in ordered
+            if node["kind"] == "TEXT_LINE"
+        ):
+            return nodes, False, frozenset(by_id)
     for index, (previous, following) in enumerate(zip(ordered, ordered[1:], strict=False)):
-        if following[0] < bottoms[previous[3]["node_id"]]:
+        left = (
+            previous[1],
+            previous[0],
+            _metadata_right(previous[3]),
+            bottoms[previous[3]["node_id"]],
+        )
+        right = (
+            following[1],
+            following[0],
+            _metadata_right(following[3]),
+            bottoms[following[3]["node_id"]],
+        )
+        height = min(left[3] - left[1], right[3] - right[1])
+        if following[0] < bottoms[previous[3]["node_id"]] or (
+            reordered
+            and (
+                previous[3]["source_layer"] != following[3]["source_layer"]
+                or abs(left[0] - right[0]) > min(48, 2 * height)
+                or min(left[2], right[2]) - max(left[0], right[0])
+                < 0.5 * min(left[2] - left[0], right[2] - right[0])
+                or right[1] - left[3] > min(48, 3 * height)
+            )
+        ):
             if not proven_prefix:
                 return nodes, False, frozenset()
             return (
                 [item[3] for item in ordered],
                 True,
-                frozenset(item[3]["node_id"] for item in ordered[index:]),
+                frozenset(
+                    item[3]["node_id"]
+                    for item in ordered[
+                        index if following[0] < bottoms[previous[3]["node_id"]] else index + 1 :
+                    ]
+                ),
             )
     return [item[3] for item in ordered], True, frozenset()
+
+
+def _metadata_right(node: dict[str, Any]) -> float:
+    if node["kind"] == "TABLE_ROW":
+        return cast(float, max(cell["bbox"][2] for cell in node["cells"]))
+    return cast(float, node["bbox"][2])
 
 
 def _positionable_box(box: list[float]) -> bool:
@@ -295,13 +358,14 @@ def _observe(
     legacy: bool = False,
     issuer_captions: bool = False,
     proven_prefix: bool = True,
+    metadata_revision: str = "document-metadata-v8",
 ) -> _Observed:
     observed = _Observed()
     patterns = _LEGACY_PATTERNS if legacy else _PATTERNS
     nodes, positioned, quarantined = (
         (nodes, False, frozenset())
         if legacy
-        else _source_layout(nodes, proven_prefix=proven_prefix)
+        else _source_layout(nodes, proven_prefix=proven_prefix, metadata_revision=metadata_revision)
     )
     title_area_open = True
     metadata_area_open = True
@@ -355,7 +419,9 @@ def _observe(
             trimmed = raw.strip(" \t[]【】")
             trim_start = len(raw) - len(raw.lstrip(" \t[]【】"))
             title = _key(trimmed)
-            cover_role = None if legacy else _cover_role(trimmed)
+            cover_role = (
+                None if legacy else _cover_role(trimmed, metadata_revision=metadata_revision)
+            )
             known_title = (
                 any(title in titles for titles in METADATA_ROLE_TITLES.values())
                 if legacy
@@ -374,7 +440,8 @@ def _observe(
             ):
                 labelled = False
             prelude = not legacy and (
-                _cover_caption(trimmed) or (issuer_captions and _insurer_caption(trimmed))
+                _cover_caption(trimmed, metadata_revision=metadata_revision)
+                or (issuer_captions and _insurer_caption(trimmed))
             )
             if raw.strip() and not known_title and not labelled and not prelude:
                 title_area_open = False
@@ -405,7 +472,11 @@ def _observe(
             product_end = (
                 cover_role[3]
                 if cover_role is not None
-                else (len(trimmed) if not legacy and _product_caption(trimmed) else 0)
+                else (
+                    len(trimmed)
+                    if not legacy and _product_caption(trimmed, metadata_revision=metadata_revision)
+                    else 0
+                )
             )
             if metadata_area_open and not table_barrier and not labelled and product_end:
                 observed.add(
@@ -475,7 +546,12 @@ def _insurer_caption(text: str) -> bool:
     )
 
 
-def _bind_insurer_captions(observed: _Observed, nodes: list[dict[str, Any]]) -> None:
+def _bind_insurer_captions(
+    observed: _Observed,
+    nodes: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
+) -> None:
     if set(observed.roles) not in ({"policy"}, {"terms"}):
         return
     by_id = {node["node_id"]: node for node in nodes}
@@ -486,7 +562,10 @@ def _bind_insurer_captions(observed: _Observed, nodes: list[dict[str, Any]]) -> 
             same_region = span["node_id"] == role["node_id"]
             if not same_region:
                 same_region = _caption_region_adjacent(
-                    by_id[span["node_id"]], by_id[role["node_id"]], nodes
+                    by_id[span["node_id"]],
+                    by_id[role["node_id"]],
+                    nodes,
+                    metadata_revision=metadata_revision,
                 )
             if same_region:
                 observed.add("insurer", span["text"], serialized)
@@ -494,7 +573,11 @@ def _bind_insurer_captions(observed: _Observed, nodes: list[dict[str, Any]]) -> 
 
 
 def _caption_region_adjacent(
-    left_node: dict[str, Any], right_node: dict[str, Any], nodes: list[dict[str, Any]]
+    left_node: dict[str, Any],
+    right_node: dict[str, Any],
+    nodes: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> bool:
     boxes = []
     for node in (left_node, right_node):
@@ -513,15 +596,26 @@ def _caption_region_adjacent(
         left_node, right_node = right_node, left_node
     overlap = min(left[2], right[2]) - max(left[0], right[0])
     return (
-        left_node["reading_order"] < right_node["reading_order"]
+        (
+            metadata_revision == "document-metadata-v10"
+            or left_node["reading_order"] < right_node["reading_order"]
+        )
         and overlap >= 0.5 * min(left[2] - left[0], right[2] - right[0])
         and 0 <= right[1] - left[3] <= min(48, 3 * min(left[3] - left[1], right[3] - right[1]))
-        and not _caption_interrupted(left_node, right_node, left, right, nodes)
+        and not _caption_interrupted(
+            left_node, right_node, left, right, nodes, metadata_revision=metadata_revision
+        )
     )
 
 
 def _caption_interrupted(
-    first: dict[str, Any], last: dict[str, Any], left: Any, right: Any, nodes: list[dict[str, Any]]
+    first: dict[str, Any],
+    last: dict[str, Any],
+    left: Any,
+    right: Any,
+    nodes: list[dict[str, Any]],
+    *,
+    metadata_revision: str = "document-metadata-v8",
 ) -> bool:
     represented = {span["block_node_id"] for node in nodes for span in node.get("source_spans", [])}
     for node in nodes:
@@ -544,9 +638,9 @@ def _caption_interrupted(
         for line in node["text"].splitlines():
             text = line.strip()
             if text and not (
-                _cover_caption(text)
+                _cover_caption(text, metadata_revision=metadata_revision)
                 or _insurer_caption(text)
-                or _cover_role(text)
+                or _cover_role(text, metadata_revision=metadata_revision)
                 or any(pattern.fullmatch(line) for pattern in _PATTERNS.values())
             ):
                 return True
@@ -600,8 +694,13 @@ class MetadataSourceContext:
                 set(
                     _observe(
                         nodes,
+                        metadata_revision=self.revision,
                         proven_prefix=self.revision
-                        in {"document-metadata-v8", "document-metadata-v9"},
+                        in {
+                            "document-metadata-v8",
+                            "document-metadata-v9",
+                            "document-metadata-v10",
+                        },
                         issuer_captions=self.revision
                         in {
                             "document-metadata-v4",
@@ -610,6 +709,7 @@ class MetadataSourceContext:
                             "document-metadata-v7",
                             "document-metadata-v8",
                             "document-metadata-v9",
+                            "document-metadata-v10",
                         },
                     ).roles
                 ),
@@ -626,6 +726,7 @@ class MetadataSourceContext:
             "document-metadata-v7",
             "document-metadata-v8",
             "document-metadata-v9",
+            "document-metadata-v10",
         } and is_navigation_page(nodes, metadata_revision=self.revision):
             self.states[number] = restricted
             self.last_page = number
@@ -645,6 +746,7 @@ class MetadataSourceContext:
                 "document-metadata-v7",
                 "document-metadata-v8",
                 "document-metadata-v9",
+                "document-metadata-v10",
             },
             navigation_instructions=self.revision
             in {
@@ -652,9 +754,15 @@ class MetadataSourceContext:
                 "document-metadata-v7",
                 "document-metadata-v8",
                 "document-metadata-v9",
+                "document-metadata-v10",
             },
             reading_guides=self.revision
-            in {"document-metadata-v7", "document-metadata-v8", "document-metadata-v9"},
+            in {
+                "document-metadata-v7",
+                "document-metadata-v8",
+                "document-metadata-v9",
+                "document-metadata-v10",
+            },
         )
         self.last_page = number
 
@@ -664,7 +772,7 @@ def validate_component_metadata(
     projection: dict[str, Any],
     *,
     page_loader: Callable[[int], dict[str, Any]] | None = None,
-    revision: str = "document-metadata-v9",
+    revision: str = "document-metadata-v10",
     source_context: MetadataSourceContext | None = None,
 ) -> ValidatedComponent | None:
     """Require complete original anchors; caller separately checks generation and scope.
@@ -695,6 +803,7 @@ def _validate(
         "document-metadata-v7",
         "document-metadata-v8",
         "document-metadata-v9",
+        "document-metadata-v10",
     }:
         return None
     component_fields = set(DocumentMetadataComponent.__annotations__) - {"range_evidence"}
@@ -706,6 +815,7 @@ def _validate(
         "document-metadata-v7",
         "document-metadata-v8",
         "document-metadata-v9",
+        "document-metadata-v10",
     }:
         component_fields.add("range_evidence")
     if set(component) != component_fields:
@@ -764,6 +874,7 @@ def _validate(
         "document-metadata-v7",
         "document-metadata-v8",
         "document-metadata-v9",
+        "document-metadata-v10",
     }:
 
         def context_page(number: int) -> dict[str, Any]:
@@ -794,6 +905,7 @@ def _validate(
         "document-metadata-v7",
         "document-metadata-v8",
         "document-metadata-v9",
+        "document-metadata-v10",
     } and len(span_indices) != len(component["role_spans"]):
         return None
     previous_numbers: tuple[int, ...] = ()
@@ -815,11 +927,14 @@ def _validate(
             "document-metadata-v7",
             "document-metadata-v8",
             "document-metadata-v9",
+            "document-metadata-v10",
         } and is_navigation_page(page_nodes, metadata_revision=revision):
             return None
         page = _observe(
             page_nodes,
-            proven_prefix=revision in {"document-metadata-v8", "document-metadata-v9"},
+            metadata_revision=revision,
+            proven_prefix=revision
+            in {"document-metadata-v8", "document-metadata-v9", "document-metadata-v10"},
             legacy=revision == "document-metadata-v1",
             issuer_captions=revision
             in {
@@ -829,6 +944,7 @@ def _validate(
                 "document-metadata-v7",
                 "document-metadata-v8",
                 "document-metadata-v9",
+                "document-metadata-v10",
             },
         )
         restricted = False
@@ -850,6 +966,7 @@ def _validate(
                 "document-metadata-v7",
                 "document-metadata-v8",
                 "document-metadata-v9",
+                "document-metadata-v10",
             }
             else None
         )
@@ -866,8 +983,9 @@ def _validate(
             "document-metadata-v7",
             "document-metadata-v8",
             "document-metadata-v9",
+            "document-metadata-v10",
         }:
-            _bind_insurer_captions(page, page_nodes)
+            _bind_insurer_captions(page, page_nodes, metadata_revision=revision)
         numbers = body[0] if body is not None and role == "terms" else ()
         sequence_verified = bool(body is not None and role == "terms" and body[2])
         scalars = {name: _key(value) for name, value in page.facts if name not in _MULTIPLE}
@@ -883,6 +1001,7 @@ def _validate(
                     "document-metadata-v7",
                     "document-metadata-v8",
                     "document-metadata-v9",
+                    "document-metadata-v10",
                 }
                 and role == "terms"
                 and bool(numbers)
@@ -916,6 +1035,7 @@ def _validate(
             "document-metadata-v7",
             "document-metadata-v8",
             "document-metadata-v9",
+            "document-metadata-v10",
         }:
             range_evidence.append(
                 {
@@ -942,6 +1062,7 @@ def _validate(
         "document-metadata-v7",
         "document-metadata-v8",
         "document-metadata-v9",
+        "document-metadata-v10",
     }:
         supplied = component["range_evidence"]
         if not isinstance(supplied, list) or len(supplied) != end - start + 1:
