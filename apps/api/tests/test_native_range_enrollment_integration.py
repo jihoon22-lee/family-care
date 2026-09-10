@@ -1179,3 +1179,58 @@ def test_failed_reanalysis_preserves_published_enrollment_and_source(
         assert attempts == (
             [("FAILED", "STRUCTURE_SOURCE_INVALID", None)] if failure == "incomplete_source" else []
         )
+
+
+@pytest.mark.parametrize("contract_label", ["증 권 번 호", "계 약 번 호"])
+def test_spaced_native_identity_labels_keep_one_enrollment_across_reimport(
+    native_database, contract_label
+):
+    url, job = native_database
+    _store_words(
+        url,
+        job,
+        _words(
+            [
+                "Policy certificate",
+                f"{contract_label}: synthetic-policy-001",
+                "피 보 험 자: Family Member A",
+                "Sample Insurer Sample Plan",
+                "Sample Rider sum assured: 317 KRW",
+            ]
+        ),
+    )
+    first = _retain_native(url, job)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    scope = HouseholdScope(job.household_space_id)
+    ledger = PolicyLedgerRepository(url)
+    policy = ledger.list_policies(scope)[0]
+    original_riders = ledger.list_policy_riders(scope, policy.id)
+    assert len(original_riders) == 1
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        original_structure = connection.execute(
+            "SELECT structure_json FROM document_structure_generations WHERE id=%s",
+            (first.generation_id,),
+        ).fetchone()[0]
+    reimport = _reextract(url, job, reimport=True)
+    _retain_native(url, reimport)
+    assert RangeEnrollmentProjector(url).project_pending() == 2
+    assert ledger.list_policies(scope) == [policy]
+    assert ledger.list_policy_riders(scope, policy.id) == original_riders
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute(
+                "SELECT structure_json FROM document_structure_generations WHERE id=%s",
+                (first.generation_id,),
+            ).fetchone()[0]
+            == original_structure
+        )
+        assert connection.execute(
+            "SELECT count(DISTINCT source_candidate_version_id) FROM range_enrollment_publications "
+            "WHERE rider_id=%s",
+            (original_riders[0].id,),
+        ).fetchone() == (2,)
+        assert connection.execute(
+            "SELECT family_member_id FROM policy_parties WHERE policy_contract_id=%s "
+            "AND deleted_at IS NULL",
+            (policy.id,),
+        ).fetchall() == [(job.family_member_id,)]

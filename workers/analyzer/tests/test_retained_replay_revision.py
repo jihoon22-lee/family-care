@@ -5,7 +5,6 @@ import pytest
 from familycare_worker import retained_policy
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
 from familycare_worker.policy_range_repository import PolicyRangeRepository
-from familycare_worker.runtime_schema import SUPPORTED_SCHEMA_REVISION
 from psycopg.types.json import Jsonb
 
 from apps.api.tests.test_metadata_navigation_publication import _migrate
@@ -14,8 +13,6 @@ from workers.analyzer.tests.test_policy_structuring_jobs import _psycopg_url
 from workers.analyzer.tests.test_retained_field_proof_revision import _contracts, _history
 from workers.analyzer.tests.test_retained_policy_resubmission import (
     _assert_original_preserved,
-    _enqueue,
-    _target,
     ranges_database,  # noqa: F401
     seeded_policy_database,  # noqa: F401
     structure_database,  # noqa: F401
@@ -29,6 +26,32 @@ V4 = "retained-policy-association-v4"
 PREVIOUS = "0068_range_field_proof"
 REVISION = "0069_policy_draft_replay"
 NORMALIZATION = "policy-draft-normalization-v1"
+
+
+@pytest.fixture(autouse=True)
+def historical_v4_producer(monkeypatch, retained_source):
+    monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", V4)
+    # Test migration 0069 itself, independently of later privacy revisions.
+    assert _migrate(retained_source.url, "downgrade", REVISION).returncode == 0
+    try:
+        yield
+    finally:
+        assert _migrate(retained_source.url, "upgrade", "head").returncode == 0
+
+
+def _enqueue(sample, **overrides):
+    from workers.analyzer.tests.test_retained_policy_resubmission import _enqueue as enqueue
+
+    return enqueue(sample, **{"pipeline_revision": V4, **overrides})
+
+
+def _target(sample, job_id):
+    return retained_policy.RetainedPolicyJobQueue(
+        sample.url,
+        household_space_id=sample.original.household_space_id,
+        job_id=job_id,
+        pipeline_revision=V4,
+    )
 
 
 def _legacy_work(sample, monkeypatch, revision):
@@ -74,7 +97,7 @@ def test_replay_upgrade_preserves_prior_review_response_and_appends_v4(
     old, work, _ = _legacy_work(sample, monkeypatch, revision)
     before = _history(sample.url, old.id)
     contracts = _contracts(sample.url, sample.original.household_space_id)
-    assert _migrate(sample.url, "upgrade", "head").returncode == 0
+    assert _migrate(sample.url, "upgrade", REVISION).returncode == 0
     new = _enqueue(sample)
     assert new.pipeline_version == V4 and new.id != old.id
     assert _enqueue(sample).id == new.id
@@ -104,7 +127,7 @@ def test_replay_downgrade_restores_exact_contract_when_empty(retained_source):
     assert _migrate(sample.url, "downgrade", PREVIOUS).returncode == 0
     before = _contracts(sample.url, sample.original.household_space_id)
     try:
-        assert _migrate(sample.url, "upgrade", "head").returncode == 0
+        assert _migrate(sample.url, "upgrade", REVISION).returncode == 0
         after = _contracts(sample.url, sample.original.household_space_id)
         assert V4 in after["source"] and V4 in after["guard"]
         assert before["privacy"] == after["privacy"]
@@ -113,7 +136,7 @@ def test_replay_downgrade_restores_exact_contract_when_empty(retained_source):
         with pytest.raises(retained_policy.RetainedPolicyConflict):
             _enqueue(sample, pipeline_revision=V4)
     finally:
-        assert _migrate(sample.url, "upgrade", "head").returncode == 0
+        assert _migrate(sample.url, "upgrade", REVISION).returncode == 0
     _assert_original_preserved(sample)
 
 
@@ -131,7 +154,7 @@ def test_v4_job_alone_refuses_downgrade(retained_source):
     assert _history(sample.url, new.id) == before
     with psycopg.connect(_psycopg_url(sample.url)) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            SUPPORTED_SCHEMA_REVISION,
+            REVISION,
         )
 
 

@@ -17,8 +17,15 @@ import psycopg
 from familycare_worker.document_structure import DocumentStructure, StructureNode, node_source_roles
 
 _TYPE_LABELS = {
-    "insured": re.compile(r"^(?:피보험자(?: 성명)?|insured(?: name)?)$", re.IGNORECASE),
-    "contract": re.compile(r"^(?:증권번호|계약번호|policy number|contract number)$", re.IGNORECASE),
+    # Printed labels may space their characters. Identity values and original
+    # line/cell anchors keep their existing normalization and complete bounds.
+    "insured": re.compile(
+        r"^(?:피\s*보\s*험\s*자(?:\s*성\s*명)?|insured(?:\s+name)?)$", re.IGNORECASE
+    ),
+    "contract": re.compile(
+        r"^(?:증\s*권\s*번\s*호|계\s*약\s*번\s*호|policy\s+number|contract\s+number)$",
+        re.IGNORECASE,
+    ),
 }
 _DATE_QUALIFIER = re.compile(
     r"(?P<year>[0-9]{4})(?P<separator>[-./])(?P<month>[0-9]{2})"

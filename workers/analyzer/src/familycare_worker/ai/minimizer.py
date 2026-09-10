@@ -18,22 +18,24 @@ _PHONE_PATTERN = re.compile(
 )
 _RESIDENT_IDENTIFIER_PATTERN = re.compile(r"(?<![\d*])\d{6}\s*-\s*[\d*]{7}(?![\d*])")
 _POLICY_IDENTIFIER_PATTERN = re.compile(
-    r"(?P<label>(?:(?:보험\s*)?증권|계약)\s*번호|"
+    r"(?P<label>(?:(?:보\s*험\s*)?증\s*권|계\s*약)\s*번\s*호|"
     r"(?:policy|contract|certificate)\s*(?:number|no\.?|id))"
     r"\s*[:#]?\s*(?P<value>[A-Z0-9][A-Z0-9._/-]{4,})",
     re.IGNORECASE,
 )
-MINIMIZATION_REVISION = "source-window-minimizer-v3"
+MINIMIZATION_REVISION = "source-window-minimizer-v4"
 
 _IDENTITY_LABEL = (
-    r"계약자(?:명)?|피보험자(?:명)?|보험\s*수익자|수익자(?:명)?|성명|이름|"
+    r"계약자(?:명)?|피\s*보\s*험\s*자(?:\s*성\s*명|\s*명)?|"
+    r"보험\s*수익자|수익자(?:명)?|성명|이름|"
     r"주소|거주지|소재지|생년월일|주민등록번호|"
     r"policyholder|insured(?!\s+amount\b)(?:\s+(?:person|name))?|beneficiary(?:\s+name)?|"
     r"full\s+name|customer\s+name|address|date\s+of\s+birth"
 )
 _FOLLOWING_FIELD_LABEL = (
     rf"{_IDENTITY_LABEL}|보험사|상품명|계약일|보험기간|보장기간|보장개시일|"
-    r"보장종료일|계약상태|담보명|가입금액|통화|갱신여부|증권번호|계약번호|"
+    r"보장종료일|계약상태|담보명|가입금액|통화|갱신여부|"
+    r"증\s*권\s*번\s*호|계\s*약\s*번\s*호|"
     r"insurer|product(?:\s+name)?|contract\s+(?:date|status)|coverage\s+(?:start|end)|"
     r"rider(?:\s+name)?|insured\s+amount|currency|renewable|policy\s+(?:number|no\.?|id)"
 )

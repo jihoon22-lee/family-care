@@ -12,10 +12,8 @@ from psycopg.types.json import Jsonb
 from workers.analyzer.tests.test_retained_policy_resubmission import (
     WORKER,
     _assert_original_preserved,
-    _enqueue,
     _no_facts,
     _psycopg_url,
-    _target,
     ranges_database,  # noqa: F401
     seeded_policy_database,  # noqa: F401
     structure_database,  # noqa: F401
@@ -25,6 +23,32 @@ from workers.analyzer.tests.test_retained_policy_resubmission import (
 )
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.fixture(autouse=True)
+def historical_v4_producer(monkeypatch):
+    from familycare_worker import retained_policy
+
+    monkeypatch.setattr(
+        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v4"
+    )
+
+
+def _enqueue(sample, **overrides):
+    from workers.analyzer.tests.test_retained_policy_resubmission import _enqueue as enqueue
+
+    return enqueue(sample, **{"pipeline_revision": "retained-policy-association-v4", **overrides})
+
+
+def _target(sample, job_id):
+    from familycare_worker.retained_policy import RetainedPolicyJobQueue
+
+    return RetainedPolicyJobQueue(
+        sample.url,
+        household_space_id=sample.original.household_space_id,
+        job_id=job_id,
+        pipeline_revision="retained-policy-association-v4",
+    )
 
 
 @pytest.fixture()

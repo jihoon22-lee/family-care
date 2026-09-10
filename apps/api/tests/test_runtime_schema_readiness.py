@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0073_metadata_header_regions"
+REVISION = "0074_policy_label_spacing"
 
 
 class Result:
@@ -60,7 +60,8 @@ class Engine:
         [("0069_policy_draft_replay",)],
         [("0071_source_calculations",)],
         [("0072_metadata_physical_flow",)],
-        [("0074_synthetic_future",)],
+        [("0073_metadata_header_regions",)],
+        [("0075_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

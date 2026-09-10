@@ -197,7 +197,7 @@ def test_field_revision_downgrade_restores_exact_v2_only_contract_without_histor
     with pytest.raises(retained_policy.RetainedPolicyConflict):
         _enqueue(sample, pipeline_revision=V3)
     try:
-        assert _migrate(sample.url, "upgrade", "head").returncode == 0
+        assert _migrate(sample.url, "upgrade", "0068_range_field_proof").returncode == 0
         after = _contracts(sample.url, sample.original.household_space_id)
         assert after["privacy"] == before["privacy"]
         assert "retained-policy-association-v3" in after["source"]
