@@ -118,6 +118,9 @@ RIDER_CLAUSE_RULES_FIELD_PATHS = [
     "Rider.status",
     "Rider.insured_amount",
     "ClaimHistory.counted_occurrence",
+    "MedicalEvent.reduction_applies",
+    "Receipt.covered_amount",
+    "Receipt.confirmed_amount",
 ]
 RIDER_CLAUSE_RULE_KINDS = [
     "eligibility",
@@ -151,6 +154,7 @@ RIDER_CLAUSE_RULE_CALCULATION_OPERATORS = [
     "min",
     "max",
     "round",
+    "if",
 ]
 RIDER_CLAUSE_RULE_ROUNDING_MODES = ["half_up", "half_even", "up", "down"]
 RIDER_CLAUSE_RULE_REVIEW_STATES = ["AI_VERIFIED", "NEEDS_REVIEW", "USER_CONFIRMED"]

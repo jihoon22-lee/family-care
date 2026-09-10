@@ -25,6 +25,118 @@ const questions = [
 ];
 
 describe("minimum event questions", () => {
+  it.each([
+    ["true", true],
+    ["false", false],
+    ["unknown", null],
+  ] as const)(
+    "saves reduction answer %s as a user fact without AI structuring",
+    async (choice, value) => {
+      const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
+      render(
+        <GuidanceQuestions
+          event={event}
+          questions={[
+            {
+              field_path: "MedicalEvent.reduction_applies",
+              reason_code: "CALCULATION_INPUT_NEEDED",
+            },
+          ]}
+          onSave={save}
+          onAnalyze={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      await userEvent.selectOptions(
+        screen.getByLabelText("감액 조건 해당 여부"),
+        choice,
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+      );
+      expect(save).toHaveBeenCalledWith(
+        {
+          expected_version: 2,
+          facts: {
+            ...event.facts,
+            "MedicalEvent.reduction_applies": { value, confirmation: "user" },
+          },
+        },
+        expect.any(AbortSignal),
+      );
+    },
+  );
+
+  it.each([true, false])(
+    "preserves both day and reduction answers in question order %s",
+    async (reductionFirst) => {
+      const save = vi.fn().mockResolvedValue({ ...event, version: 3 });
+      const reduction = {
+        field_path: "MedicalEvent.reduction_applies",
+        reason_code: "CALCULATION_INPUT_NEEDED",
+      };
+      render(
+        <GuidanceQuestions
+          event={event}
+          questions={
+            reductionFirst
+              ? [reduction, ...questions]
+              : [...questions, reduction]
+          }
+          onSave={save}
+          onAnalyze={vi.fn().mockResolvedValue(undefined)}
+        />,
+      );
+      await userEvent.type(screen.getByLabelText("입원 일수"), "5");
+      await userEvent.selectOptions(
+        screen.getByLabelText("감액 조건 해당 여부"),
+        "false",
+      );
+      await userEvent.click(
+        screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+      );
+      expect(save.mock.calls[0][0]).toEqual({
+        expected_version: 2,
+        facts: {
+          ...event.facts,
+          "MedicalEvent.admission_days": { value: 5, confirmation: "user" },
+          "MedicalEvent.reduction_applies": {
+            value: false,
+            confirmation: "user",
+          },
+        },
+      });
+    },
+  );
+
+  it("keeps an existing Boolean reduction fact while updating only admission days", async () => {
+    const current = {
+      ...event,
+      facts: {
+        ...event.facts,
+        "MedicalEvent.reduction_applies": {
+          value: false,
+          confirmation: "user" as const,
+        },
+      },
+    };
+    const save = vi.fn().mockResolvedValue({ ...current, version: 3 });
+    render(
+      <GuidanceQuestions
+        event={current}
+        questions={questions}
+        onSave={save}
+        onAnalyze={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    await userEvent.type(screen.getByLabelText("입원 일수"), "5");
+    await userEvent.click(
+      screen.getByRole("button", { name: "입력 보완 후 다시 계산" }),
+    );
+    expect(
+      save.mock.calls[0][0].facts["MedicalEvent.reduction_applies"],
+    ).toEqual({ value: false, confirmation: "user" });
+  });
+
   it.each([true, false])(
     "saves explicit diagnosis confirmation as boolean %s",
     async (value) => {

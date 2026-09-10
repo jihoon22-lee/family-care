@@ -17,6 +17,10 @@ def decimal_text(value: Decimal | None) -> str | None:
     return "0" if text in {"", "-0"} else text
 
 
+def _operand_value(value: Decimal | bool | None) -> str | bool | None:
+    return value if type(value) is bool else decimal_text(value)
+
+
 def source_reference(value: CalculationSourceRef) -> GuidanceSourceReference:
     return GuidanceSourceReference(
         source_kind=value.source_kind,
@@ -68,8 +72,8 @@ def calculation_trace(
                             "kind": operand.kind,
                             "field_path": operand.field_path,
                             "child_path": operand.child_path,
-                            "value": decimal_text(operand.value),
-                            "supplied_value": decimal_text(operand.supplied_value),
+                            "value": _operand_value(operand.value),
+                            "supplied_value": _operand_value(operand.supplied_value),
                             "unit": operand.unit,
                             "currency": operand.currency,
                             "provenance": operand.provenance,

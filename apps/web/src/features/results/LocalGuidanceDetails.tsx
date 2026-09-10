@@ -38,6 +38,7 @@ const provenanceLabels: Record<string, string> = {
   DERIVED_CONFIRMED: "확인된 사건 정보에서 도출",
   SCENARIO_ASSUMPTION: "예정 치료 가정",
   AI_STRUCTURED: "AI 정리 · 확인 전",
+  AI_SUGGESTED: "AI 정리 · 확인 전",
   UNCONFIRMED: "확인 전",
 };
 
@@ -46,11 +47,17 @@ function provenanceLabel(value: string | null | undefined) {
 }
 
 function unitValue(
-  value: string | null | undefined,
+  value: GuidanceCalculationOperand["value"],
   unit: GuidanceCalculationOperand["unit"],
   currency?: string | null,
 ): string {
-  if (value == null) return "미산정";
+  if (unit === "BOOLEAN")
+    return value === true
+      ? "해당함"
+      : value === false
+        ? "해당하지 않음"
+        : "미확인";
+  if (typeof value !== "string") return "미산정";
   switch (unit) {
     case "MONEY":
       return money(value, currency);
@@ -158,6 +165,14 @@ function stepExpression(step: GuidanceCalculationStep): string {
       break;
     case "round":
       expression = `자리수 조정 (${values.join(", ")})`;
+      break;
+    case "if":
+      expression =
+        step.operands[0]?.status === "AVAILABLE" &&
+        typeof step.operands[0].value === "boolean" &&
+        step.operands.length === 2
+          ? `조건 ${values[0]} · 선택한 값 ${values[1]}`
+          : "조건 미확인 · 선택 보류";
       break;
   }
   return `${expression} = ${unitValue(step.value, step.unit, step.currency)}`;

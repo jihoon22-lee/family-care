@@ -318,7 +318,7 @@ def test_source_revision_digest_and_real_refs_survive_success_and_failure():
     result = evaluate_calculation(node, {}, source=changed)
     assert result.source == changed and result.source.publication_id != SOURCE.publication_id
     assert result.source.source_refs == (REF,)
-    assert result.runtime_revision == "guidance-calculation-v2"
+    assert result.runtime_revision == "guidance-calculation-v3"
 
 
 @pytest.mark.parametrize("fault", ["currency", "stale", "ai", "unknown_unit"])

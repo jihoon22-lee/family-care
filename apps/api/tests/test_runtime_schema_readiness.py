@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0070_semantic_activity"
+REVISION = "0071_source_calculations"
 
 
 class Result:

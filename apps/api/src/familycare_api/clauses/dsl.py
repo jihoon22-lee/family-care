@@ -45,7 +45,7 @@ ExpressionOperator = Literal[
     "count_before",
 ]
 
-CalculationOperator = Literal["add", "subtract", "multiply", "min", "max", "round"]
+CalculationOperator = Literal["add", "subtract", "multiply", "min", "max", "round", "if"]
 
 RULE_KINDS = frozenset(
     {
@@ -76,7 +76,7 @@ EXPRESSION_OPERATORS = frozenset(
         "count_before",
     }
 )
-CALCULATION_OPERATORS = frozenset({"add", "subtract", "multiply", "min", "max", "round"})
+CALCULATION_OPERATORS = frozenset({"add", "subtract", "multiply", "min", "max", "round", "if"})
 UNIT_REGISTRY = frozenset({"date", "days", "occurrences", "amount", "currency"})
 ROUNDING_MODES = frozenset({"half_up", "half_even", "up", "down"})
 MAX_RULE_DEPTH = 16
@@ -88,6 +88,7 @@ FIELD_PATHS = frozenset(
         "MedicalEvent.classification",
         "MedicalEvent.treatment_kind",
         "MedicalEvent.admission_days",
+        "MedicalEvent.reduction_applies",
         "MedicalEvent.admission",
         "MedicalEvent.performed",
         "MedicalEvent.planned",
@@ -230,6 +231,7 @@ _FIELD_REGISTRY: dict[str, _FieldSpec] = {
     "MedicalEvent.classification": _FieldSpec("string", frozenset()),
     "MedicalEvent.treatment_kind": _FieldSpec("string", frozenset()),
     "MedicalEvent.admission_days": _FieldSpec("integer", frozenset({"days"})),
+    "MedicalEvent.reduction_applies": _FieldSpec("boolean", frozenset()),
     "MedicalEvent.admission": _FieldSpec("boolean", frozenset()),
     "MedicalEvent.performed": _FieldSpec("boolean", frozenset()),
     "MedicalEvent.planned": _FieldSpec("boolean", frozenset()),
@@ -681,6 +683,8 @@ def _validate_calculation(
     raw_args = _sequence(node["args"])
     if len(raw_args) > MAX_RULE_ITEMS:
         raise RuleValidationError("INVALID_ARGUMENTS")
+    if operator == "if" and len(raw_args) != 3:
+        raise RuleValidationError("INVALID_ARGUMENTS")
     if operator == "round":
         if len(raw_args) != 1:
             raise RuleValidationError("INVALID_ARGUMENTS")
@@ -696,12 +700,22 @@ def _validate_calculation(
         rounding = None
     compiled_operands: list[object] = []
     referenced_fields: list[str] = []
-    for raw_operand in raw_args:
-        compiled, fields = _calculation_operand(
-            raw_operand,
-            depth=depth + 1,
-            remaining_nodes=remaining_nodes,
-        )
+    compiled: object
+    fields: tuple[str, ...]
+    for index, raw_operand in enumerate(raw_args):
+        if operator == "if" and index == 0:
+            condition = _mapping(raw_operand)
+            _require_keys(condition, required=frozenset({"field"}), allowed=frozenset({"field"}))
+            condition_field, spec = _field_spec(condition["field"])
+            if spec.kind != "boolean" or condition_field != "MedicalEvent.reduction_applies":
+                raise RuleValidationError("INVALID_FIELD_FOR_CALCULATION")
+            compiled, fields = condition_field, (condition_field,)
+        else:
+            compiled, fields = _calculation_operand(
+                raw_operand,
+                depth=depth + 1,
+                remaining_nodes=remaining_nodes,
+            )
         compiled_operands.append(compiled)
         for field in fields:
             if field not in referenced_fields:

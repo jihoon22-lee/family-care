@@ -6,7 +6,7 @@ from datetime import date
 from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 from familycare_api.common.coverage_identity import CanonicalCoverageIdentity, CanonicalCoverageRef
 
@@ -17,7 +17,7 @@ Currency = Annotated[str, Field(pattern=r"^[A-Z]{3}$")]
 FactPath = Annotated[str, Field(min_length=1, max_length=160)]
 Freshness = Literal["CONFIRMED_AT_EVENT", "DOCUMENT_CONTINUITY", "STATUS_UNRESOLVED"]
 Number = Annotated[str, Field(pattern=r"^-?(0|[1-9][0-9]*)(\.[0-9]+)?$", max_length=162)]
-Unit = Literal["MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "UNKNOWN"]
+Unit = Literal["MONEY", "DAYS", "COUNT", "RATIO", "NUMBER", "BOOLEAN", "UNKNOWN"]
 CalculationPath = Annotated[
     str, Field(max_length=512, pattern=r"^/calculation(?:/args/[0-9]{1,2})*$")
 ]
@@ -194,8 +194,8 @@ class GuidanceCalculationOperand(GuidanceModel):
     kind: Literal["FIELD", "LITERAL", "CHILD"]
     field_path: FactPath | None = None
     child_path: CalculationPath | None = None
-    value: Number | None = None
-    supplied_value: Number | None = None
+    value: Number | StrictBool | None = None
+    supplied_value: Number | StrictBool | None = None
     unit: Unit
     currency: Currency | None = None
     provenance: Code | None = None
@@ -208,7 +208,7 @@ class GuidanceCalculationOperand(GuidanceModel):
 class GuidanceCalculationStep(GuidanceModel):
     step_number: int = Field(ge=1, le=256)
     expression_path: CalculationPath
-    operation: Literal["add", "subtract", "multiply", "min", "max", "round"]
+    operation: Literal["add", "subtract", "multiply", "min", "max", "round", "if"]
     operands: tuple[GuidanceCalculationOperand, ...] = Field(min_length=1, max_length=16)
     value: Number | None = None
     unit: Unit

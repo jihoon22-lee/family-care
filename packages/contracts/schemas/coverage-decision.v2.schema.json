@@ -428,6 +428,7 @@
             "COUNT",
             "RATIO",
             "NUMBER",
+            "BOOLEAN",
             "UNKNOWN"
           ],
           "title": "Unit",
@@ -566,6 +567,9 @@
               "type": "string"
             },
             {
+              "type": "boolean"
+            },
+            {
               "type": "null"
             }
           ],
@@ -579,6 +583,7 @@
             "COUNT",
             "RATIO",
             "NUMBER",
+            "BOOLEAN",
             "UNKNOWN"
           ],
           "title": "Unit",
@@ -590,6 +595,9 @@
               "maxLength": 162,
               "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
               "type": "string"
+            },
+            {
+              "type": "boolean"
             },
             {
               "type": "null"
@@ -646,7 +654,8 @@
             "multiply",
             "min",
             "max",
-            "round"
+            "round",
+            "if"
           ],
           "title": "Operation",
           "type": "string"
@@ -703,6 +712,7 @@
             "COUNT",
             "RATIO",
             "NUMBER",
+            "BOOLEAN",
             "UNKNOWN"
           ],
           "title": "Unit",
@@ -853,6 +863,7 @@
             "COUNT",
             "RATIO",
             "NUMBER",
+            "BOOLEAN",
             "UNKNOWN"
           ],
           "title": "Unit",

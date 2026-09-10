@@ -33,6 +33,7 @@ const booleans = new Set([
   "outpatient",
   "pharmacy",
   "separately_billed_treatment",
+  "reduction_applies",
 ]);
 function field(path: string) {
   return path.startsWith("MedicalEvent.")
@@ -45,6 +46,7 @@ function supported(path: string) {
     "admission_days",
     "event_date",
     "visit_date",
+    "reduction_applies",
     ...structuredFields,
   ].includes(name);
 }
@@ -52,18 +54,23 @@ function existingFacts(event: MedicalEventResponse): Record<string, FactInput> {
   const facts: Record<string, FactInput> = {};
   for (const [path, raw] of Object.entries(event.facts)) {
     if (
-      !["MedicalEvent.classification", "MedicalEvent.admission_days"].includes(
-        path,
-      ) ||
+      ![
+        "MedicalEvent.classification",
+        "MedicalEvent.admission_days",
+        "MedicalEvent.reduction_applies",
+      ].includes(path) ||
       !raw ||
       typeof raw !== "object"
     )
       continue;
     const value = raw as Partial<FactInput>;
     if (
+      value.value !== undefined &&
       (value.value === null ||
-        typeof value.value === "string" ||
-        typeof value.value === "number") &&
+        (path === "MedicalEvent.reduction_applies"
+          ? typeof value.value === "boolean"
+          : typeof value.value === "string" ||
+            typeof value.value === "number")) &&
       ["user", "ai_structured", "unconfirmed", "conflicting"].includes(
         value.confirmation ?? "",
       )
@@ -151,8 +158,16 @@ export function GuidanceQuestions({
           return;
         }
         input.facts = {
-          ...existingFacts(event),
+          ...(input.facts ?? existingFacts(event)),
           [path]: { value: Number(value), confirmation: "user" },
+        };
+      } else if (name === "reduction_applies") {
+        input.facts = {
+          ...(input.facts ?? existingFacts(event)),
+          [path]: {
+            value: value === "unknown" ? null : value === "true",
+            confirmation: "user",
+          },
         };
       } else if (name === "event_date" || name === "visit_date") {
         input[name] = value;
@@ -238,6 +253,9 @@ export function GuidanceQuestions({
                     <option value="">아직 답하지 않음</option>
                     <option value="true">예</option>
                     <option value="false">아니요</option>
+                    {name === "reduction_applies" ? (
+                      <option value="unknown">확인하지 못함</option>
+                    ) : null}
                   </select>
                 ) : (
                   <input

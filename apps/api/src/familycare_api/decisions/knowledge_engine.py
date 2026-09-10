@@ -780,6 +780,19 @@ class _CalculationState:
     last_rounding: str | None = None
 
     def evaluate(self, node: CompiledCalculation) -> Decimal:
+        if node.operator == "if":
+            condition_path = node.operands[0]
+            if not isinstance(condition_path, str) or len(node.operands) != 3:
+                raise ValueError
+            condition = self.context.get(condition_path)
+            if (
+                condition is None
+                or type(condition.value) is not bool
+                or condition.confirmation != "user"
+                or condition.evidence_stale
+            ):
+                raise _CalculationInputUnavailable
+            return self._operand(node.operands[1 if condition.value else 2])
         values = tuple(self._operand(value) for value in node.operands)
         if node.operator == "add":
             output = sum(values, Decimal("0"))

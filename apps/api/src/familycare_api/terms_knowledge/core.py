@@ -19,10 +19,12 @@ from familycare_api.terms_knowledge.generated_contracts import (
     SemanticClassification,
     SemanticCodeDefinition,
     SemanticCondition,
+    SemanticConditionalReduction,
     SemanticDailyCalculation,
     SemanticDeductible,
     SemanticFixedCalculation,
     SemanticFootnote,
+    SemanticIndemnityCalculation,
     SemanticInformation,
     SemanticLimit,
     SemanticNode,
@@ -31,7 +33,7 @@ from familycare_api.terms_knowledge.generated_contracts import (
 )
 from pydantic import ValidationError
 
-COMPILER_REVISION = "terms-semantic-compiler-v2"
+COMPILER_REVISION = "terms-semantic-compiler-v3"
 MAX_CLOSURE_DEPTH = 32
 
 
@@ -279,7 +281,10 @@ def _calculation(nodes: list[SemanticNode], evidence: tuple[str, ...]) -> dict[s
         for n in nodes
         if isinstance(
             n.payload,
-            SemanticDailyCalculation | SemanticFixedCalculation | SemanticRatioCalculation,
+            SemanticDailyCalculation
+            | SemanticFixedCalculation
+            | SemanticRatioCalculation
+            | SemanticIndemnityCalculation,
         )
     ]
     if not formulas:
@@ -290,10 +295,12 @@ def _calculation(nodes: list[SemanticNode], evidence: tuple[str, ...]) -> dict[s
     exclusions = [n.payload for n in nodes if isinstance(n.payload, SemanticFootnote)]
     limits = [n.payload for n in nodes if isinstance(n.payload, SemanticLimit)]
     deductibles = [n.payload for n in nodes if isinstance(n.payload, SemanticDeductible)]
+    reductions = [n.payload for n in nodes if isinstance(n.payload, SemanticConditionalReduction)]
     if (
         len(exclusions) > 1
         or len({p.measure for p in limits}) != len(limits)
         or len(deductibles) > 1
+        or len(reductions) > 1
     ):
         raise SemanticKnowledgeError("CALCULATION_CONFLICT")
     if any(
@@ -330,11 +337,23 @@ def _calculation(nodes: list[SemanticNode], evidence: tuple[str, ...]) -> dict[s
         if isinstance(formula, SemanticFixedCalculation):
             expression = _op("multiply", _operand(formula.amount), _operand(1))
             kind = "fixed_amount"
+        elif isinstance(formula, SemanticIndemnityCalculation):
+            expression = _op("multiply", {"field": "Receipt.covered_amount"}, _operand(1))
+            kind = "rate_amount"
         else:
             if Decimal(formula.ratio) > 1:
                 raise SemanticKnowledgeError("CALCULATION_RATE_INVALID")
             expression = _op("multiply", {"field": "Rider.insured_amount"}, _operand(formula.ratio))
             kind = "rate_amount"
+    if reductions:
+        reduction = reductions[0]
+        if Decimal(reduction.factor) > 1:
+            raise SemanticKnowledgeError("CALCULATION_RATE_INVALID")
+        expression = _op(
+            "multiply",
+            expression,
+            _op("if", {"field": reduction.field}, _operand(reduction.factor), _operand(1)),
+        )
     if deductibles:
         expression = _op(
             "max", _op("subtract", expression, _operand(deductibles[0].amount)), _operand(0)
@@ -665,7 +684,10 @@ def _compile_root(
                 for n in active
                 if isinstance(
                     n.payload,
-                    SemanticDailyCalculation | SemanticFixedCalculation | SemanticRatioCalculation,
+                    SemanticDailyCalculation
+                    | SemanticFixedCalculation
+                    | SemanticRatioCalculation
+                    | SemanticIndemnityCalculation,
                 )
             ),
             None,

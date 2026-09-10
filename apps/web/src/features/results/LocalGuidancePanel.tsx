@@ -24,6 +24,7 @@ const inputLabels: Record<string, string> = {
   "MedicalEvent.event_date": "사건일",
   "MedicalEvent.visit_date": "방문일",
   "MedicalEvent.diagnosis_confirmed": "확정 진단 여부",
+  "MedicalEvent.reduction_applies": "감액 조건 해당 여부",
   "MedicalEvent.diagnosis_label": "진단명",
   "MedicalEvent.diagnosis_code": "진단 코드",
   "MedicalEvent.procedure_code": "처치·수술 코드",

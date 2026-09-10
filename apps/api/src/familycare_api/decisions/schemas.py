@@ -50,11 +50,12 @@ from familycare_api.decisions.structuring_schemas import (
 )
 from familycare_api.guidance.models import LocalGuidanceResponse
 
-FactScalar = str | int | Decimal | date | None
+FactScalar = str | StrictBool | int | Decimal | date | None
 _EVENT_FIELDS = frozenset(
     {
         "MedicalEvent.classification",
         "MedicalEvent.admission_days",
+        "MedicalEvent.reduction_applies",
     }
 )
 
@@ -915,6 +916,9 @@ class DecisionErrorResponse(StrictModel):
 def _require_event_fields(facts: dict[str, FactInput]) -> None:
     if any(field not in _EVENT_FIELDS for field in facts):
         raise ValueError("unsupported fact field")
+    reduction = facts.get("MedicalEvent.reduction_applies")
+    if reduction is not None and reduction.value is not None and type(reduction.value) is not bool:
+        raise ValueError("invalid reduction condition")
     classification = facts.get("MedicalEvent.classification")
     if classification is not None and classification.value is not None:
         value = classification.value
