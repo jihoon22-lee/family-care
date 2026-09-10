@@ -33,6 +33,9 @@ v0.5.0은 개발 중입니다. 아래 날짜는 준비 기록이며 최종 릴�
 
 ### Fixed
 
+- Already approved operational rules with matching original insurer/product-code evidence retain
+  conditional relevance when application-date proof is missing, with explicit terms uncertainty
+  and no unproven amount or planned-care scenario.
 - Source-backed daily benefits, conditional reductions, and confirmed receipt costs now reach
   local estimates without treating an insured amount or an AI guess as payout authority.
 - Independent first-header geometry recovers metadata beside separated columns while preserving

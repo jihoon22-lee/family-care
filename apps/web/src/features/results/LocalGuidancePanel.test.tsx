@@ -1033,3 +1033,37 @@ describe("source-preserving guidance details", () => {
     expect(screen.getByText(/전체 지급 예상액이 아닙니다/)).toBeInTheDocument();
   });
 });
+
+it("explains uncertain terms applicability without asking for unrelated event facts", () => {
+  const source = candidate("Sample Applicable Coverage", {
+    kind: "FORMULA",
+    formula: "가입금액 × 입원 일수",
+    currency: "KRW",
+    reason_code: "TERMS_APPLICABILITY_UNRESOLVED",
+  });
+  source.group = "CONDITIONAL";
+  source.condition_result = "UNKNOWN";
+  source.reason_codes = ["TERMS_APPLICABILITY_UNRESOLVED"];
+  source.conditions = [
+    {
+      rule_id: "synthetic-rule-001",
+      result: "UNKNOWN",
+      reason_code: "TERMS_APPLICABILITY_UNRESOLVED",
+      evidence: source.conditions?.[0]?.evidence ?? [],
+    },
+  ];
+  show(result(guidance([source])));
+  expect(
+    screen.getByRole("heading", { name: source.coverage_label }),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/이 약관 판본이 계약에 적용되는지 확인이 필요합니다/),
+  ).toBeVisible();
+  expect(screen.getByText("가입금액 × 입원 일수")).toBeVisible();
+  expect(
+    screen.queryByText(/추가 사건 정보에 따라 적용 조건이 달라질/),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText(/TERMS_APPLICABILITY_UNRESOLVED|UNKNOWN/),
+  ).not.toBeInTheDocument();
+});

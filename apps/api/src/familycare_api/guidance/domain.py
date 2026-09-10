@@ -49,6 +49,8 @@ class GuidanceRuleInput:
     source_kind: Literal["PRIVATE_RULE_PUBLICATION", "OPERATIONAL_RULE_VERSION", "SEMANTIC_NODE"]
     semantic_node_id: str | None = None
     classification_scopes: tuple[Mapping[str, str], ...] = ()
+    terms_applicability: Literal["MATCH", "UNKNOWN"] = "MATCH"
+    uncertain_terms_relevance_supported: bool = False
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -62,6 +64,7 @@ class GuidanceCalculationInput:
     source_kind: Literal["PRIVATE_RULE_PUBLICATION", "OPERATIONAL_RULE_VERSION", "SEMANTIC_NODE"]
     semantic_node_id: str | None = None
     source_currency: str | None = None
+    terms_applicability: Literal["MATCH", "UNKNOWN"] = "MATCH"
 
 
 @dataclass(frozen=True, slots=True, repr=False)

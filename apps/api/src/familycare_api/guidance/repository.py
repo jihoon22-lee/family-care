@@ -30,6 +30,7 @@ from familycare_api.guidance.domain import (
 from familycare_api.guidance.models import GuidanceEvidence, GuidanceVersions
 from familycare_api.guidance.semantic_binding import BoundSemanticRoot
 from familycare_api.guidance.semantic_repository import SemanticGuidanceReader
+from familycare_api.guidance.terms_uncertainty import read_uncertain_rule_relevance
 from familycare_api.insurance_reconciliation import claim_aliases
 from familycare_api.insurance_reconciliation.canonical_repository import (
     CanonicalLinkError,
@@ -278,6 +279,9 @@ def read_operational_guidance(
             family_member_id=event.family_member_id,
             event_date=event.event_date,
         )
+        uncertain_relevance = read_uncertain_rule_relevance(
+            connection, scope, event, snapshot.policy_id, snapshot.rider_id, selected
+        )
         rules = []
         calculations = []
         for rule in selected:
@@ -293,8 +297,7 @@ def read_operational_guidance(
                 _citation(
                     item,
                     rule.id,
-                    evidence_valid.get(item.evidence_id) == item
-                    and selected.status_for(rule.id) == "MATCH",
+                    evidence_valid.get(item.evidence_id) == item,
                 )
                 for item in rule.evidence
             )
@@ -317,6 +320,9 @@ def read_operational_guidance(
                             calculation_document=rule.rule_document,
                             citations=citations,
                             source_kind="OPERATIONAL_RULE_VERSION",
+                            terms_applicability=(
+                                "MATCH" if selected.status_for(rule.id) == "MATCH" else "UNKNOWN"
+                            ),
                         )
                     )
             else:
@@ -330,6 +336,10 @@ def read_operational_guidance(
                         rule_document=rule.rule_document,
                         citations=citations,
                         source_kind="OPERATIONAL_RULE_VERSION",
+                        terms_applicability=(
+                            "MATCH" if selected.status_for(rule.id) == "MATCH" else "UNKNOWN"
+                        ),
+                        uncertain_terms_relevance_supported=rule.id in uncertain_relevance,
                     )
                 )
         intervals, status_rows = _event_statuses(
@@ -458,6 +468,7 @@ def read_operational_guidance(
                         "document": rule.rule_document,
                         "evidence": [asdict(e) for e in rule.evidence],
                         "event_status": selected.status_for(rule.id),
+                        "uncertain_relevance_assessment": uncertain_relevance.get(rule.id),
                     }
                     for rule in selected
                 ],

@@ -39,6 +39,8 @@ class GuidanceRuleRuntime:
                 or validated.result_reason_code != rule.result_reason_code
             ):
                 raise RuleValidationError("RULE_METADATA_MISMATCH")
+            if rule.terms_applicability != "MATCH":
+                return self._unknown(rule, "TERMS_APPLICABILITY_UNRESOLVED"), False
             if rule.classification_scopes or set(validated.referenced_fields) & {
                 "MedicalEvent.diagnosis_code",
                 "MedicalEvent.procedure_code",

@@ -1,6 +1,6 @@
 # v0.5 B04: Local candidates and explainable estimates
 
-- 상태: completed — PR #95에서 #66의 고정 원문 금액 3건 수용 완료; #65와 기존 B04 완료 기록 보존
+- 상태: in_progress — 기존 승인 규칙의 판본 근거 부족을 조건부 관련성으로 유지하는 후속 보완; PR #95/#65/#66 완료 기록 보존
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP05 #65](https://github.com/jihoon22-lee/family-care/issues/65), [WP06 #66](https://github.com/jihoon22-lee/family-care/issues/66)
 - 구현 기반: B03 [PR #78](https://github.com/jihoon22-lee/family-care/pull/78), merge `3f4a47cc2d1b4e649d202850020b94882dc4adfe`, 필수 CI 7/7 통과.
@@ -16,6 +16,11 @@
 5. completed — API/UI/snapshot과 stale 판정을 새 계약으로 연결했다. 과거 청구/실수령/계산 snapshot을 보존하고 사건·가입/연결·원문·지식·가정 revision으로 재현한다. private/operational 청구 생성·복원의 중복·경합·실패 롤백을 검증했다. 재import 후 과거에 검증된 원문 연결을 다시 검증해 기존 청구·지급 이력에 사용한다.
 6. completed — 합성 원문→가입 담보→실제 분석 응답의 300/400·과거 300 보존, 거부/부분 계산·AI-off·동시성과 고정 dev/holdout 후보 목표를 통과했다. source `02be761`의 CI 34289732889 필수 7/7: PostgreSQL 644, Python 3398/3 subtests, Web 210/build, Chromium mock 20, 이미지 3개. PR #79 merge `05325888bb52b7b6c00365fd237d7473bef1dc20`으로 통합했다. 실제 자료 전환·기기·전체 부하 수용은 후속 범위다.
 7. completed — 고정 일당 33·조건부 감액 30·실손 60을 정상 증권·비용 근거와 원문 compiler를 거쳐 확인했다. 고정 20건을 포함한 관련 DB 38개, 금액/근거 거부 8개, 전체 Python/Web·브라우저 mock 검증을 마쳤다. [검증 기록](../../../workthrough/2026-09-10-fixed-guidance-review-evaluation.md#source-calculation-completion)의 PR #95와 main CI 필수 7/7 후 `ee732db`로 통합했고 #66을 완료 처리했다. 보호 자료의 지원률로 확대하지 않는다.
+8. in_progress — #63/#70 후속 감사에서 기존 승인 operational rule의 판본 UNKNOWN을
+   인용 무효와 합쳐 관련 후보까지 제거하는 경로를 확인했다. 원문의 동일 보험사/상품코드와
+   현재 평가·승인 연결이 검증되고 적용 근거만 부족한 경우 조건부 후보를 유지한다.
+   교정·제외·불일치·변경 관계는 보존하고, 산식 근거 검증과 금액/시나리오 미확정을 분리한다.
+   [후속 실행 기록](../../../workthrough/2026-09-10-uncertain-terms-guidance.md)에서 검증·통합한다.
 
 ## First vertical acceptance
 
