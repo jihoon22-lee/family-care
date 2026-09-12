@@ -889,7 +889,7 @@ class ExtractionRepository:
 
 _BATCH_WORKER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _BATCH_RETRYABLE_CODES = frozenset({"EXTRACTION_TIMEOUT", "OCR_TIMEOUT", "RESOURCE_LIMIT_EXCEEDED"})
-_POLICY_STRUCTURING_PIPELINE_VERSION = "policy-range-normalized-v1"
+_POLICY_STRUCTURING_PIPELINE_VERSION = "policy-range-normalized-v2"
 
 
 def _should_enqueue_policy_structuring_job(document_kind: object) -> bool:

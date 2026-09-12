@@ -40,6 +40,15 @@ def _contains(text: str, value: str) -> bool:
     )
 
 
+def _certificate_title(text: str, value: str) -> bool:
+    """Accept the exact product before a line-final certificate label only."""
+    normalized = _normalize(value)
+    if not normalized:
+        return False
+    pattern = r"(?<!\w)" + re.escape(normalized) + r"_보험증권$"
+    return any(re.search(pattern, _normalize(line)) is not None for line in text.splitlines())
+
+
 def _named_enrollment_line(text: str, name: str) -> bool:
     normalized = _normalize(text)
     value = re.escape(_normalize(name)) + r"(?!\w)"
@@ -185,6 +194,7 @@ def ground_range_candidate(
     evidence: Sequence[RangeEvidenceSlice],
     *,
     local_nodes: Mapping[str, Mapping[str, Any]] | None = None,
+    allow_certificate_title: bool = False,
 ) -> PolicyCandidate:
     """Retain unsupported facts for review; never promote rejected/review candidates."""
     if _excluded_enrollment(candidate, evidence, local_nodes or {}):
@@ -281,7 +291,16 @@ def ground_range_candidate(
             or any(key not in sources for key in field.evidence_ids)
             or len(field.evidence_ids) > 16
             or not any(item.primary and item.source_role == "policy" for item in cited)
-            or not _grounded(field, text, candidate)
+            or not (
+                _grounded(field, text, candidate)
+                or (
+                    allow_certificate_title
+                    and candidate.candidate_kind == "policy_contract"
+                    and field.field_id == "product_name"
+                    and isinstance(field.value, str)
+                    and _certificate_title(text, field.value)
+                )
+            )
         ):
             unsupported = True
             break

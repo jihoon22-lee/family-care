@@ -322,6 +322,7 @@ class PolicyRangeRepository:
         review: bool,
     ) -> None:
         from familycare_worker.policy_draft_replay import (
+            CERTIFICATE_TITLE_PIPELINES,
             NORMALIZED_POLICY_PIPELINES,
             _current_source,
             validate_replay_receipt,
@@ -376,7 +377,12 @@ class PolicyRangeRepository:
                 result = CandidatePipelineResult.model_validate_json(json.dumps(payload["result"]))
                 nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
                 grounded = tuple(
-                    ground_range_candidate(candidate, work.envelope.evidence, local_nodes=nodes)
+                    ground_range_candidate(
+                        candidate,
+                        work.envelope.evidence,
+                        local_nodes=nodes,
+                        allow_certificate_title=job.pipeline_version in CERTIFICATE_TITLE_PIPELINES,
+                    )
                     for candidate in result.candidates
                 )
                 result = result.model_copy(
@@ -390,7 +396,11 @@ class PolicyRangeRepository:
                 payload = {
                     **payload,
                     "result": result.model_dump(mode="json"),
-                    "program_validation_version": "range-grounding-v2",
+                    "program_validation_version": (
+                        "range-grounding-v3"
+                        if job.pipeline_version in CERTIFICATE_TITLE_PIPELINES
+                        else "range-grounding-v2"
+                    ),
                 }
                 review = review or result.classification != "SUCCESS"
             row = connection.execute(

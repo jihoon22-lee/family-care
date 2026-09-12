@@ -46,6 +46,8 @@ def publish_range_candidates(
             "retained-policy-association-v4",
             "retained-policy-association-v6",
             "policy-range-normalized-v1",
+            "retained-policy-association-v7",
+            "policy-range-normalized-v2",
         }
         else None
     )

@@ -1,13 +1,15 @@
-"""Initial normalization appends a version without rewriting earlier processing."""
+"""New certificate-title receipts preserve old proofs and reject cross-revision reuse."""
 
 import psycopg
 import pytest
-from familycare_worker import retained_policy
 from familycare_worker.policy_draft_replay import PolicyDraftReplayRepository
 from familycare_worker.policy_range_repository import PolicyRangeConflict, PolicyRangeRepository
+from familycare_worker.retained_policy import RETAINED_POLICY_PIPELINE_REVISION
 from familycare_worker.runtime_schema import SUPPORTED_SCHEMA_REVISION
+from psycopg.rows import dict_row
 
 from apps.api.tests.test_metadata_navigation_publication import _migrate
+from workers.analyzer.tests.test_policy_range_repository import WORKER
 from workers.analyzer.tests.test_retained_field_proof_revision import _contracts
 from workers.analyzer.tests.test_retained_policy_resubmission import (
     _assert_original_preserved,
@@ -24,18 +26,10 @@ from workers.analyzer.tests.test_retained_policy_resubmission import (
 from workers.analyzer.tests.test_retained_replay_revision import _legacy_work
 
 pytestmark = pytest.mark.integration
-PREVIOUS = "0074_policy_label_spacing"
-RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v6"
+PREVIOUS = "0075_initial_policy_drafts"
 
 
-@pytest.fixture(autouse=True)
-def historical_initial_producer(monkeypatch):
-    monkeypatch.setattr(
-        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", RETAINED_POLICY_PIPELINE_REVISION
-    )
-
-
-def test_empty_initial_revision_restores_exact_previous_functions(retained_source):
+def test_empty_certificate_revision_restores_previous_admission(retained_source):
     sample = retained_source
     assert _migrate(sample.url, "downgrade", PREVIOUS).returncode == 0
     before = _contracts(sample.url, sample.original.household_space_id)
@@ -53,21 +47,20 @@ def test_empty_initial_revision_restores_exact_previous_functions(retained_sourc
 
 
 @pytest.mark.parametrize("mode", ["automatic", "retained"])
-def test_new_pipeline_history_blocks_downgrade_before_any_provider_request(retained_source, mode):
+def test_certificate_pipeline_history_prevents_downgrade(retained_source, mode):
     sample = retained_source
     if mode == "retained":
-        job = _enqueue(sample)
-        assert job.pipeline_version == RETAINED_POLICY_PIPELINE_REVISION
+        assert _enqueue(sample).pipeline_version == RETAINED_POLICY_PIPELINE_REVISION
     else:
         with psycopg.connect(_psycopg_url(sample.url)) as connection:
             connection.execute(
-                "UPDATE policy_structuring_jobs SET pipeline_version='policy-range-normalized-v1' "
+                "UPDATE policy_structuring_jobs SET pipeline_version='policy-range-normalized-v2' "
                 "WHERE id=%s",
                 (sample.original.id,),
             )
     refused = _migrate(sample.url, "downgrade", PREVIOUS)
     assert refused.returncode != 0
-    assert "initial policy draft history prevents downgrade" in refused.stderr
+    assert "certificate title history prevents downgrade" in refused.stderr
     with psycopg.connect(_psycopg_url(sample.url)) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
             SUPPORTED_SCHEMA_REVISION,
@@ -75,54 +68,52 @@ def test_new_pipeline_history_blocks_downgrade_before_any_provider_request(retai
         assert connection.execute("SELECT count(*) FROM policy_provider_requests").fetchone() == (
             0,
         )
-    if mode == "retained":
-        _assert_original_preserved(sample)
 
 
-@pytest.mark.parametrize(
-    "source_revision,privacy",
-    [
-        ("retained-policy-association-v4", "source-window-minimizer-v4"),
-        ("retained-policy-association-v5", "source-window-minimizer-v3"),
-    ],
-)
-def test_v6_replay_rejects_wrong_source_revision_or_privacy(
-    retained_source, monkeypatch, source_revision, privacy
+def test_v7_refuses_a_legacy_receipt_even_for_the_same_exact_raw_source(
+    retained_source, monkeypatch
 ):
-    from familycare_worker import policy_range_repository
-
-    from workers.analyzer.tests.test_policy_range_repository import WORKER
-
     sample = retained_source
-    with monkeypatch.context() as historical:
-        historical.setattr(policy_range_repository, "MINIMIZATION_REVISION", privacy)
-        old, _, request = _legacy_work(sample, historical, source_revision)
-    with psycopg.connect(_psycopg_url(sample.url)) as connection:
-        before = connection.execute(
-            "SELECT to_jsonb(r) FROM policy_provider_requests r WHERE job_id=%s", (old.id,)
-        ).fetchall()
+    old, old_work, request = _legacy_work(sample, monkeypatch, "retained-policy-association-v6")
     new = _enqueue(sample)
     running = _target(sample, new.id).claim_next_job(WORKER)
     assert running is not None
     work = PolicyRangeRepository(sample.url).next(running, WORKER, sensitive_terms=())
-    assert work is not None
+    assert work is not None and work.envelope == old_work.envelope
+    with psycopg.connect(_psycopg_url(sample.url), row_factory=dict_row) as connection:
+        before = connection.execute(
+            "SELECT to_jsonb(r) AS row FROM policy_provider_requests r WHERE job_id=%s", (old.id,)
+        ).fetchall()
+        connection.execute(
+            "INSERT INTO policy_range_replay_sources(job_id,envelope_id,source_job_id,"
+            "source_envelope_id,source_provider_request_id,source_response_hash,"
+            "normalization_revision,normalized_batch_json,adjustments_json,partial,origin) "
+            "VALUES(%s,%s,%s,%s,%s,%s,'policy-draft-normalization-v1','{}','[]',false,'replay')",
+            (
+                running.id,
+                work.envelope.envelope_id,
+                old.id,
+                old_work.envelope.envelope_id,
+                request,
+                "a" * 64,
+            ),
+        )
     with pytest.raises(PolicyRangeConflict):
         PolicyDraftReplayRepository(sample.url, source_provider_request_id=request).prepare(
-            running,
-            WORKER,
-            work,
+            running, WORKER, work
         )
-    with psycopg.connect(_psycopg_url(sample.url)) as connection:
+    with psycopg.connect(_psycopg_url(sample.url), row_factory=dict_row) as connection:
         assert (
             connection.execute(
-                "SELECT to_jsonb(r) FROM policy_provider_requests r WHERE job_id=%s", (old.id,)
+                "SELECT to_jsonb(r) AS row FROM policy_provider_requests r WHERE job_id=%s",
+                (old.id,),
             ).fetchall()
             == before
         )
-        assert connection.execute(
-            "SELECT count(*) FROM policy_provider_requests WHERE job_id=%s", (new.id,)
-        ).fetchone() == (0,)
-        assert connection.execute(
-            "SELECT count(*) FROM policy_range_replay_sources WHERE job_id=%s", (new.id,)
-        ).fetchone() == (0,)
+        assert (
+            connection.execute(
+                "SELECT count(*) AS n FROM policy_provider_requests WHERE job_id=%s", (running.id,)
+            ).fetchone()["n"]
+            == 0
+        )
     _assert_original_preserved(sample)

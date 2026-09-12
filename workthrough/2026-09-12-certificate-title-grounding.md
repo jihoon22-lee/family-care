@@ -1,0 +1,59 @@
+# Certificate product-title grounding
+
+- 상태: in_progress
+- 범위: #63/#69, B02 Task 4의 실제 가입 근거 연결
+- 기준: PR #100 merge `60baead`; PR CI 34682864379 및 main CI 34684113185 필수 7/7 성공
+
+## Problem and change
+
+정확한 상품명 뒤의 문서 종류 표기 `_보험증권`을 일반 단어 경계가 상품명 연속으로
+해석하여 계약 초안을 버리는 경우를 해결한다. 새 자동 v2/retained v7·정규화 v2에서만
+줄 끝의 정확한 표기를 구분한다. 원 응답·후보 값·인용을 유지하고 새 독립 검수를 요구한다.
+이전 정규화 v1과 이전 작업의 판독 의미를 보존하며 schema 0076은 새 receipt와 작업의
+이력을 보존한다. 담보 금액 reader는 같은 금액 근거 계약의 새 판독 revision도 소비한다.
+
+## Verification cadence
+
+핵심 판독과 연결·migration·회귀·문서를 먼저 완성한다. 커밋에는 변경 파일 문법·형식과
+계획 범위만 확인한다. 최종 PR의 CI로 상세 검증하고 같은 무거운 검사를 로컬에서 중복하지
+않는다. 실제 반영은 최종 소스에 묶인 필요한 범위로 진행한다.
+
+## Protected work already completed
+
+Drive 목록 108개 PDF와 이전 출처 기록 50개의 Drive 식별을 확인했다. 현재 지식 패키지의
+내부 참조와 실제 PDF의 확정 연결을 완료한 것은 아니다. 실제 파일명·식별자·값은 비공개
+기록에만 보관했다. 대응표 부재를 사용자에게 전량 검수 요청으로 전가하지 않는다.
+
+기준 `60baead`에서 기존 격리 개발 DB만 schema 0074→0075로 올렸다. 실행 직전의 일관된
+전체 DB 백업을 생성하고 모든 이전 행·열과 API/Worker readiness를 보존 확인했다.
+261.72초, 성공이며 provider 요청·운영 DB 쓰기·runtime switch는 0이다. 이 실행은
+schema 0076의 실제 반영이나 마일스톤 완료를 의미하지 않는다.
+
+표지 OCR 선택의 코드 경계를 조사했고 승인 약관 표지 13개의 제한된 로컬 실험에서는
+12개 OCR 텍스트 반환, 1개 오류를 기록했다. 단어별 결과에 현재 보험사 표제 판별을 적용한
+이 집계로 완전한 줄 재구성이나 신원 추출 효과를 판단하지 않는다. 이미지와 중간 파일을
+정리했고 외부 AI/DB 쓰기는 없었다. 이 결과만으로 OCR 보강 기능을 추가하지 않는다.
+
+## Remaining acceptance
+
+## PR verification and targeted corrections
+
+소스 `b5e75e5`의 [첫 CI 34690619132](https://github.com/jihoon22-lee/family-care/actions/runs/34690619132)에서
+저장소 안전·Web·컨테이너 3개는 통과했다. Python은 4,085개 통과/1개 실패,
+PostgreSQL은 909개 통과/2개 실패였다. 실패는 새 테스트의 문서 역할 불일치와
+generation 보관 후 원문을 바꾼 fixture 구성 때문이었다. 제품의 원문 변경 거부는 유지하고
+처음부터 올바른 합성 입력을 준비하도록 테스트만 수정했다.
+
+2026-09-12 같은 소스와 테스트 수정에서 `TMPDIR=/tmp .venv/bin/python -m pytest
+workers/analyzer/tests/test_certificate_title_grounding.py -q`는 29개 통과(0.87초)했다.
+전용 합성 PostgreSQL에서 `pytest -m integration
+workers/analyzer/tests/test_policy_replay_publication.py -q`는 4개 통과(17.07초)했다.
+처음 빈 DB 실행은 migration 누락으로 setup 오류 4개였으며 `alembic upgrade head` 후
+해당 검사만 다시 실행했다. 전용 컨테이너는 제거했다. 변경 파일 형식과 diff 검사도 통과했다.
+무관한 전체 suite·Web·이미지 빌드를 로컬에서 반복하지 않았다.
+
+## Remaining acceptance
+
+- 최종 PR 상세 검증·통합
+- 새 revision에서 보관 원 응답 재사용·새 검수·실제 원장 반영
+- 전체 가입/약관 연결과 최종 운영 전환·사용 수용·릴리스

@@ -184,8 +184,18 @@ retained v6의 명시적 replay는 같은 최소화 v4 fingerprint를 가진 v5 
 이때 `origin=replay`와 원 요청 hash를 보존하고 바뀐 초안을 새로 검수한다. 과거 v4의
 v2/v3 replay와 기존 자동/v5 작업은 당시 동작을 유지한다. 원문이나 개인정보 최소화
 계약을 바꾸거나 예산을 초기화하지 않으며, 새 v6 작업을 자동 예약하지 않는다.
-현재 API/Worker는 schema 0075와 origin 열을 요구한다. 새 자동/v6 작업 또는 initial
+0075 API/Worker는 schema 0075와 origin 열을 요구한다. 새 자동/v6 작업 또는 initial
 receipt가 있는 DB는 0074로 downgrade할 수 없다.
+
+`0076_certificate_title_grounding`의 새 자동 `policy-range-normalized-v2`와 retained v7은
+정규화 v2를 사용한다. 계약 후보의 상품명에 한해 같은 줄 끝의 정확한 `_보험증권`을
+문서 종류 표기로 구분한다. 상품 값·인용을 고치거나 다른 판본·상품 변형을 잘라내지 않는다.
+다른 필드·담보 이름의 단어 경계와 가입·피보험자·금액 검사는 유지한다. 새 독립 검수와
+`range-grounding-v3` 저장 검사를 모두 통과해야 원장에 게시하며 v3의 담보 금액 근거는
+이전 v2와 같은 검사를 적용한다. 기존 v1 정규화 receipt는 이전 판독 규칙으로 재생한다.
+retained v7의 명시적 재사용은 정확히 같은 source/envelope/최소화 fingerprint의 v5 또는
+v6 원 응답만 허용한다. 요청 예산을 초기화하지 않는다. 새 작업이나 v2 receipt가 있으면
+0075로 downgrade할 수 없다. 현재 API/Worker 지원 schema는 0076이다.
 
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래

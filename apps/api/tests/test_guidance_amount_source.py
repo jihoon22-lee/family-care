@@ -189,8 +189,10 @@ class SourceDatabase:
         return read_operational_amount_source(self, self.scope, self.rider["id"])
 
 
-def test_program_amount_and_currency_replay_original_field_meaning():
+@pytest.mark.parametrize("revision", ["range-grounding-v2", "range-grounding-v3"])
+def test_program_amount_and_currency_replay_original_field_meaning(revision):
     database = SourceDatabase()
+    database.publications[0]["result_json"]["program_validation_version"] = revision
     result = database.read()
     assert result.amount == 317 and result.currency == "KRW"
     assert result.amount_decision == result.currency_decision == "MATCH"
@@ -210,8 +212,10 @@ def test_general_ledger_evidence_is_not_direct_amount_authority():
 
 
 @pytest.mark.parametrize("fault", ["amount", "currency"])
-def test_forged_retained_program_values_do_not_replace_original_proof(fault):
+@pytest.mark.parametrize("revision", ["range-grounding-v2", "range-grounding-v3"])
+def test_forged_retained_program_values_do_not_replace_original_proof(fault, revision):
     database = SourceDatabase()
+    database.publications[0]["result_json"]["program_validation_version"] = revision
     key, value = ("sum_assured", 999) if fault == "amount" else ("currency", "USD")
     database.rider["insured_amount" if fault == "amount" else "currency"] = (
         Decimal(999) if fault == "amount" else value

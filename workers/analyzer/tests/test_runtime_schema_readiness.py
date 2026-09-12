@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0075_initial_policy_drafts"
+REVISION = "0076_certificate_title_grounding"
 
 
 class Result:

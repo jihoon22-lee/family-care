@@ -31,6 +31,7 @@ def _retain_contract(
     unenrolled: bool = False,
     omit_benefit_type: bool = False,
     review_rider: bool = False,
+    certificate_title: bool = False,
 ) -> None:
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(
@@ -42,8 +43,9 @@ def _retain_contract(
             "AND page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s)",
             (
                 "보험증권 가입금액\n증권번호: synthetic-policy-001\n"
-                "피보험자: Family Member A\nSample Insurer Sample Plan\n"
-                "Sample Rider fixed sum assured: 317 KRW"
+                "피보험자: Family Member A\nSample Insurer Sample Plan"
+                + ("_보험증권" if certificate_title else "")
+                + "\nSample Rider fixed sum assured: 317 KRW"
                 + (" | 미가입" if unenrolled else "")
                 + "\n"
                 "Another Rider fixed sum assured: 619 KRW",

@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 from familycare_worker.ai.policy_draft_normalization import (
+    CERTIFICATE_TITLE_NORMALIZATION_REVISION,
     POLICY_DRAFT_NORMALIZATION_REVISION,
     PolicyDraftInvalid,
     normalize_policy_draft,
@@ -27,9 +28,21 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-NORMALIZED_POLICY_PIPELINES = frozenset(
-    {"policy-range-normalized-v1", "retained-policy-association-v6"}
+CERTIFICATE_TITLE_PIPELINES = frozenset(
+    {"policy-range-normalized-v2", "retained-policy-association-v7"}
 )
+NORMALIZED_POLICY_PIPELINES = (
+    frozenset({"policy-range-normalized-v1", "retained-policy-association-v6"})
+    | CERTIFICATE_TITLE_PIPELINES
+)
+
+
+def normalization_revision(pipeline_version: str) -> str:
+    return (
+        CERTIFICATE_TITLE_NORMALIZATION_REVISION
+        if pipeline_version in CERTIFICATE_TITLE_PIPELINES
+        else POLICY_DRAFT_NORMALIZATION_REVISION
+    )
 
 
 def _current_source(
@@ -70,9 +83,11 @@ def _current_source(
           AND target.generation_id=generation.id
           AND target.envelope_id=%s AND target.envelope_json=%s AND target.state='PENDING'
         WHERE current.id=%s AND current.household_space_id=%s
-          AND ((current.pipeline_version='policy-range-normalized-v1'
+          AND ((current.pipeline_version IN
+                ('policy-range-normalized-v1','policy-range-normalized-v2')
                 AND current.processing_mode='automatic')
-            OR (current.pipeline_version='retained-policy-association-v6'
+            OR (current.pipeline_version IN
+                ('retained-policy-association-v6','retained-policy-association-v7')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -112,11 +127,17 @@ def _source(
     route = (
         """
         AND ((old.id=current.id AND current.pipeline_version IN
-          ('policy-range-normalized-v1','retained-policy-association-v6'))
+          ('policy-range-normalized-v1','retained-policy-association-v6',
+           'policy-range-normalized-v2','retained-policy-association-v7'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
-            AND old.pipeline_version='retained-policy-association-v5'))
+            AND old.pipeline_version='retained-policy-association-v5')
+          OR (current.pipeline_version='retained-policy-association-v7'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained'
+            AND old.pipeline_version IN
+              ('retained-policy-association-v5','retained-policy-association-v6')))
         AND (SELECT count(*) FROM policy_provider_requests matching
           WHERE matching.job_id=request.job_id AND matching.request_id=request.request_id
             AND matching.state='SUCCEEDED')=1
@@ -192,6 +213,7 @@ def _source(
             batch,
             work.envelope,
             local_nodes={node["node_id"]: node for node in row["structure_json"]["nodes"]},
+            revision=normalization_revision(job.pipeline_version),
         )
     except ValueError, TypeError, KeyError, PolicyDraftInvalid, ValidationError:
         raise PolicyRangeConflict from None
@@ -229,7 +251,7 @@ def validate_replay_receipt(
             raise PolicyRangeConflict
         return None
     if (
-        receipt["normalization_revision"] != POLICY_DRAFT_NORMALIZATION_REVISION
+        receipt["normalization_revision"] != normalization_revision(job.pipeline_version)
         or receipt["source_envelope_id"] != work.envelope.envelope_id
         or (
             expected_request is not None
