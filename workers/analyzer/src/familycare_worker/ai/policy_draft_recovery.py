@@ -166,6 +166,9 @@ def _context_nodes(
     by_id = {item.evidence_id: item for item in envelope.evidence}
     pending = {by_id[key].node_id for key in field.evidence_ids}
     original = set(pending)
+    primary_nodes = {by_id[key].node_id for key in field.evidence_ids if by_id[key].primary}
+    referenced_context: set[str] = set()
+    fully_covered: set[str] = set()
     visited: set[str] = set()
     while pending:
         key = pending.pop()
@@ -188,12 +191,14 @@ def _context_nodes(
         ):
             return None
         end = 0
+        contiguous = True
         for item in sorted(slices, key=lambda item: (item.start, item.end)):
-            if item.start > end or not 0 <= item.start < item.end <= len(node["text"]):
+            if not 0 <= item.start < item.end <= len(node["text"]):
                 return None
+            contiguous = contiguous and item.start <= end
             end = max(end, item.end)
-        if end != len(node["text"]):
-            return None
+        if contiguous and end == len(node["text"]):
+            fully_covered.add(key)
         context = node.get("context_node_ids", ())
         if (
             not isinstance(context, (tuple, list))
@@ -201,7 +206,13 @@ def _context_nodes(
             or any(not isinstance(k, str) for k in context)
         ):
             return None
+        referenced_context.update(context)
         pending.update(context)
+    # The original primary's exact span can already prove a field in v6. It
+    # need not disclose the rest of a large node. Referenced context still needs
+    # complete coverage, even if the same node also supplied a primary slice.
+    if not ((visited - primary_nodes) | referenced_context) <= fully_covered:
+        return None
     return visited - original
 
 

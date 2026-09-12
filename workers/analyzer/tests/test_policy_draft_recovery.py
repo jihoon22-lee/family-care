@@ -392,11 +392,38 @@ def test_program_probe_cannot_add_unrelated_context_or_change_a_field(fault, mon
     assert result.batch.candidates[0].model_dump(mode="json") == raw["candidates"][0]
 
 
-def test_missing_context_retains_loss_and_cannot_approve_an_orphan():
+def test_supported_partial_primary_keeps_its_original_span_and_v6_mapping():
+    raw, envelope, nodes = _text_input(1)
+    original = envelope.evidence[0]
+    prefix = "Sample preceding paragraph.\n"
+    nodes[original.node_id]["text"] = prefix + original.text + "\nSample following paragraph."
+    partial = replace(original, start=len(prefix), end=len(prefix) + len(original.text))
+    envelope = _pack((partial,))
+    legacy = normalize_policy_draft(
+        PolicyRangeBatch.model_validate_json(json.dumps(raw), strict=True),
+        envelope,
+        local_nodes=nodes,
+        revision="policy-draft-normalization-v6",
+    )
+    result = _recover(raw, envelope, nodes)
+    assert len(legacy.batch.candidates) == len(result.batch.candidates) == 1
+    assert result.batch == legacy.batch
+    assert not result.partial
+    assert "CANDIDATE_RANGE_UNSUPPORTED" not in _reasons(result)
+    assert envelope.evidence == (partial,)
+    assert all(f.evidence_ids == (partial.evidence_id,) for f in result.batch.candidates[0].fields)
+
+
+@pytest.mark.parametrize("fault", ["missing", "truncated"])
+def test_missing_context_retains_loss_and_cannot_approve_an_orphan(fault):
     raw, envelope, nodes = _table_raw()
     _orphan(raw, 0)
     envelope = _pack(
-        tuple(e for e in envelope.evidence if nodes[e.node_id].get("row_role") != "header")
+        tuple(
+            replace(e, end=e.end - 1) if nodes[e.node_id].get("row_role") == "header" else e
+            for e in envelope.evidence
+            if fault != "missing" or nodes[e.node_id].get("row_role") != "header"
+        )
     )
     result = _recover(raw, envelope, nodes)
     assert result.batch.candidates == () and result.partial
