@@ -35,6 +35,7 @@ from familycare_worker.policy_request_budget import PolicyRequestBudget
 from familycare_worker.retained_policy import RetainedPolicyJobQueue, RetainedPolicyRepository
 from familycare_worker.runner import PolicyStructuringJobRunner
 from psycopg.rows import dict_row
+from psycopg.types.json import Jsonb
 
 from apps.api.tests.test_range_enrollment_integration import (
     WORKER,
@@ -79,7 +80,8 @@ def _drain(url, queue, job, terms):
 def deferred_parent(enrollment_database, request):
     option = getattr(request, "param", None)
     missing_currency = option == "missing_currency"
-    review_action = None if missing_currency else option
+    cited_name_errors = option == "cited_name_errors"
+    review_action = None if missing_currency or cited_name_errors else option
     url, original = enrollment_database
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(
@@ -93,13 +95,51 @@ def deferred_parent(enrollment_database, request):
             "Sample Insurer",
             "Sample Plan_보험증권",
         ]
-        lines += [f"담보명: Sample Rider {i} | 정액 가입금액: {100 + i}원" for i in range(6)]
+        if not cited_name_errors:
+            lines += [f"담보명: Sample Rider {i} | 정액 가입금액: {100 + i}원" for i in range(6)]
         connection.execute(
             "UPDATE extraction_blocks SET text=%s WHERE reading_order=0 AND "
             "page_id IN (SELECT id FROM extraction_pages WHERE "
             "extraction_id=%s)",
             ("\n".join(lines), original.extraction_id),
         )
+        if cited_name_errors:
+            connection.execute(
+                "DELETE FROM extraction_blocks WHERE reading_order>0 AND page_id IN "
+                "(SELECT id FROM extraction_pages WHERE extraction_id=%s)",
+                (original.extraction_id,),
+            )
+            page = connection.execute(
+                "SELECT id FROM extraction_pages WHERE extraction_id=%s", (original.extraction_id,)
+            ).fetchone()[0]
+            table = connection.execute(
+                "INSERT INTO extraction_tables(page_id,bbox,metadata_json) "
+                "VALUES (%s,'[10,100,430,240]',%s) RETURNING id",
+                (page, Jsonb({"header_rows": [0]})),
+            ).fetchone()[0]
+            table_rows = [["담보명", "가입금액(원)", "보장구분"]] + [
+                [f"Sample Rider {i}", str(100 + i), "정액"] for i in range(6)
+            ]
+            for row_index, cells in enumerate(table_rows):
+                for column, value in enumerate(cells):
+                    connection.execute(
+                        "INSERT INTO extraction_cells(table_id,row_index,column_index,text,bbox) "
+                        "VALUES (%s,%s,%s,%s,%s)",
+                        (
+                            table,
+                            row_index,
+                            column,
+                            value,
+                            Jsonb(
+                                [
+                                    10 + column * 140,
+                                    100 + row_index * 20,
+                                    150 + column * 140,
+                                    120 + row_index * 20,
+                                ]
+                            ),
+                        ),
+                    )
     loader = PolicyEvidenceLoader(url)
     terms = loader.load_member_terms(
         household_space_id=original.household_space_id, family_member_id=original.family_member_id
@@ -123,13 +163,13 @@ def deferred_parent(enrollment_database, request):
     work = ranges.next(old, WORKER, sensitive_terms=terms)
     primary = work.envelope.primary_evidence_ids[0]
 
-    def candidate(kind, fields):
+    def candidate(kind, fields, evidence_id=None):
         return StructurerCandidate(
             schema_version="1",
             candidate_id=uuid4(),
             candidate_kind=kind,
             fields=tuple(
-                CandidateField(field_id=name, value=value, evidence_ids=(primary,))
+                CandidateField(field_id=name, value=value, evidence_ids=(evidence_id or primary,))
                 for name, value in fields
             ),
         )
@@ -137,16 +177,24 @@ def deferred_parent(enrollment_database, request):
     policy = candidate(
         "policy_contract", [("insurer", "Sample Insurer"), ("product_name", "Sample Plan")]
     )
+    raw_names = ["SampleRider 0", "Sample Rider1", "Wrong Rider 2"] if cited_name_errors else []
     riders = tuple(
         candidate(
             "rider",
             [
-                ("rider_name", f"Sample Rider {i}"),
-                ("rider_key", f"Sample Rider {i}"),
+                ("rider_name", raw_names[i] if i < len(raw_names) else f"Sample Rider {i}"),
+                ("rider_key", raw_names[i] if i < len(raw_names) else f"Sample Rider {i}"),
                 *([("benefit_type", "fixed")] if i != 5 else []),
                 ("sum_assured", 100 + i),
                 *([] if missing_currency else [("currency", "KRW")]),
             ],
+            evidence_id=next(
+                e.evidence_id
+                for e in work.envelope.evidence
+                if e.primary and e.source_role == "policy" and f"Sample Rider {i}" in e.text
+            )
+            if cited_name_errors
+            else None,
         )
         for i in range(6)
     )
@@ -162,11 +210,29 @@ def deferred_parent(enrollment_database, request):
             for i, key in enumerate(work.envelope.primary_chunk_ids)
         ),
     )
+    if cited_name_errors:
+        dispositions = []
+        for key, evidence_id in zip(
+            work.envelope.primary_chunk_ids, work.envelope.primary_evidence_ids, strict=True
+        ):
+            ids = tuple(
+                c.candidate_id
+                for c in batch.candidates
+                if any(evidence_id in f.evidence_ids for f in c.fields)
+            )
+            dispositions.append(
+                RangeDisposition(
+                    chunk_id=key,
+                    outcome="CANDIDATES" if ids else "NO_ENROLLMENT_FACTS",
+                    candidate_ids=ids,
+                )
+            )
+        batch = batch.model_copy(update={"ranges": tuple(dispositions)})
     request = _raw_request(url, old, batch)
     draft = PolicyDraftNormalizationRepository(url).normalize(
         old, WORKER, work, batch, "synthetic-normalization-request"
     )
-    assert len(draft.batch.candidates) == 7
+    assert len(draft.batch.candidates) == (4 if cited_name_errors else 7)
     result = CandidatePipelineResult(
         classification="NEEDS_REVIEW",
         candidates=tuple(
