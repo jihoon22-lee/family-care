@@ -366,7 +366,7 @@ def _explicit_unit_row(
         return None
     available = {item.node_id: item for item in envelope.evidence}
     headers = []
-    hints = set()
+    hints: set[str] = set()
     for key in row.get("context_node_ids", ()):
         node = nodes[key]
         item = available.get(key)
@@ -376,8 +376,8 @@ def _explicit_unit_row(
             or explicitly_unenrolled(node.get("text", ""))
         ):
             return None
-        unit = re.fullmatch(rf"\s*(?:단위|unit)\s*[:：]\s*({_UNIT})\s*", node["text"], re.I)
-        if node.get("kind") == "TABLE_ROW" and node.get("row_role") == "header" or unit:
+        unit_match = re.fullmatch(rf"\s*(?:단위|unit)\s*[:：]\s*({_UNIT})\s*", node["text"], re.I)
+        if node.get("kind") == "TABLE_ROW" and node.get("row_role") == "header" or unit_match:
             if (
                 item is None
                 or item.source_role != "policy"
@@ -386,8 +386,8 @@ def _explicit_unit_row(
                 or not _unit_visible(node["text"], item.text)
             ):
                 return None
-            if unit:
-                hints.add(unit[1].upper())
+            if unit_match:
+                hints.add(unit_match[1].upper())
             else:
                 header = _unit_cells(node)
                 if header is None:

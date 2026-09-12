@@ -192,6 +192,7 @@ def missing_money(enrollment_database, monkeypatch):
     assert work is not None
     primary = work.envelope.primary_evidence_ids[0]
     policy = StructurerCandidate(
+        schema_version="1",
         candidate_id=uuid4(),
         candidate_kind="policy_contract",
         fields=tuple(
@@ -206,6 +207,7 @@ def missing_money(enrollment_database, monkeypatch):
         )
         riders.append(
             StructurerCandidate(
+                schema_version="1",
                 candidate_id=uuid4(),
                 candidate_kind="rider",
                 fields=tuple(
@@ -330,8 +332,8 @@ def test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
                 actor_id=uuid4(),
                 request=CandidateCorrectionRequest(
                     expected_version=item.expected_version,
-                    field_id="sum_assured",
-                    value=737,
+                    field_id="rider_name",
+                    value="Sample User Corrected Rider",
                     evidence_id=item.evidence[0].evidence_id,
                 ),
             )
@@ -413,3 +415,55 @@ def test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
                 ).fetchall()
                 == review_history
             )
+
+
+def test_v4_rejection_is_preserved_before_any_v12_verifier_request(missing_money, monkeypatch):
+    url, original, _, previous, request_id, generation = missing_money
+    scope = HouseholdScope(original.household_space_id)
+    repository = CandidateRepository(url)
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as c:
+        old = c.execute(
+            "SELECT v.id FROM analysis_candidate_versions v JOIN analysis_candidate_fields f "
+            "ON f.candidate_version_id=v.id WHERE v.structuring_job_id=%s "
+            "AND f.field_id='rider_name' AND f.value=%s",
+            (previous.id, Jsonb("Sample Rider 0")),
+        ).fetchone()["id"]
+    item = next(
+        i
+        for i in repository.list_review_items(scope, status="AI_VERIFIED")
+        if i.candidate_version_id == old
+    )
+    repository.transition(
+        scope,
+        item.review_item_id,
+        expected_version=item.expected_version,
+        status="rejected",
+        actor_id=uuid4(),
+        rejection_reason="INVALID_EVIDENCE",
+    )
+    with psycopg.connect(_psycopg_url(url)) as c:
+        before = c.execute(
+            "SELECT to_jsonb(v) FROM analysis_candidate_versions v "
+            "WHERE review_item_id=%s ORDER BY id",
+            (item.review_item_id,),
+        ).fetchall()
+    queue, job = _historical_job(
+        url, original, generation, "retained-policy-association-v12", monkeypatch
+    )
+    draft = _verify(url, queue, job, request_id, 6, "synthetic-preserved-review-verifier")
+    assert all(
+        not any(
+            f.field_id == "rider_name" and f.value == "Sample Rider 0" for f in candidate.fields
+        )
+        for candidate in draft.batch.candidates
+    )
+    assert RangeEnrollmentProjector(url).project_pending() == 6
+    with psycopg.connect(_psycopg_url(url)) as c:
+        assert (
+            c.execute(
+                "SELECT to_jsonb(v) FROM analysis_candidate_versions v "
+                "WHERE review_item_id=%s ORDER BY id",
+                (item.review_item_id,),
+            ).fetchall()
+            == before
+        )

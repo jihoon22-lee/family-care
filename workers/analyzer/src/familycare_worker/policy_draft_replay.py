@@ -217,7 +217,7 @@ def _preserve_verified_riders(
         "AND r.state IN ('COMPLETE','REVIEW') AND policy_structuring_source_current(old.id) "
         "AND ((old.pipeline_version='retained-policy-association-v4' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v2' "
-        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "AND r.result_json->'draft_replay'->>'normalization_revision'="
         "'policy-draft-normalization-v1') "
         "OR (old.pipeline_version='retained-policy-association-v7' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v3' "
