@@ -115,7 +115,7 @@ function setTargets(
         displayLabel: policy.product_display,
         documentSetId: policy.document_set_id ?? undefined,
         key: policy.document_set_id ?? `policy:${policy.policy_id}`,
-        label: `연결된 문서 묶음 · ${policy.insurer_display} · ${policy.product_display}`,
+        label: `연결된 문서 묶음 · ${policy.insurer_display ?? "보험사 확인 전"} · ${policy.product_display}`,
         policyId: policy.policy_id,
         version: policy.document_set_version ?? undefined,
       },
@@ -256,7 +256,7 @@ function PolicyInventoryCard({
     <article className="insurance-inventory-policy-card">
       <header className="insurance-inventory-card-heading">
         <div>
-          <p>{policy.insurer_display}</p>
+          <p>{policy.insurer_display ?? "보험사 확인 전"}</p>
           <h3>{policy.product_display}</h3>
         </div>
         <span className="insurance-inventory-status">

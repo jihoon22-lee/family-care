@@ -379,6 +379,61 @@ extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한�
 준비 대기를 최대 300번 조회하고, 처리 실패를 재업로드 요구로 바꾸지 않는다. 본문·파일 경로·
 추출 식별자는 이 상태 응답에 포함하지 않는다. 기존 provider 경로의 범위 소비 전환은 B02 후속이다.
 
+범위의 모든 primary가 policy 출처 근거를 갖지 못하면 구조화·독립 검수와 요청 예약 전에
+`nonpolicy-primary-deferral-v1` / `PRIMARY_POLICY_SOURCE_UNAVAILABLE`로 로컬 보류한다.
+이 결과는 `REVIEW`이며 미가입이나 원문 해석 완료를 뜻하지 않는다. 현재 원문 세대·가정·
+대상자·최소화·lease와 정확한 PENDING 입력을 확인하고 기존 요청·응답·정규화 receipt를
+보존한 채 다음 범위로 진행한다. policy primary가 있는 혼합 범위는 기존 처리와 필드별
+근거 검증을 유지한다. 로컬 보류를 외부 AI의 검수 결과나 새로운 가입 사실로 기록하지 않는다.
+
+## Source-scoped policy identity
+
+명시적으로 선택한 `retained-policy-association-v8`는 `policy-draft-normalization-v3`와
+`range-grounding-v4`를 사용한다. 기존 automatic v2와 retained v7의 기본값·검수 의미는
+유지한다. 원문 계약 locator·피보험자·상품이 확인된 계약에서 발급 보험사만 미확인인 경우,
+보험사를 가짜 문자열로 채우지 않고 해당 필드를 제외한 별도 초안을 독립 검수한다.
+원래 응답·필드·인용은 그대로 보존하고 제외 이유는 `ISSUER_UNCONFIRMED`로 기록한다.
+새 revision의 보험사 필드는 policy primary의 명시적 발급주체 라벨 문맥까지 확인하며,
+본문에 같은 회사명이 있다는 사실만으로 발급 보험사로 삼지 않는다.
+
+새 부모는 정확한 native source·계약 locator·대상자·상품 근거를 요구한다. 보험사 display/key는
+함께 null이고, 출처 한정 신원과 미확인 이유를 게시 이력에 남긴다. 수동 신규 계약 입력의
+보험사 필수 조건은 유지한다. null 보험사끼리의 계약 합치기나 약관 판본 확정은 금지한다.
+후속 보험사 보강은 같은 원문 계약 identity를 유지하며 사용자 교정과 청구 snapshot을 덮지 않는다.
+
+같은 source/generation/envelope·최소화·대상자 연결과 필드/인용이 정확히 일치하고 현재
+AI_VERIFIED인 기존 v7 담보는 새 v8 검수 요청에서 제외한다. 새 승인을 복제하는 것이 아니라
+원래 후보·검수 이력을 유지하며 `PRIOR_VERIFIED_CANDIDATE_PRESERVED`로 작업 제외를 기록한다.
+범위는 부분 상태를 유지하고, 새 부모 게시 후 원래 담보가 같은 출처 한정 계약으로 연결된다.
+필드·인용·대상자·source가 달라지면 기존 AI 검증 제외를 재사용하지 않는다. 기존 후보에
+교정·거절·삭제가 있으면 `PRIOR_CANDIDATE_REVIEW_PRESERVED`로 원래 검토 이력을 보존하고,
+옛 필드를 새 review item으로 재승인하여 사용자 결정을 우회하지 않는다.
+
+명시적 `retained-policy-association-v9` / `policy-draft-normalization-v4`는 이미 입증된
+가입금액과 동일한 행·헤더에서 유일한 통화가 확인될 때만 누락 통화를 보강한다. 기존 값과
+충돌하면 바꾸지 않는다. 헤더만 잘못 인용한 같은 값은 금액의 행 인용으로 정렬하고 각각
+`CURRENCY_DERIVED_FROM_AMOUNT` / `CURRENCY_EVIDENCE_REALIGNED`를 기록한다.
+기존 grounding v4 의미와 v7/v8 결과는 유지하며 변경 담보만 새 독립 검수를 받는다.
+변경 없는 기존 부모·담보와 모든 종류의 사용자 검토는 새 검수에서 제외한다.
+
+API는 schema 0078에서 같은 native 출처·대상자·계약·담보와 기존 금액/필드가 일치하고
+현재 통화가 null인 경우에만 별도의 원문 금액·통화 증명을 확인해 보강한다. 사용자 교정이나
+원장 버전 변경이 있으면 거부한다. 담보 ID·금액·원래 source evidence·기존 게시/후보/청구
+이력은 유지하고 통화와 원장 버전만 갱신하며 새 게시 이력을 추가한다. 가입금액의 통화
+복구는 지급 산식이나 지급액 확정을 뜻하지 않는다.
+
+명시적 retained v10 / normalization v5는 provider가 이미 인용한 단일 native 표 행에서
+이름 열과 같은 행의 가입금액이 독립적으로 증명될 때만 원래 이름 셀을 새 초안에 복구한다.
+공백 차이나 provider의 잘못된 이름을 private 목록 값으로 바꾸거나 유사 이름 검색으로
+해결하지 않는다. 원래 raw 응답·제외 이력과 모든 기존 사용자 결정을 유지하고, 변경 없는
+v7/v8/v9 후보는 제외한 뒤 복구한 후보만 새 검수와 프로그램 검증을 받는다. API/Worker는
+schema 0079에서 이 명시적 처리 revision을 허용하며 기본 automatic/retained 값은 유지한다.
+
+canonical 이름 위치의 유일성 검사에서는 검증된 비이름 열의 참조를 독립 가입 행과
+구분한다. 유일하고 일관된 이름 열, 그 행의 완전한 이름 셀에 대한 native 위치 증명,
+다른 명시적 열의 겹치지 않는 기하·텍스트가 모두 있어야 한다. 이 조건 없는 원문 이름
+위치와 실제 별도 가입 행은 계속 검사하며 참조만 있는 페이지는 승인하지 않는다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의
@@ -417,3 +472,16 @@ global 잠금을 쓰므로 기본 문서당 4회·하루 8회 한도를 두 경�
 v3를 사용하고 v3 이력이 있으면 0068 downgrade를 거부한다. 선택 날짜는 해당 label과
 단일 날짜 근거가 있을 때만 출력하며, 일반 보험기간이나 실제 계약체결일을 범위의 개시일
 필드로 추측하지 않는다. 미지원 선택 필드는 생략하고 미해석 범위는 UNRESOLVED로 남긴다.
+
+## Field-scoped retained verification
+
+명시적 retained v11은 normalization v5와 grounding v4를 유지하며 schema 0080에서 별도
+`cited-fields-v1` 검수를 기록한다. 초안의 모든 인용, 프로그램 proof가 보강한 헤더/단위,
+해당 node의 모든 context를 재귀적으로 포함한다. 기존 최소화 envelope의 Evidence만
+사용하고 문맥이 누락·불명확하면 원래 전체 범위로 되돌린다. 각주나 예외를 검수에서
+숨기거나 local 원문으로 개인정보 제거를 되돌리지 않는다.
+
+검수에는 내부 rider_key와 분류 미확인 unknown의 실제 의미를 명시한다. 구체적 가입
+사실·값에는 계속 원문 근거가 필요하며 기존 실패를 지우지 않는다. 변경 없는 기존
+v7/v8/v9/v10 승인 후보와 사용자 검토는 재검수하지 않고, 보류 후보만 새 독립 검수와
+프로그램 검증을 통과할 수 있다. 이전 버전의 검수 prompt는 그대로 보존한다.

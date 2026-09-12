@@ -136,7 +136,7 @@ def test_v2_normalization_retains_exact_values_and_citations_without_approval():
     assert "status" not in result.batch.candidates[0].model_dump()
 
 
-@pytest.mark.parametrize("revision", ["", "policy-draft-normalization-v3", "unknown"])
+@pytest.mark.parametrize("revision", ["", "policy-draft-normalization-v999", "unknown"])
 def test_unknown_normalization_revision_is_rejected(revision):
     envelope = _envelope("Sample Insurer\nSample Plan (A)_보험증권")
     source = _candidate(

@@ -343,7 +343,7 @@ class InsuranceReconciliationRepository:
             policies = tuple(
                 OperationalPolicySource(
                     id=cast(UUID, row["id"]),
-                    insurer_display=cast(str, row["insurer_display"]),
+                    insurer_display=cast(str | None, row["insurer_display"]),
                     product_display=cast(str, row["product_display"]),
                     status=cast(Any, row["status"]),
                     completeness=(

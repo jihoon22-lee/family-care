@@ -34,6 +34,9 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
+NONPOLICY_DEFERRAL_REVISION = "nonpolicy-primary-deferral-v1"
+NONPOLICY_DEFERRAL_REASON = "PRIMARY_POLICY_SOURCE_UNAVAILABLE"
+
 
 class PolicyRangeConflict(RuntimeError):
     def __init__(self) -> None:
@@ -312,6 +315,99 @@ class PolicyRangeRepository:
             review=True,
         )
 
+    def defer_nonpolicy(
+        self,
+        job: PolicyStructuringJobRecord,
+        worker_id: str,
+        work: PolicyRangeWork,
+        *,
+        sensitive_terms: Sequence[str],
+    ) -> None:
+        """Retain a source without primary policy authority for review, without an AI decision."""
+        primary = {item.evidence_id for item in work.envelope.evidence if item.primary}
+        if (
+            not primary
+            or primary != set(work.envelope.primary_evidence_ids)
+            or any(item.primary and item.source_role == "policy" for item in work.envelope.evidence)
+        ):
+            raise PolicyRangeConflict
+        self._store(
+            job,
+            worker_id,
+            work,
+            {
+                "schema_version": "1",
+                "local_processing": {
+                    "revision": NONPOLICY_DEFERRAL_REVISION,
+                    "reason_code": NONPOLICY_DEFERRAL_REASON,
+                },
+            },
+            review=True,
+            local_deferral_terms=sensitive_terms,
+        )
+
+    @staticmethod
+    def _local_deferral_source(
+        connection: psycopg.Connection[dict[str, Any]],
+        job: PolicyStructuringJobRecord,
+        work: PolicyRangeWork,
+        sensitive_terms: Sequence[str],
+    ) -> list[dict[str, str]]:
+        connection.execute(
+            "SELECT id FROM document_batch_items WHERE id=%s FOR UPDATE", (job.batch_item_id,)
+        )
+        row = connection.execute(
+            "SELECT p.privacy_fingerprint,p.associations_json FROM document_policy_range_plans p "
+            "JOIN document_structure_generations g ON g.id=p.generation_id "
+            "JOIN document_batch_items i ON i.id=g.batch_item_id AND i.state='succeeded' "
+            "JOIN document_batches b ON b.id=i.batch_id AND b.state<>'cancelled' "
+            "JOIN document_policy_ranges r ON r.job_id=p.job_id AND r.generation_id=g.id "
+            "WHERE p.job_id=%s AND p.state='PROCESSING' AND g.id=%s "
+            "AND g.is_current AND NOT g.cancelled AND g.batch_item_id=%s "
+            "AND g.household_space_id=%s AND g.family_member_id=%s "
+            "AND b.household_space_id=g.household_space_id "
+            "AND b.family_member_id=g.family_member_id "
+            "AND g.document_version_id=%s AND g.extraction_id=%s "
+            "AND policy_structuring_source_current(p.job_id) "
+            "AND (i.processed_document_version_id IS NULL "
+            "OR i.processed_document_version_id=g.document_version_id) "
+            "AND r.envelope_id=%s AND r.envelope_json=%s "
+            "AND r.state='PENDING' AND r.result_json IS NULL "
+            "FOR SHARE OF p,g,b FOR UPDATE OF r",
+            (
+                job.id,
+                work.generation_id,
+                job.batch_item_id,
+                job.household_space_id,
+                job.family_member_id,
+                job.document_version_id,
+                job.extraction_id,
+                work.envelope.envelope_id,
+                Jsonb(work.envelope.to_provider_payload()),
+            ),
+        ).fetchone()
+        privacy = hashlib.sha256(
+            json.dumps(
+                [MINIMIZATION_REVISION, sorted(set(sensitive_terms))],
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        members = load_local_members(connection, job.household_space_id)
+        if (
+            row is None
+            or row["privacy_fingerprint"] != privacy
+            or row["associations_json"].get("member_fingerprint")
+            != member_identity_fingerprint(members)
+        ):
+            raise PolicyRangeConflict
+        # Earlier paid attempts remain unchanged history, never replaced by this local result.
+        requests = connection.execute(
+            "SELECT id,state FROM policy_provider_requests WHERE job_id=%s ORDER BY id FOR SHARE",
+            (job.id,),
+        ).fetchall()
+        return [{"reservation_id": str(item["id"]), "state": item["state"]} for item in requests]
+
     def _store(
         self,
         job: PolicyStructuringJobRecord,
@@ -320,16 +416,22 @@ class PolicyRangeRepository:
         payload: dict[str, Any],
         *,
         review: bool,
+        local_deferral_terms: Sequence[str] | None = None,
     ) -> None:
         from familycare_worker.policy_draft_replay import (
             CERTIFICATE_TITLE_PIPELINES,
+            FIELD_SCOPED_POLICY_PIPELINES,
             NORMALIZED_POLICY_PIPELINES,
+            SOURCE_SCOPED_POLICY_PIPELINES,
             _current_source,
             validate_replay_receipt,
         )
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             _lock(connection, job, worker_id)
+            if local_deferral_terms is not None:
+                preserved = self._local_deferral_source(connection, job, work, local_deferral_terms)
+                payload = {**payload, "preserved_job_provider_requests": preserved}
             normalized = job.pipeline_version in NORMALIZED_POLICY_PIPELINES
             if normalized:
                 _current_source(connection, job, work)
@@ -352,6 +454,18 @@ class PolicyRangeRepository:
                         "source_response_hash": receipt["source_response_hash"],
                         "normalization_revision": receipt["normalization_revision"],
                         "partial": receipt["partial"],
+                    },
+                }
+            if (
+                receipt is not None
+                and "result" in payload
+                and job.pipeline_version in FIELD_SCOPED_POLICY_PIPELINES
+            ):
+                payload = {
+                    **payload,
+                    "verification_scope": {
+                        "revision": "cited-fields-v1",
+                        "evidence_ids": receipt["_verifier_evidence_ids"],
                     },
                 }
             source = connection.execute(
@@ -382,6 +496,8 @@ class PolicyRangeRepository:
                         work.envelope.evidence,
                         local_nodes=nodes,
                         allow_certificate_title=job.pipeline_version in CERTIFICATE_TITLE_PIPELINES,
+                        require_issuer_context=job.pipeline_version
+                        in SOURCE_SCOPED_POLICY_PIPELINES,
                     )
                     for candidate in result.candidates
                 )
@@ -397,7 +513,9 @@ class PolicyRangeRepository:
                     **payload,
                     "result": result.model_dump(mode="json"),
                     "program_validation_version": (
-                        "range-grounding-v3"
+                        "range-grounding-v4"
+                        if job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
+                        else "range-grounding-v3"
                         if job.pipeline_version in CERTIFICATE_TITLE_PIPELINES
                         else "range-grounding-v2"
                     ),

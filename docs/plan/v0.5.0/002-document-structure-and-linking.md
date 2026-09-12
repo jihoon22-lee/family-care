@@ -106,6 +106,19 @@
 
 ## Local data contract
 
+현재 Task 3/4의 후속 구현은 `fix/source-processing-recovery`에서 진행한다. policy primary가
+없는 범위는 유료 구조화·검수로 가입 근거를 만들 수 없으므로 출처 미해결로 로컬 보류하고
+다음 범위로 진행한다. 이를 미가입·원문 해석 완료로 바꾸지 않으며 기존 요청·응답·receipt와
+후보를 보존한다. policy/terms 혼합 범위는 기존 필드별 근거 검사를 유지한다. 별도로 문자
+추출에서 확보하지 못한 보험사 근거를 OCR 원문에서 확인하되, 진단 결과만으로 가입이나
+약관 신원을 게시하지 않는다. 구현·관련 회귀·문서를 완성한 뒤 PR 검증을 한 번 수행한다.
+
+후속 Task 3/4는 `feat/source-scoped-policy-identity`에서 미확인 보험사 필드와 확인된 가입
+사실의 보류를 분리한다. 명시적 retained v8 복구에서만 정확한 원문 계약 locator·대상자·
+상품 근거와 새 부모 검수를 요구하고, 보험사 null 및 미확인 출처를 보존한다. 동일 필드와
+근거의 기존 v7 담보는 다시 검수하지 않는다. 실제 자료의 기존 원장·응답·교정·청구 이력을
+유지하며 이 변경만으로 약관 신원·판본 연결이나 마일스톤 전체 완료를 선언하지 않는다.
+
 `document_structure.py`는 로컬 전량 보존 adapter이고 외부 전달 DTO가 아니다.
 문서 bytes·extraction/OCR revision·node/row/cell 위치를 보존한다. 행은 쪼개지 않고
 반복 헤더/각주 문맥을 primary 가입 행과 별도로 참조한다. `ChunkPlan.complete`는 범위의
@@ -129,3 +142,11 @@ RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22
 14개 합성 테스트가 통과했다. 이 증거는 순수 adapter 범위이며 DB/실제 import/외부 전달
 완료를 의미하지 않는다. 최신 결과와 남은 경계는
 [B02 workthrough](../../../workthrough/2026-09-07-document-structure-and-linking.md)에 연결한다.
+
+같은 PR #103에서 통화가 누락된 기존 담보의 동일 금액 행·헤더 근거를 v9/v4로 복구한다.
+변경 담보만 독립 검수하고 사용자 교정·원장 버전을 보호하며 API가 통화 근거를 별도로 확인한다.
+
+같은 PR #103의 후속 Task 3/4 (`fix/canonical-source-citations`에서 준비)는 이미 게시된 담보의 이름 인용에 primary
+표 헤더가 포함될 때도 동일 물리 위치를 정확히 확인해 canonical 연결한다. 또한 이미 인용한
+native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명시적 v10 초안에서 복구한다.
+기존 raw/후보/검수·사용자 결정·출처를 보존하고 변경 후보만 독립 검수한다.

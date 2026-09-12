@@ -68,8 +68,8 @@ class PolicyContract:
     household_space_id: UUID
     source_document_version_id: UUID
     source_evidence: EvidenceRef
-    insurer_display: str
-    insurer_key: str
+    insurer_display: str | None
+    insurer_key: str | None
     product_display: str
     product_key: str
     contract_date: date | None

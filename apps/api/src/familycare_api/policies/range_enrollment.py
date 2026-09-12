@@ -20,8 +20,10 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_api.policies.contract_source_locator import contract_source_locator
+from familycare_api.policies.currency_enrichment import currency_enrichment_proven
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
 from familycare_api.policies.source_projection import StructureProjectionReader
+from familycare_api.policies.source_scoped_identity import source_scoped_identity
 
 
 def _key(value: str) -> str:
@@ -280,6 +282,7 @@ def project_range_candidate(
         return False
     source = connection.execute(
         "SELECT s.*, j.household_space_id,j.document_version_id,j.extraction_id, "
+        "j.pipeline_version, "
         "p.associations_json,p.generation_id,"
         "document_structure_projection(g.id,j.household_space_id,"
         "ARRAY(SELECT (ref->>'page')::integer FROM jsonb_array_elements("
@@ -392,8 +395,14 @@ def project_range_candidate(
         "ORDER BY created_at DESC,candidate_version_id DESC LIMIT 1",
         (household, policy_id, rider_id),
     ).fetchone()
+    identity_proof = None
+    if rider_id is None and "insurer" not in values:
+        identity_proof = source_scoped_identity(connection, version, source, values, evidence)
+        if identity_proof is None:
+            return False
     authority = "USER_CONFIRMED" if version["status"] == "USER_CONFIRMED" else "PROGRAM_VERIFIED"
     update = False
+    currency_enrichment = False
     if target is not None:
         if (
             target["deleted_at"] is not None
@@ -402,7 +411,25 @@ def project_range_candidate(
         ):
             return False
         if values != previous["field_values"]:
-            if authority != "USER_CONFIRMED":
+            issuer_enrichment = (
+                rider_id is None
+                and authority == "PROGRAM_VERIFIED"
+                and target["insurer_display"] is None
+                and previous.get("source_identity_json") is not None
+                and "insurer" not in previous["field_values"]
+                and isinstance(values.get("insurer"), str)
+                and {key: value for key, value in values.items() if key != "insurer"}
+                == previous["field_values"]
+                and source["pipeline_version"] == "retained-policy-association-v8"
+            )
+            currency_enrichment = (
+                rider_id is not None
+                and authority == "PROGRAM_VERIFIED"
+                and currency_enrichment_proven(
+                    connection, version, source, values, evidence, target, previous
+                )
+            )
+            if authority != "USER_CONFIRMED" and not issuer_enrichment and not currency_enrichment:
                 return False
             lineage_publication = connection.execute(
                 "SELECT candidate_version_id FROM range_enrollment_publications "
@@ -417,7 +444,19 @@ def project_range_candidate(
                 "ORDER BY created_at DESC LIMIT 1",
                 (household, policy_id, rider_id),
             ).fetchone()
-            if lineage_publication is None or (
+            if currency_enrichment:
+                if last_user is not None:
+                    return False
+            elif issuer_enrichment:
+                if (
+                    last_user is not None
+                    or source_scoped_identity(
+                        connection, version, source, values, evidence, allow_insurer=True
+                    )
+                    is None
+                ):
+                    return False
+            elif lineage_publication is None or (
                 last_user is not None
                 and last_user["source_candidate_version_id"] != source["candidate_version_id"]
             ):
@@ -443,14 +482,16 @@ def project_range_candidate(
             # appended publication retains the corrected import's field proof.
             common["source_evidence_id"] = target["source_evidence_id"]
         insurer, product = values.get("insurer"), values.get("product_name")
-        if not isinstance(insurer, str) or not 1 <= len(insurer) <= 160:
+        if identity_proof is None and (
+            not isinstance(insurer, str) or not 1 <= len(insurer) <= 160
+        ):
             return False
         if not isinstance(product, str) or not 1 <= len(product) <= 200:
             return False
         columns = dict(
             common,
             insurer_display=insurer,
-            insurer_key=_key(insurer)[:160],
+            insurer_key=_key(insurer)[:160] if insurer is not None else None,
             product_display=product,
             product_key=_key(product)[:200],
             contract_date=_as_date(values.get("contract_start")),
@@ -477,6 +518,8 @@ def project_range_candidate(
             coverage_start_date=_as_date(values.get("coverage_start")),
             coverage_end_date=_as_date(values.get("coverage_end")),
         )
+    if currency_enrichment:
+        columns = {"currency": values["currency"]}
     insured_evidence_id = _insured_evidence(connection, source)
     if insured_evidence_id is None:
         return False
@@ -521,7 +564,7 @@ def project_range_candidate(
         "INSERT INTO range_enrollment_publications(candidate_version_id,"
         "source_candidate_version_id,"
         "household_space_id,policy_contract_id,rider_id,ledger_version,field_values,authority,"
-        "insured_evidence_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+        "insured_evidence_id,source_identity_json) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
         (
             version["id"],
             source["candidate_version_id"],
@@ -532,6 +575,7 @@ def project_range_candidate(
             Jsonb(values),
             authority,
             insured_evidence_id,
+            Jsonb(identity_proof) if identity_proof is not None else None,
         ),
     )
     connection.execute(

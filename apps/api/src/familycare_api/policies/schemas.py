@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Self, cast
+from typing import Literal, Self, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -215,8 +215,9 @@ class PolicyResponse(BaseModel):
     id: UUID
     source_document_version_id: UUID
     source_evidence: EvidenceResponse
-    insurer_display: str
-    insurer_key: str
+    insurer_display: str | None
+    insurer_key: str | None
+    insurer_unresolved_reason: Literal["INSURER_SOURCE_UNVERIFIED"] | None = None
     product_display: str
     product_key: str
     contract_date: date | None
@@ -236,6 +237,9 @@ class PolicyResponse(BaseModel):
             source_evidence=EvidenceResponse.from_domain(policy.source_evidence),
             insurer_display=policy.insurer_display,
             insurer_key=policy.insurer_key,
+            insurer_unresolved_reason="INSURER_SOURCE_UNVERIFIED"
+            if policy.insurer_key is None
+            else None,
             product_display=policy.product_display,
             product_key=policy.product_key,
             contract_date=policy.contract_date,

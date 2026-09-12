@@ -52,6 +52,26 @@ afterEach(() => {
 });
 
 describe("insurance reconciliation API", () => {
+  it("accepts a source-scoped operational policy with an unverified issuer", async () => {
+    const response: MemberInsuranceReconciliationResponse = {
+      ...RECONCILIATION,
+      orphan_operational_contracts: [
+        {
+          policy_contract_id: POLICY_ID,
+          insurer_display: null,
+          insurer_unresolved_reason: "INSURER_SOURCE_UNVERIFIED",
+          product_display: "Sample Plan",
+          status: "unknown",
+          completeness: "CERTIFICATE_ONLY",
+        },
+      ],
+    };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(response)));
+    await expect(getInsuranceReconciliation(MEMBER_ID)).resolves.toEqual(
+      response,
+    );
+  });
+
   it("loads the member-scoped no-store projection and rejects malformed success", async () => {
     const fetchMock = vi
       .fn()

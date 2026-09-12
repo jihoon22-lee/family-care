@@ -290,12 +290,18 @@
         "insurer_display": {
           "maxLength": 160,
           "minLength": 1,
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "insurer_key": {
           "maxLength": 160,
           "minLength": 1,
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "product_display": {
           "maxLength": 200,
@@ -366,6 +372,16 @@
         },
         "deleted": {
           "type": "boolean"
+        },
+        "insurer_unresolved_reason": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "INSURER_SOURCE_UNVERIFIED",
+            null
+          ]
         }
       },
       "required": [

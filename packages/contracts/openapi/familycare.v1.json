@@ -10617,10 +10617,29 @@
             "type": "string"
           },
           "insurer_display": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Insurer Display",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 240,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
+          "insurer_unresolved_reason": {
+            "anyOf": [
+              {
+                "const": "INSURER_SOURCE_UNVERIFIED",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Unresolved Reason"
           },
           "policy_contract_id": {
             "format": "uuid",
@@ -11006,12 +11025,38 @@
             "type": "string"
           },
           "insurer_display": {
-            "title": "Insurer Display",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
           },
           "insurer_key": {
-            "title": "Insurer Key",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Key"
+          },
+          "insurer_unresolved_reason": {
+            "anyOf": [
+              {
+                "const": "INSURER_SOURCE_UNVERIFIED",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Unresolved Reason"
           },
           "parties": {
             "items": {
@@ -12156,10 +12201,29 @@
             "type": "boolean"
           },
           "insurer_display": {
-            "maxLength": 160,
-            "minLength": 1,
-            "title": "Insurer Display",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Display"
+          },
+          "insurer_unresolved_reason": {
+            "anyOf": [
+              {
+                "const": "INSURER_SOURCE_UNVERIFIED",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Insurer Unresolved Reason"
           },
           "missing_document_roles": {
             "items": {

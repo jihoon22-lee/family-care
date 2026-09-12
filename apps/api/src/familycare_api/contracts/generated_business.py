@@ -469,8 +469,9 @@ class PolicyRecord(TypedDict):
     coverage_start_date: str | None
     deleted: bool
     id: PolicyId
-    insurer_display: str
-    insurer_key: str
+    insurer_display: object
+    insurer_key: object
+    insurer_unresolved_reason: NotRequired[Literal["INSURER_SOURCE_UNVERIFIED", None]]
     parties: list[PolicyPartyRecord]
     product_display: str
     product_key: str

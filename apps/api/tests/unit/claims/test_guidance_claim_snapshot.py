@@ -90,7 +90,7 @@ def test_unselected_coverage_cannot_enter_snapshot():
     [
         {"rider_id": None},
         {"policy_contract_id": None},
-        {"insurer_key": None},
+        {"insurer_key": ""},
         {
             "coverage": {
                 "kind": "PRIVATE_KNOWLEDGE_COVERAGE",

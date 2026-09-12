@@ -76,6 +76,17 @@ def _no_facts(work: Any, *, unresolved: bool = False) -> PolicyRangeBatch:
     )
 
 
+def _prepare_policy_source(url: str, job: Any) -> None:
+    # Provider retry tests need enrollment-source authority before generation capture.
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        connection.execute(
+            "UPDATE extraction_blocks SET text = '보험증권 가입금액 ' || text "
+            "WHERE page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s) "
+            "AND reading_order=0",
+            (job.extraction_id,),
+        )
+
+
 def test_preparation_retains_all_ranges_and_reuses_the_exact_pending_envelope(
     ranges_database: Any,
 ) -> None:
@@ -201,6 +212,8 @@ def test_worker_uses_complete_ranges_and_pauses_without_repeating_saved_ranges(
     url, job = ranges_database
     seen: list[str] = []
 
+    _prepare_policy_source(url, job)
+
     class Provider:
         def complete(self, **kwargs: Any) -> ProviderResponse:
             assert kwargs["schema_name"] == "policy_range_structurer_v3"
@@ -302,6 +315,8 @@ def test_range_verifier_timeout_reuses_the_structurer_response(ranges_database: 
     candidate_id = str(uuid4())
     calls: list[str] = []
 
+    _prepare_policy_source(url, job)
+
     class Provider:
         evidence_id = ""
 
@@ -386,7 +401,7 @@ def test_range_verifier_timeout_reuses_the_structurer_response(ranges_database: 
                 "SELECT result_json FROM document_policy_ranges WHERE state <> 'PENDING'"
             ).fetchone()[0]
             assert saved["result"]["candidates"][0]["candidate_id"] == candidate_id
-            # An unknown page role must not be upgraded to enrollment authority by AI approval.
+            # AI approval cannot supply the missing Rider field and subject grounding.
             assert saved["result"]["candidates"][0]["status"] == "NEEDS_REVIEW"
     finally:
         with psycopg.connect(_psycopg_url(url)) as connection:

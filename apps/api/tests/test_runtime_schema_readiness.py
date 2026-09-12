@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0076_certificate_title_grounding"
+REVISION = "0080_scoped_policy_verifier"
 
 
 class Result:
@@ -62,7 +62,9 @@ class Engine:
         [("0072_metadata_physical_flow",)],
         [("0073_metadata_header_regions",)],
         [("0074_policy_label_spacing",)],
-        [("0076_synthetic_future",)],
+        [("0076_certificate_title_grounding",)],
+        [("0079_cited_rider_name",)],
+        [("0081_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

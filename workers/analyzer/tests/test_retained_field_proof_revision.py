@@ -231,42 +231,48 @@ def test_v3_history_refuses_downgrade_without_changing_job_or_contracts(retained
 
 def test_preexisting_v2_candidates_keep_api_publication_authority(native_database, monkeypatch):
     url, original = native_database
-    assert _migrate(url, "downgrade", "0067_metadata_lineage").returncode == 0
+    # Current API publication requires its current schema; v2 history is then
+    # produced on the historical schema before testing the upgrade.
     first = _initial(native_database)
-    sample = SimpleNamespace(url=url, original=original, generation=first.generation_id)
-    old, queue = _v2_job(sample, monkeypatch)
-    running = queue.claim_next_job(WORKER)
-    assert running is not None
-    _retain_native(url, running)
-    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
-        ledger = connection.execute(
-            "SELECT to_jsonb(p) AS value FROM policy_contracts p WHERE household_space_id=%s",
-            (original.household_space_id,),
-        ).fetchall()
-        assert connection.execute(
-            "SELECT count(*) AS count FROM policy_range_candidate_sources WHERE job_id=%s",
-            (old.id,),
-        ).fetchone() == {"count": 2}
-    before = _history(url, old.id)
-    assert _migrate(url, "upgrade", "head").returncode == 0
-    with psycopg.connect(_psycopg_url(url)) as connection:
-        assert connection.execute(
-            "SELECT policy_structuring_source_current(%s)", (old.id,)
-        ).fetchone() == (True,)
-    assert RangeEnrollmentProjector(url).project_pending() == 2
-    assert _history(url, old.id) == before
-    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
-        assert (
-            connection.execute(
+    assert _migrate(url, "downgrade", "0067_metadata_lineage").returncode == 0
+    try:
+        sample = SimpleNamespace(url=url, original=original, generation=first.generation_id)
+        old, queue = _v2_job(sample, monkeypatch)
+        running = queue.claim_next_job(WORKER)
+        assert running is not None
+        _retain_native(url, running)
+        with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+            ledger = connection.execute(
                 "SELECT to_jsonb(p) AS value FROM policy_contracts p WHERE household_space_id=%s",
                 (original.household_space_id,),
             ).fetchall()
-            == ledger
-        )
-        assert connection.execute(
-            "SELECT count(*) AS count FROM range_enrollment_publications p "
-            "JOIN policy_range_candidate_sources s "
-            "ON s.candidate_version_id=p.source_candidate_version_id "
-            "WHERE s.job_id=%s",
-            (old.id,),
-        ).fetchone() == {"count": 2}
+            assert connection.execute(
+                "SELECT count(*) AS count FROM policy_range_candidate_sources WHERE job_id=%s",
+                (old.id,),
+            ).fetchone() == {"count": 2}
+        before = _history(url, old.id)
+        assert _migrate(url, "upgrade", "head").returncode == 0
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            assert connection.execute(
+                "SELECT policy_structuring_source_current(%s)", (old.id,)
+            ).fetchone() == (True,)
+        assert RangeEnrollmentProjector(url).project_pending() == 2
+        assert _history(url, old.id) == before
+        with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
+            assert (
+                connection.execute(
+                    "SELECT to_jsonb(p) AS value FROM policy_contracts p "
+                    "WHERE household_space_id=%s",
+                    (original.household_space_id,),
+                ).fetchall()
+                == ledger
+            )
+            assert connection.execute(
+                "SELECT count(*) AS count FROM range_enrollment_publications p "
+                "JOIN policy_range_candidate_sources s "
+                "ON s.candidate_version_id=p.source_candidate_version_id "
+                "WHERE s.job_id=%s",
+                (old.id,),
+            ).fetchone() == {"count": 2}
+    finally:
+        assert _migrate(url, "upgrade", "head").returncode == 0

@@ -80,7 +80,9 @@ from familycare_worker.policy_candidates import (
     PolicyCandidateRepositoryUnavailable,
 )
 from familycare_worker.policy_draft_replay import (
+    FIELD_SCOPED_POLICY_PIPELINES,
     NORMALIZED_POLICY_PIPELINES,
+    SOURCE_SCOPED_POLICY_PIPELINES,
     PolicyDraftNormalizationRepository,
     PolicyDraftReplayRepository,
 )
@@ -400,6 +402,13 @@ class PolicyStructuringJobRunner:
         work = self.range_repository.next(job, worker_id, sensitive_terms=member_terms)
         if work is None:
             return
+        if not any(
+            item.primary and item.source_role == "policy" for item in work.envelope.evidence
+        ):
+            self.range_repository.defer_nonpolicy(
+                job, worker_id, work, sensitive_terms=member_terms
+            )
+            return
         replay = self.replay_repository
         draft = None if replay is None else replay.prepare(job, worker_id, work)
         if draft is None and normalization is not None:
@@ -441,10 +450,14 @@ class PolicyStructuringJobRunner:
             verify_structured_policy_batch(
                 candidates=batch.candidates,
                 allow_unclassified_enrollment=True,
+                allow_unconfirmed_insurer=job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES,
                 structurer_request_id=request_id,
-                evidence=work.envelope.evidence,
+                evidence=draft.verifier_evidence
+                if draft is not None and draft.verifier_evidence is not None
+                else work.envelope.evidence,
                 provider=leased,
                 verifier_model=self.verifier_model,
+                field_scoped=job.pipeline_version in FIELD_SCOPED_POLICY_PIPELINES,
             )
             if batch.candidates
             else CandidatePipelineResult(classification="SUCCESS", candidates=())

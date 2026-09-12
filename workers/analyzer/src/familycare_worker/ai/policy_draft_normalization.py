@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -31,6 +32,9 @@ from familycare_worker.ai.schemas import (
 
 POLICY_DRAFT_NORMALIZATION_REVISION = "policy-draft-normalization-v1"
 CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
+SOURCE_SCOPED_NORMALIZATION_REVISION = "policy-draft-normalization-v3"
+AMOUNT_CURRENCY_NORMALIZATION_REVISION = "policy-draft-normalization-v4"
+TABLE_NAME_NORMALIZATION_REVISION = "policy-draft-normalization-v5"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -39,6 +43,12 @@ type AdjustmentReason = Literal[
     "RIDER_KEY_DERIVED_FROM_NAME",
     "RANGE_PRIMARY_UNSUPPORTED",
     "CANDIDATE_UNREFERENCED",
+    "ISSUER_UNCONFIRMED",
+    "PRIOR_VERIFIED_CANDIDATE_PRESERVED",
+    "PRIOR_CANDIDATE_REVIEW_PRESERVED",
+    "CURRENCY_DERIVED_FROM_AMOUNT",
+    "CURRENCY_EVIDENCE_REALIGNED",
+    "RIDER_NAME_RESTORED_FROM_CITED_ROW",
 ]
 
 
@@ -129,6 +139,7 @@ def _supported(
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
     *,
     allow_certificate_title: bool = False,
+    allow_unconfirmed_insurer: bool = False,
 ) -> bool:
     # Probe one field with its rider-name anchor through the unchanged program
     # proof. The temporary status only enables that proof; it is never returned.
@@ -151,6 +162,7 @@ def _supported(
         envelope.evidence,
         local_nodes=local_nodes,
         allow_certificate_title=allow_certificate_title,
+        require_issuer_context=allow_unconfirmed_insurer,
     )
     proven = next((item for item in proof.fields if item.field_id == field.field_id), None)
     # The grounder can enrich table citations and demote guessed benefit types.
@@ -163,6 +175,169 @@ def _supported(
     )
 
 
+def _table_name_draft(
+    source: StructurerCandidate,
+    envelope: PolicyRangeEnvelope,
+    local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    adjustments: list[PolicyDraftAdjustment],
+) -> StructurerCandidate:
+    """Restore an already-cited single native row's exact name, never search by value."""
+    from familycare_worker.ai.table_grounding import _NAME, _cells, _label
+
+    if source.candidate_kind != "rider" or local_nodes is None:
+        return source
+    fields = {field.field_id: field for field in source.fields}
+    if len(fields) != len(source.fields) or "rider_name" not in fields:
+        return source
+    name = fields["rider_name"]
+    if _supported(source, name, envelope, local_nodes):
+        return source
+    cited = [e for e in envelope.evidence if e.evidence_id in name.evidence_ids]
+    rows = [
+        e
+        for e in cited
+        if e.primary
+        and e.source_role == "policy"
+        and local_nodes[e.node_id].get("kind") == "TABLE_ROW"
+        and local_nodes[e.node_id].get("row_role") == "data"
+    ]
+    if len(rows) != 1:
+        return source
+    evidence = rows[0]
+    row = local_nodes[evidence.node_id]
+    if (
+        row.get("source_layer") != "native"
+        or evidence.start != 0
+        or evidence.end != len(row["text"])
+    ):
+        return source
+    cells = _cells(row)
+    headers = [
+        local_nodes[key]
+        for key in row.get("context_node_ids", ())
+        if key in local_nodes
+        and local_nodes[key].get("kind") == "TABLE_ROW"
+        and local_nodes[key].get("row_role") == "header"
+    ]
+    columns = {
+        column
+        for header in headers
+        for column, cell in (_cells(header) or {}).items()
+        if _label(cell["text"]) in _NAME
+    }
+    if cells is None or len(columns) != 1 or next(iter(columns)) not in cells:
+        return source
+    value = cells[next(iter(columns))]["text"]
+    if not isinstance(value, str) or not value.strip() or len(value) > 240:
+        return source
+    # Local nodes retain unminimized source. Never reintroduce a removed name or
+    # identifier into the provider draft: the complete value must already appear
+    # in this exact privacy-minimized source slice.
+    visible = " ".join(unicodedata.normalize("NFKC", evidence.text).split())
+    if " ".join(unicodedata.normalize("NFKC", value).split()) not in visible:
+        return source
+    restored = name.model_copy(update={"value": value, "evidence_ids": (evidence.evidence_id,)})
+    # Existing logical keys must either copy the former name or remain independently
+    # proven. They are never silently redirected from another named Rider.
+    key = fields.get("rider_key")
+    if key is not None and key.value != name.value:
+        return source
+    proposed = source.model_copy(
+        update={
+            "fields": tuple(
+                restored
+                if f.field_id == "rider_name"
+                else f.model_copy(update={"value": value, "evidence_ids": restored.evidence_ids})
+                if f.field_id == "rider_key"
+                else f
+                for f in source.fields
+            )
+        }
+    )
+    # The unchanged column proof rejects ambiguous headers, examples, multiple rows,
+    # missing context and conflicting source. At least the same numeric amount must
+    # be proven, so a guessed citation cannot reassign a name-only candidate.
+    amount = fields.get("sum_assured")
+    if (
+        amount is None
+        or not _supported(proposed, restored, envelope, local_nodes)
+        or not _supported(proposed, amount, envelope, local_nodes)
+    ):
+        return source
+    adjustments.append(
+        PolicyDraftAdjustment(
+            "RIDER_NAME_RESTORED_FROM_CITED_ROW", source.candidate_id, "rider_name"
+        )
+    )
+    return proposed
+
+
+def _amount_currency_draft(
+    source: StructurerCandidate,
+    envelope: PolicyRangeEnvelope,
+    local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    adjustments: list[PolicyDraftAdjustment],
+) -> StructurerCandidate:
+    """Derive a unique explicit unit from the already-proven amount's same row.
+
+    No default currency, adjacent row or changed numeric value is accepted. A
+    conflicting supplied currency remains unresolved rather than being corrected.
+    """
+    if source.candidate_kind != "rider" or len({f.field_id for f in source.fields}) != len(
+        source.fields
+    ):
+        return source
+    fields = {field.field_id: field for field in source.fields}
+    amount = fields.get("sum_assured")
+    if amount is None or not _supported(
+        source,
+        amount,
+        envelope,
+        local_nodes,
+        allow_certificate_title=True,
+        allow_unconfirmed_insurer=True,
+    ):
+        return source
+    existing = fields.get("currency")
+    if existing is not None and _supported(
+        source,
+        existing,
+        envelope,
+        local_nodes,
+        allow_certificate_title=True,
+        allow_unconfirmed_insurer=True,
+    ):
+        return source
+    proven = []
+    for currency in ("KRW", "USD", "EUR", "JPY"):
+        field = CandidateField(
+            field_id="currency", value=currency, evidence_ids=amount.evidence_ids
+        )
+        if _supported(
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=True,
+            allow_unconfirmed_insurer=True,
+        ):
+            proven.append(field)
+    if len(proven) != 1 or (existing is not None and existing.value != proven[0].value):
+        return source
+    field = proven[0]
+    adjusted = tuple(field if f.field_id == "currency" else f for f in source.fields)
+    if existing is None:
+        adjusted = (*adjusted, field)
+    adjustments.append(
+        PolicyDraftAdjustment(
+            "CURRENCY_DERIVED_FROM_AMOUNT" if existing is None else "CURRENCY_EVIDENCE_REALIGNED",
+            source.candidate_id,
+            "currency",
+        )
+    )
+    return source.model_copy(update={"fields": adjusted})
+
+
 def _candidate_draft(
     source: StructurerCandidate,
     envelope: PolicyRangeEnvelope,
@@ -170,10 +345,11 @@ def _candidate_draft(
     adjustments: list[PolicyDraftAdjustment],
     *,
     allow_certificate_title: bool = False,
+    allow_unconfirmed_insurer: bool = False,
 ) -> StructurerCandidate | None:
     fields = {item.field_id: item for item in source.fields}
     required: tuple[PolicyCandidateFieldId, ...] = (
-        ("insurer", "product_name")
+        (("product_name",) if allow_unconfirmed_insurer else ("insurer", "product_name"))
         if source.candidate_kind == "policy_contract"
         else ("rider_name",)
     )
@@ -181,7 +357,12 @@ def _candidate_draft(
     for key in required:
         field = fields.get(key)
         if field is None or not _supported(
-            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=allow_certificate_title,
+            allow_unconfirmed_insurer=allow_unconfirmed_insurer,
         ):
             adjustments.append(
                 PolicyDraftAdjustment(
@@ -195,9 +376,22 @@ def _candidate_draft(
         return None
 
     retained = []
+    if (
+        source.candidate_kind == "policy_contract"
+        and allow_unconfirmed_insurer
+        and "insurer" not in fields
+    ):
+        adjustments.append(
+            PolicyDraftAdjustment("ISSUER_UNCONFIRMED", source.candidate_id, "insurer")
+        )
     for field in source.fields:
         if field.field_id in required or _supported(
-            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=allow_certificate_title,
+            allow_unconfirmed_insurer=allow_unconfirmed_insurer,
         ):
             retained.append(field)
         elif source.candidate_kind == "rider" and field.field_id == "rider_key":
@@ -210,7 +404,11 @@ def _candidate_draft(
         else:
             adjustments.append(
                 PolicyDraftAdjustment(
-                    "OPTIONAL_FIELD_UNSUPPORTED", source.candidate_id, field.field_id
+                    "ISSUER_UNCONFIRMED"
+                    if allow_unconfirmed_insurer and field.field_id == "insurer"
+                    else "OPTIONAL_FIELD_UNSUPPORTED",
+                    source.candidate_id,
+                    field.field_id,
                 )
             )
     if source.candidate_kind == "rider" and "rider_key" not in fields:
@@ -246,6 +444,9 @@ def normalize_policy_draft(
         if revision not in (
             POLICY_DRAFT_NORMALIZATION_REVISION,
             CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+            SOURCE_SCOPED_NORMALIZATION_REVISION,
+            AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+            TABLE_NAME_NORMALIZATION_REVISION,
         ):
             raise PolicyDraftInvalid
         _check_source(batch, envelope)
@@ -253,11 +454,33 @@ def normalize_policy_draft(
         adjustments: list[PolicyDraftAdjustment] = []
         drafts = {
             candidate.candidate_id: _candidate_draft(
-                candidate,
+                _amount_currency_draft(
+                    _table_name_draft(candidate, envelope, local_nodes, adjustments)
+                    if revision == TABLE_NAME_NORMALIZATION_REVISION
+                    else candidate,
+                    envelope,
+                    local_nodes,
+                    adjustments,
+                )
+                if revision
+                in {AMOUNT_CURRENCY_NORMALIZATION_REVISION, TABLE_NAME_NORMALIZATION_REVISION}
+                else candidate,
                 envelope,
                 local_nodes,
                 adjustments,
-                allow_certificate_title=revision == CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+                allow_certificate_title=revision
+                in {
+                    CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+                    SOURCE_SCOPED_NORMALIZATION_REVISION,
+                    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                    TABLE_NAME_NORMALIZATION_REVISION,
+                },
+                allow_unconfirmed_insurer=revision
+                in {
+                    SOURCE_SCOPED_NORMALIZATION_REVISION,
+                    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                    TABLE_NAME_NORMALIZATION_REVISION,
+                },
             )
             for candidate in batch.candidates
         }

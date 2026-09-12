@@ -132,6 +132,45 @@ class _SourceInventory:
         return self.value
 
 
+def _name_source(
+    inventory: _SourceInventory,
+    row: dict[str, Any],
+    refs: list[dict[str, Any]],
+    bound_pages: set[int],
+) -> tuple[dict[str, Any], UUID] | None:
+    """Select name evidence only after every original primary view agrees.
+
+    A primary table header supports the name field without locating the name.
+    Equivalent row/line views may nominate a representative only when each
+    independently reproduces the complete field's single native locator.
+    """
+    if not 1 <= len(refs) <= 64:
+        return None
+    primary = [ref for ref in refs if ref["primary"] and ref["source_role"] == "policy"]
+    pages = {ref["page"] for ref in primary} & bound_pages
+    located = []
+    for page in sorted(pages):
+        structure = inventory.page(row["content_sha256"], page).get(row["generation_id"])
+        if structure is None:
+            continue
+        locator = physical_enrollment_locator(structure, row["original_rider_name"], refs)
+        if (
+            locator is None
+            or locator["content_sha256"] != row["content_sha256"]
+            or locator["physical_page"] != page
+        ):
+            continue
+        name_evidence = {
+            UUID(ref["evidence_id"])
+            for ref in primary
+            if ref["page"] == page
+            and physical_enrollment_locator(structure, row["original_rider_name"], [ref]) == locator
+        }
+        if name_evidence:
+            located.append((locator, min(name_evidence)))
+    return located[0] if len(located) == 1 else None
+
+
 def _certificate_pages(coverages: list[dict[str, Any]]) -> dict[str, set[int]]:
     pages: dict[str, set[int]] = defaultdict(set)
     for coverage in coverages:
@@ -304,21 +343,15 @@ def _proposals(
     candidates: list[ProgramEnrollmentSource] = []
     operational = {}
     located_publications: set[UUID] = set()
+    native_names: dict[UUID, str] = {}
     for row in rows:
         if row["candidate_version_id"] in located_publications:
             continue
         refs = [ref for ref in row["source_refs"] if ref["evidence_id"] in row["name_ids"]]
-        primary = [ref for ref in refs if ref["primary"] and ref["source_role"] == "policy"]
-        if len(primary) != 1 or primary[0]["page"] not in bound_pages[row["content_sha256"]]:
+        name_source = _name_source(inventory, row, refs, bound_pages[row["content_sha256"]])
+        if name_source is None:
             continue
-        structure = inventory.page(row["content_sha256"], primary[0]["page"]).get(
-            row["generation_id"]
-        )
-        if structure is None:
-            continue
-        locator = physical_enrollment_locator(structure, row["original_rider_name"], refs)
-        if locator is None or locator["content_sha256"] != row["content_sha256"]:
-            continue
+        locator, name_evidence_id = name_source
         # Identity follows the original proven mention. A corrected native name
         # is considered only when the original name has no physical proof.
         located_publications.add(row["candidate_version_id"])
@@ -332,13 +365,14 @@ def _proposals(
             content_sha256=row["content_sha256"],
             physical_page=locator["physical_page"],
             publication_candidate_version_id=row["candidate_version_id"],
-            evidence_id=UUID(primary[0]["evidence_id"]),
+            evidence_id=name_evidence_id,
             generation_id=row["generation_id"],
             physical_locator=locator,
             source_refs=tuple(refs),
             publication_authority=row["publication_authority"],
             name_source_candidate_version_id=row["name_source_candidate_version_id"],
         )
+        native_names[row["candidate_version_id"]] = row["original_rider_name"]
         candidates.append(enrollment)
         operational[row["rider_id"]] = row
     user_links = connection.execute(
@@ -410,7 +444,7 @@ def _proposals(
                 unique_native_name_location(
                     structure,
                     proof.private_evidence_location["physical_page"],
-                    source["certificate_review"]["name"],
+                    native_names[proof.publication_candidate_version_id],
                     proof.physical_locator,
                 )
                 for structure in structures.values()
