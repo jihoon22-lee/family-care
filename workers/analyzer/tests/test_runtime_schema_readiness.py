@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0082_proven_draft_context"
+REVISION = "0083_source_unit_currency"
 
 
 class Result:

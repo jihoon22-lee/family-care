@@ -1,6 +1,6 @@
 # v0.5 B02: Document structure and enrollment linking
 
-- 상태: in_progress
+- 상태: in_progress — 구현·선택 원문 복구 완료; 자료 지원 PARTIAL, v14 최종 CI·수용 판단 대기
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59),
   [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 구현: [WP02 #62](https://github.com/jihoon22-lee/family-care/issues/62),
@@ -11,6 +11,8 @@
 
 ## Tasks
 
+Task 3/4의 아래 세부 설명은 구현 당시 경과를 보존한다. 현재 결과는 다음 최종 수용 갱신을 따른다.
+
 1. complete — 전체 block/table/cell/OCR 보존 IR, 명확한 레이아웃 관계,
    페이지/행/문자 범위와 처리 누락 adapter를 통합했다. 관련 합성 62개 통과.
 2. complete — 버전별 IR/범위 상태 저장과 기존 DB 추출 재사용, 부분 계획·취소·재개·
@@ -20,7 +22,7 @@
    후속 큰 합성 문서에서 64 MiB 전체 JSON 저장 한도 초과를 확인하여 원본/identity를
    보존하는 페이지 저장과 기존 형식 조회 호환성을 추가했다. 10만 단어 DB 저장/복원,
    연속표 문맥·원자성·실패 횟수 보존을 포함한 전체 합성 PostgreSQL 330개가 통과했다.
-3. in_progress — 범위별 검토 후보와 원문 위치, 필드 원문 대조, 로컬 피보험자/계약
+3. complete (구현·선택 범위 복구) / PARTIAL (자료 지원) — 범위별 검토 후보와 원문 위치, 필드 원문 대조, 로컬 피보험자/계약
    연결 근거를 저장한다. 검증된 계약/담보의 API 자동 반영·원장 조회·재시도와 사용자 교정
    우선순위를 연결했다. 검증된 연속표·열/단위 문맥을 반영하고, 가입 사실과 유형 분류를
    분리해 미분류 담보를 보존하며 미가입/예시는 반영을 막는다. native 단어의 원본 역추적
@@ -85,7 +87,7 @@
    전체 Python 4,052개·Web 250개 검사를 통과했다. 원문의 추가 라벨은 확인했지만
    새 대상자/계약 연결로 이어지지는 않았다. [검증 기록](../../../workthrough/2026-09-10-spaced-policy-source-labels.md)에
    PR CI와 보호 수용을 이어가며 B02 전체는 계속 진행 중이다.
-4. in_progress — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
+4. complete (구현·선택 범위 실행) / PARTIAL (자료 지원) — 문서 등록의 범위별 구조화·최소화·총량 제한을 연결한다. OpenAI 연결 작업은
    기존 키 재사용·보호된 자료 처리·최소 전송은 세션에서 승인받았다. 낮은 API 잔액에
    맞춰 로컬 재사용을 우선하고 범위별 호출 예산을 구현한 뒤 제한적으로 실행한다.
    기존 정책 Worker에 묶음 검증·영속 요청 예약/캐시·문서 누적/UTC 일일 예산을 연결했다.
@@ -135,7 +137,7 @@
 실패한 새 추출의 기존 가입/구조/게시 보존, 승인 원문의 0073 재처리·전체 행 보존·
 인증된 AI-off 조회를 대사해 #62를 완료 처리했다. [상세 기록](../../../workthrough/2026-09-10-metadata-header-regions.md#integration-and-isolated-schema-0073-acceptance)에
 따라 #63의 실제 가입/신원·판본 적용, 실제 document-structuring provider 품질, 최종 기기
-수용은 완료로 확대하지 않는다. B02 전체와 위 Task 3/4는 이 인계 범위를 계속 추적한다.
+수용은 완료로 확대하지 않았던 당시 기록이다. 현재 Task 3/4 판단은 아래 갱신을 따른다.
 
 IR 구현은 별도 worktree commit `e9c0cd1`(통합 `195bb36`)에서 시작했다. 새 모듈 부재
 RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22개와 기존 PDF 추출
@@ -164,3 +166,36 @@ native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명�
 초안 인용에 붙인다. 원문이 유일하게 입증하는 primary에 한해 보존된 응답의 누락/잘못된
 후보-범위 연결도 복구한다. 원 응답·이전 거부·게시·사용자 결정을 보존하며 변경 초안만
 새로 검수한다. 스키마·회귀·문서를 한 묶음으로 완성한 뒤 상세 검증한다.
+
+## 2026-09-13 final acceptance update
+
+[PR #103](https://github.com/jihoon22-lee/family-care/pull/103)의 출처 한정 계약 신원·통화·인용 이름·
+지목 필드 검수와 [PR #105](https://github.com/jihoon22-lee/family-care/pull/105)의 명시 단위 금액 복구는
+병합됐다. [PR #106](https://github.com/jihoon22-lee/family-care/pull/106)의 v13은 원문이 증명한 표 헤더를
+독립 검수 이후 게시 단계까지 유지한다. 기준은 `39a63bcf4e3ed61eb0be44c0f27ab6eebf1205ed`,
+`0082_proven_draft_context`이며 최종 CI는 PENDING이다.
+
+보호된 같은 원문에서 선택 계약의 native 담보는 16→53개가 됐고 별도 계약의 기존 9개는
+유지했다. 바뀌지 않은 후보·사용자 결정·이전 검수·원장·청구 snapshot을 보존했다. 새 출처
+연결 1개는 13개 가입 프로필과 기존 제품명 원문 검증으로 문서 대응만 추가했다. 이 자료의
+9개 UNRESOLVED 계약 범위와 금액 근거 페이지 불일치 10개는 그대로이며 가입 게시로
+승격하지 않았다. 문서 대응과 개별 담보/약관 적용을 구분한다.
+
+전체 승인 source 58개와 policy 43개/703쪽·terms 13개를 분모에 유지한다. 조사한 약관에서
+자동 보험사·상품·판본 신원은 확보하지 못했으며 원문 전체에 정보가 없다고 단정하지 않는다.
+확인된 USER component의 역할·범위와 미확인 identity를 구분하고, 부분 지원을 성공이나
+사용자 전량 재검수 의무로 바꾸지 않는다. #63 종료 판단에 전체 58개 자동 확정이라는
+별도 gate를 추가하지 않는다. v14 적용 후 선택 native는 54개, canonical은 51/54개다.
+기존 12개 금액/통화를 보강하고 새 담보 1개를 게시했으며 금액 충돌은 0개다.
+표시명 충돌 6개와 원래 private 인용/identity 한계의 미연결 3개는 남긴다. 최신 canonical 결과와 정확한 제한은
+[최종 수용 기록](../../../workthrough/2026-09-13-source-unit-currency.md)을 따른다.
+
+명시 단위가 raw currency에 들어간 경우의 후속은 `54496fa`/schema
+`0083_source_unit_currency`의 v14·정규화 v8이다. 원래 인용된 native 행·단위와 raw 값이
+정확히 같을 때만 scaled 금액/KRW 초안을 만들고 새 독립 검수와 API 금액 원문 검증을
+요구한다. 이전 v1–v7 동작과 원래 응답·사용자 결정은 유지한다. 관련 192 unit·mypy 369개
+소스·서로 다른 PG 3개를 통과했다. 실제 독립 검수 1회 뒤 12개 금액/통화 보강과
+담보 1개 추가·기존 다른 필드/이력 보존을 확인했다. 8개 범위의 REVIEW 상태는 그대로이며
+지원 사건 앱에서 후보 6개·POINT 3개·FORMULA 1개와 근거·저장 재조회도 확인했다.
+마지막 helper 카운터 실패는 보존하며 재분석 없는 대사에서 외부 작업/시도 0과 기존
+이력 보존을 확인했다. 최종 CI·운영 전환은 PENDING이며 전체 자료 지원 PASS로 확대하지 않는다.

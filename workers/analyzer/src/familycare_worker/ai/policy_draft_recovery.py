@@ -1,6 +1,6 @@
 """Reconcile a new draft against existing source proof before fresh verification.
 
-Only v7 accepts a structurally valid response with orphan/misassigned candidates.
+Versions v7/v8 accept structurally valid responses with orphan/misassigned candidates.
 The raw response remains immutable; no old verifier decision enters this module.
 """
 
@@ -20,6 +20,7 @@ from familycare_worker.ai.policy_draft_normalization import (
     PolicyDraftNormalization,
     _check_nodes,
     _check_source,
+    _explicit_unit_draft,
     _supported,
     normalize_policy_draft,
 )
@@ -30,6 +31,7 @@ from familycare_worker.ai.schemas import CandidateField, PolicyCandidate, Struct
 from familycare_worker.ai.scoped_policy_verifier import scoped_policy_evidence
 
 PROVEN_CONTEXT_NORMALIZATION_REVISION = "policy-draft-normalization-v7"
+SOURCE_UNIT_CURRENCY_NORMALIZATION_REVISION = "policy-draft-normalization-v8"
 
 
 class _RawResponse(BaseModel):
@@ -96,10 +98,21 @@ def _normalize_one(
     envelope: PolicyRangeEnvelope,
     nodes: Mapping[str, Mapping[str, Any]] | None,
     primary: Mapping[str, UUID],
+    *,
+    allow_source_unit_currency: bool = False,
 ) -> PolicyDraftNormalization | None:
     nominated = _nominees(candidate, primary)
     if not nominated:
         return None
+    adjustments: list[PolicyDraftAdjustment] = []
+    if allow_source_unit_currency:
+        candidate = _explicit_unit_draft(
+            candidate,
+            envelope,
+            nodes,
+            adjustments,
+            allow_source_unit_currency=True,
+        )
     # These provisional ranges come only from the candidate's original required
     # field citations. They are discarded after v6's name/unit/field reduction;
     # final mappings below must independently prove each required primary.
@@ -115,8 +128,16 @@ def _normalize_one(
             for r in raw.ranges
         ),
     )
-    return normalize_policy_draft(
+    reduced = normalize_policy_draft(
         isolated, envelope, local_nodes=nodes, revision=EXPLICIT_UNIT_NORMALIZATION_REVISION
+    )
+    if not adjustments:
+        return reduced
+    return PolicyDraftNormalization(
+        batch=reduced.batch,
+        adjustments=(*adjustments, *reduced.adjustments),
+        partial=True,
+        revision=reduced.revision,
     )
 
 
@@ -288,6 +309,7 @@ def normalize_policy_response(
     envelope: PolicyRangeEnvelope,
     *,
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    revision: str = PROVEN_CONTEXT_NORMALIZATION_REVISION,
 ) -> PolicyDraftNormalization:
     """Reconcile only independently proven mappings and field-specific context.
 
@@ -296,6 +318,11 @@ def normalize_policy_response(
     Neither temporary program probes nor previous verifier decisions approve it.
     """
     try:
+        if revision not in (
+            PROVEN_CONTEXT_NORMALIZATION_REVISION,
+            SOURCE_UNIT_CURRENCY_NORMALIZATION_REVISION,
+        ):
+            raise PolicyDraftInvalid
         raw = _parse(raw_response, envelope)
         _check_nodes(envelope, local_nodes)
         primary = dict(zip(envelope.primary_chunk_ids, envelope.primary_evidence_ids, strict=True))
@@ -305,7 +332,14 @@ def normalize_policy_response(
         blocked: set[str] = set()
         for original in raw.candidates:
             old_links = {r.chunk_id for r in raw.ranges if original.candidate_id in r.candidate_ids}
-            reduced = _normalize_one(original, raw, envelope, local_nodes, primary)
+            reduced = _normalize_one(
+                original,
+                raw,
+                envelope,
+                local_nodes,
+                primary,
+                allow_source_unit_currency=revision == SOURCE_UNIT_CURRENCY_NORMALIZATION_REVISION,
+            )
             if reduced is not None:
                 adjustments.extend(reduced.adjustments)
             candidate = (
@@ -411,7 +445,7 @@ def normalize_policy_response(
             adjustments=tuple(dict.fromkeys(adjustments)),
             partial=any(a.reason != "RIDER_KEY_DERIVED_FROM_NAME" for a in adjustments)
             or any(r.outcome == "UNRESOLVED" for r in batch.ranges),
-            revision=PROVEN_CONTEXT_NORMALIZATION_REVISION,
+            revision=revision,
         )
     except KeyError, TypeError, ValueError, AttributeError, OverflowError, ValidationError:
         raise PolicyDraftInvalid from None

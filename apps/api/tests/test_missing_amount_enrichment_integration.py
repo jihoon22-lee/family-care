@@ -121,7 +121,7 @@ def _verify(url, queue, job, request_id, count, provider_request_id, provider=No
 
 
 @pytest.fixture()
-def missing_money(enrollment_database, monkeypatch):
+def missing_money(enrollment_database, monkeypatch, request):
     url, original = enrollment_database
     with psycopg.connect(_psycopg_url(url)) as c:
         c.execute(
@@ -221,6 +221,20 @@ def missing_money(enrollment_database, monkeypatch):
                 ),
             )
         )
+    if getattr(request, "param", None) == "source_unit":
+        riders = [
+            r.model_copy(
+                update={
+                    "fields": (
+                        *r.fields,
+                        CandidateField(
+                            field_id="currency", value="만원", evidence_ids=r.fields[0].evidence_ids
+                        ),
+                    )
+                }
+            )
+            for r in riders
+        ]
     candidates = (policy, *riders)
     dispositions = []
     for chunk, evidence_id in zip(
@@ -242,7 +256,13 @@ def missing_money(enrollment_database, monkeypatch):
     request_id = _raw_request(url, raw_job, raw)
     _drain(url, queue, raw_job, terms)
     queue, previous = _historical_job(
-        url, original, generation, "retained-policy-association-v4", monkeypatch
+        url,
+        original,
+        generation,
+        "retained-policy-association-v13"
+        if getattr(request, "param", None) == "source_unit"
+        else "retained-policy-association-v4",
+        monkeypatch,
     )
     assert previous is not None
     draft = _verify(url, queue, previous, request_id, 8, "synthetic-old-v4-verifier")
@@ -548,3 +568,13 @@ def test_v13_proves_header_before_verification_without_rewriting_prior_invented_
             ).fetchone()["n"]
             == 1
         )
+
+
+@pytest.mark.parametrize("missing_money", ["source_unit"], indirect=True)
+@pytest.mark.parametrize("late_change", [None, "correct"])
+def test_v14_recovers_exact_source_unit_currency_and_preserves_user_history(
+    missing_money, late_change
+):
+    test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
+        missing_money, late_change, "retained-policy-association-v14"
+    )

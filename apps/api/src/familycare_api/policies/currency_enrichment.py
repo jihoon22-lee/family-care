@@ -6,7 +6,7 @@ from uuid import UUID
 
 import psycopg
 
-from familycare_api.guidance.amount_source import _money_witness
+from familycare_api.guidance.amount_source import _money_witness, _table_money
 from familycare_api.policies.contract_source_locator import contract_source_locator
 
 _REASONS = {"CURRENCY_DERIVED_FROM_AMOUNT", "CURRENCY_EVIDENCE_REALIGNED"}
@@ -35,7 +35,7 @@ def amount_enrichment_proven(
     target: dict[str, Any],
     previous: dict[str, Any],
 ) -> bool:
-    """Only an old program-removed amount and originally absent currency may be filled."""
+    """Only source-proven, program-removed money may fill an unchanged empty pair."""
     return _money_enrichment_proven(
         connection, version, source, values, evidence, target, previous, fill_amount=True
     )
@@ -59,6 +59,7 @@ def _money_enrichment_proven(
             {
                 "retained-policy-association-v12": "policy-draft-normalization-v6",
                 "retained-policy-association-v13": "policy-draft-normalization-v7",
+                "retained-policy-association-v14": "policy-draft-normalization-v8",
             }.get(pipeline)
             if fill_amount
             else "policy-draft-normalization-v4"
@@ -142,7 +143,7 @@ def _money_enrichment_proven(
         ).fetchone()
         if row is None or row["result_json"].get("program_validation_version") != (
             "range-grounding-v5"
-            if pipeline == "retained-policy-association-v13"
+            if pipeline in {"retained-policy-association-v13", "retained-policy-association-v14"}
             else "range-grounding-v4"
         ):
             return False
@@ -150,7 +151,11 @@ def _money_enrichment_proven(
         if not any(
             item.get("candidate_id") == identifier
             and item.get("field_id") == "currency"
-            and item.get("reason") in _REASONS
+            and (
+                item.get("reason") in _REASONS
+                or pipeline == "retained-policy-association-v14"
+                and item.get("reason") == "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT"
+            )
             for item in row["adjustments_json"]
         ):
             return False
@@ -234,8 +239,12 @@ def _previous_amount_was_removed(
     drafted: dict[str, dict[str, Any]],
 ) -> bool:
     identifier = str(source["provider_candidate_id"])
+    old_revision = old["old_generator_revision"]
+    allowed_revisions = {"policy-draft-normalization-v1"}
+    if source["pipeline_version"] == "retained-policy-association-v14":
+        allowed_revisions.add("policy-draft-normalization-v7")
     if (
-        old["old_generator_revision"] != "policy-draft-normalization-v1"
+        old_revision not in allowed_revisions
         or old["old_envelope_id"] != source["envelope_id"]
         or str(old["old_provider_candidate_id"]) != identifier
         or not any(
@@ -270,7 +279,7 @@ def _previous_amount_was_removed(
         "ON verification.job_id=%s AND verification.request_id=%s AND "
         "verification.state='SUCCEEDED' "
         "WHERE receipt.job_id=%s AND receipt.envelope_id=%s "
-        "AND receipt.normalization_revision='policy-draft-normalization-v1' "
+        f"AND receipt.normalization_revision='{old_revision}' "
         "AND receipt.source_provider_request_id=%s "
         "FOR SHARE OF receipt,raw,verification,old_range,current_range",
         (
@@ -313,14 +322,21 @@ def _previous_amount_was_removed(
     return (
         original[0]["candidate_kind"] == normalized[0]["candidate_kind"] == "rider"
         and len(fields) == len(original[0]["fields"])
-        and "currency" not in fields
+        and (
+            "currency" not in fields
+            and old_revision == "policy-draft-normalization-v1"
+            or source["pipeline_version"] == "retained-policy-association-v14"
+            and old_revision == "policy-draft-normalization-v7"
+            and _source_unit_currency_proven(source, receipt, previous, fields, drafted)
+        )
         and all(f["field_id"] not in {"sum_assured", "currency"} for f in normalized[0]["fields"])
         and type(fields["sum_assured"]["value"]) in (int, float)
         and fields["sum_assured"]["value"] != drafted["sum_assured"]["value"]
         and (
             set(fields["sum_assured"]["evidence_ids"])
             <= set(drafted["sum_assured"]["evidence_ids"])
-            if source["pipeline_version"] == "retained-policy-association-v13"
+            if source["pipeline_version"]
+            in {"retained-policy-association-v13", "retained-policy-association-v14"}
             else set(fields["sum_assured"]["evidence_ids"])
             == set(drafted["sum_assured"]["evidence_ids"])
         )
@@ -332,3 +348,44 @@ def _previous_amount_was_removed(
             for field in drafted.values()
         )
     )
+
+
+def _source_unit_currency_proven(
+    source: dict[str, Any],
+    receipt: dict[str, Any],
+    previous: dict[str, Any],
+    fields: dict[str, Any],
+    drafted: dict[str, Any],
+) -> bool:
+    """Recheck the original numeric cell and exact unit independently of the Worker."""
+    identifier = str(source["provider_candidate_id"])
+    currency = fields.get("currency")
+    if (
+        currency is None
+        or currency["value"] not in {"천원", "만원", "백만원", "억원"}
+        or type(fields["sum_assured"]["value"]) not in (int, float)
+        or not currency["evidence_ids"]
+        or not set(currency["evidence_ids"]) <= set(drafted["currency"]["evidence_ids"])
+        or not any(
+            a.get("candidate_id") == identifier
+            and a.get("field_id") == "currency"
+            and a.get("reason") == "OPTIONAL_FIELD_UNSUPPORTED"
+            for a in previous["adjustments_json"]
+        )
+        or not any(
+            a.get("candidate_id") == identifier
+            and a.get("field_id") == "currency"
+            and a.get("reason") == "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT"
+            for a in receipt["adjustments_json"]
+        )
+    ):
+        return False
+    nodes = {node["node_id"]: node for node in source["structure_json"]["nodes"]}
+    refs = {ref["evidence_id"]: ref for ref in source["source_refs"]}
+    proof = _table_money(
+        nodes,
+        [refs[key] for key in drafted["currency"]["evidence_ids"]],
+        drafted["rider_name"]["value"],
+        expected_source=(Decimal(str(fields["sum_assured"]["value"])), currency["value"]),
+    )
+    return proof == (Decimal(str(drafted["sum_assured"]["value"])), "KRW")

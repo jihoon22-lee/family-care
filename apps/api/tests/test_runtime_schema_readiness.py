@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0082_proven_draft_context"
+REVISION = "0083_source_unit_currency"
 
 
 class Result:

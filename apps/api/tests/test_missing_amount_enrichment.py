@@ -113,7 +113,7 @@ class MissingAmountProof(CurrencyProof):
         if "analysis_candidate_versions c" in query:
             return super().execute(query, params)
         if "FROM policy_range_replay_sources receipt" in query:
-            assert "normalization_revision='policy-draft-normalization-v1'" in query
+            assert f"normalization_revision='{self.old['old_generator_revision']}'" in query
             assert "verification.state='SUCCEEDED'" in query and "FOR SHARE" in query
             assert "current_range.envelope_json=old_range.envelope_json" in query
             assert "current_range.envelope_id=old_range.envelope_id" in query
@@ -275,4 +275,75 @@ def test_v13_context_cannot_replace_original_amount_source_or_add_unproved_evide
                         if fault == "removed_primary"
                         else [str(uid(9)), str(uid(999))]
                     )
+    assert not proof.check()
+
+
+def _source_unit_currency_money():
+    proof = _proven_context_money()
+    proof.source["pipeline_version"] = "retained-policy-association-v14"
+    proof.version["generator_version"] = "policy-draft-normalization-v8"
+    proof.old["old_generator_revision"] = "policy-draft-normalization-v7"
+    proof.prior["response_json"]["candidates"][0]["fields"].append(
+        {"field_id": "currency", "value": "만원", "evidence_ids": [str(uid(9))]}
+    )
+    proof.prior["adjustments_json"].append(
+        {
+            "candidate_id": str(uid(5)),
+            "field_id": "currency",
+            "reason": "OPTIONAL_FIELD_UNSUPPORTED",
+        }
+    )
+    proof.receipt["adjustments_json"].append(
+        {
+            "candidate_id": str(uid(5)),
+            "field_id": "currency",
+            "reason": "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT",
+        }
+    )
+    return proof
+
+
+def test_v14_rechecks_raw_numeric_cell_and_its_exact_source_unit():
+    assert _source_unit_currency_money().check()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "foreign",
+        "different_unit",
+        "numeric_compensation",
+        "currency_not_removed",
+        "old_v1",
+        "missing_reason",
+        "currency_foreign_citation",
+        "native_unit_changed",
+    ],
+)
+def test_v14_source_unit_cannot_authorize_other_units_or_unproved_history(fault):
+    proof = _source_unit_currency_money()
+    raw = proof.prior["response_json"]["candidates"][0]["fields"]
+    currency = next(f for f in raw if f["field_id"] == "currency")
+    if fault == "foreign":
+        currency["value"] = "USD"
+    elif fault in {"different_unit", "numeric_compensation"}:
+        currency["value"] = "천원"
+        if fault == "numeric_compensation":
+            next(f for f in raw if f["field_id"] == "sum_assured")["value"] = 3170
+    elif fault == "currency_not_removed":
+        proof.prior["adjustments_json"] = [
+            a for a in proof.prior["adjustments_json"] if a["field_id"] != "currency"
+        ]
+    elif fault == "old_v1":
+        proof.old["old_generator_revision"] = "policy-draft-normalization-v1"
+    elif fault == "missing_reason":
+        proof.receipt["adjustments_json"] = [
+            a
+            for a in proof.receipt["adjustments_json"]
+            if a["reason"] != "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT"
+        ]
+    elif fault == "currency_foreign_citation":
+        currency["evidence_ids"] = [str(uid(999))]
+    elif fault == "native_unit_changed":
+        proof.source["structure_json"]["nodes"][-1]["cells"][1]["text"] = "가입금액(천원)"
     assert not proof.check()

@@ -29,6 +29,7 @@ from familycare_worker.ai.policy_draft_normalization import (
 )
 from familycare_worker.ai.policy_draft_recovery import (
     PROVEN_CONTEXT_NORMALIZATION_REVISION,
+    SOURCE_UNIT_CURRENCY_NORMALIZATION_REVISION,
     normalize_policy_response,
 )
 from familycare_worker.ai.policy_ranges import RangeEvidenceSlice
@@ -44,7 +45,10 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-PROVEN_CONTEXT_POLICY_PIPELINES = frozenset({"retained-policy-association-v13"})
+SOURCE_UNIT_CURRENCY_PIPELINES = frozenset({"retained-policy-association-v14"})
+PROVEN_CONTEXT_POLICY_PIPELINES = SOURCE_UNIT_CURRENCY_PIPELINES | frozenset(
+    {"retained-policy-association-v13"}
+)
 EXPLICIT_UNIT_POLICY_PIPELINES = PROVEN_CONTEXT_POLICY_PIPELINES | frozenset(
     {"retained-policy-association-v12"}
 )
@@ -71,7 +75,9 @@ NORMALIZED_POLICY_PIPELINES = (
 
 def normalization_revision(pipeline_version: str) -> str:
     return (
-        PROVEN_CONTEXT_NORMALIZATION_REVISION
+        SOURCE_UNIT_CURRENCY_NORMALIZATION_REVISION
+        if pipeline_version in SOURCE_UNIT_CURRENCY_PIPELINES
+        else PROVEN_CONTEXT_NORMALIZATION_REVISION
         if pipeline_version in PROVEN_CONTEXT_POLICY_PIPELINES
         else EXPLICIT_UNIT_NORMALIZATION_REVISION
         if pipeline_version in EXPLICIT_UNIT_POLICY_PIPELINES
@@ -132,7 +138,7 @@ def _current_source(
                 ('retained-policy-association-v6','retained-policy-association-v7',
                  'retained-policy-association-v8','retained-policy-association-v9',
                  'retained-policy-association-v10','retained-policy-association-v11',
-                 'retained-policy-association-v12','retained-policy-association-v13')
+                 'retained-policy-association-v12','retained-policy-association-v13','retained-policy-association-v14')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -221,7 +227,8 @@ def _preserve_verified_riders(
         "AND (p.privacy_fingerprint=current.privacy_fingerprint "
         "OR EXISTS(SELECT 1 FROM policy_structuring_jobs cp WHERE cp.id=current.job_id "
         "AND cp.pipeline_version IN "
-        "('retained-policy-association-v12','retained-policy-association-v13'))) "
+        "('retained-policy-association-v12','retained-policy-association-v13',"
+        "'retained-policy-association-v14'))) "
         "AND p.associations_json=current.associations_json "
         "AND r.envelope_id=%s AND r.envelope_json=%s "
         "AND r.state IN ('COMPLETE','REVIEW') AND policy_structuring_source_current(old.id) "
@@ -249,12 +256,27 @@ def _preserve_verified_riders(
         "OR (old.pipeline_version='retained-policy-association-v12' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
-        "'policy-draft-normalization-v6')) "
+        "'policy-draft-normalization-v6') "
+        "OR (old.pipeline_version='retained-policy-association-v13' "
+        "AND r.result_json->>'program_validation_version'='range-grounding-v5' "
+        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "'policy-draft-normalization-v7')) "
         "FOR SHARE OF old,p,current,r",
         (
             job.id,
             job.id,
             [
+                "retained-policy-association-v13",
+                "retained-policy-association-v12",
+                "retained-policy-association-v11",
+                "retained-policy-association-v10",
+                "retained-policy-association-v9",
+                "retained-policy-association-v8",
+                "retained-policy-association-v7",
+                "retained-policy-association-v4",
+            ]
+            if job.pipeline_version in SOURCE_UNIT_CURRENCY_PIPELINES
+            else [
                 "retained-policy-association-v4",
                 "retained-policy-association-v7",
                 "retained-policy-association-v8",
@@ -434,7 +456,7 @@ def _source(
            'policy-range-normalized-v2','retained-policy-association-v7',
            'retained-policy-association-v8','retained-policy-association-v9',
                  'retained-policy-association-v10','retained-policy-association-v11',
-                 'retained-policy-association-v12','retained-policy-association-v13'))
+                 'retained-policy-association-v12','retained-policy-association-v13','retained-policy-association-v14'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
@@ -450,6 +472,15 @@ def _source(
             AND old.pipeline_version IN
               ('retained-policy-association-v5','retained-policy-association-v6',
                'retained-policy-association-v7'))
+          OR (current.pipeline_version='retained-policy-association-v14'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained' AND old.pipeline_version IN
+              ('retained-policy-association-v2','retained-policy-association-v3',
+               'retained-policy-association-v4','retained-policy-association-v5',
+               'retained-policy-association-v6','retained-policy-association-v7',
+               'retained-policy-association-v8','retained-policy-association-v9',
+               'retained-policy-association-v10','retained-policy-association-v11',
+               'retained-policy-association-v12','retained-policy-association-v13'))
           OR (current.pipeline_version='retained-policy-association-v13'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained' AND old.pipeline_version IN
@@ -525,7 +556,7 @@ def _source(
           AND original.envelope_json=target.envelope_json
           AND (original_plan.privacy_fingerprint=target_plan.privacy_fingerprint
             OR current.pipeline_version IN
-              ('retained-policy-association-v12','retained-policy-association-v13'))
+              ('retained-policy-association-v12','retained-policy-association-v13','retained-policy-association-v14'))
           AND target.generation_id=%s AND target.envelope_id=%s
           AND target.envelope_json=%s AND target.state='PENDING'
           AND policy_structuring_source_current(old.id)
@@ -563,7 +594,10 @@ def _source(
             ):
                 raise PolicyRangeConflict
             normalized = normalize_policy_response(
-                row["response_json"], work.envelope, local_nodes=local_nodes
+                row["response_json"],
+                work.envelope,
+                local_nodes=local_nodes,
+                revision=normalization_revision(job.pipeline_version),
             )
         else:
             batch = PolicyRangeBatch.model_validate_json(response_json, strict=True)

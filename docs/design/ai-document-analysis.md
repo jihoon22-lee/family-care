@@ -522,3 +522,17 @@ grounder 결과의 field-specific 헤더/단위 문맥만 초안 Evidence에 추
 표 헤더를 가입 행이 아닌 field context로 취급하여, 이미 입증한 헤더가 붙은 필드를 다시
 검사해도 같은 값·인용·상태가 유지되게 한다. header-only와 복수 가입 행은 계속 거부하며
 v1–v4의 이전 판독은 기본 플래그를 유지한다. API의 독립 금액 근거 검사도 v5 출처를 읽는다.
+
+
+### Explicit source-unit currency recovery
+
+Explicit `retained-policy-association-v14` / `policy-draft-normalization-v8` (schema
+0083) adds one source-bound conversion to v13. A draft currency equal to the independently
+proved native Korean amount unit may become KRW while scaling the exact same numeric
+cell. The original response is immutable and a fresh verifier is required. Other currency
+values and earlier normalization revisions keep their existing behavior.
+
+API enrichment of a prior v13 program-removed pair independently matches the raw numeric
+cell and exact unit, checks its removal receipt and fresh verifier, and preserves user
+corrections, source identity and unrelated ledger fields. This does not authorize currency
+conversion between currencies or silently resolve private/native field conflicts.

@@ -57,6 +57,7 @@ type AdjustmentReason = Literal[
     "CURRENCY_EVIDENCE_REALIGNED",
     "RIDER_NAME_RESTORED_FROM_CITED_ROW",
     "AMOUNT_SCALED_FROM_EXPLICIT_UNIT",
+    "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT",
     "CANDIDATE_RANGE_RECONCILED",
     "CANDIDATE_RANGE_UNSUPPORTED",
     "FIELD_CONTEXT_EVIDENCE_PROVEN",
@@ -492,6 +493,8 @@ def _explicit_unit_draft(
     envelope: PolicyRangeEnvelope,
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
     adjustments: list[PolicyDraftAdjustment],
+    *,
+    allow_source_unit_currency: bool = False,
 ) -> StructurerCandidate:
     """Atomically repair a cited name/amount pair, still requiring fresh verification."""
     from familycare_worker.ai.range_grounding import _UNITS
@@ -548,7 +551,13 @@ def _explicit_unit_draft(
     if scaled == unscaled:
         return source
     currency = fields.get("currency")
-    if currency is not None and currency.value != "KRW":
+    source_unit_currency = (
+        allow_source_unit_currency
+        and currency is not None
+        and unit in {"천원", "만원", "백만원", "억원"}
+        and currency.value == unit
+    )
+    if currency is not None and currency.value != "KRW" and not source_unit_currency:
         return source
     restored = {
         "rider_name": name.model_copy(update={"value": actual_name}),
@@ -594,6 +603,8 @@ def _explicit_unit_draft(
             PolicyDraftAdjustment(
                 "CURRENCY_DERIVED_FROM_AMOUNT"
                 if currency is None
+                else "CURRENCY_NORMALIZED_FROM_SOURCE_UNIT"
+                if source_unit_currency
                 else "CURRENCY_EVIDENCE_REALIGNED",
                 source.candidate_id,
                 "currency",

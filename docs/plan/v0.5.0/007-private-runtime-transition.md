@@ -1,6 +1,6 @@
 # v0.5 B07: Existing data transition and recovery
 
-- 상태: in_progress
+- 상태: in_progress — 격리 0083 보강·보존 및 지원 사건 앱 경로 확인; 새 live 이력 병합·최종 CI·배포 대기
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP09 #69](https://github.com/jihoon22-lee/family-care/issues/69)
 - 기반: B01–B06 통합 코드, [PR #81](https://github.com/jihoon22-lee/family-care/pull/81) merge `f59c8a9e989ea2822ec6e57174a1a7055948828b`, CI 34306662287 필수 7/7 통과.
@@ -24,7 +24,7 @@ Task 5 후속 구현은 보관 구조의 피보험자 복합 필드와 명시적
 집계하지 않는다. 과거 패키지의 PDF 별칭 연결과 원문에서 직접 만드는 가입 근거는 각각
 수용한다. 별칭 대응표가 없다는 사실만으로 직접 원문 처리까지 중단하지 않는다.
 
-Task 5의 추가 재사용 경로는 in_progress다. 원본 provider 응답과 동일한 최소화 원문을
+Task 5의 아래 추가 재사용 경로는 당시 in_progress였으며 최신 실행은 0082 갱신에 기록한다. 원본 provider 응답과 동일한 최소화 원문을
 고정하고, 근거 없는 선택 필드는 별도 파생 초안에서 제외한다. 새 retained v4 작업의
 불변 receipt에 손실을 기록하며 독립 검수·프로그램 검증·기존 게시 경계를 다시 통과한다.
 원본 응답을 현재 prompt의 cache hit로 취급하거나 기존 요청 예산을 초기화하지 않는다.
@@ -77,3 +77,59 @@ Task 6의 실제 실행·릴리스의 수동 노트 복구·Windows 임시 세�
 연결했다. 보존된 원본 0024와 활성 대상 0069를 분리하며 새 쓰기 뒤 원본 DB로 자동
 되돌리지 않는다. digest 고정 관리 명령은 비공개 운영 설정에 설치했다. Task 5의 자료
 지원 PARTIAL과 #69의 전체 새 구조 연결 수용은 열린 상태다.
+
+## 0082 protected acceptance update
+
+2026-09-13 기준 `39a63bcf4e3ed61eb0be44c0f27ab6eebf1205ed`의 격리 DB를
+`0082_proven_draft_context`로 전환했다. 기존 owned clone의 함수·constraint를 갱신하고
+이전 원문·처리·후보·교정·게시·청구 행을 보존했다. 이는 기존 source `2370761`/schema 0069의
+실행 앱을 전환했다는 뜻이 아니며 최종 이미지·운영 배포는 PENDING이다.
+
+선택 범위 v13은 새 verifier 3회로 37개 담보를 게시해 해당 계약을 16→53개로 늘렸다.
+별도 계약의 기존 9개와 과거 이력을 유지했다. 전체 추가 승인 예산 원장은 HTTP 22회,
+USD 0.52531240 사용량 기준 누계이며 기존 문서/일일 예약과 별도로 관리했다. 이 비용을
+과거 고정 20건 검수 평가에 합산하거나 모델 품질 점수로 쓰지 않는다.
+
+기존 2개 문서 출처 연결에 정확한 원문 프로필의 선언 1개를 기존 repository로 추가했다.
+기존 bindings와 원장·검수·청구 이력은 불변이며 새로운 가입/담보와 canonical 갱신은 이
+선언 작업에서 만들지 않았다. 이후 인증·원문 발췌·AI-off 조회·저장·이력 보존은 67.883초에 통과했다.
+선택 canonical은 50/53개(전체 59개), 결합 100개는 공통 identity로 50개가 됐다.
+대표 입력은 total 191/evaluated 0/unsupported 191/candidate 0이다. 분모는 private 94 +
+operational 147 − canonical 50이며 해당 구성원의 실행 규칙·계산이 없는 지원 한계다.
+다른 두 구성원의 기존 규칙/계산을 사용하는 대표 앱 수용은 별도로 확인한다. 이전 helper 실패/복구는
+[최종 수용 기록](../../../workthrough/2026-09-13-source-unit-currency.md)에 함께 기록한다.
+
+#69의 전환·보존 수용과 자료 지원률을 분리한다. 약관 신원·일부 연결이 PARTIAL이어도
+그 상태와 전체 분모를 보존하는 전환은 평가할 수 있다. 모든 자료의 자동 해석 완료나
+모바일 실기기 확인을 새 전환 선행 조건으로 만들지 않는다. 실제 최종 배포는 해당
+소스·schema·이미지·전후 보존·재시작 결과를 받은 뒤에만 완료 처리한다.
+
+## 0083 transition candidate
+
+최종 후보 source는 `54496fa915b80e2dcdb043268473eb3ffe72399a`, schema는
+`0083_source_unit_currency`다. 같은 owned clone에서 원문 단위에 의한 금액/통화 초안
+보강을 적용했다. schema 준비는 1.762초, 실제 verifier 1회는 43.978초였으며 누적 예산은
+HTTP 23회 / USD 0.57333290이다. 기존 12개 금액/통화 보강과 담보 1개 추가로 선택
+원문의 54개 가입을 native에 반영했다. 다른 필드와 원래 이력·8개 REVIEW 범위는 보존했다.
+
+canonical 갱신은 24.044초에 통과했다. 변경 11개는 기존 10개 갱신과 신규 1개이며 선택
+51/54개·전체 60개(다른 계약 9개)다. 금액 충돌 0개, 표시명 충돌 6개와 원래 인용/identity
+한계의 미연결 3개를 유지한다. range 유래 두 계약의 native 54+9개를 legacy 원장까지
+포함한 전체 담보 수로 표시하지 않는다.
+
+`54496fa`/0083의 지원 규칙이 있는 구성원에서 기존 입력을 복제한 사건 1개를 확인했다.
+59.831초에 후보 6개·POINT 3개·FORMULA 1개·RANGE 0개, support 238개 중 evaluated 5개/
+unsupported 233개였다. 실패 코드 0개, SUMMARY 근거 2개 열람, 저장 재조회 일치·기존
+사건 불변·청구 조회·새 사건 soft delete·logout과 외부 HTTP 0을 확인했다. 마지막 helper는
+정상 LOCAL_SEARCH_ONLY/SUCCEEDED/attempts 0 행을 provider 증가로 세어 실패했다.
+새 분석 없이 수행한 후속 대사에서 provider 관련 5개 job table의 신규 행·work state·
+attempts는 모두 0이었다. 신규 assistance job 1개는 정상 로컬 검색 행으로 확인했다.
+원래 source event API 동등성은 직접 통과했고, 보조 root-delta 기준의 40개 table/116,681개
+기존 행도 missing 0/changed 0이었다. 추가 10개는 복수 root 작업의 delta이며 단일 앱의
+전후 증거로 확대하지 않는다. 처음의 FAILED 기록은 남기되 AI-off·기존 이력 조건은 해소했다.
+
+최종 운영 전환은 PENDING이다. live에 이후 생긴 분석/청구 결과 약 9천 행을 원래 key로
+owned DB에 병합할 준비가 필요하다. 기존 Rider 7개 차이는 승인된 금액 보강·독립 API 원문
+증명으로 확인했고 사용자 보험정보 교정 충돌은 확인되지 않았다. session 상태와 약관 확인
+시각 차이를 보험정보 변경으로 합치지 않는다. 새 live 이력 보존, 전환 직전 source barrier와
+배포 후 재시작·조회 결과를 확인하기 전에는 격리 DB 준비를 운영 전환 완료로 표시하지 않는다.
