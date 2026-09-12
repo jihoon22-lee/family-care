@@ -30,6 +30,7 @@ from familycare_worker.ai.schemas import (
 )
 
 POLICY_DRAFT_NORMALIZATION_REVISION = "policy-draft-normalization-v1"
+CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -126,6 +127,8 @@ def _supported(
     field: CandidateField,
     envelope: PolicyRangeEnvelope,
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    *,
+    allow_certificate_title: bool = False,
 ) -> bool:
     # Probe one field with its rider-name anchor through the unchanged program
     # proof. The temporary status only enables that proof; it is never returned.
@@ -143,7 +146,12 @@ def _supported(
         issue_codes=(),
         provider_request_ids=(),
     )
-    proof = ground_range_candidate(candidate, envelope.evidence, local_nodes=local_nodes)
+    proof = ground_range_candidate(
+        candidate,
+        envelope.evidence,
+        local_nodes=local_nodes,
+        allow_certificate_title=allow_certificate_title,
+    )
     proven = next((item for item in proof.fields if item.field_id == field.field_id), None)
     # The grounder can enrich table citations and demote guessed benefit types.
     # Only prove the original value here; neither alteration enters this draft.
@@ -160,6 +168,8 @@ def _candidate_draft(
     envelope: PolicyRangeEnvelope,
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
     adjustments: list[PolicyDraftAdjustment],
+    *,
+    allow_certificate_title: bool = False,
 ) -> StructurerCandidate | None:
     fields = {item.field_id: item for item in source.fields}
     required: tuple[PolicyCandidateFieldId, ...] = (
@@ -170,7 +180,9 @@ def _candidate_draft(
     unsupported = False
     for key in required:
         field = fields.get(key)
-        if field is None or not _supported(source, field, envelope, local_nodes):
+        if field is None or not _supported(
+            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+        ):
             adjustments.append(
                 PolicyDraftAdjustment(
                     "REQUIRED_FIELD_MISSING" if field is None else "REQUIRED_FIELD_UNSUPPORTED",
@@ -184,7 +196,9 @@ def _candidate_draft(
 
     retained = []
     for field in source.fields:
-        if field.field_id in required or _supported(source, field, envelope, local_nodes):
+        if field.field_id in required or _supported(
+            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+        ):
             retained.append(field)
         elif source.candidate_kind == "rider" and field.field_id == "rider_key":
             adjustments.append(
@@ -220,6 +234,7 @@ def normalize_policy_draft(
     envelope: PolicyRangeEnvelope,
     *,
     local_nodes: Mapping[str, Mapping[str, Any]] | None = None,
+    revision: str = POLICY_DRAFT_NORMALIZATION_REVISION,
 ) -> PolicyDraftNormalization:
     """Return a separate draft and complete loss accounting without provider I/O.
 
@@ -228,11 +243,22 @@ def normalize_policy_draft(
     range UNRESOLVED, never NO_ENROLLMENT_FACTS or a silently shortened success.
     """
     try:
+        if revision not in (
+            POLICY_DRAFT_NORMALIZATION_REVISION,
+            CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+        ):
+            raise PolicyDraftInvalid
         _check_source(batch, envelope)
         _check_nodes(envelope, local_nodes)
         adjustments: list[PolicyDraftAdjustment] = []
         drafts = {
-            candidate.candidate_id: _candidate_draft(candidate, envelope, local_nodes, adjustments)
+            candidate.candidate_id: _candidate_draft(
+                candidate,
+                envelope,
+                local_nodes,
+                adjustments,
+                allow_certificate_title=revision == CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+            )
             for candidate in batch.candidates
         }
         primary = dict(zip(envelope.primary_chunk_ids, envelope.primary_evidence_ids, strict=True))
@@ -278,4 +304,5 @@ def normalize_policy_draft(
         tuple(adjustments),
         any(item.reason != "RIDER_KEY_DERIVED_FROM_NAME" for item in adjustments)
         or any(item.outcome == "UNRESOLVED" for item in ranges),
+        revision=revision,
     )
