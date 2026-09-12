@@ -40,9 +40,13 @@ from apps.api.tests.test_source_scoped_policy_identity_integration import (
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize(
+    "target_revision", ["retained-policy-association-v11", "retained-policy-association-v12"]
+)
 @pytest.mark.parametrize("deferred_parent", ["cited_name_errors"], indirect=True)
 def test_scoped_revision_rechecks_only_unapproved_candidate_and_preserves_prior_results(
     deferred_parent,
+    target_revision,
 ):
     url, original, old, parent, *_ = deferred_parent
     projector = RangeEnrollmentProjector(url)
@@ -153,7 +157,7 @@ def test_scoped_revision_rechecks_only_unapproved_candidate_and_preserves_prior_
             (old.household_space_id,),
         ).fetchall()
         assert len(riders) == 5
-    target = run("retained-policy-association-v11", True)
+    target = run(target_revision, True)
     assert len(calls) == 2
     assert projector.project_pending() == 1
     with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as connection:
