@@ -142,3 +142,6 @@ RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22
 14개 합성 테스트가 통과했다. 이 증거는 순수 adapter 범위이며 DB/실제 import/외부 전달
 완료를 의미하지 않는다. 최신 결과와 남은 경계는
 [B02 workthrough](../../../workthrough/2026-09-07-document-structure-and-linking.md)에 연결한다.
+
+같은 PR #103에서 통화가 누락된 기존 담보의 동일 금액 행·헤더 근거를 v9/v4로 복구한다.
+변경 담보만 독립 검수하고 사용자 교정·원장 버전을 보호하며 API가 통화 근거를 별도로 확인한다.

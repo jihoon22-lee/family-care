@@ -14,6 +14,7 @@ from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
 from familycare_worker.ai.policy_draft_normalization import (
+    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
     CERTIFICATE_TITLE_NORMALIZATION_REVISION,
     POLICY_DRAFT_NORMALIZATION_REVISION,
     SOURCE_SCOPED_NORMALIZATION_REVISION,
@@ -33,7 +34,10 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-SOURCE_SCOPED_POLICY_PIPELINES = frozenset({"retained-policy-association-v8"})
+AMOUNT_CURRENCY_POLICY_PIPELINES = frozenset({"retained-policy-association-v9"})
+SOURCE_SCOPED_POLICY_PIPELINES = AMOUNT_CURRENCY_POLICY_PIPELINES | frozenset(
+    {"retained-policy-association-v8"}
+)
 CERTIFICATE_TITLE_PIPELINES = SOURCE_SCOPED_POLICY_PIPELINES | frozenset(
     {"policy-range-normalized-v2", "retained-policy-association-v7"}
 )
@@ -45,7 +49,9 @@ NORMALIZED_POLICY_PIPELINES = (
 
 def normalization_revision(pipeline_version: str) -> str:
     return (
-        SOURCE_SCOPED_NORMALIZATION_REVISION
+        AMOUNT_CURRENCY_NORMALIZATION_REVISION
+        if pipeline_version in AMOUNT_CURRENCY_POLICY_PIPELINES
+        else SOURCE_SCOPED_NORMALIZATION_REVISION
         if pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
         else CERTIFICATE_TITLE_NORMALIZATION_REVISION
         if pipeline_version in CERTIFICATE_TITLE_PIPELINES
@@ -96,7 +102,7 @@ def _current_source(
                 AND current.processing_mode='automatic')
             OR (current.pipeline_version IN
                 ('retained-policy-association-v6','retained-policy-association-v7',
-                 'retained-policy-association-v8')
+                 'retained-policy-association-v8','retained-policy-association-v9')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -129,18 +135,19 @@ def _preserve_verified_riders(
     normalized: PolicyDraftNormalization,
     local_nodes: dict[str, dict[str, Any]],
 ) -> PolicyDraftNormalization:
-    """Exclude unchanged, still-current v7 Riders from a new v8 verifier request.
+    """Preserve source-bound user reviews and unchanged v7/v8 verified candidates.
 
     This grants no new approval and creates no copy. The existing candidate remains
     the authority-bearing record; its exact fields, citations and source must match.
     The new range remains partial, accounting for every omitted candidate.
     """
     rows = connection.execute(
-        "SELECT old.id AS job_id,r.result_json FROM policy_structuring_jobs old "
+        "SELECT old.id AS job_id,old.pipeline_version,r.result_json "
+        "FROM policy_structuring_jobs old "
         "JOIN document_policy_range_plans p ON p.job_id=old.id "
         "JOIN document_policy_range_plans current ON current.job_id=%s "
         "JOIN document_policy_ranges r ON r.job_id=old.id AND r.generation_id=p.generation_id "
-        "WHERE old.id<>%s AND old.pipeline_version='retained-policy-association-v7' "
+        "WHERE old.id<>%s AND old.pipeline_version=ANY(%s) "
         "AND old.processing_mode='retained' AND old.household_space_id=%s "
         "AND old.family_member_id=%s AND old.document_version_id=%s "
         "AND old.extraction_id=%s AND old.batch_item_id=%s "
@@ -150,12 +157,21 @@ def _preserve_verified_riders(
         "AND p.associations_json=current.associations_json "
         "AND r.envelope_id=%s AND r.envelope_json=%s "
         "AND r.state IN ('COMPLETE','REVIEW') AND policy_structuring_source_current(old.id) "
+        "AND ((old.pipeline_version='retained-policy-association-v7' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v3' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
-        "'policy-draft-normalization-v2' FOR SHARE OF old,p,current,r",
+        "'policy-draft-normalization-v2') "
+        "OR (old.pipeline_version='retained-policy-association-v8' "
+        "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
+        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "'policy-draft-normalization-v3')) "
+        "FOR SHARE OF old,p,current,r",
         (
             job.id,
             job.id,
+            ["retained-policy-association-v7", "retained-policy-association-v8"]
+            if job.pipeline_version in AMOUNT_CURRENCY_POLICY_PIPELINES
+            else ["retained-policy-association-v7"],
             job.household_space_id,
             job.family_member_id,
             job.document_version_id,
@@ -170,29 +186,26 @@ def _preserve_verified_riders(
     ).fetchall()
     preserved: set[UUID] = set()
     reviewed: set[UUID] = set()
-    sources = {
-        item.candidate_id: item
-        for item in normalized.batch.candidates
-        if item.candidate_kind == "rider"
-    }
+    sources = {item.candidate_id: item for item in normalized.batch.candidates}
     for row in rows:
         previous = CandidatePipelineResult.model_validate_json(
             json.dumps(row["result_json"]["result"])
         )
         for candidate in previous.candidates:
             draft = sources.get(candidate.candidate_id)
-            if draft is None or candidate.candidate_kind != "rider":
+            if draft is None or candidate.candidate_kind != draft.candidate_kind:
                 continue
             version = connection.execute(
                 "SELECT id,is_current,status,deleted_at FROM analysis_candidate_versions "
                 "WHERE structuring_job_id=%s "
                 "AND source_candidate_id=%s AND household_space_id=%s "
-                "AND candidate_kind='rider' "
-                "AND generator_version='policy-draft-normalization-v2' FOR SHARE",
+                "AND candidate_kind=%s AND generator_version=%s FOR SHARE",
                 (
                     row["job_id"],
                     uuid5(row["job_id"], f"{work.envelope.envelope_id}:{candidate.candidate_id}"),
                     job.household_space_id,
+                    candidate.candidate_kind,
+                    normalization_revision(row["pipeline_version"]),
                 ),
             ).fetchone()
             if version is None:
@@ -207,7 +220,10 @@ def _preserve_verified_riders(
                 preserved.add(candidate.candidate_id)
                 reviewed.add(candidate.candidate_id)
                 continue
-            if candidate.status != "AI_VERIFIED":
+            if candidate.status != "AI_VERIFIED" or (
+                candidate.candidate_kind != "rider"
+                and job.pipeline_version not in AMOUNT_CURRENCY_POLICY_PIPELINES
+            ):
                 continue
             grounded = ground_range_candidate(
                 PolicyCandidate(
@@ -292,7 +308,8 @@ def _source(
         """
         AND ((old.id=current.id AND current.pipeline_version IN
           ('policy-range-normalized-v1','retained-policy-association-v6',
-           'policy-range-normalized-v2','retained-policy-association-v7','retained-policy-association-v8'))
+           'policy-range-normalized-v2','retained-policy-association-v7',
+           'retained-policy-association-v8','retained-policy-association-v9'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
@@ -307,7 +324,12 @@ def _source(
             AND old.processing_mode='retained'
             AND old.pipeline_version IN
               ('retained-policy-association-v5','retained-policy-association-v6',
-               'retained-policy-association-v7')))
+               'retained-policy-association-v7'))
+          OR (current.pipeline_version='retained-policy-association-v9'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained' AND old.pipeline_version IN
+              ('retained-policy-association-v5','retained-policy-association-v6',
+               'retained-policy-association-v7','retained-policy-association-v8')))
         AND (SELECT count(*) FROM policy_provider_requests matching
           WHERE matching.job_id=request.job_id AND matching.request_id=request.request_id
             AND matching.state='SUCCEEDED')=1

@@ -24,6 +24,7 @@ from familycare_worker.policy_jobs import (
 # Advancing it permits a new explicit run; it never schedules one automatically.
 RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v7"
 SOURCE_SCOPED_POLICY_PIPELINE_REVISION = "retained-policy-association-v8"
+AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION = "retained-policy-association-v9"
 
 
 class RetainedPolicyConflict(RuntimeError):
@@ -38,7 +39,11 @@ def _identity(value: UUID) -> UUID:
 
 
 def _revision(value: str) -> str:
-    if value not in {RETAINED_POLICY_PIPELINE_REVISION, SOURCE_SCOPED_POLICY_PIPELINE_REVISION}:
+    if value not in {
+        RETAINED_POLICY_PIPELINE_REVISION,
+        SOURCE_SCOPED_POLICY_PIPELINE_REVISION,
+        AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION,
+    }:
         raise RetainedPolicyConflict
     return value
 

@@ -409,6 +409,19 @@ AI_VERIFIED인 기존 v7 담보는 새 v8 검수 요청에서 제외한다. 새 
 교정·거절·삭제가 있으면 `PRIOR_CANDIDATE_REVIEW_PRESERVED`로 원래 검토 이력을 보존하고,
 옛 필드를 새 review item으로 재승인하여 사용자 결정을 우회하지 않는다.
 
+명시적 `retained-policy-association-v9` / `policy-draft-normalization-v4`는 이미 입증된
+가입금액과 동일한 행·헤더에서 유일한 통화가 확인될 때만 누락 통화를 보강한다. 기존 값과
+충돌하면 바꾸지 않는다. 헤더만 잘못 인용한 같은 값은 금액의 행 인용으로 정렬하고 각각
+`CURRENCY_DERIVED_FROM_AMOUNT` / `CURRENCY_EVIDENCE_REALIGNED`를 기록한다.
+기존 grounding v4 의미와 v7/v8 결과는 유지하며 변경 담보만 새 독립 검수를 받는다.
+변경 없는 기존 부모·담보와 모든 종류의 사용자 검토는 새 검수에서 제외한다.
+
+API는 schema 0078에서 같은 native 출처·대상자·계약·담보와 기존 금액/필드가 일치하고
+현재 통화가 null인 경우에만 별도의 원문 금액·통화 증명을 확인해 보강한다. 사용자 교정이나
+원장 버전 변경이 있으면 거부한다. 담보 ID·금액·원래 source evidence·기존 게시/후보/청구
+이력은 유지하고 통화와 원장 버전만 갱신하며 새 게시 이력을 추가한다. 가입금액의 통화
+복구는 지급 산식이나 지급액 확정을 뜻하지 않는다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의

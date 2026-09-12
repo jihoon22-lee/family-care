@@ -32,6 +32,7 @@ from familycare_worker.ai.schemas import (
 POLICY_DRAFT_NORMALIZATION_REVISION = "policy-draft-normalization-v1"
 CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
 SOURCE_SCOPED_NORMALIZATION_REVISION = "policy-draft-normalization-v3"
+AMOUNT_CURRENCY_NORMALIZATION_REVISION = "policy-draft-normalization-v4"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -43,6 +44,8 @@ type AdjustmentReason = Literal[
     "ISSUER_UNCONFIRMED",
     "PRIOR_VERIFIED_CANDIDATE_PRESERVED",
     "PRIOR_CANDIDATE_REVIEW_PRESERVED",
+    "CURRENCY_DERIVED_FROM_AMOUNT",
+    "CURRENCY_EVIDENCE_REALIGNED",
 ]
 
 
@@ -169,6 +172,72 @@ def _supported(
     )
 
 
+def _amount_currency_draft(
+    source: StructurerCandidate,
+    envelope: PolicyRangeEnvelope,
+    local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    adjustments: list[PolicyDraftAdjustment],
+) -> StructurerCandidate:
+    """Derive a unique explicit unit from the already-proven amount's same row.
+
+    No default currency, adjacent row or changed numeric value is accepted. A
+    conflicting supplied currency remains unresolved rather than being corrected.
+    """
+    if source.candidate_kind != "rider" or len({f.field_id for f in source.fields}) != len(
+        source.fields
+    ):
+        return source
+    fields = {field.field_id: field for field in source.fields}
+    amount = fields.get("sum_assured")
+    if amount is None or not _supported(
+        source,
+        amount,
+        envelope,
+        local_nodes,
+        allow_certificate_title=True,
+        allow_unconfirmed_insurer=True,
+    ):
+        return source
+    existing = fields.get("currency")
+    if existing is not None and _supported(
+        source,
+        existing,
+        envelope,
+        local_nodes,
+        allow_certificate_title=True,
+        allow_unconfirmed_insurer=True,
+    ):
+        return source
+    proven = []
+    for currency in ("KRW", "USD", "EUR", "JPY"):
+        field = CandidateField(
+            field_id="currency", value=currency, evidence_ids=amount.evidence_ids
+        )
+        if _supported(
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=True,
+            allow_unconfirmed_insurer=True,
+        ):
+            proven.append(field)
+    if len(proven) != 1 or (existing is not None and existing.value != proven[0].value):
+        return source
+    field = proven[0]
+    adjusted = tuple(field if f.field_id == "currency" else f for f in source.fields)
+    if existing is None:
+        adjusted = (*adjusted, field)
+    adjustments.append(
+        PolicyDraftAdjustment(
+            "CURRENCY_DERIVED_FROM_AMOUNT" if existing is None else "CURRENCY_EVIDENCE_REALIGNED",
+            source.candidate_id,
+            "currency",
+        )
+    )
+    return source.model_copy(update={"fields": adjusted})
+
+
 def _candidate_draft(
     source: StructurerCandidate,
     envelope: PolicyRangeEnvelope,
@@ -276,6 +345,7 @@ def normalize_policy_draft(
             POLICY_DRAFT_NORMALIZATION_REVISION,
             CERTIFICATE_TITLE_NORMALIZATION_REVISION,
             SOURCE_SCOPED_NORMALIZATION_REVISION,
+            AMOUNT_CURRENCY_NORMALIZATION_REVISION,
         ):
             raise PolicyDraftInvalid
         _check_source(batch, envelope)
@@ -283,13 +353,20 @@ def normalize_policy_draft(
         adjustments: list[PolicyDraftAdjustment] = []
         drafts = {
             candidate.candidate_id: _candidate_draft(
-                candidate,
+                _amount_currency_draft(candidate, envelope, local_nodes, adjustments)
+                if revision == AMOUNT_CURRENCY_NORMALIZATION_REVISION
+                else candidate,
                 envelope,
                 local_nodes,
                 adjustments,
                 allow_certificate_title=revision
-                in {CERTIFICATE_TITLE_NORMALIZATION_REVISION, SOURCE_SCOPED_NORMALIZATION_REVISION},
-                allow_unconfirmed_insurer=revision == SOURCE_SCOPED_NORMALIZATION_REVISION,
+                in {
+                    CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+                    SOURCE_SCOPED_NORMALIZATION_REVISION,
+                    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                },
+                allow_unconfirmed_insurer=revision
+                in {SOURCE_SCOPED_NORMALIZATION_REVISION, AMOUNT_CURRENCY_NORMALIZATION_REVISION},
             )
             for candidate in batch.candidates
         }

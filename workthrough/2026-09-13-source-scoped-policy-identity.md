@@ -44,7 +44,40 @@ Python 3.14.7을 사용했고 실제 자료·외부 AI는 검사 입력에 포�
 섞지 않으며 위 PG의 거절·교정 case로 확인했다. 같은 전체 회귀·빌드를 로컬에서 반복하지
 않고 필수 7개 최종 CI를 PR에 연결한다. 실제 자료 전환은 별도의 source/schema 증거로 남긴다.
 
+## Protected source 455eee2 acceptance
+
+승인 격리 DB만 schema 0077로 전환했고 새 backup과 기존 행/열 보존·API/Worker readiness를
+확인했다(155.869초). 새 부모 1개만 독립 검수해 기존 담보 6개와 함께 게시했다. 추가 호출은
+1회이며 이번 예산의 누계는 6회, USD 0.1222802이다. 나머지 혼합/약관 범위는 기존 응답
+재사용·무호출 보류로 끝냈고 이전 작업·요청·후보·게시 이력을 보존했다.
+
+인증된 실제 API의 원장·담보·inventory·reconciliation·청구 조회와 AI-off 저장 결과 경로를
+확인했다(6.235초). 새 담보 6개를 로컬 안내가 소비했지만 합성 사건에 대한 관련 후보는
+0개였으므로 안내 품질이나 지급액 지원 향상을 주장하지 않는다. 외부 HTTP·새 AI 작업은
+0개였고 임시 합성 사건은 soft delete했다. 운영 source/schema와 runtime은 바꾸지 않았다.
+
+## Focused currency recovery
+
+같은 PR #103에 explicit retained v9 / normalization v4 / schema 0078을 추가한다. 기존
+6개 담보는 가입금액이 있고 통화만 누락되었다. 동일 금액 행·헤더의 통화 근거로만 복구하고
+변경 없는 부모와 기존 검토 이력은 재검수하지 않는다. API는 native 근거를 별도로 확인해
+동일 담보의 통화·version만 갱신하고 기존 source evidence와 후보/청구/게시 이력을 유지한다.
+
+첫 PR CI `34703159421`은 Web·안전·컨테이너 3개가 통과했다. Python은 4134 성공·1 실패:
+null 보험사 허용 뒤 낡은 거부 fixture를 빈 문자열 거부로 고쳤고 관련 5개가 통과했다.
+PostgreSQL은 904 성공·19 실패였으며 최초 historical fixture가 0067로 내린 상태에서 현재
+API publisher를 호출해 새 열을 찾지 못한 뒤 schema 미복원으로 18개가 연쇄 실패했다.
+현행 baseline 게시를 downgrade 전에 준비하고 finally에서 schema를 복원하도록 고쳤다.
+실패한 결과는 보존하고 전체 로컬 suite 대신 영향을 받는 경로만 확인한다.
+
+`ddcb87b`와 후속 Worker/fixture 변경에서 통화·기존 정규화·API 금액·readiness·청구 단위
+검사는 첫 실행 118 성공·5 실패였다. 새 표 fixture의 범위가 담보 행 대신 문서 헤더를
+가리킨 것이 원인으로, 실제 인용 행에 할당한 뒤 해당 모듈 12개가 통과했다(0.82초).
+`mypy apps/api/src workers/analyzer/src`는 300개 파일을 통과했다. 별도 읽기 전용
+source→sink 검토에서는 구체적 회귀를 발견하지 못했고 동적 검증으로 취급하지 않는다.
+
 ## Remaining
 
-- 최종 필수 PR CI와 승인 격리 DB의 schema 0077 전환·실제 부모 검수/게시
-- 승인 격리 자료 처리와 #69/#70 최종 수용·전환·릴리스
+- 통화 복구 및 historical fixture의 관련 DB 검사·최종 필수 PR CI
+- 승인 격리 DB 0078 적용·변경 담보 검수와 실제 통화 소비 확인
+- 실제 원문 신원/약관 연결, #69/#70 최종 수용·전환·릴리스
