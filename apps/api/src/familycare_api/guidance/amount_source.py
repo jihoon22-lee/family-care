@@ -128,7 +128,11 @@ def _not_enrolled(text: str) -> bool:
 
 
 def _table_money(
-    nodes: dict[str, dict[str, Any]], refs: list[dict[str, Any]], name: str
+    nodes: dict[str, dict[str, Any]],
+    refs: list[dict[str, Any]],
+    name: str,
+    *,
+    expected_source: tuple[Decimal, str] | None = None,
 ) -> tuple[Decimal, str] | None:
     rows = {
         r["node_id"]
@@ -224,6 +228,11 @@ def _table_money(
     if len(hints) != 1:
         return None
     unit = next(iter(hints))
+    if expected_source is not None and expected_source != (
+        Decimal(match[1].replace(",", "")),
+        unit,
+    ):
+        return None
     amount = _number(Decimal(match[1].replace(",", "")) * _UNITS.get(unit, 1))
     return (amount, "KRW" if unit in _UNITS else unit) if amount is not None else None
 
