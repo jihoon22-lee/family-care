@@ -22,11 +22,18 @@ from workers.analyzer.tests.test_policy_structuring_runner import FakeLoader, Fa
 def _work(roles, *, context_policy=False):
     envelope = _envelope(*(f"Synthetic source {i}" for i in range(len(roles))))
     evidence = tuple(
-        replace(item, source_role=role) for item, role in zip(envelope.evidence, roles, strict=True)
+        replace(item, source_role=role, document_kind="policy" if role == "policy" else "terms")
+        for item, role in zip(envelope.evidence, roles, strict=True)
     )
     if context_policy:
         evidence += (
-            replace(evidence[0], evidence_id=uuid4(), primary=False, source_role="policy"),
+            replace(
+                evidence[0],
+                evidence_id=uuid4(),
+                primary=False,
+                source_role="policy",
+                document_kind="policy",
+            ),
         )
     return PolicyRangeWork(uuid4(), replace(envelope, evidence=evidence))
 

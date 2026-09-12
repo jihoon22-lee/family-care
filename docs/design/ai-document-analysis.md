@@ -379,6 +379,13 @@ extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한�
 준비 대기를 최대 300번 조회하고, 처리 실패를 재업로드 요구로 바꾸지 않는다. 본문·파일 경로·
 추출 식별자는 이 상태 응답에 포함하지 않는다. 기존 provider 경로의 범위 소비 전환은 B02 후속이다.
 
+범위의 모든 primary가 policy 출처 근거를 갖지 못하면 구조화·독립 검수와 요청 예약 전에
+`nonpolicy-primary-deferral-v1` / `PRIMARY_POLICY_SOURCE_UNAVAILABLE`로 로컬 보류한다.
+이 결과는 `REVIEW`이며 미가입이나 원문 해석 완료를 뜻하지 않는다. 현재 원문 세대·가정·
+대상자·최소화·lease와 정확한 PENDING 입력을 확인하고 기존 요청·응답·정규화 receipt를
+보존한 채 다음 범위로 진행한다. policy primary가 있는 혼합 범위는 기존 처리와 필드별
+근거 검증을 유지한다. 로컬 보류를 외부 AI의 검수 결과나 새로운 가입 사실로 기록하지 않는다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의

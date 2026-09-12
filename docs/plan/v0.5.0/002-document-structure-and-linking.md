@@ -106,6 +106,13 @@
 
 ## Local data contract
 
+현재 Task 3/4의 후속 구현은 `fix/source-processing-recovery`에서 진행한다. policy primary가
+없는 범위는 유료 구조화·검수로 가입 근거를 만들 수 없으므로 출처 미해결로 로컬 보류하고
+다음 범위로 진행한다. 이를 미가입·원문 해석 완료로 바꾸지 않으며 기존 요청·응답·receipt와
+후보를 보존한다. policy/terms 혼합 범위는 기존 필드별 근거 검사를 유지한다. 별도로 문자
+추출에서 확보하지 못한 보험사 근거를 OCR 원문에서 확인하되, 진단 결과만으로 가입이나
+약관 신원을 게시하지 않는다. 구현·관련 회귀·문서를 완성한 뒤 PR 검증을 한 번 수행한다.
+
 `document_structure.py`는 로컬 전량 보존 adapter이고 외부 전달 DTO가 아니다.
 문서 bytes·extraction/OCR revision·node/row/cell 위치를 보존한다. 행은 쪼개지 않고
 반복 헤더/각주 문맥을 primary 가입 행과 별도로 참조한다. `ChunkPlan.complete`는 범위의

@@ -319,14 +319,14 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
             ).fetchone()
             stages = connection.execute(
                 "SELECT j.state,plan.state AS plan_state,r.state AS range_state,"
-                "receipt.origin,receipt.partial,receipt.normalized_batch_json,"
+                "r.result_json,receipt.origin,receipt.partial,receipt.normalized_batch_json,"
                 "request.response_json "
                 "FROM policy_structuring_jobs j "
                 "JOIN document_policy_range_plans plan ON plan.job_id=j.id "
                 "JOIN document_policy_ranges r ON r.job_id=j.id "
-                "JOIN policy_range_replay_sources receipt ON receipt.job_id=r.job_id "
+                "LEFT JOIN policy_range_replay_sources receipt ON receipt.job_id=r.job_id "
                 "AND receipt.envelope_id=r.envelope_id "
-                "JOIN policy_provider_requests request ON "
+                "LEFT JOIN policy_provider_requests request ON "
                 "request.id=receipt.source_provider_request_id "
                 "WHERE j.batch_item_id=%s",
                 (structuring_job[1],),
@@ -337,19 +337,18 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 (structuring_job[1],),
             ).fetchone()["n"]
         assert structured == []
-        assert len(stages) == 1 and request_count == 1
+        assert len(stages) == 1 and request_count == 0
         stage = stages[0]
         assert (stage["state"], stage["plan_state"], stage["range_state"]) == (
             "permanently_failed",
             "PARTIAL",
             "REVIEW",
         )
-        assert stage["origin"] == "initial" and stage["partial"] is True
-        assert stage["normalized_batch_json"]["candidates"] == []
-        assert len(stage["response_json"]["candidates"]) == 1
-        assert {field["value"] for field in stage["response_json"]["candidates"][0]["fields"]} == {
-            "Sample Insurer",
-            "Sample Plan",
+        assert stage["origin"] is None and stage["normalized_batch_json"] is None
+        assert stage["response_json"] is None
+        assert stage["result_json"]["local_processing"] == {
+            "revision": "nonpolicy-primary-deferral-v1",
+            "reason_code": "PRIMARY_POLICY_SOURCE_UNAVAILABLE",
         }
         assert ledger_count is not None and ledger_count["count"] == 0
         assert len(list(archive_root.iterdir())) == 1
