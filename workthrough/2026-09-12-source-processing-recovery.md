@@ -25,7 +25,9 @@ Standard 단가로 최대 비용을 예약하고, 사용량을 확인한 응답�
 기존 policy 텍스트 전체와 수정한 OCR 행의 발급 보험사 근거 탐색을 진행했다. 추가 요청
 5회, 누계 추정 USD 0.1022572이다. 새 담보 후보 3개를 보존하여 해당 작업의 AI_VERIFIED는 6개지만,
 계약 1개의 발급 보험사 근거는 보류되어 신규 원장 반영은 0이다. 기존 응답·완료 범위·후보를
-보존했고 순수 terms 범위 1개는 PENDING이다. 운영 DB·배포·태그는 변경하지 않았다.
+보존했다. 뒤이어 source `7ba874b7392a9fd7b1209352360ecfe2b008edb5`의 무호출 경로로
+마지막 순수 terms primary 17개를 REVIEW에 보존해 범위는 REVIEW 3개가 됐다.
+이전 범위·후보·요청과 예산 기록은 그대로이며 운영 DB·배포·태그는 변경하지 않았다.
 
 첫 표지 OCR의 단어 단위 집계와 행 묶음 집계는 구분한다. 행 묶음의 좌표 해석 오류를
 기록·수정했으며 해당 행 집계는 근거로 사용하지 않는다. 알려진 회사 caption을 찾지 못한
@@ -39,6 +41,15 @@ Standard 단가로 최대 비용을 예약하고, 사용량을 확인한 응답�
 기존 응답·receipt 보존, stale source·대상자·최소화·lease 거부, 혼합 범위와 기존 검수
 재개 회귀를 함께 준비했다. 전체 필수 검사와 PostgreSQL 통합은 최종 PR CI에서 실행하며
 같은 전체 검사를 로컬에서 중복하지 않는다. CI 결과는 PR에 연결한다.
+
+PR #102 첫 CI `34701005436`에서 다른 필수 6개는 성공했고, PostgreSQL은 917개 성공·2개
+실패였다. 기존 retained provider 테스트가 unknown source를 사용해 새 로컬 보류에 들어갔다.
+해당 테스트만 첫 generation 생성 전에 합성 policy 근거를 준비하도록 수정해 호출/예산과
+provider 중 source 변경 기대값을 유지했다. 전용 합성 PostgreSQL 18.6에서
+`test_targeted_runner_uses_existing_provider_budget_without_resetting_document_quota`와
+`test_generation_change_during_provider_call_cannot_publish_or_retransmit`만 재실행하여
+3개 성공(5.18초)을 확인했다. 첫 로컬 시도는 빈 테스트 DB에 migration을 적용하기 전이어서
+setup 3개 오류였으며, 제품 테스트 결과로 간주하지 않는다. 최종 필수 CI는 수정 source에 연결한다.
 
 ## Acceptance remaining
 
