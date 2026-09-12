@@ -213,7 +213,8 @@ def match_canonical_enrollment(
     Equal bytes may have different DocumentVersion IDs after reimport. Every
     matching physical occurrence must agree on member, household, policy and
     Rider. Multiple rows on one page remain ambiguous even for the same Rider.
-    Monetary values are intentionally not consulted.
+    Whitespace variants compete together; punctuation and monetary values are not
+    used to collapse different names or choose between multiple physical locations.
     """
     try:
         if not _uuid(expected_family_member_id) or not 1 <= len(candidates) <= 10000:
@@ -247,7 +248,7 @@ def match_canonical_enrollment(
                 for candidate in candidates
                 if candidate.content_sha256 == binding.content_sha256
                 and candidate.physical_page == page
-                and _name(candidate.original_rider_name) == name
+                and _name(candidate.original_rider_name).replace(" ", "") == name.replace(" ", "")
             ]
             if not relevant:
                 return None

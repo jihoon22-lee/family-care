@@ -343,6 +343,7 @@ def _proposals(
     candidates: list[ProgramEnrollmentSource] = []
     operational = {}
     located_publications: set[UUID] = set()
+    native_names: dict[UUID, str] = {}
     for row in rows:
         if row["candidate_version_id"] in located_publications:
             continue
@@ -371,6 +372,7 @@ def _proposals(
             publication_authority=row["publication_authority"],
             name_source_candidate_version_id=row["name_source_candidate_version_id"],
         )
+        native_names[row["candidate_version_id"]] = row["original_rider_name"]
         candidates.append(enrollment)
         operational[row["rider_id"]] = row
     user_links = connection.execute(
@@ -442,7 +444,7 @@ def _proposals(
                 unique_native_name_location(
                     structure,
                     proof.private_evidence_location["physical_page"],
-                    source["certificate_review"]["name"],
+                    native_names[proof.publication_candidate_version_id],
                     proof.physical_locator,
                 )
                 for structure in structures.values()

@@ -96,6 +96,29 @@ def _raw_orders(blocks: Sequence[Node]) -> Iterator[Sequence[Node]]:
         yield [node for _, node in continuation]
 
 
+def _raw_streams(blocks: Sequence[Node], nodes: Sequence[Node]) -> Iterator[Sequence[Node]]:
+    yield from _raw_orders(blocks)
+    # Cell-local streams prevent an adjacent amount column from interrupting a
+    # hidden wrapped spelling. These add checks even for untrusted table views;
+    # they grant no geometry or enrollment authority.
+    seen: set[Box] = set()
+    for node in nodes:
+        if node.get("kind") != "TABLE_ROW":
+            continue
+        for cell in node.get("cells", ()):
+            box = _box(cell.get("bbox"))
+            if box is None or box in seen:
+                continue
+            seen.add(box)
+            enclosed = [
+                block
+                for block in blocks
+                if (value := _box(block.get("bbox"))) is not None and _inside(value, box)
+            ]
+            if len(enclosed) > 1:
+                yield from _raw_orders(enclosed)
+
+
 def _raw_occurrences(blocks: Sequence[Node], pattern: re.Pattern[str]) -> Iterator[list[Node]]:
     pieces = []
     spans = []
@@ -313,7 +336,11 @@ def unique_native_name_location(
             or _box(expected_locator.get("name_bbox")) is None
         ):
             return False
-        pattern = re.compile(r"(?<!\w)" + re.escape(name) + r"(?!\w)")
+        # Search all whitespace-equivalent spellings, including unpublished raw
+        # fragments. Geometry still uses the actual native publication name.
+        pattern = re.compile(
+            r"(?<!\w)" + r"\s*".join(re.escape(c) for c in name if not c.isspace()) + r"(?!\w)"
+        )
         nodes = [node for node in structure["nodes"] if node.get("page_number") == physical_page]
         found = False
         checked: set[tuple[str, ...]] = set()
@@ -357,7 +384,7 @@ def unique_native_name_location(
         layers = {node.get("source_layer") for node in raw}
         for layer in layers:
             blocks = [node for node in raw if node.get("source_layer") == layer]
-            for ordered in _raw_orders(blocks):
+            for ordered in _raw_streams(blocks, nodes):
                 for selected in _raw_occurrences(ordered, pattern):
                     key = tuple(node["node_id"] for node in selected)
                     if key in checked:

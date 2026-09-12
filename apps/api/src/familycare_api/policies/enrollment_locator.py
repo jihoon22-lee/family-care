@@ -89,7 +89,7 @@ def _cells(node: Node) -> dict[int, Node] | None:
     return columns if len(columns) == len(cells) else None
 
 
-def _table_anchor(row: Node, nodes: Mapping[str, Node], name: str) -> Box | None:
+def _table_name_cell(row: Node, nodes: Mapping[str, Node], name: str) -> Node | None:
     if row.get("row_role") != "data":
         return None
     headers = []
@@ -124,6 +124,135 @@ def _table_anchor(row: Node, nodes: Mapping[str, Node], name: str) -> Box | None
     cell_box = _box(name_cell.get("bbox"))
     if cell_box is None or _normalized(name_cell["text"]) != _normalized(name):
         return None
+    return name_cell
+
+
+def _wrapped_cell_anchor(
+    row: Node, nodes: Mapping[str, Node], name: str, selected: Sequence[Node] | None = None
+) -> Box | None:
+    """Wrap only a complete, unambiguous native NAME cell; never free text."""
+    cell = _table_name_cell(row, nodes, name)
+    if (
+        cell is None
+        or row.get("issue_codes")
+        or row.get("source_layer") != "native"
+        or row.get("schedulable") is False
+    ):
+        return None
+    cell_box = _box(cell.get("bbox"))
+    assert cell_box is not None
+    for node in (row, *(nodes[key] for key in row.get("context_node_ids", ()))):
+        if node.get("source_layer") != "native" or node.get("issue_codes"):
+            return None
+        if any(_box(c.get("bbox")) is None for c in node.get("cells", ())):
+            return None
+        if any(
+            type(c[key]) is not int or c[key] != 1
+            for c in node.get("cells", ())
+            for key in ("row_span", "column_span")
+            if c.get(key) is not None
+        ):
+            return None
+    blocks = []
+    for node in nodes.values():
+        if node.get("page_number") != row["page_number"]:
+            continue
+        if node.get("kind") == "TABLE_ROW":
+            for other in node.get("cells", ()):
+                if other is cell:
+                    continue
+                box = _box(other.get("bbox"))
+                if (
+                    box is not None
+                    and min(box[2], cell_box[2]) > max(box[0], cell_box[0])
+                    and min(box[3], cell_box[3]) > max(box[1], cell_box[1])
+                ):
+                    return None
+        if node.get("kind") != "BLOCK":
+            continue
+        box = _box(node.get("bbox"))
+        if box is None:
+            continue
+        intersects = min(box[2], cell_box[2]) > max(box[0], cell_box[0]) and min(
+            box[3], cell_box[3]
+        ) > max(box[1], cell_box[1])
+        if not intersects:
+            continue
+        if (
+            not _inside(box, cell_box)
+            or node.get("source_layer") != "native"
+            or node.get("issue_codes")
+            or not isinstance(node.get("text"), str)
+            or not node["text"].strip()
+            or len(node["text"].splitlines()) != 1
+        ):
+            return None
+        blocks.append(node)
+    if not blocks or (
+        selected is not None and {n["node_id"] for n in selected} != {n["node_id"] for n in blocks}
+    ):
+        return None
+    lines: list[list[Node]] = []
+    for block in sorted(blocks, key=lambda n: (n["bbox"][1], n["bbox"][0])):
+        box = block["bbox"]
+        compatible = [
+            line
+            for line in lines
+            if all(
+                min(box[3], part["bbox"][3]) - max(box[1], part["bbox"][1])
+                >= min(box[3] - box[1], part["bbox"][3] - part["bbox"][1]) / 2
+                for part in line
+            )
+        ]
+        if len(compatible) > 1:
+            return None
+        if compatible:
+            compatible[0].append(block)
+        else:
+            lines.append([block])
+    if len(lines) < 2:
+        return None
+    line_boxes: list[Box] = []
+    texts = []
+    for line in lines:
+        line.sort(key=lambda n: n["bbox"][0])
+        text = " ".join(n["text"] for n in line)
+        box = _anchor(line, text, row["page_number"])
+        if box is None:
+            return None
+        line_boxes.append(box)
+        texts.append(text)
+    if _normalized(" ".join(texts)) != _normalized(name):
+        return None
+    for previous, current in pairwise(line_boxes):
+        height = min(previous[3] - previous[1], current[3] - current[1])
+        if not 0 <= current[1] - previous[3] <= height or abs(current[0] - previous[0]) > height:
+            return None
+    return (
+        min(b[0] for b in line_boxes),
+        min(b[1] for b in line_boxes),
+        max(b[2] for b in line_boxes),
+        max(b[3] for b in line_boxes),
+    )
+
+
+def _table_raw_anchor(nodes: Mapping[str, Node], blocks: Sequence[Node], name: str) -> Box | None:
+    matches = []
+    for row in nodes.values():
+        if row.get("kind") != "TABLE_ROW" or row.get("row_role") != "data":
+            continue
+        box = _wrapped_cell_anchor(row, nodes, name, blocks)
+        if box is not None:
+            matches.append(box)
+    return matches[0] if len(matches) == 1 else None
+
+
+def _table_anchor(row: Node, nodes: Mapping[str, Node], name: str) -> Box | None:
+    cell = _table_name_cell(row, nodes, name)
+    if cell is None:
+        return None
+    cell_box = _box(cell["bbox"])
+    assert cell_box is not None
     blocks = [
         node
         for node in nodes.values()
@@ -133,7 +262,7 @@ def _table_anchor(row: Node, nodes: Mapping[str, Node], name: str) -> Box | None
         and (box := _box(node.get("bbox"))) is not None
         and _inside(box, cell_box)
     ]
-    return _anchor(blocks, name, row["page_number"])
+    return _anchor(blocks, name, row["page_number"]) or _wrapped_cell_anchor(row, nodes, name)
 
 
 def _line_anchor(line: Node, nodes: Mapping[str, Node], name: str) -> Box | None:
@@ -168,7 +297,7 @@ def _line_anchor(line: Node, nodes: Mapping[str, Node], name: str) -> Box | None
         blocks.append(block)
     if line["text"][cursor:end].strip():
         return None
-    return _anchor(blocks, name, line["page_number"])
+    return _anchor(blocks, name, line["page_number"]) or _table_raw_anchor(nodes, blocks, name)
 
 
 def physical_enrollment_locator(
@@ -225,7 +354,9 @@ def physical_enrollment_locator(
         if raw_blocks:
             blocks = list(raw_blocks.values())
             page = blocks[0]["page_number"]
-            box = _anchor(blocks, original_name, page)
+            box = _anchor(blocks, original_name, page) or _table_raw_anchor(
+                nodes, blocks, original_name
+            )
             if box is None:
                 return None
             anchors.add((page, box))
