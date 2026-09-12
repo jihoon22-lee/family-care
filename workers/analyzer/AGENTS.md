@@ -13,7 +13,7 @@
 
 ## Verification and review
 
-- 합성 문서와 합성 provider 응답으로 테스트를 먼저 작성합니다. 공개 CI는 외부 AI·Drive·실제 PDF 없이 실행합니다.
+- 합성 문서와 합성 provider 응답으로 필요한 테스트를 구현과 함께 작성하고 PR 계획 완료 시점에 실행합니다. 커밋마다 RED/GREEN 실행을 요구하지 않습니다. 공개 CI는 외부 AI·Drive·실제 PDF 없이 실행합니다.
 - 추출/임시 파일은 성공·실패·취소와 자원 제한을, provider는 잘못된 schema/인용·timeout·재시도·stale version을 변경 범위에 맞춰 검증합니다.
 - queue·lease·transaction 변경은 전용 합성 PostgreSQL 통합 테스트를 추가로 실행합니다. 기본 pytest의 integration 제외를 보고합니다.
 - [검증 전략](../../docs/design/test-strategy.md#verification-by-change)의 Python·계약 명령을 사용하고 Web·Docker 검사와 직렬 실행합니다.
