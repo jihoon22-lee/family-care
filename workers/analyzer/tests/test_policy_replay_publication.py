@@ -42,6 +42,7 @@ pytestmark = pytest.mark.integration
     "source_revision,target_revision",
     [
         ("retained-policy-association-v2", "retained-policy-association-v4"),
+        ("retained-policy-association-v12", "retained-policy-association-v13"),
         ("retained-policy-association-v2", "retained-policy-association-v12"),
         ("retained-policy-association-v3", "retained-policy-association-v12"),
         ("retained-policy-association-v5", "retained-policy-association-v6"),
@@ -147,6 +148,23 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
             ),
         }
     )
+    if target_revision == "retained-policy-association-v13":
+        # Keep a provider response whose otherwise valid Rider was omitted from
+        # the response's range assignment. Historical validation rejects it.
+        batch = batch.model_copy(
+            update={
+                "ranges": tuple(
+                    item.model_copy(
+                        update={
+                            "candidate_ids": tuple(
+                                key for key in item.candidate_ids if key != rider.candidate_id
+                            )
+                        }
+                    )
+                    for item in batch.ranges
+                )
+            }
+        )
     with psycopg.connect(_psycopg_url(url)) as connection:
         request_id = connection.execute(
             "INSERT INTO policy_provider_requests(job_id,document_id,fingerprint,state,"
@@ -212,7 +230,9 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         ).fetchall()
         assert len(candidates) == 2 and all(row["status"] == "AI_VERIFIED" for row in candidates)
         expected_normalization = (
-            "policy-draft-normalization-v6"
+            "policy-draft-normalization-v7"
+            if target_revision == "retained-policy-association-v13"
+            else "policy-draft-normalization-v6"
             if target_revision == "retained-policy-association-v12"
             else "policy-draft-normalization-v2"
             if target_revision == "retained-policy-association-v7"

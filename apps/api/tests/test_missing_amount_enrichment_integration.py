@@ -94,7 +94,7 @@ class Verifier:
         )
 
 
-def _verify(url, queue, job, request_id, count, provider_request_id):
+def _verify(url, queue, job, request_id, count, provider_request_id, provider=None):
     replay = PolicyDraftReplayRepository(url, source_provider_request_id=request_id)
     ranges = PolicyRangeRepository(url)
     loader = PolicyEvidenceLoader(url)
@@ -105,7 +105,7 @@ def _verify(url, queue, job, request_id, count, provider_request_id):
     assert work is not None
     draft = replay.prepare(job, WORKER, work)
     assert draft is not None and len(draft.batch.candidates) == count
-    provider = Verifier(count, provider_request_id)
+    provider = provider or Verifier(count, provider_request_id)
     PolicyStructuringJobRunner(
         queue=queue,
         evidence_loader=loader,
@@ -255,9 +255,16 @@ def missing_money(enrollment_database, monkeypatch):
     return url, original, raw_job, previous, request_id, generation
 
 
-@pytest.mark.parametrize("late_change", [None, "ledger_version", "correct", "reject"])
+@pytest.mark.parametrize(
+    "late_change,revision",
+    [
+        (value, "retained-policy-association-v12")
+        for value in (None, "ledger_version", "correct", "reject")
+    ]
+    + [(value, "retained-policy-association-v13") for value in (None, "correct")],
+)
 def test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
-    missing_money, late_change
+    missing_money, late_change, revision
 ):
     url, original, raw_job, previous, request_id, generation = missing_money
     old_jobs = [raw_job.id, previous.id]
@@ -301,7 +308,7 @@ def test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
         household_space_id=original.household_space_id,
         source_job_id=original.id,
         expected_generation_id=generation,
-        pipeline_revision="retained-policy-association-v12",
+        pipeline_revision=revision,
     )
     queue = retained_policy.RetainedPolicyJobQueue(
         url,
@@ -417,7 +424,12 @@ def test_v12_fills_seven_empty_money_pairs_and_respects_late_user_changes(
             )
 
 
-def test_v4_rejection_is_preserved_before_any_v12_verifier_request(missing_money, monkeypatch):
+@pytest.mark.parametrize(
+    "revision", ["retained-policy-association-v12", "retained-policy-association-v13"]
+)
+def test_v4_rejection_is_preserved_before_any_v12_verifier_request(
+    missing_money, monkeypatch, revision
+):
     url, original, _, previous, request_id, generation = missing_money
     scope = HouseholdScope(original.household_space_id)
     repository = CandidateRepository(url)
@@ -447,9 +459,7 @@ def test_v4_rejection_is_preserved_before_any_v12_verifier_request(missing_money
             "WHERE review_item_id=%s ORDER BY id",
             (item.review_item_id,),
         ).fetchall()
-    queue, job = _historical_job(
-        url, original, generation, "retained-policy-association-v12", monkeypatch
-    )
+    queue, job = _historical_job(url, original, generation, revision, monkeypatch)
     draft = _verify(url, queue, job, request_id, 6, "synthetic-preserved-review-verifier")
     assert all(
         not any(
@@ -466,4 +476,71 @@ def test_v4_rejection_is_preserved_before_any_v12_verifier_request(missing_money
                 (item.review_item_id,),
             ).fetchall()
             == before
+        )
+
+
+def test_v13_proves_header_before_verification_without_rewriting_prior_invented_result(
+    missing_money, monkeypatch
+):
+    url, original, _, _, request_id, generation = missing_money
+
+    class HeaderVerifier(Verifier):
+        def complete(self, **kwargs):
+            response = super().complete(**kwargs)
+            header = next(
+                e["evidence_id"]
+                for e in kwargs["input_payload"]["evidence"]
+                if "담보명" in e["text"] and "가입금액(만원)" in e["text"]
+            )
+            payload = deepcopy(response.payload)
+            for decision in payload["decisions"]:
+                decision["evidence_ids"] = sorted({*decision["evidence_ids"], header})
+            return ProviderResponse(request_id=response.request_id, payload=payload)
+
+    def run(revision):
+        queue, job = _historical_job(url, original, generation, revision, monkeypatch)
+        provider = HeaderVerifier(7, "synthetic-context-" + revision)
+        draft = _verify(url, queue, job, request_id, 7, provider.request_id, provider)
+        return job, draft
+
+    old, _ = run("retained-policy-association-v12")
+    assert RangeEnrollmentProjector(url).project_pending() == 0
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as c:
+        rejected = c.execute(
+            "SELECT status,issues FROM analysis_candidate_versions WHERE structuring_job_id=%s",
+            (old.id,),
+        ).fetchall()
+        assert len(rejected) == 7 and all(
+            r["status"] == "NEEDS_REVIEW"
+            and {i["code"] for i in r["issues"]} == {"INVENTED_EVIDENCE"}
+            for r in rejected
+        )
+        before = c.execute(
+            "SELECT to_jsonb(r) FROM document_policy_ranges r WHERE job_id=%s ORDER BY position",
+            (old.id,),
+        ).fetchall()
+    fresh, draft = run("retained-policy-association-v13")
+    assert fresh.id != old.id and len(draft.batch.candidates) == 7
+    assert RangeEnrollmentProjector(url).project_pending() == 7
+    with psycopg.connect(_psycopg_url(url), row_factory=dict_row) as c:
+        assert (
+            c.execute(
+                "SELECT to_jsonb(r) FROM document_policy_ranges r WHERE job_id=%s "
+                "ORDER BY position",
+                (old.id,),
+            ).fetchall()
+            == before
+        )
+        assert (
+            c.execute(
+                "SELECT status,issues FROM analysis_candidate_versions WHERE structuring_job_id=%s",
+                (old.id,),
+            ).fetchall()
+            == rejected
+        )
+        assert (
+            c.execute(
+                "SELECT count(*) AS n FROM policy_provider_requests WHERE job_id=%s", (fresh.id,)
+            ).fetchone()["n"]
+            == 1
         )

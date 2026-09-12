@@ -4,7 +4,7 @@ The Worker image does not contain Alembic or API checkout files. Its compiled
 revision must agree with the API and migration head, enforced by repository tests.
 """
 
-SUPPORTED_SCHEMA_REVISION = "0081_explicit_unit_draft"
+SUPPORTED_SCHEMA_REVISION = "0082_proven_draft_context"
 SCHEMA_REVISION_QUERY = "SELECT version_num FROM public.alembic_version LIMIT 2"
 REQUIRED_SCHEMA_QUERY = """
 SELECT job.lease_token, job.source_digest, input.sources_json,

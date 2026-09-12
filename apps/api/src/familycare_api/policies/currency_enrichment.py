@@ -54,12 +54,17 @@ def _money_enrichment_proven(
 ) -> bool:
     """The caller holds current-candidate/ledger locks and excludes user publications."""
     try:
+        pipeline = source["pipeline_version"] if fill_amount else "retained-policy-association-v9"
         revision = (
-            "policy-draft-normalization-v6" if fill_amount else "policy-draft-normalization-v4"
+            {
+                "retained-policy-association-v12": "policy-draft-normalization-v6",
+                "retained-policy-association-v13": "policy-draft-normalization-v7",
+            }.get(pipeline)
+            if fill_amount
+            else "policy-draft-normalization-v4"
         )
-        pipeline = (
-            "retained-policy-association-v12" if fill_amount else "retained-policy-association-v9"
-        )
+        if revision is None:
+            return False
         additions = {"sum_assured", "currency"} if fill_amount else {"currency"}
         if (
             version["candidate_kind"] != "rider"
@@ -311,8 +316,13 @@ def _previous_amount_was_removed(
         and all(f["field_id"] not in {"sum_assured", "currency"} for f in normalized[0]["fields"])
         and type(fields["sum_assured"]["value"]) in (int, float)
         and fields["sum_assured"]["value"] != drafted["sum_assured"]["value"]
-        and set(fields["sum_assured"]["evidence_ids"])
-        == set(drafted["sum_assured"]["evidence_ids"])
+        and (
+            set(fields["sum_assured"]["evidence_ids"])
+            <= set(drafted["sum_assured"]["evidence_ids"])
+            if source["pipeline_version"] == "retained-policy-association-v13"
+            else set(fields["sum_assured"]["evidence_ids"])
+            == set(drafted["sum_assured"]["evidence_ids"])
+        )
         and decisions[0]["decision"] == "approved"
         and not decisions[0]["issue_codes"]
         and all(

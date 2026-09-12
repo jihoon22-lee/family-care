@@ -41,7 +41,12 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.parametrize(
-    "target_revision", ["retained-policy-association-v11", "retained-policy-association-v12"]
+    "target_revision",
+    [
+        "retained-policy-association-v11",
+        "retained-policy-association-v12",
+        "retained-policy-association-v13",
+    ],
 )
 @pytest.mark.parametrize("deferred_parent", ["cited_name_errors"], indirect=True)
 def test_scoped_revision_rechecks_only_unapproved_candidate_and_preserves_prior_results(

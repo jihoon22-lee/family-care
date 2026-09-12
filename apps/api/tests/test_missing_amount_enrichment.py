@@ -120,7 +120,7 @@ class MissingAmountProof(CurrencyProof):
             assert "privacy_fingerprint" not in query
             assert params[-1] == self.receipt["source_provider_request_id"]
             return Rows([self.prior] if self.prior is not None else [])
-        assert "normalization_revision='policy-draft-normalization-v6'" in query
+        assert f"normalization_revision='{self.version['generator_version']}'" in query
         return Rows([self.receipt])
 
     def check(self):
@@ -237,3 +237,41 @@ def test_missing_amount_recovery_rejects_unproved_or_user_owned_changes(fault):
     elif fault == "ocr_row":
         p.source["structure_json"]["nodes"][0]["source_layer"] = "ocr"
     assert not p.check()
+
+
+def _proven_context_money():
+    proof = MissingAmountProof()
+    proof.source["pipeline_version"] = "retained-policy-association-v13"
+    proof.version["generator_version"] = "policy-draft-normalization-v7"
+    for field in proof.receipt["normalized_batch_json"]["candidates"][0]["fields"]:
+        if field["field_id"] in {"sum_assured", "currency"}:
+            field["evidence_ids"].append(str(uid(15)))
+    proof.prior["verifier_response"]["decisions"][0]["evidence_ids"].append(str(uid(15)))
+    return proof
+
+
+def test_v13_proven_header_keeps_original_money_citation_and_requires_fresh_verification():
+    proof = _proven_context_money()
+    assert proof.check()
+    proof.prior["verifier_response"]["decisions"][0]["evidence_ids"].remove(str(uid(15)))
+    assert not proof.check()
+
+
+@pytest.mark.parametrize("fault", ["removed_primary", "foreign_context", "ocr_header"])
+def test_v13_context_cannot_replace_original_amount_source_or_add_unproved_evidence(fault):
+    proof = _proven_context_money()
+    if fault == "ocr_header":
+        proof.source["structure_json"]["nodes"][-1]["source_layer"] = "ocr"
+    else:
+        for candidate in (
+            proof.receipt["normalized_batch_json"]["candidates"][0],
+            proof.receipt["result_json"]["result"]["candidates"][0],
+        ):
+            for field in candidate["fields"]:
+                if field["field_id"] in {"sum_assured", "currency"}:
+                    field["evidence_ids"] = (
+                        [str(uid(15))]
+                        if fault == "removed_primary"
+                        else [str(uid(9)), str(uid(999))]
+                    )
+    assert not proof.check()
