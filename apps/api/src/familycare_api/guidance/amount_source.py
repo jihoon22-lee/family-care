@@ -431,7 +431,12 @@ def _evaluate(
             ]
             if (
                 document.get("program_validation_version")
-                not in {"range-grounding-v2", "range-grounding-v3", "range-grounding-v4"}
+                not in {
+                    "range-grounding-v2",
+                    "range-grounding-v3",
+                    "range-grounding-v4",
+                    "range-grounding-v5",
+                }
                 or len(matches) != 1
                 or matches[0]["status"] != "AI_VERIFIED"
                 or matches[0]["candidate_kind"] != "rider"

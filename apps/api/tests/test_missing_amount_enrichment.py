@@ -243,6 +243,7 @@ def _proven_context_money():
     proof = MissingAmountProof()
     proof.source["pipeline_version"] = "retained-policy-association-v13"
     proof.version["generator_version"] = "policy-draft-normalization-v7"
+    proof.receipt["result_json"]["program_validation_version"] = "range-grounding-v5"
     for field in proof.receipt["normalized_batch_json"]["candidates"][0]["fields"]:
         if field["field_id"] in {"sum_assured", "currency"}:
             field["evidence_ids"].append(str(uid(15)))

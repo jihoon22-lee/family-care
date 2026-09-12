@@ -492,9 +492,13 @@ def test_v13_proves_header_before_verification_without_rewriting_prior_invented_
                 for e in kwargs["input_payload"]["evidence"]
                 if "담보명" in e["text"] and "가입금액(만원)" in e["text"]
             )
-            payload = deepcopy(response.payload)
-            for decision in payload["decisions"]:
-                decision["evidence_ids"] = sorted({*decision["evidence_ids"], header})
+            payload = {
+                **response.payload,
+                "decisions": [
+                    {**decision, "evidence_ids": sorted({*decision["evidence_ids"], header})}
+                    for decision in response.payload["decisions"]
+                ],
+            }
             return ProviderResponse(request_id=response.request_id, payload=payload)
 
     def run(revision):

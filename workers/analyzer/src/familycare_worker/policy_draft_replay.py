@@ -355,6 +355,8 @@ def _preserve_verified_riders(
                 local_nodes=local_nodes,
                 allow_certificate_title=True,
                 require_issuer_context=True,
+                allow_primary_header_context=job.pipeline_version
+                in PROVEN_CONTEXT_POLICY_PIPELINES,
             )
             if grounded.status != "AI_VERIFIED" or candidate.fields != grounded.fields:
                 continue
@@ -606,6 +608,8 @@ def _source(
                         normalized.batch,
                         work.envelope,
                         {node["node_id"]: node for node in row["structure_json"]["nodes"]},
+                        allow_primary_header_context=job.pipeline_version
+                        in PROVEN_CONTEXT_POLICY_PIPELINES,
                     )
                 ]
             }

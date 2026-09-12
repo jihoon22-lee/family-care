@@ -140,9 +140,10 @@ def _money_enrichment_proven(
             "FOR SHARE OF r,receipt",
             (source["job_id"], source["generation_id"], source["envelope_id"]),
         ).fetchone()
-        if (
-            row is None
-            or row["result_json"].get("program_validation_version") != "range-grounding-v4"
+        if row is None or row["result_json"].get("program_validation_version") != (
+            "range-grounding-v5"
+            if pipeline == "retained-policy-association-v13"
+            else "range-grounding-v4"
         ):
             return False
         identifier = str(source["provider_candidate_id"])

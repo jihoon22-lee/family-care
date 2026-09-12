@@ -238,6 +238,7 @@ def _proven_context_draft(
         local_nodes=nodes,
         allow_certificate_title=True,
         require_issuer_context=True,
+        allow_primary_header_context=True,
     )
     by_id = {item.evidence_id: item for item in scope}
     original = {field.field_id: field for field in candidate.fields}
@@ -392,7 +393,9 @@ def normalize_policy_response(
             ),
             ranges=tuple(ranges),
         )
-        scope = scoped_policy_evidence(batch, envelope, local_nodes)
+        scope = scoped_policy_evidence(
+            batch, envelope, local_nodes, allow_primary_header_context=True
+        )
         batch = batch.model_copy(
             update={
                 "candidates": tuple(

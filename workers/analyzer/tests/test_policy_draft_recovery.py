@@ -408,7 +408,7 @@ def test_supported_partial_primary_keeps_its_original_span_and_v6_mapping():
     result = _recover(raw, envelope, nodes)
     assert len(legacy.batch.candidates) == len(result.batch.candidates) == 1
     assert result.batch == legacy.batch
-    assert not result.partial
+    assert result.partial == legacy.partial
     assert "CANDIDATE_RANGE_UNSUPPORTED" not in _reasons(result)
     assert envelope.evidence == (partial,)
     assert all(f.evidence_ids == (partial.evidence_id,) for f in result.batch.candidates[0].fields)
@@ -417,6 +417,18 @@ def test_supported_partial_primary_keeps_its_original_span_and_v6_mapping():
 @pytest.mark.parametrize("fault", ["missing", "truncated"])
 def test_missing_context_retains_loss_and_cannot_approve_an_orphan(fault):
     raw, envelope, nodes = _table_raw()
+    if fault == "missing":
+        # Remove only context, preserving every declared primary range identity.
+        draft = StructurerCandidate.model_validate_json(
+            json.dumps(raw["candidates"][0]), strict=True
+        )
+        envelope = _pack(
+            tuple(
+                replace(e, primary=False) if nodes[e.node_id].get("row_role") == "header" else e
+                for e in envelope.evidence
+            )
+        )
+        raw, envelope, nodes = _table_raw(draft, envelope, nodes)
     _orphan(raw, 0)
     envelope = _pack(
         tuple(

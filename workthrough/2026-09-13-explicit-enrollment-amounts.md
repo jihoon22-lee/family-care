@@ -86,3 +86,26 @@ Ruff checks and format checks for 13 files, and `git diff --check` passed. Full 
 Web/Python/containers/PostgreSQL are delegated to the final PR CI once; no equivalent
 full local run is added. Protected-operation results will be linked to the PR/issue
 without pushing a documentation-only commit merely to restart the same full CI.
+
+## Final integration and protected outcome
+
+PR #105 passed required CI 7/7 on `f1ffb50a49af43d42ad1d02d33ebffef89691075` in
+run `34712018964`; PostgreSQL passed 937 tests (4384 deselected) in 2252.85 seconds.
+It was merged as `f4858f62d4cac0f0f11de44a44b7205ab06d6609`. PR #104 was superseded
+solely for an invalid local merge subject, without rewriting shared history; its
+incomplete run was canceled. The final four implementation commits passed conventions.
+The source tree is exactly the same as protected source `17da1b3`: tree
+`97710bd9ace6c6c19004840c456e2f06b842bbe3`.
+
+The approved owned clone advanced to schema 0081 in 1.151 seconds using the already
+verified backup and preserving existing processing/ledger/binding/claim rows. The
+selected eight ranges were processed in 230.554 seconds with seven HTTP calls: seven
+existing empty money pairs were filled and nine Riders added. The selected 16 native
+Riders all linked to their existing private identities; only two display-name conflicts
+remain, with no money/currency conflicts. Original records and user history remain.
+
+Additional API spending is USD 0.39536340 / 19 requests (target 1, hard ceiling 2).
+All eight ranges remain REVIEW: two stored responses have range-assignment issues,
+and 17 candidates were rejected for supplied/proven header context not yet attached
+to their draft fields. The next explicit source-reconciliation bundle addresses those
+residuals without reinterpreting the old failures. Full catalog/terms/release remains open.
