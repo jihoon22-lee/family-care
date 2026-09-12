@@ -296,7 +296,9 @@ def deferred_parent(enrollment_database, request):
     return url, original, old, current, history, old_fields, old_candidates, calls, reviewed
 
 
-def test_v8_parent_publishes_existing_six_riders_without_copy_or_reverification(deferred_parent):
+def test_v8_parent_publishes_existing_six_riders_without_copy_or_reverification(
+    deferred_parent, monkeypatch
+):
     url, original, old, current, history, old_fields, old_candidates, calls, _ = deferred_parent
     assert len(calls) == 1 and calls[0]["schema_name"] == "policy_candidate_batch_verifier_v2"
     projector = RangeEnrollmentProjector(url)
@@ -368,11 +370,44 @@ def test_v8_parent_publishes_existing_six_riders_without_copy_or_reverification(
     inventory = InsuranceDocumentRepository(url).get_inventory(scope, original.family_member_id)
     serialized = MemberInsuranceDocumentInventoryResponse.from_domain(inventory)
     assert serialized.registered_policies[0].insurer_display is None
-    reconciliation = InsuranceReconciliationRepository(url).get_member(
-        scope, original.family_member_id
-    )
-    serialized_reconciliation = MemberInsuranceReconciliationResponse.from_domain(reconciliation)
-    assert serialized_reconciliation.orphan_operational_contracts[0].insurer_display is None
+    from apps.api.tests import test_insurance_reconciliation_migration_integration as knowledge
+
+    # Reuse the existing synthetic run/subject/contract seed for this fixture's household.
+    run_id = uuid4()
+    with monkeypatch.context() as seed_scope, psycopg.connect(_psycopg_url(url)) as connection:
+        actor = connection.execute(
+            "SELECT id FROM app_users WHERE household_space_id=%s LIMIT 1",
+            (old.household_space_id,),
+        ).fetchone()[0]
+        for name, value in {
+            "HOUSEHOLD_ID": old.household_space_id,
+            "MEMBER_A_ID": original.family_member_id,
+            "USER_ID": actor,
+            "RUN_ID": run_id,
+            "SUBJECT_ID": uuid4(),
+            "CONTRACT_ID": uuid4(),
+        }.items():
+            seed_scope.setattr(knowledge, name, value)
+        knowledge._seed_knowledge(connection)
+    try:
+        reconciliation = InsuranceReconciliationRepository(url).get_member(
+            scope, original.family_member_id
+        )
+        assert reconciliation is not None and reconciliation.knowledge_run_id == run_id
+        serialized_reconciliation = MemberInsuranceReconciliationResponse.from_domain(
+            reconciliation
+        )
+        assert len(serialized_reconciliation.contracts) == 1
+        assert len(serialized_reconciliation.orphan_operational_contracts) == 1
+        orphan = serialized_reconciliation.orphan_operational_contracts[0]
+        assert orphan.policy_contract_id == policy["id"]
+        assert orphan.insurer_display is None
+        assert orphan.insurer_unresolved_reason == "INSURER_SOURCE_UNVERIFIED"
+        assert serialized_reconciliation.contracts[0].operational_link.policy_contract_id is None
+    finally:
+        # Shared fixtures use this dedicated synthetic database; immutable imports use TRUNCATE.
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute("TRUNCATE private_knowledge_import_runs CASCADE")
     from apps.api.tests.test_metadata_navigation_publication import _migrate
 
     refused = _migrate(url, "downgrade", "0076_certificate_title_grounding")
