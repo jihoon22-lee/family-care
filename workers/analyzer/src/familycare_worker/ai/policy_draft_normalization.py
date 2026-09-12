@@ -11,16 +11,22 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import ValidationError
 
-from familycare_worker.ai.policy_ranges import RANGE_ENVELOPE_REVISION, PolicyRangeEnvelope
+from familycare_worker.ai.policy_ranges import (
+    RANGE_ENVELOPE_REVISION,
+    PolicyRangeEnvelope,
+    RangeEvidenceSlice,
+)
 from familycare_worker.ai.range_grounding import ground_range_candidate
 from familycare_worker.ai.range_structurer import PolicyRangeBatch, RangeDisposition
 from familycare_worker.ai.schemas import (
@@ -35,6 +41,7 @@ CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
 SOURCE_SCOPED_NORMALIZATION_REVISION = "policy-draft-normalization-v3"
 AMOUNT_CURRENCY_NORMALIZATION_REVISION = "policy-draft-normalization-v4"
 TABLE_NAME_NORMALIZATION_REVISION = "policy-draft-normalization-v5"
+EXPLICIT_UNIT_NORMALIZATION_REVISION = "policy-draft-normalization-v6"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -49,6 +56,7 @@ type AdjustmentReason = Literal[
     "CURRENCY_DERIVED_FROM_AMOUNT",
     "CURRENCY_EVIDENCE_REALIGNED",
     "RIDER_NAME_RESTORED_FROM_CITED_ROW",
+    "AMOUNT_SCALED_FROM_EXPLICIT_UNIT",
 ]
 
 
@@ -272,6 +280,325 @@ def _table_name_draft(
     return proposed
 
 
+def _unit_box(value: object) -> tuple[float, ...] | None:
+    if (
+        not isinstance(value, list | tuple)
+        or len(value) != 4
+        or any(type(part) not in (int, float) or not math.isfinite(part) for part in value)
+        or value[0] >= value[2]
+        or value[1] >= value[3]
+    ):
+        return None
+    return tuple(value)
+
+
+def _unit_cells(node: Mapping[str, Any]) -> dict[int, Mapping[str, Any]] | None:
+    from familycare_worker.ai.table_grounding import _cells
+
+    cells = _cells(node)
+    if (
+        node.get("source_layer") != "native"
+        or node.get("issue_codes")
+        or cells is None
+        or len(cells) < 2
+        or any(type(column) is not int for column in cells)
+        or any(
+            type(cell[key]) is not int or cell[key] != 1
+            for cell in cells.values()
+            for key in ("row_span", "column_span")
+            if cell.get(key) is not None
+        )
+    ):
+        return None
+    boxes = [_unit_box(cell.get("bbox")) for cell in cells.values()]
+    parent = _unit_box(node.get("bbox"))
+    if parent is None or any(
+        box is None
+        or not (
+            parent[0] <= box[0] < box[2] <= parent[2] and parent[1] <= box[1] < box[3] <= parent[3]
+        )
+        for box in boxes
+    ):
+        return None
+    for position, left in enumerate(boxes):
+        assert left is not None
+        for right in boxes[position + 1 :]:
+            assert right is not None
+            if min(left[2], right[2]) > max(left[0], right[0]) and min(left[3], right[3]) > max(
+                left[1], right[1]
+            ):
+                return None
+    return cells
+
+
+def _unit_visible(value: str, text: str) -> bool:
+    # Whitespace wrapping may differ, but removed source characters cannot return.
+    def compact(s: str) -> str:
+        return "".join(unicodedata.normalize("NFKC", s).casefold().split())
+
+    return bool(compact(value)) and compact(value) in compact(text)
+
+
+def _explicit_unit_row(
+    row: Mapping[str, Any],
+    evidence: RangeEvidenceSlice,
+    envelope: PolicyRangeEnvelope,
+    nodes: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, Decimal, str] | None:
+    """Prove two labeled cells and one explicit unit within the existing envelope."""
+    from familycare_worker.ai.range_grounding import _UNITS
+    from familycare_worker.ai.table_grounding import (
+        _AMOUNT_HEADER,
+        _NAME,
+        _UNIT,
+        _label,
+        explicitly_unenrolled,
+    )
+
+    cells = _unit_cells(row)
+    if (
+        cells is None
+        or row.get("row_role") != "data"
+        or row.get("schedulable") is False
+        or row.get("page_number") != evidence.page
+        or explicitly_unenrolled(row["text"])
+    ):
+        return None
+    available = {item.node_id: item for item in envelope.evidence}
+    headers = []
+    hints = set()
+    for key in row.get("context_node_ids", ()):
+        node = nodes[key]
+        item = available.get(key)
+        if (
+            node.get("source_layer") != "native"
+            or node.get("issue_codes")
+            or explicitly_unenrolled(node.get("text", ""))
+        ):
+            return None
+        unit = re.fullmatch(rf"\s*(?:단위|unit)\s*[:：]\s*({_UNIT})\s*", node["text"], re.I)
+        if node.get("kind") == "TABLE_ROW" and node.get("row_role") == "header" or unit:
+            if (
+                item is None
+                or item.source_role != "policy"
+                or item.start != 0
+                or item.end != len(node["text"])
+                or not _unit_visible(node["text"], item.text)
+            ):
+                return None
+            if unit:
+                hints.add(unit[1].upper())
+            else:
+                header = _unit_cells(node)
+                if header is None:
+                    return None
+                headers.append(header)
+    name_columns = {
+        col for h in headers for col, cell in h.items() if _label(cell["text"]) in _NAME
+    }
+    amount_columns = {
+        col
+        for h in headers
+        for col, cell in h.items()
+        if _AMOUNT_HEADER.fullmatch(cell["text"].strip())
+    }
+    if len(name_columns) != 1 or len(amount_columns) != 1:
+        return None
+    name_col, amount_col = next(iter(name_columns)), next(iter(amount_columns))
+    if name_col == amount_col or name_col not in cells or amount_col not in cells:
+        return None
+    for header in headers:
+        if (
+            name_col not in header
+            or _label(header[name_col]["text"]) not in _NAME
+            or amount_col not in header
+        ):
+            return None
+        match = _AMOUNT_HEADER.fullmatch(header[amount_col]["text"].strip())
+        if match is None:
+            return None
+        if match[1]:
+            hints.add(match[1].upper())
+    name, amount = cells[name_col], cells[amount_col]
+    ordered = sorted(cells)
+    minimized = evidence.text.split("\t")
+    if (
+        not isinstance(name["text"], str)
+        or not 1 <= len(name["text"]) <= 240
+        or row["text"] != "\t".join(cells[col]["text"] for col in ordered)
+        or len(minimized) != len(ordered)
+        or any(
+            not _unit_visible(cells[col]["text"], minimized[ordered.index(col)])
+            or not _unit_visible(minimized[ordered.index(col)], cells[col]["text"])
+            for col in (name_col, amount_col)
+        )
+    ):
+        return None
+    selected_boxes = [_unit_box(cell["bbox"]) for cell in (name, amount)]
+    left, right = selected_boxes
+    assert left is not None and right is not None
+    if (
+        min(left[3], right[3]) - max(left[1], right[1])
+        < min(left[3] - left[1], right[3] - right[1]) / 2
+    ):
+        return None
+    for header in headers:
+        for column in (name_col, amount_col):
+            head_box = _unit_box(header[column]["bbox"])
+            cell_box = _unit_box(cells[column]["bbox"])
+            assert head_box is not None and cell_box is not None
+            if (
+                min(head_box[2], cell_box[2]) - max(head_box[0], cell_box[0])
+                < min(head_box[2] - head_box[0], cell_box[2] - cell_box[0]) / 2
+            ):
+                return None
+    # A second/overlapping table interpretation cannot authorize either field.
+    for other in nodes.values():
+        if (
+            other is row
+            or other.get("kind") != "TABLE_ROW"
+            or other.get("page_number") != evidence.page
+        ):
+            continue
+        for cell in other.get("cells", ()):
+            box = _unit_box(cell.get("bbox"))
+            if box is not None and any(
+                target is not None
+                and min(box[2], target[2]) > max(box[0], target[0])
+                and min(box[3], target[3]) > max(box[1], target[1])
+                for target in selected_boxes
+            ):
+                return None
+    match = re.fullmatch(
+        rf"\s*([0-9]+(?:,[0-9]{{3}})*(?:\.[0-9]+)?)\s*({_UNIT})?\s*", amount["text"], re.I
+    )
+    if match is None:
+        return None
+    if match[2]:
+        hints.add(match[2].upper())
+    if len(hints) != 1:
+        return None
+    unit = next(iter(hints))
+    if _UNITS.get(unit, 1) == 1:
+        return None
+    return name["text"], Decimal(match[1].replace(",", "")), unit
+
+
+def _explicit_unit_draft(
+    source: StructurerCandidate,
+    envelope: PolicyRangeEnvelope,
+    local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    adjustments: list[PolicyDraftAdjustment],
+) -> StructurerCandidate:
+    """Atomically repair a cited name/amount pair, still requiring fresh verification."""
+    from familycare_worker.ai.range_grounding import _UNITS
+
+    if source.candidate_kind != "rider" or local_nodes is None:
+        return source
+    fields = {field.field_id: field for field in source.fields}
+    if len(fields) != len(source.fields) or not {"rider_name", "sum_assured"} <= fields.keys():
+        return source
+    name, amount = fields["rider_name"], fields["sum_assured"]
+    key = fields.get("rider_key")
+    primary = [
+        {
+            item.evidence_id
+            for item in envelope.evidence
+            if item.primary and item.evidence_id in f.evidence_ids
+        }
+        for f in (name, amount)
+    ]
+    if len(primary[0]) != 1 or primary[0] != primary[1]:
+        return source
+    evidence = next(item for item in envelope.evidence if item.evidence_id in primary[0])
+    node = local_nodes[evidence.node_id]
+    allowed_nodes = {evidence.node_id, *node.get("context_node_ids", ())}
+    if (
+        evidence.source_role != "policy"
+        or node.get("source_layer") != "native"
+        or node.get("issue_codes")
+        or node.get("schedulable") is False
+        or evidence.start != 0
+        or evidence.end != len(node["text"])
+        or node.get("kind") != "TABLE_ROW"
+        or _unit_box(evidence.bbox) != _unit_box(node.get("bbox"))
+        or _unit_box(evidence.bbox) is None
+        or any(
+            item.node_id not in allowed_nodes
+            for item in envelope.evidence
+            if item.evidence_id in {*name.evidence_ids, *amount.evidence_ids}
+        )
+    ):
+        return source
+    proof = _explicit_unit_row(node, evidence, envelope, local_nodes)
+    if proof is None:
+        return source
+    actual_name, unscaled, unit = proof
+    if actual_name != name.value and key is not None and key.value != name.value:
+        return source
+    try:
+        if isinstance(amount.value, bool) or Decimal(str(amount.value)) != unscaled:
+            return source
+    except InvalidOperation:
+        return source
+    scaled = unscaled * _UNITS[unit]
+    if scaled == unscaled:
+        return source
+    currency = fields.get("currency")
+    if currency is not None and currency.value != "KRW":
+        return source
+    restored = {
+        "rider_name": name.model_copy(update={"value": actual_name}),
+        "sum_assured": amount.model_copy(
+            update={
+                "value": int(scaled)
+                if scaled == scaled.to_integral_value()
+                else format(scaled, "f")
+            }
+        ),
+        "currency": CandidateField(
+            field_id="currency", value="KRW", evidence_ids=amount.evidence_ids
+        ),
+    }
+    if key is not None and actual_name != name.value:
+        restored["rider_key"] = key.model_copy(
+            update={"value": actual_name, "evidence_ids": name.evidence_ids}
+        )
+    proposed = source.model_copy(
+        update={
+            "fields": tuple(restored.get(f.field_id, f) for f in source.fields)
+            + (() if currency is not None else (restored["currency"],))
+        }
+    )
+    if not all(
+        _supported(proposed, restored[field], envelope, local_nodes)
+        for field in ("rider_name", "sum_assured", "currency")
+    ):
+        return source
+    adjustments.append(
+        PolicyDraftAdjustment(
+            "AMOUNT_SCALED_FROM_EXPLICIT_UNIT", source.candidate_id, "sum_assured"
+        )
+    )
+    if name.value != actual_name:
+        adjustments.append(
+            PolicyDraftAdjustment(
+                "RIDER_NAME_RESTORED_FROM_CITED_ROW", source.candidate_id, "rider_name"
+            )
+        )
+    if currency != restored["currency"]:
+        adjustments.append(
+            PolicyDraftAdjustment(
+                "CURRENCY_DERIVED_FROM_AMOUNT"
+                if currency is None
+                else "CURRENCY_EVIDENCE_REALIGNED",
+                source.candidate_id,
+                "currency",
+            )
+        )
+    return proposed
+
+
 def _amount_currency_draft(
     source: StructurerCandidate,
     envelope: PolicyRangeEnvelope,
@@ -447,6 +774,7 @@ def normalize_policy_draft(
             SOURCE_SCOPED_NORMALIZATION_REVISION,
             AMOUNT_CURRENCY_NORMALIZATION_REVISION,
             TABLE_NAME_NORMALIZATION_REVISION,
+            EXPLICIT_UNIT_NORMALIZATION_REVISION,
         ):
             raise PolicyDraftInvalid
         _check_source(batch, envelope)
@@ -455,15 +783,27 @@ def normalize_policy_draft(
         drafts = {
             candidate.candidate_id: _candidate_draft(
                 _amount_currency_draft(
-                    _table_name_draft(candidate, envelope, local_nodes, adjustments)
-                    if revision == TABLE_NAME_NORMALIZATION_REVISION
+                    _table_name_draft(
+                        _explicit_unit_draft(candidate, envelope, local_nodes, adjustments)
+                        if revision == EXPLICIT_UNIT_NORMALIZATION_REVISION
+                        else candidate,
+                        envelope,
+                        local_nodes,
+                        adjustments,
+                    )
+                    if revision
+                    in {TABLE_NAME_NORMALIZATION_REVISION, EXPLICIT_UNIT_NORMALIZATION_REVISION}
                     else candidate,
                     envelope,
                     local_nodes,
                     adjustments,
                 )
                 if revision
-                in {AMOUNT_CURRENCY_NORMALIZATION_REVISION, TABLE_NAME_NORMALIZATION_REVISION}
+                in {
+                    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                    TABLE_NAME_NORMALIZATION_REVISION,
+                    EXPLICIT_UNIT_NORMALIZATION_REVISION,
+                }
                 else candidate,
                 envelope,
                 local_nodes,
@@ -474,12 +814,14 @@ def normalize_policy_draft(
                     SOURCE_SCOPED_NORMALIZATION_REVISION,
                     AMOUNT_CURRENCY_NORMALIZATION_REVISION,
                     TABLE_NAME_NORMALIZATION_REVISION,
+                    EXPLICIT_UNIT_NORMALIZATION_REVISION,
                 },
                 allow_unconfirmed_insurer=revision
                 in {
                     SOURCE_SCOPED_NORMALIZATION_REVISION,
                     AMOUNT_CURRENCY_NORMALIZATION_REVISION,
                     TABLE_NAME_NORMALIZATION_REVISION,
+                    EXPLICIT_UNIT_NORMALIZATION_REVISION,
                 },
             )
             for candidate in batch.candidates
