@@ -16,6 +16,7 @@ from psycopg.rows import dict_row
 from workers.analyzer.tests.test_policy_range_repository import (
     WORKER,
     _no_facts,
+    _prepare_policy_source,
     seeded_policy_database,  # noqa: F401
     structure_database,  # noqa: F401
 )
@@ -37,8 +38,10 @@ def historical_v5_producer(monkeypatch):
 
 
 @pytest.fixture()
-def retained_source(ranges_database):
+def retained_source(ranges_database, request):
     url, job = ranges_database
+    if getattr(request, "param", None) == "policy":
+        _prepare_policy_source(url, job)
     original = job
     ranges = PolicyRangeRepository(url)
     generation = None
@@ -417,6 +420,7 @@ def test_migration_refuses_to_discard_retained_processing_history(retained_sourc
     _assert_original_preserved(sample)
 
 
+@pytest.mark.parametrize("retained_source", ["policy"], indirect=True)
 @pytest.mark.parametrize("already_budgeted", [False, True])
 def test_targeted_runner_uses_existing_provider_budget_without_resetting_document_quota(
     retained_source, already_budgeted
@@ -474,6 +478,7 @@ def test_targeted_runner_uses_existing_provider_budget_without_resetting_documen
     _assert_original_preserved(sample)
 
 
+@pytest.mark.parametrize("retained_source", ["policy"], indirect=True)
 def test_generation_change_during_provider_call_cannot_publish_or_retransmit(retained_source):
     from familycare_worker.ai.provider import ProviderResponse
     from familycare_worker.policy_request_budget import PolicyRequestBudget
