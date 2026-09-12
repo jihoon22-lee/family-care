@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0080_scoped_policy_verifier"
+REVISION = "0081_explicit_unit_draft"
 
 
 class Result:

@@ -42,6 +42,8 @@ pytestmark = pytest.mark.integration
     "source_revision,target_revision",
     [
         ("retained-policy-association-v2", "retained-policy-association-v4"),
+        ("retained-policy-association-v2", "retained-policy-association-v12"),
+        ("retained-policy-association-v3", "retained-policy-association-v12"),
         ("retained-policy-association-v5", "retained-policy-association-v6"),
         ("retained-policy-association-v5", "retained-policy-association-v7"),
         ("retained-policy-association-v6", "retained-policy-association-v7"),
@@ -98,7 +100,17 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         household_space_id=old.household_space_id,
         family_member_id=old.family_member_id,
     )
-    work = ranges.next(old, WORKER, sensitive_terms=member_terms)
+    if target_revision == "retained-policy-association-v12":
+        # A historical fingerprint is not a different transmission when the
+        # whole minimized envelope is identical under the current rules.
+        with monkeypatch.context() as legacy_privacy:
+            legacy_privacy.setattr(
+                "familycare_worker.policy_range_repository.MINIMIZATION_REVISION",
+                "synthetic-historical-minimizer",
+            )
+            work = ranges.next(old, WORKER, sensitive_terms=member_terms)
+    else:
+        work = ranges.next(old, WORKER, sensitive_terms=member_terms)
     batch, _ = _one_contract(work)
     primary = work.envelope.primary_evidence_ids[0]
     policy = batch.candidates[0].model_copy(
@@ -200,7 +212,9 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         ).fetchall()
         assert len(candidates) == 2 and all(row["status"] == "AI_VERIFIED" for row in candidates)
         expected_normalization = (
-            "policy-draft-normalization-v2"
+            "policy-draft-normalization-v6"
+            if target_revision == "retained-policy-association-v12"
+            else "policy-draft-normalization-v2"
             if target_revision == "retained-policy-association-v7"
             else "policy-draft-normalization-v1"
         )
