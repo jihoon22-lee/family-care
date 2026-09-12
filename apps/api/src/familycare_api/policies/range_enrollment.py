@@ -20,7 +20,10 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_api.policies.contract_source_locator import contract_source_locator
-from familycare_api.policies.currency_enrichment import currency_enrichment_proven
+from familycare_api.policies.currency_enrichment import (
+    amount_enrichment_proven,
+    currency_enrichment_proven,
+)
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
 from familycare_api.policies.source_projection import StructureProjectionReader
 from familycare_api.policies.source_scoped_identity import source_scoped_identity
@@ -403,6 +406,7 @@ def project_range_candidate(
     authority = "USER_CONFIRMED" if version["status"] == "USER_CONFIRMED" else "PROGRAM_VERIFIED"
     update = False
     currency_enrichment = False
+    amount_enrichment = False
     if target is not None:
         if (
             target["deleted_at"] is not None
@@ -429,7 +433,19 @@ def project_range_candidate(
                     connection, version, source, values, evidence, target, previous
                 )
             )
-            if authority != "USER_CONFIRMED" and not issuer_enrichment and not currency_enrichment:
+            amount_enrichment = (
+                rider_id is not None
+                and authority == "PROGRAM_VERIFIED"
+                and amount_enrichment_proven(
+                    connection, version, source, values, evidence, target, previous
+                )
+            )
+            if (
+                authority != "USER_CONFIRMED"
+                and not issuer_enrichment
+                and not currency_enrichment
+                and not amount_enrichment
+            ):
                 return False
             lineage_publication = connection.execute(
                 "SELECT candidate_version_id FROM range_enrollment_publications "
@@ -444,7 +460,7 @@ def project_range_candidate(
                 "ORDER BY created_at DESC LIMIT 1",
                 (household, policy_id, rider_id),
             ).fetchone()
-            if currency_enrichment:
+            if currency_enrichment or amount_enrichment:
                 if last_user is not None:
                     return False
             elif issuer_enrichment:
@@ -520,6 +536,11 @@ def project_range_candidate(
         )
     if currency_enrichment:
         columns = {"currency": values["currency"]}
+    elif amount_enrichment:
+        columns = {
+            "insured_amount": Decimal(str(values["sum_assured"])),
+            "currency": values["currency"],
+        }
     insured_evidence_id = _insured_evidence(connection, source)
     if insured_evidence_id is None:
         return False
