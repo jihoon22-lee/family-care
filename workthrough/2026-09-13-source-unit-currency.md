@@ -160,7 +160,7 @@ PR #106과 다음 v14 PR의 소스에 대응하는 최종 CI는 주 작업이 �
 - COMPLETE (사전 병합): live 이력 9,208행의 원래 key·본문 보존, local job 6개와 incoming
   run 12개의 명시 alias. 최종 barrier는 추가 INSERT·누락 0·기존 행 보존으로 통과했다. Rider 7개 차이는 승인된 금액 보강/API 원문 증명으로 확인했고
   사용자 보험정보 교정 충돌은 발견하지 않았다. session 상태·약관 확인 시각은 별도다.
-- PUSHED / PUBLISHED / PENDING: 최종 v0.5.0 태그·이미지·GitHub Release는 게시됐고
+- PUSHED / PUBLISHED / ACTIVATED: 최종 v0.5.0 태그·이미지·GitHub Release는 게시됐고
   순차 up activation의 새 컨테이너 수용은 통과했다. 외부 네트워크 수용도 명시된 기존 결과 조회 범위에서 통과했다. 격리 DB 준비를
   새 live 이력의 병합·운영 전환 완료로 표시하지 않는다.
 - UNVERIFIED: 실제 모바일/PWA 설치 등 직접 확인하지 않은 환경. 이전 Windows/Linux
@@ -180,9 +180,10 @@ PR #106과 다음 v14 PR의 소스에 대응하는 최종 CI는 주 작업이 �
 | release workflow | SUCCESS | [34719394060](https://github.com/jihoon22-lee/family-care/actions/runs/34719394060), [GitHub Release](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.0) 정식 게시 2026-09-12T22:00:32Z; draft/prerelease 아님 |
 | 로컬 VERIFY_RELEASE_IMAGES | 첫 FAILED / 인증 복구 후 PASSED | GHCR_TOKEN/actor 인증 누락으로 manifest-status 단계 실패·전환 없음. 기존 gh 인증을 메모리에서 재사용해 manifest HTTP 200·digest 대조 통과; 실패 단계만 재개, release workflow 재실행 없음 |
 | PULL_RELEASE_IMAGES | PASSED | 검증된 이미지를 순차 pull했고 이어 순차 up으로 새 컨테이너를 생성 |
+| 전환 준비 첫 시도 | FAILED 보존 / 수정 후 PASSED | 기존 Compose env-file의 symlink를 FILE_BOUNDARY_INVALID로 거부해 전환 전 중단. 승인된 원래 argv를 유지하고 resolved target·내용 hash를 고정하도록 준비 helper만 수정; 이미 확인한 이미지·pull은 재실행하지 않음 |
 | writer barrier·이력 | PASSED | history 9개 table 16.268초 재호출, 추가 INSERT 0·누락 0·모든 기존 source/owned 행 보존. 나머지105개 table/live35,160행 보존, source app_sessions19·refresh 시각20·승인 Rider 보강7개 대사. 총114개 table |
 | activation | PASSED | `7d1a53d`/schema 0083, 순차 up 새 컨테이너 3개 digest/이미지/리비전/health 일치·API readiness PASS. 별도 restart 없음 |
-| 네트워크 첫 시도 | FAILED 보존 | Windows curl 버전 실행 OSError errno8, HTTPS 요청0. 서비스 HTTPS 응답 실패가 아니라 interop 실행 실패 |
+| 네트워크 첫 시도 | FAILED 보존 | Windows curl 요청 프로세스 시작 시 OSError errno8, HTTPS 요청0. 서비스 HTTPS 응답 실패가 아니라 interop 실행 실패 |
 | 네트워크 재조회 | PASSED, 30.765초 | WSL_CURL·HTTPS10/readiness1, 인증·schema83·이미지3·health·no-store·logout 확인. 실패한 네트워크 읽기만 재실행, 재배포/restart 없음 |
 | 기존 저장 결과 수용 | PASSED (과거 결과) | 후보6·POINT3·FORMULA1·RANGE0, support238=evaluated6+unsupported232. saved_guidance_stale=true로 최신 fresh 결과가 아님. SUMMARY 근거1·청구/원래 사건 불변 |
 | 새 동작·원본 보존 | PASSED | provider activity 불변·local projection delta0·new events0/analyze0/restarts0. manager 새 stage active, 이전 DB 보존 |

@@ -59,7 +59,7 @@ SUCCESS이며 [정식 Release](https://github.com/jihoon22-lee/family-care/relea
 지원 규칙이 있는 구성원의 기존 입력 복제 1개에서 후보 6개·POINT 3개·FORMULA 1개와
 근거·저장·기존 사건 보존·청구 조회를 확인했다. 마지막 helper의 정상 로컬 검색/provider
 카운터 오류는 실패로 보존하고 재분석 없는 metadata 대사로 외부 작업/시도 0·이력 보존을
-확인했다. 새 live 이력의 사전 병합 9,208행과 명시 job alias는 보존 검사를 통과했지만
+확인했다. 새 live 이력의 사전 병합 9,208행과 명시 job alias는 보존 검사를 통과했다.
 최종 source barrier 재호출은 추가 INSERT·누락 0·이력 보존으로 통과했고 activation도
 완료했다. 최초 Windows curl 실행 실패는 보존하며 영향받는 네트워크 조회만 재실행해
 통과했다. 기존 저장 결과는 stale 상태로 조회했고 새 event·분석·restart는 모두 0이었다. 상세 수치와 이전
