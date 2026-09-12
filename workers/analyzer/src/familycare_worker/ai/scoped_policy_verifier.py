@@ -57,7 +57,8 @@ def scoped_policy_evidence(
             )
             grounded = {field.field_id: field.value for field in probe.fields}
             if probe.status != "AI_VERIFIED" or any(
-                grounded.get(key) != value for key, value in original.items()
+                type(grounded.get(key)) is not type(value) or grounded.get(key) != value
+                for key, value in original.items()
             ):
                 return full
             selected.update(key for field in probe.fields for key in field.evidence_ids)

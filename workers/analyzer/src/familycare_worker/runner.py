@@ -80,6 +80,7 @@ from familycare_worker.policy_candidates import (
     PolicyCandidateRepositoryUnavailable,
 )
 from familycare_worker.policy_draft_replay import (
+    FIELD_SCOPED_POLICY_PIPELINES,
     NORMALIZED_POLICY_PIPELINES,
     SOURCE_SCOPED_POLICY_PIPELINES,
     PolicyDraftNormalizationRepository,
@@ -451,9 +452,12 @@ class PolicyStructuringJobRunner:
                 allow_unclassified_enrollment=True,
                 allow_unconfirmed_insurer=job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES,
                 structurer_request_id=request_id,
-                evidence=work.envelope.evidence,
+                evidence=draft.verifier_evidence
+                if draft is not None and draft.verifier_evidence is not None
+                else work.envelope.evidence,
                 provider=leased,
                 verifier_model=self.verifier_model,
+                field_scoped=job.pipeline_version in FIELD_SCOPED_POLICY_PIPELINES,
             )
             if batch.candidates
             else CandidatePipelineResult(classification="SUCCESS", candidates=())

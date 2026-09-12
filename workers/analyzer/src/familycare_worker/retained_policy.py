@@ -26,6 +26,7 @@ RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v7"
 SOURCE_SCOPED_POLICY_PIPELINE_REVISION = "retained-policy-association-v8"
 AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION = "retained-policy-association-v9"
 TABLE_NAME_POLICY_PIPELINE_REVISION = "retained-policy-association-v10"
+FIELD_SCOPED_POLICY_PIPELINE_REVISION = "retained-policy-association-v11"
 
 
 class RetainedPolicyConflict(RuntimeError):
@@ -45,6 +46,7 @@ def _revision(value: str) -> str:
         SOURCE_SCOPED_POLICY_PIPELINE_REVISION,
         AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION,
         TABLE_NAME_POLICY_PIPELINE_REVISION,
+        FIELD_SCOPED_POLICY_PIPELINE_REVISION,
     }:
         raise RetainedPolicyConflict
     return value

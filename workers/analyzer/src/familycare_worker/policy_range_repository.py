@@ -420,6 +420,7 @@ class PolicyRangeRepository:
     ) -> None:
         from familycare_worker.policy_draft_replay import (
             CERTIFICATE_TITLE_PIPELINES,
+            FIELD_SCOPED_POLICY_PIPELINES,
             NORMALIZED_POLICY_PIPELINES,
             SOURCE_SCOPED_POLICY_PIPELINES,
             _current_source,
@@ -453,6 +454,18 @@ class PolicyRangeRepository:
                         "source_response_hash": receipt["source_response_hash"],
                         "normalization_revision": receipt["normalization_revision"],
                         "partial": receipt["partial"],
+                    },
+                }
+            if (
+                receipt is not None
+                and "result" in payload
+                and job.pipeline_version in FIELD_SCOPED_POLICY_PIPELINES
+            ):
+                payload = {
+                    **payload,
+                    "verification_scope": {
+                        "revision": "cited-fields-v1",
+                        "evidence_ids": receipt["_verifier_evidence_ids"],
                     },
                 }
             source = connection.execute(

@@ -18,6 +18,7 @@ from workers.analyzer.tests.test_policy_table_grounding import _input
 def _fixture():
     candidate, evidence, nodes, header_id = _input()
     draft = StructurerCandidate(
+        schema_version="1",
         candidate_id=candidate.candidate_id,
         candidate_kind=candidate.candidate_kind,
         fields=candidate.fields,
@@ -155,9 +156,13 @@ def test_all_fields_and_multiple_candidates_contribute_to_scope():
     candidate, evidence, nodes, header_id = _input(second_amount="30")
     rows = [e for e in evidence if nodes[e.node_id].get("row_role") == "data"]
     first = StructurerCandidate(
-        candidate_id=candidate.candidate_id, candidate_kind="rider", fields=candidate.fields
+        schema_version="1",
+        candidate_id=candidate.candidate_id,
+        candidate_kind="rider",
+        fields=candidate.fields,
     )
     second = StructurerCandidate(
+        schema_version="1",
         candidate_id=uuid4(),
         candidate_kind="rider",
         fields=tuple(
