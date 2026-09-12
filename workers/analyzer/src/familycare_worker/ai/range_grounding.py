@@ -206,6 +206,7 @@ def ground_range_candidate(
     local_nodes: Mapping[str, Mapping[str, Any]] | None = None,
     allow_certificate_title: bool = False,
     require_issuer_context: bool = False,
+    allow_primary_header_context: bool = False,
 ) -> PolicyCandidate:
     """Retain unsupported facts for review; never promote rejected/review candidates."""
     if _excluded_enrollment(candidate, evidence, local_nodes or {}):
@@ -257,7 +258,14 @@ def ground_range_candidate(
                 break
         proof = None
         if local_nodes is not None:
-            proof = table_field_proof(candidate, field, cited, evidence, local_nodes)
+            proof = table_field_proof(
+                candidate,
+                field,
+                cited,
+                evidence,
+                local_nodes,
+                allow_primary_header_context=allow_primary_header_context,
+            )
             if proof is not None:
                 if proof.issue_code == "UNCLASSIFIED_BENEFIT_TYPE":
                     field = field.model_copy(update={"value": "unknown"})
