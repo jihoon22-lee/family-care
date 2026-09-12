@@ -1,6 +1,6 @@
 # Source unit in a currency field
 
-- Status: implementation, focused verification and protected application complete; final CI and activation pending.
+- Status: implementation, required CI, protected application, release, activation and bounded HTTPS acceptance complete; partial source support and device limits retained.
 - Scope: B02 Task 3/4 / #63; final activation and acceptance #69/#70.
 - Base: PR #106 source `39a63bcf4e3ed61eb0be44c0f27ab6eebf1205ed`.
 - Branch: `fix/source-unit-currency`.
@@ -42,8 +42,9 @@ flags are intentionally false and are not a defect or an authorization to promot
 
 Finish this bundle's implementation/tests/docs before one focused verification pass.
 Use affected-only reruns after failures and final required CI for full suites. No actual
-source text, values, identities or paths are recorded here. Protected data remains in
-the authorized owned clone; no live switch or release has occurred.
+source text, values, identities or paths are recorded here. At that protected phase,
+data remained in the authorized owned clone and no live switch or release had occurred.
+The current tag/release/activation state is recorded below.
 
 
 ## Focused verification
@@ -82,7 +83,7 @@ member's unsupported count in the complete source/support report.
 
 # v0.5.0 final acceptance
 
-- Status: in_progress — 최종 수용 문서 준비, v14 실제 보강·보존 완료; 지원 사건 앱 경로 확인, 후속 metadata 대사 완료; 최종 CI·새 live 이력 병합·릴리스/배포 PENDING.
+- Status: complete (명시된 최종 수용·릴리스·운영 전환·HTTPS 경로) / PARTIAL (자료 지원); 문서 PR 후 이슈 종료 동기화.
 - Scope: #60 / WP03 #63 / WP09 #69 / WP10 #70; R01–R20, S01–S14.
 - Candidate source: `54496fa915b80e2dcdb043268473eb3ffe72399a`; v13 기록은 `39a63bc`에 연결.
 - Schema: `0083_source_unit_currency`; 기존 owned82 결과와 운영 source `2370761`/0069를 구분.
@@ -109,7 +110,8 @@ member's unsupported count in the complete source/support report.
 |---|---|---|
 | PR #103 | [MERGED](https://github.com/jihoon22-lee/family-care/pull/103), `957d7edf4d94d716bdcd43a62f45d16d25efe85f` | 출처 한정 부모·통화·이름 인용·지목 필드 검수 복구. 전체 약관 신원 완료가 아님 |
 | PR #105 | [MERGED](https://github.com/jihoon22-lee/family-care/pull/105), `f4858f62d4cac0f0f11de44a44b7205ab06d6609` | 원문 명시 단위의 빈 가입금액/통화 보강. 가입금액은 지급 예상액이 아님 |
-| PR #106 | [OPEN](https://github.com/jihoon22-lee/family-care/pull/106), source `39a63bc`; 필수 CI 6/7 통과·PG 진행 중 | v13/정규화 v7/grounding v5는 증명된 문맥·범위만 복구. 세부 합성 실행은 [원래 workthrough](2026-09-13-proven-policy-draft-context.md)에 보존 |
+| PR #106 | [MERGED](https://github.com/jihoon22-lee/family-care/pull/106), `34df397`; [CI 34715572418](https://github.com/jihoon22-lee/family-care/actions/runs/34715572418) 7/7·PG 944 | v13/정규화 v7/grounding v5는 증명된 문맥·범위만 복구. 세부 합성 실행은 [원래 workthrough](2026-09-13-proven-policy-draft-context.md)에 보존 |
+| PR #107 | [MERGED](https://github.com/jihoon22-lee/family-care/pull/107), `7d1a53d`; [CI 34717282331](https://github.com/jihoon22-lee/family-care/actions/runs/34717282331) 7/7·PG 947 | 명시 원화 단위 보강과 최종 수용 기록 통합 |
 | 승인 자료 | 58 sources; policy 43개/703쪽, terms 13개 | 전체 분모 유지, 미지원 자료를 제외하지 않음 |
 | v13 실제 선택 처리 | verifier 3회, 새 담보 37개, 해당 계약 native 16→53 | 별도 계약 기존 9개 유지. 기존 원문·후보·교정·검수·원장·청구 이력 보존 |
 | 추가 source binding | 기존 2개 + 새 1개 | 13개 unique 이름/금액/통화와 상품 근거 2개를 기존 repository로 선언. 해당 source의 9개 UNRESOLVED·금액 페이지 오차 10개 유지; 이 선언의 신규 가입/담보 0 |
@@ -149,15 +151,17 @@ PG는 서로 다른 3개가 통과했다. 첫 두 실패는 전용 합성 DB에 
 PR #106과 다음 v14 PR의 소스에 대응하는 최종 CI는 주 작업이 한 번 수집하며 로컬 전체 검사를
 중복하지 않는다. 실패 수정 후에는 영향받는 검사만 다시 실행한다.
 
-- PENDING: PR #106 최종 CI/merge와 v14·이 문서 묶음 PR의 최종 필요한 검사.
+- COMPLETE: PR #106/#107 최종 CI 각각 7/7과 merge. 최종 docs-only PR의 필요한 검사는
+  실제 운영 결과를 모은 뒤 실행하며 로컬 코드 suite를 반복하지 않는다.
 - COMPLETE (명시 범위): 지원 사건 앱의 AI-off·기존 이력 보존. 마지막 helper 실패는 보존하고
   재분석 없는 후속 대사로 조건을 해소했다. 규칙 없는 구성원의 191개 미지원은 전체 분모와
   함께 PARTIAL로 남긴다.
 - PENDING: #59/#60/#63/#69/#70에 최종 판단 동기화.
-- PENDING: live의 후속 분석/청구 결과 약 9천 행을 원래 key로 보존 병합하고 전환 직전
-  source barrier를 확인한다. Rider 7개 차이는 승인된 금액 보강/API 원문 증명으로 확인했고
+- COMPLETE (사전 병합): live 이력 9,208행의 원래 key·본문 보존, local job 6개와 incoming
+  run 12개의 명시 alias. 최종 barrier는 추가 INSERT·누락 0·기존 행 보존으로 통과했다. Rider 7개 차이는 승인된 금액 보강/API 원문 증명으로 확인했고
   사용자 보험정보 교정 충돌은 발견하지 않았다. session 상태·약관 확인 시각은 별도다.
-- PENDING: 최종 v0.5.0 태그·이미지·운영 배포와 실제 전환/재시작 기록. 격리 DB 준비를
+- PUSHED / PUBLISHED / PENDING: 최종 v0.5.0 태그·이미지·GitHub Release는 게시됐고
+  순차 up activation의 새 컨테이너 수용은 통과했다. 외부 네트워크 수용도 명시된 기존 결과 조회 범위에서 통과했다. 격리 DB 준비를
   새 live 이력의 병합·운영 전환 완료로 표시하지 않는다.
 - UNVERIFIED: 실제 모바일/PWA 설치 등 직접 확인하지 않은 환경. 이전 Windows/Linux
   브라우저 수용을 새 기기/새 배포의 PASS로 확대하지 않는다.
@@ -165,3 +169,45 @@ PR #106과 다음 v14 PR의 소스에 대응하는 최종 CI는 주 작업이 �
 실제 값·원문·식별자·경로는 저장소 밖 보호 artifact에만 유지했다. 공개 문서에는 승인된
 집계·고정 reason·코드 source/schema와 공개 PR만 기록한다. source binding 실행의
 후보·원장·검수·claim·canonical 보존 비교는 통과했으며 연결 1건 이외의 쓰기는 없었다.
+
+## Final release, activation and HTTPS acceptance
+
+| 단계 | 상태 | 근거 / 완료 시 기록할 항목 |
+|---|---|---|
+| PR #106 통합 | PASSED | merge `34df3970ce51262939df2fe5062ca47ec8d873ce`, 필수 CI 7/7·PG 944 |
+| PR #107 통합 | PASSED | merge `7d1a53d85438249c6a9c8e5effc71e092461a858`, 필수 CI 7/7·PG 947 |
+| 최종 태그 | PUSHED | `v0.5.0` → `7d1a53d85438249c6a9c8e5effc71e092461a858` |
+| release workflow | SUCCESS | [34719394060](https://github.com/jihoon22-lee/family-care/actions/runs/34719394060), [GitHub Release](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.0) 정식 게시 2026-09-12T22:00:32Z; draft/prerelease 아님 |
+| 로컬 VERIFY_RELEASE_IMAGES | 첫 FAILED / 인증 복구 후 PASSED | GHCR_TOKEN/actor 인증 누락으로 manifest-status 단계 실패·전환 없음. 기존 gh 인증을 메모리에서 재사용해 manifest HTTP 200·digest 대조 통과; 실패 단계만 재개, release workflow 재실행 없음 |
+| PULL_RELEASE_IMAGES | PASSED | 검증된 이미지를 순차 pull했고 이어 순차 up으로 새 컨테이너를 생성 |
+| writer barrier·이력 | PASSED | history 9개 table 16.268초 재호출, 추가 INSERT 0·누락 0·모든 기존 source/owned 행 보존. 나머지105개 table/live35,160행 보존, source app_sessions19·refresh 시각20·승인 Rider 보강7개 대사. 총114개 table |
+| activation | PASSED | `7d1a53d`/schema 0083, 순차 up 새 컨테이너 3개 digest/이미지/리비전/health 일치·API readiness PASS. 별도 restart 없음 |
+| 네트워크 첫 시도 | FAILED 보존 | Windows curl 버전 실행 OSError errno8, HTTPS 요청0. 서비스 HTTPS 응답 실패가 아니라 interop 실행 실패 |
+| 네트워크 재조회 | PASSED, 30.765초 | WSL_CURL·HTTPS10/readiness1, 인증·schema83·이미지3·health·no-store·logout 확인. 실패한 네트워크 읽기만 재실행, 재배포/restart 없음 |
+| 기존 저장 결과 수용 | PASSED (과거 결과) | 후보6·POINT3·FORMULA1·RANGE0, support238=evaluated6+unsupported232. saved_guidance_stale=true로 최신 fresh 결과가 아님. SUMMARY 근거1·청구/원래 사건 불변 |
+| 새 동작·원본 보존 | PASSED | provider activity 불변·local projection delta0·new events0/analyze0/restarts0. manager 새 stage active, 이전 DB 보존 |
+| 최종 문서 PR | 로컬 문서 검증 완료 / root 게시 대기 | `docs/v05-release-completion`, 기존 workthrough 재사용. 문서/안전/diff만 검사하고 기존 PR107/release의 코드 검증을 재사용 |
+
+사전 병합의 첫 UNIQUE 충돌은 전체 rollback됐고 실패 기록은 보존했다. 동일 logical job의
+6개 원행·원래 UUID/시각과 canonical job 매핑을 보호 manifest에 남겼으며 원래 run/결과/청구
+ID는 유지했다. 누락된 run 12개의 INSERT에서만 job FK를 바꾸고 기존 owned 행의
+UPDATE/DELETE·constraint 우회·live 쓰기는 하지 않았다. 명시 alias 정규화 후 누락 0과
+원래 source/owned 행 보존을 16.128초에 확인했다. 최종 barrier의 별도 재호출도 16.268초에
+추가 INSERT·누락 0과 이력 보존으로 통과했다.
+
+위 결과는 주 작업이 제공한 실제 실행 증거에 연결했다. 기능 PR·릴리스의 동일 runtime
+검증을 재사용하고 해당 표와 로드맵/B02/B07/B08/수용 원장을 한 docs-only PR로 동기화한다. 과거
+실패와 자료 지원 PARTIAL·58개 전체 분모·기기 UNVERIFIED를 보존하고 전량 MATCH를
+새로운 종료 gate로 만들지 않는다.
+
+최종 네트워크 수용은 기존 저장 결과를 읽은 검증이다. 앞선 `54496fa`/owned83의 fresh
+대표 입력은 support 238=evaluated 5+unsupported 233이었고, 최종 HTTPS의 과거 저장
+결과는 6+232 및 `saved_guidance_stale=true`였다. 두 실행의 분모·시점·성격을 합치거나
+새 분석이 실행된 것처럼 보고하지 않는다. 실제 모바일/PWA 설치는 계속 UNVERIFIED다.
+
+최종 문서 검증은 `7d1a53d` 기준의 이 여섯 Markdown 변경에 한정한다. 로컬에서
+`python3 scripts/check_documentation.py`, `python3 scripts/check_repository_safety.py`,
+`git diff --check`를 한 번 실행했다. 문서 50개·저장소 안전 1,203개 경로 및 diff 검사가
+모두 통과했다. 코드 suite·DB·Docker·provider·
+네트워크 helper를 이 문서 작업에서 다시 실행하지 않는다. push와 최종 이슈 종료 동기화는
+주 작업이 문서 커밋을 검토한 뒤 진행한다.

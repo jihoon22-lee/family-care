@@ -1,6 +1,6 @@
 # v0.5 B07: Existing data transition and recovery
 
-- 상태: in_progress — 격리 0083 보강·보존 및 지원 사건 앱 경로 확인; 새 live 이력 병합·최종 CI·배포 대기
+- 상태: complete (전환·보존·명시 수용 범위) / PARTIAL (자료 지원) — 최종 barrier·activation·HTTPS 수용 완료
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59), [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행: [WP09 #69](https://github.com/jihoon22-lee/family-care/issues/69)
 - 기반: B01–B06 통합 코드, [PR #81](https://github.com/jihoon22-lee/family-care/pull/81) merge `f59c8a9e989ea2822ec6e57174a1a7055948828b`, CI 34306662287 필수 7/7 통과.
@@ -128,8 +128,45 @@ attempts는 모두 0이었다. 신규 assistance job 1개는 정상 로컬 검�
 기존 행도 missing 0/changed 0이었다. 추가 10개는 복수 root 작업의 delta이며 단일 앱의
 전후 증거로 확대하지 않는다. 처음의 FAILED 기록은 남기되 AI-off·기존 이력 조건은 해소했다.
 
-최종 운영 전환은 PENDING이다. live에 이후 생긴 분석/청구 결과 약 9천 행을 원래 key로
-owned DB에 병합할 준비가 필요하다. 기존 Rider 7개 차이는 승인된 금액 보강·독립 API 원문
+최종 운영 전환은 PENDING이다. 아래 사전 병합 전에는 live에 이후 생긴 분석/청구 결과
+약 9천 행의 원래 key 보존이 미완료였으며 이 조건은 다음 기록에서 해소했다. 기존 Rider 7개 차이는 승인된 금액 보강·독립 API 원문
 증명으로 확인했고 사용자 보험정보 교정 충돌은 확인되지 않았다. session 상태와 약관 확인
 시각 차이를 보험정보 변경으로 합치지 않는다. 새 live 이력 보존, 전환 직전 source barrier와
 배포 후 재시작·조회 결과를 확인하기 전에는 격리 DB 준비를 운영 전환 완료로 표시하지 않는다.
+
+## Final release and activation preparation
+
+PR #106은 `34df397`/필수 CI 7/7·PG 944개, PR #107은 `7d1a53d`/필수 CI 7/7·PG
+947개로 통합됐다. 태그 `v0.5.0`은 `7d1a53d`를 가리키며
+[release 34719394060](https://github.com/jihoon22-lee/family-care/actions/runs/34719394060)는
+SUCCESS이며 [GitHub Release](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.0)는
+2026-09-12T22:00:32Z에 정식 게시됐다. 인증된 manifest/digest 확인 뒤 이미지 순차 pull이
+완료됐으며 `7d1a53d`/0083 activation이 성공했다. 세 이미지 digest/리비전/health와
+API readiness가 일치했고 별도 restart는 실행하지 않았다. 외부 네트워크 수용도 아래 범위에서 통과했다.
+
+사전 live→owned83 이력 병합은 16.128초에 9,208행 INSERT로 완료했다. 첫 시도는 동등한
+로컬 작업의 unique key 충돌로 전체 rollback됐으며 실패를 보존했다. 후속에서는 정확히
+같은 household/event/version/candidate digest·terminal local 상태인 작업 6개의 원행과
+원래 ID/시각을 보호 manifest에 남겼다. 새 run 12개를 INSERT할 때만 기존 동등 job을
+참조했고, 원래 run/decision/result/claim ID·본문과 기존 owned 행을 보존했다. live 쓰기,
+UPDATE/DELETE, 제약 우회는 없었다. 명시 alias를 적용한 비교의 누락은 0이었다.
+
+이 사전 병합은 최종 writer barrier를 대신하지 않는다. 전환 직전 새 missing 행의 재대사,
+원래 live 이력·원문·키·교정 보존, 네트워크 경로와 순차 up으로 생성한 새 컨테이너의 실제 activation·인증 조회 결과를
+주 작업의 실행 증거에 연결한다. 최종 barrier의 history 9개 table 재호출은 16.268초에
+추가 INSERT 0·누락 0·source/owned 기존 행 보존으로 통과했다. 나머지 105개 table의
+live 35,160행도 보존했고 source app_sessions 19행·refresh 시각 20행·승인 Rider
+금액 보강 7개를 명시적으로 대사했다. 총 114개 table 확인을 완료했다. 새 stage를
+활성화하고 이전 DB는 보존했으며 네트워크 수용도 통과했다.
+
+최초 네트워크 helper는 Windows curl 실행의 `OSError errno 8`로 HTTPS 요청 전에 실패했다.
+HTTPS 요청은 0이었다. 버전 실행 실패를 감지한 뒤 WSL curl을 선택해 영향받는 네트워크
+읽기 조회만 다시 실행했으며 재배포·restart·재분석은 없었다.
+이 실패는 서비스 자체의 HTTPS 응답 실패나 실제 Windows 브라우저 수용으로 집계하지 않는다.
+
+최종 WSL curl 수용은 30.765초에 HTTPS 10회·readiness 1회를 통과했다. 인증·schema 0083·
+이미지 3개·health를 확인했고, 기존 저장 결과는 후보 6개·POINT 3개·FORMULA 1개·RANGE
+0개, support 238=evaluated 6+unsupported 232였다. `saved_guidance_stale=true`인 과거
+저장 결과 조회이므로 최신 입력으로 새로 분석한 결과나 앞선 fresh 수용(5+233)의 재현으로
+보고하지 않는다. SUMMARY 근거 1개·청구·원래 사건 보존·no-store·logout도 통과했다.
+provider activity와 local projection delta는 불변, 새 event·analyze·restart는 모두 0이었다.

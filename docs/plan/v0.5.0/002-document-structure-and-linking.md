@@ -1,6 +1,6 @@
 # v0.5 B02: Document structure and enrollment linking
 
-- 상태: in_progress — 구현·선택 원문 복구 완료; 자료 지원 PARTIAL, v14 최종 CI·수용 판단 대기
+- 상태: complete (구현·명시 수용 범위) / PARTIAL (자료 지원) — 기능 CI·운영 전환·HTTPS 수용 완료
 - 메인/요구사항: [#59](https://github.com/jihoon22-lee/family-care/issues/59),
   [#60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 구현: [WP02 #62](https://github.com/jihoon22-lee/family-care/issues/62),
@@ -173,7 +173,8 @@ native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명�
 지목 필드 검수와 [PR #105](https://github.com/jihoon22-lee/family-care/pull/105)의 명시 단위 금액 복구는
 병합됐다. [PR #106](https://github.com/jihoon22-lee/family-care/pull/106)의 v13은 원문이 증명한 표 헤더를
 독립 검수 이후 게시 단계까지 유지한다. 기준은 `39a63bcf4e3ed61eb0be44c0f27ab6eebf1205ed`,
-`0082_proven_draft_context`이며 최종 CI는 PENDING이다.
+`0082_proven_draft_context`이며 PR #106은 `34df397`로 병합됐다. 최종 CI는 필수 7/7,
+PostgreSQL 944개를 통과했다.
 
 보호된 같은 원문에서 선택 계약의 native 담보는 16→53개가 됐고 별도 계약의 기존 9개는
 유지했다. 바뀌지 않은 후보·사용자 결정·이전 검수·원장·청구 snapshot을 보존했다. 새 출처
@@ -198,4 +199,12 @@ native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명�
 담보 1개 추가·기존 다른 필드/이력 보존을 확인했다. 8개 범위의 REVIEW 상태는 그대로이며
 지원 사건 앱에서 후보 6개·POINT 3개·FORMULA 1개와 근거·저장 재조회도 확인했다.
 마지막 helper 카운터 실패는 보존하며 재분석 없는 대사에서 외부 작업/시도 0과 기존
-이력 보존을 확인했다. 최종 CI·운영 전환은 PENDING이며 전체 자료 지원 PASS로 확대하지 않는다.
+이력 보존을 확인했다. PR #107은 `7d1a53d`로 병합됐고
+[CI 34717282331](https://github.com/jihoon22-lee/family-care/actions/runs/34717282331)는
+필수 7/7·PostgreSQL 947개를 통과했다. `7d1a53d`/0083 운영 전환도 완료했으며 전체 자료 지원 PASS로
+확대하지 않는다.
+
+최종 태그 `v0.5.0`은 `7d1a53d`에 게시했고 [release 34719394060](https://github.com/jihoon22-lee/family-care/actions/runs/34719394060)와
+[GitHub Release](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.0) 정식 게시가 완료됐다. 순차 up 전환의 세 이미지·리비전·health와 API readiness는
+일치했고 WSL curl의 인증된 HTTPS·기존 저장 결과/근거/청구 조회도 통과했다. 이 조회는
+과거 저장 결과를 읽은 것이며 새 분석·원문 재구조화나 전체 자료 지원 PASS가 아니다.
