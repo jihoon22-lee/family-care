@@ -405,7 +405,9 @@ extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한�
 AI_VERIFIED인 기존 v7 담보는 새 v8 검수 요청에서 제외한다. 새 승인을 복제하는 것이 아니라
 원래 후보·검수 이력을 유지하며 `PRIOR_VERIFIED_CANDIDATE_PRESERVED`로 작업 제외를 기록한다.
 범위는 부분 상태를 유지하고, 새 부모 게시 후 원래 담보가 같은 출처 한정 계약으로 연결된다.
-필드·인용·대상자·source나 현재 후보 상태가 달라지면 이 제외를 재사용하지 않는다.
+필드·인용·대상자·source가 달라지면 기존 AI 검증 제외를 재사용하지 않는다. 기존 후보에
+교정·거절·삭제가 있으면 `PRIOR_CANDIDATE_REVIEW_PRESERVED`로 원래 검토 이력을 보존하고,
+옛 필드를 새 review item으로 재승인하여 사용자 결정을 우회하지 않는다.
 
 ## v0.5 bounded terms proposals
 

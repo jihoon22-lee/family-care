@@ -24,12 +24,27 @@
 
 ## Verification
 
-구현·관련 테스트·문서를 먼저 완성한다. 변경 파일 문법·형식은 커밋 단위로 확인하고,
-PR 완료 시 전체 diff와 필요한 상세 검증을 집중한다. 같은 필수 CI를 로컬에서 중복하지 않는다.
-실제 자료 처리·전환·최종 수용은 해당 source/schema와 연결하고 미실행은 구분한다.
+구현·관련 테스트·문서를 완성한 뒤 전체 diff와 아래 변경 경계 검증을 진행했다.
+2026-09-13, `9d407ff87bbd5558342157635902c17bc5263c26`와 후속 Worker 검토 보호·API
+readiness fixture·설명 변경에서 다음 결과를 확인했다. 합성 PostgreSQL 18.6 전용 DB와
+Python 3.14.7을 사용했고 실제 자료·외부 AI는 검사 입력에 포함하지 않았다.
+
+- `pytest`의 source-scoped Worker/API 단위, certificate-title 호환, Worker readiness: 85개 성공.
+- API runtime schema readiness: 15개 성공.
+- `mypy apps/api/src workers/analyzer/src`: 299개 source 파일 성공.
+- 새 PostgreSQL 통합: 부모만 신규 검수 후 원래 담보 6개 게시·원장/inventory/reconciliation,
+  출처 없는 null 보험사 거부, 준비 전 사용자 거절·교정 보존 4개 성공.
+- 처음 PG 2개는 의존 fixture 등록 누락으로 setup 오류였다. 수정 뒤 3개 성공·1개 실패였고,
+  실패는 private knowledge current run 없는 샘플의 reconciliation 가정이었다. 최소 합성
+  current run을 준비한 뒤 실패한 정상 case만 재실행하여 성공(9.91초)했다.
+- 문서 계약 50개·저장소 안전 1171개 경로와 변경 Ruff/형식·diff 검사를 통과했다.
+
+검토에서 준비 전에 거절·교정된 기존 담보를 새 review item으로 재승인할 수 있던 경로를
+발견해 `PRIOR_CANDIDATE_REVIEW_PRESERVED`로 차단했다. 새 검수 여부와 사용자 이력을
+섞지 않으며 위 PG의 거절·교정 case로 확인했다. 같은 전체 회귀·빌드를 로컬에서 반복하지
+않고 필수 7개 최종 CI를 PR에 연결한다. 실제 자료 전환은 별도의 source/schema 증거로 남긴다.
 
 ## Remaining
 
-- nullable insurer의 API/원장/청구/조회/UI 계약 및 exact-source 게시 경계
-- 원래 검수·교정·청구 보존과 신규 부모 검수 회귀
+- 최종 필수 PR CI와 승인 격리 DB의 schema 0077 전환·실제 부모 검수/게시
 - 승인 격리 자료 처리와 #69/#70 최종 수용·전환·릴리스

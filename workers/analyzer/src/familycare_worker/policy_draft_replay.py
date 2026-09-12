@@ -169,20 +169,45 @@ def _preserve_verified_riders(
         ),
     ).fetchall()
     preserved: set[UUID] = set()
+    reviewed: set[UUID] = set()
     sources = {
         item.candidate_id: item
         for item in normalized.batch.candidates
         if item.candidate_kind == "rider"
     }
     for row in rows:
-        previous = CandidatePipelineResult.model_validate(row["result_json"]["result"])
+        previous = CandidatePipelineResult.model_validate_json(
+            json.dumps(row["result_json"]["result"])
+        )
         for candidate in previous.candidates:
             draft = sources.get(candidate.candidate_id)
+            if draft is None or candidate.candidate_kind != "rider":
+                continue
+            version = connection.execute(
+                "SELECT id,is_current,status,deleted_at FROM analysis_candidate_versions "
+                "WHERE structuring_job_id=%s "
+                "AND source_candidate_id=%s AND household_space_id=%s "
+                "AND candidate_kind='rider' "
+                "AND generator_version='policy-draft-normalization-v2' FOR SHARE",
+                (
+                    row["job_id"],
+                    uuid5(row["job_id"], f"{work.envelope.envelope_id}:{candidate.candidate_id}"),
+                    job.household_space_id,
+                ),
+            ).fetchone()
+            if version is None:
+                continue
             if (
-                draft is None
-                or candidate.candidate_kind != "rider"
-                or candidate.status != "AI_VERIFIED"
+                not version["is_current"]
+                or version["deleted_at"] is not None
+                or version["status"] != candidate.status
             ):
+                # A prior review/deletion owns this source candidate. A new
+                # review item must not resurrect its earlier unedited payload.
+                preserved.add(candidate.candidate_id)
+                reviewed.add(candidate.candidate_id)
+                continue
+            if candidate.status != "AI_VERIFIED":
                 continue
             grounded = ground_range_candidate(
                 PolicyCandidate(
@@ -199,19 +224,6 @@ def _preserve_verified_riders(
                 require_issuer_context=True,
             )
             if grounded.status != "AI_VERIFIED" or candidate.fields != grounded.fields:
-                continue
-            version = connection.execute(
-                "SELECT id FROM analysis_candidate_versions WHERE structuring_job_id=%s "
-                "AND source_candidate_id=%s AND household_space_id=%s "
-                "AND candidate_kind='rider' AND is_current AND status='AI_VERIFIED' "
-                "AND generator_version='policy-draft-normalization-v2' FOR SHARE",
-                (
-                    row["job_id"],
-                    uuid5(row["job_id"], f"{work.envelope.envelope_id}:{candidate.candidate_id}"),
-                    job.household_space_id,
-                ),
-            ).fetchone()
-            if version is None:
                 continue
             fields = connection.execute(
                 "SELECT f.field_id,f.value,ARRAY(SELECT e.evidence_id "
@@ -251,7 +263,12 @@ def _preserve_verified_riders(
         (
             *normalized.adjustments,
             *(
-                PolicyDraftAdjustment("PRIOR_VERIFIED_CANDIDATE_PRESERVED", key)
+                PolicyDraftAdjustment(
+                    "PRIOR_CANDIDATE_REVIEW_PRESERVED"
+                    if key in reviewed
+                    else "PRIOR_VERIFIED_CANDIDATE_PRESERVED",
+                    key,
+                )
                 for key in sorted(preserved)
             ),
         ),
