@@ -55,7 +55,7 @@ Chromium 수용과 `04fbbda`의 후보→청구 초안 생성/새로고침 조�
 근거·저장·기존 사건 보존·청구 조회를 확인했다. 마지막 helper의 정상 로컬 검색/provider
 카운터 오류는 실패로 보존하고 재분석 없는 metadata 대사로 외부 작업/시도 0·이력 보존을
 확인했다. 새 live 분석/청구 이력 병합과 source barrier를 거치는 최종 운영 전환은 PENDING이다. 상세 수치와 이전
-실패를 [최종 workthrough](../../../workthrough/2026-09-13-final-acceptance.md)에 한 번 모은다.
+실패를 [최종 workthrough](../../../workthrough/2026-09-13-source-unit-currency.md)에 한 번 모은다.
 
 수용 판단은 R01–R20/S01–S14의 구현·검증 근거, 승인 자료의 전체 분모, 가능한 부분의
 실제 사용과 미지원 사유를 함께 본다. 58개 자료의 전량 자동 확정이나 모바일 실기기

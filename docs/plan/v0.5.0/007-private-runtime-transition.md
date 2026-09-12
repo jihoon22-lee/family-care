@@ -97,7 +97,7 @@ USD 0.52531240 사용량 기준 누계이며 기존 문서/일일 예약과 별�
 대표 입력은 total 191/evaluated 0/unsupported 191/candidate 0이다. 분모는 private 94 +
 operational 147 − canonical 50이며 해당 구성원의 실행 규칙·계산이 없는 지원 한계다.
 다른 두 구성원의 기존 규칙/계산을 사용하는 대표 앱 수용은 별도로 확인한다. 이전 helper 실패/복구는
-[최종 수용 기록](../../../workthrough/2026-09-13-final-acceptance.md)에 함께 기록한다.
+[최종 수용 기록](../../../workthrough/2026-09-13-source-unit-currency.md)에 함께 기록한다.
 
 #69의 전환·보존 수용과 자료 지원률을 분리한다. 약관 신원·일부 연결이 PARTIAL이어도
 그 상태와 전체 분모를 보존하는 전환은 평가할 수 있다. 모든 자료의 자동 해석 완료나

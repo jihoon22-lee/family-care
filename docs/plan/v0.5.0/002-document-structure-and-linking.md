@@ -188,7 +188,7 @@ native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명�
 별도 gate를 추가하지 않는다. v14 적용 후 선택 native는 54개, canonical은 51/54개다.
 기존 12개 금액/통화를 보강하고 새 담보 1개를 게시했으며 금액 충돌은 0개다.
 표시명 충돌 6개와 원래 private 인용/identity 한계의 미연결 3개는 남긴다. 최신 canonical 결과와 정확한 제한은
-[최종 수용 기록](../../../workthrough/2026-09-13-final-acceptance.md)을 따른다.
+[최종 수용 기록](../../../workthrough/2026-09-13-source-unit-currency.md)을 따른다.
 
 명시 단위가 raw currency에 들어간 경우의 후속은 `54496fa`/schema
 `0083_source_unit_currency`의 v14·정규화 v8이다. 원래 인용된 native 행·단위와 raw 값이
