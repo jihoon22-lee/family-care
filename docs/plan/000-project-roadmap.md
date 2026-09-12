@@ -1,6 +1,6 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: v0.5.0 마일스톤 개발 중; 잘못 게시한 v0.5.x 릴리스·태그 제거 완료
+- 상태: v0.5.0 최종 수용 기록 정리 중; 최종 CI·이슈 판단·릴리스/배포 PENDING
 - 현재 구현 기준 설계: `docs/design/v0.1-product.md`; v0.5 전환 기준은 아래 현재 마일스톤 참조
 - 현재 개발·최종 릴리스 버전: `v0.5.0`; 마일스톤 완료 후 최종 태그·릴리스·배포
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
@@ -11,6 +11,30 @@
 - 진행·의존성·PR 묶음: [메인 #59](https://github.com/jihoon22-lee/family-care/issues/59)
 - 제품 요구사항·수용 기준: [명세 #60](https://github.com/jihoon22-lee/family-care/issues/60)
 - 실행 시작: [WP01 / B01 #61](https://github.com/jihoon22-lee/family-care/issues/61), 후속 WP #62~#70
+
+2026-09-13 현재 [PR #103](https://github.com/jihoon22-lee/family-care/pull/103)과
+[#105](https://github.com/jihoon22-lee/family-care/pull/105)는 병합됐고,
+[#106](https://github.com/jihoon22-lee/family-care/pull/106)은 필수 CI 6/7 통과·PostgreSQL 진행 중이다.
+최종 후보는 `54496fa`/schema 0083의 명시 원화 단위 보강(v14)이며 다음 PR의 CI는 PENDING이다.
+`39a63bc`/격리 schema 0082에서 원문 근거를 보존한 재검수로 선택 계약의 native 담보가
+16→53개가 됐고 별도 계약의 기존 9개를 유지했다. 문서 출처 연결은 기존 2개에 1개를
+추가했으며, 교정·검수·과거 청구 이력은 보존했다. 자료 지원은 여전히 PARTIAL이다.
+후속 v14로 선택 원문의 가입 54개가 native 원장에 반영됐다. 기존 12개 금액/통화와
+새 담보 1개를 반영했고 canonical은 선택 51/54개·전체 60개다. 금액 충돌은 0개,
+표시명 충돌 6개·연결 미성립 3개를 보존했다. 앞선 앱 인증·AI-off·저장·보존은 통과했다.
+대표 입력의 191개는 private 94 + operational 147 − canonical 50이다. 해당 구성원의
+실행 규칙·계산이 없어 전부 미지원이며 중복 합산 오류가 아니다. 별도 가입금액 NULL
+12개는 v14 실제 적용으로 보완했다. 지원 규칙이 있는 구성원의 기존 입력에서는 후보 6개·
+POINT 3개·FORMULA 1개와 근거·저장 재조회가 확인됐다. 마지막 helper의 로컬 검색/provider
+카운터 오류는 실패로 보존하며 재분석 없는 후속 대사로 외부 작업/시도 0과 이력 보존을
+확인했다. 운영 전환은 새 live 분석·청구 이력 병합과 전환 직전 source barrier가 남아 있다. 최신 결과와 종료 판단은 [최종 수용 기록](../../workthrough/2026-09-13-final-acceptance.md)에 모은다.
+
+#60/#63/#69/#70의 수용은 근거가 확인된 범위의 사용과 미지원 범위의 정확한 기록을 함께
+평가한다. 승인 자료 58개 전체의 100% 자동 확정이나 모바일 실기기 PASS를 별도 종료
+조건으로 추가하지 않는다. 불명확한 약관·연결·기기는 PARTIAL/UNVERIFIED로 남기고
+전체 분모에서 빼지 않는다. 최종 필수 CI와 실제 릴리스·배포 결과는 실행 후 기록한다.
+
+아래 날짜별 기록은 당시 상태를 보존한 역사다.
 
 2026-09-09 현재 B01–B08 구현과 후속 PR #84–#87/#89/#90이 통합됐으며 보호 자료 지원은 PARTIAL이다.
 PR #91–#93과 고정 20건 실제 선택 검수 평가는 통합했다. 사용자 지시에 따라 조기 게시한
