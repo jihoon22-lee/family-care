@@ -430,7 +430,8 @@ def _evaluate(
                 if c["candidate_id"] == str(pub["provider_candidate_id"])
             ]
             if (
-                document.get("program_validation_version") != "range-grounding-v2"
+                document.get("program_validation_version")
+                not in {"range-grounding-v2", "range-grounding-v3"}
                 or len(matches) != 1
                 or matches[0]["status"] != "AI_VERIFIED"
                 or matches[0]["candidate_kind"] != "rider"

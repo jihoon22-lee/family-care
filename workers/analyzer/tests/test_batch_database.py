@@ -281,7 +281,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
         assert structuring_job[5].int != 0
         assert structuring_job[6:] == (
             "queued",
-            "policy-range-normalized-v1",
+            "policy-range-normalized-v2",
             0,
             5,
             None,

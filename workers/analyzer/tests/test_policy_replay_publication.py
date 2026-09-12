@@ -43,6 +43,8 @@ pytestmark = pytest.mark.integration
     [
         ("retained-policy-association-v2", "retained-policy-association-v4"),
         ("retained-policy-association-v5", "retained-policy-association-v6"),
+        ("retained-policy-association-v5", "retained-policy-association-v7"),
+        ("retained-policy-association-v6", "retained-policy-association-v7"),
     ],
 )
 def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
@@ -55,6 +57,14 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
     monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", target_revision)
     url, original = enrollment_database
     _retain_contract(url, original)
+    if target_revision == "retained-policy-association-v7":
+        with psycopg.connect(_psycopg_url(url)) as connection:
+            connection.execute(
+                "UPDATE extraction_blocks SET "
+                "text=replace(text,'Sample Plan','Sample Plan_보험증권') "
+                "WHERE page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s)",
+                (original.extraction_id,),
+            )
     ranges = PolicyRangeRepository(url)
     automatic = PolicyStructuringJobQueue(url)
     while (remaining := automatic.claim_next_job(WORKER)) is not None:
@@ -195,7 +205,12 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
             (target.id,),
         ).fetchall()
         assert len(candidates) == 2 and all(row["status"] == "AI_VERIFIED" for row in candidates)
-        assert {row["generator_version"] for row in candidates} == {"policy-draft-normalization-v1"}
+        expected_normalization = (
+            "policy-draft-normalization-v2"
+            if target_revision == "retained-policy-association-v7"
+            else "policy-draft-normalization-v1"
+        )
+        assert {row["generator_version"] for row in candidates} == {expected_normalization}
         assert (
             connection.execute(
                 "SELECT count(*) AS n FROM policy_provider_requests WHERE job_id=%s", (target.id,)

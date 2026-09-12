@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0075_initial_policy_drafts"
+REVISION = "0076_certificate_title_grounding"
 
 
 class Result:

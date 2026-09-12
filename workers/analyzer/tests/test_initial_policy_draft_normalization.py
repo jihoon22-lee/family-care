@@ -38,7 +38,7 @@ from apps.api.tests.test_range_enrollment_integration import (
 from workers.analyzer.tests.test_policy_range_repository import _one_contract
 
 pytestmark = pytest.mark.integration
-INITIAL = "policy-range-normalized-v1"
+INITIAL = "policy-range-normalized-v2"
 
 
 @pytest.fixture()
@@ -59,7 +59,7 @@ def initial_source(enrollment_database):
             "AND page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s)",
             (
                 "보험증권 가입금액\n증권번호: synthetic-normalization-001\n"
-                "피보험자: Family Member A\nSample Insurer Sample Plan\n"
+                "피보험자: Family Member A\nSample Insurer Sample Plan_보험증권\n"
                 "Synthetic Inpatient Rider fixed sum assured: 251 KRW",
                 job.extraction_id,
             ),
@@ -142,7 +142,7 @@ def test_initial_draft_is_normalized_before_verifier_and_partial_loss_stays_revi
             household_space_id=original.household_space_id,
             job_id=queued.id,
         ).claim_next_job(WORKER)
-        assert job is not None and job.pipeline_version == "retained-policy-association-v6"
+        assert job is not None and job.pipeline_version == "retained-policy-association-v7"
         work = ranges.next(job, WORKER, sensitive_terms=terms)
         assert work is not None
     calls = []
@@ -225,7 +225,7 @@ def test_initial_draft_is_normalized_before_verifier_and_partial_loss_stays_revi
         ).fetchall()
         assert len(candidates) == 2 and all(item["status"] == "AI_VERIFIED" for item in candidates)
         assert {item["generator_version"] for item in candidates} == {
-            "policy-draft-normalization-v1"
+            "policy-draft-normalization-v2"
         }
     assert RangeEnrollmentProjector(url).project_pending() == 2
 
