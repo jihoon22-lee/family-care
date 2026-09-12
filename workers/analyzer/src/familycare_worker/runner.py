@@ -400,6 +400,13 @@ class PolicyStructuringJobRunner:
         work = self.range_repository.next(job, worker_id, sensitive_terms=member_terms)
         if work is None:
             return
+        if not any(
+            item.primary and item.source_role == "policy" for item in work.envelope.evidence
+        ):
+            self.range_repository.defer_nonpolicy(
+                job, worker_id, work, sensitive_terms=member_terms
+            )
+            return
         replay = self.replay_repository
         draft = None if replay is None else replay.prepare(job, worker_id, work)
         if draft is None and normalization is not None:
