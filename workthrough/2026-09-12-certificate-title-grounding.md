@@ -36,6 +36,24 @@ schema 0076의 실제 반영이나 마일스톤 완료를 의미하지 않는다
 
 ## Remaining acceptance
 
+## PR verification and targeted corrections
+
+소스 `b5e75e5`의 [첫 CI 34690619132](https://github.com/jihoon22-lee/family-care/actions/runs/34690619132)에서
+저장소 안전·Web·컨테이너 3개는 통과했다. Python은 4,085개 통과/1개 실패,
+PostgreSQL은 909개 통과/2개 실패였다. 실패는 새 테스트의 문서 역할 불일치와
+generation 보관 후 원문을 바꾼 fixture 구성 때문이었다. 제품의 원문 변경 거부는 유지하고
+처음부터 올바른 합성 입력을 준비하도록 테스트만 수정했다.
+
+2026-09-12 같은 소스와 테스트 수정에서 `TMPDIR=/tmp .venv/bin/python -m pytest
+workers/analyzer/tests/test_certificate_title_grounding.py -q`는 29개 통과(0.87초)했다.
+전용 합성 PostgreSQL에서 `pytest -m integration
+workers/analyzer/tests/test_policy_replay_publication.py -q`는 4개 통과(17.07초)했다.
+처음 빈 DB 실행은 migration 누락으로 setup 오류 4개였으며 `alembic upgrade head` 후
+해당 검사만 다시 실행했다. 전용 컨테이너는 제거했다. 변경 파일 형식과 diff 검사도 통과했다.
+무관한 전체 suite·Web·이미지 빌드를 로컬에서 반복하지 않았다.
+
+## Remaining acceptance
+
 - 최종 PR 상세 검증·통합
 - 새 revision에서 보관 원 응답 재사용·새 검수·실제 원장 반영
 - 전체 가입/약관 연결과 최종 운영 전환·사용 수용·릴리스

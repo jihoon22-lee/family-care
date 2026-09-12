@@ -56,15 +56,9 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
     # Each route preserves its original request and requires a new verifier.
     monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", target_revision)
     url, original = enrollment_database
-    _retain_contract(url, original)
-    if target_revision == "retained-policy-association-v7":
-        with psycopg.connect(_psycopg_url(url)) as connection:
-            connection.execute(
-                "UPDATE extraction_blocks SET "
-                "text=replace(text,'Sample Plan','Sample Plan_보험증권') "
-                "WHERE page_id IN (SELECT id FROM extraction_pages WHERE extraction_id=%s)",
-                (original.extraction_id,),
-            )
+    _retain_contract(
+        url, original, certificate_title=target_revision == "retained-policy-association-v7"
+    )
     ranges = PolicyRangeRepository(url)
     automatic = PolicyStructuringJobQueue(url)
     while (remaining := automatic.claim_next_job(WORKER)) is not None:

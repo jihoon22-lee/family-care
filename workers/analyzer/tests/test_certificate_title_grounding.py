@@ -98,7 +98,9 @@ def test_supported_title_never_promotes_an_unapproved_candidate(status):
 def test_title_still_requires_primary_policy_evidence(primary, role):
     envelope = _envelope("Sample Plan (A)_보험증권")
     candidate = _verified(_candidate(envelope.evidence[0], product_name="Sample Plan (A)"))
-    evidence = (replace(envelope.evidence[0], primary=primary, source_role=role),)
+    evidence = (
+        replace(envelope.evidence[0], primary=primary, source_role=role, document_kind=role),
+    )
     result = ground_range_candidate(candidate, evidence, allow_certificate_title=True)
     assert result.status == "NEEDS_REVIEW"
 
