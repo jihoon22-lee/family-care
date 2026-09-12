@@ -168,9 +168,24 @@ cache hit가 아니며 원본 response hash와 변경 이유를 불변 receipt�
 범위를 REVIEW로 유지한다.
 
 파생 초안은 공유 요청 예산 안에서 독립 verifier를 거치고 기존 validator·grounder·API
-게시 검증을 다시 통과한다. 기본 Worker에는 이 경로를 자동 연결하지 않는다. v2/v3
+게시 검증을 다시 통과한다. 이 버전에서는 기본 Worker에 이 경로를 자동 연결하지 않는다. v2/v3
 이력과 유효한 기존 원장 권위는 유지하며 v4 작업 또는 replay receipt가 있으면 0068로의
-downgrade를 거부한다. API/Worker의 현재 지원 schema는 0069다.
+downgrade를 거부한다. 이 버전의 API/Worker 지원 schema는 0069다.
+
+`0075_initial_policy_drafts`부터 새 자동 작업 `policy-range-normalized-v1`과 명시적
+retained v6 작업은 최초 structurer 응답에도 같은 로컬 정규화를 적용한다. 원본 JSON은
+성공 요청 기록에 그대로 두고, 동일 작업·정확히 하나인 요청·전체 envelope·현재 원문과
+구성원 근거에 묶인 불변 receipt에 `origin=initial`을 기록한다. 정규화한 초안을 저장한
+뒤에 verifier를 호출하며, 검수 실패 후 재개는 이 초안을 재사용한다. 범위 저장소와
+지속 요청 예산이 없는 새 버전은 provider 호출 전에 거부한다. 모든 후보가 제거된
+경우에도 전체 범위와 제거 이유를 보존하고 추가 검토 상태로 남긴다.
+
+retained v6의 명시적 replay는 같은 최소화 v4 fingerprint를 가진 v5 원 응답만 받는다.
+이때 `origin=replay`와 원 요청 hash를 보존하고 바뀐 초안을 새로 검수한다. 과거 v4의
+v2/v3 replay와 기존 자동/v5 작업은 당시 동작을 유지한다. 원문이나 개인정보 최소화
+계약을 바꾸거나 예산을 초기화하지 않으며, 새 v6 작업을 자동 예약하지 않는다.
+현재 API/Worker는 schema 0075와 origin 열을 요구한다. 새 자동/v6 작업 또는 initial
+receipt가 있는 DB는 0074로 downgrade할 수 없다.
 
 `0030_range_candidates`는 각 완료 범위의 후보를 기존 검토 저장소에 같은 transaction으로
 반영한다. provider 후보 ID는 구간 안에서만 고유하므로 job·envelope로 namespace하고 원래

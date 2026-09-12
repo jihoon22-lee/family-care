@@ -79,7 +79,11 @@ from familycare_worker.policy_candidates import (
     PolicyCandidateJobConflict,
     PolicyCandidateRepositoryUnavailable,
 )
-from familycare_worker.policy_draft_replay import PolicyDraftReplayRepository
+from familycare_worker.policy_draft_replay import (
+    NORMALIZED_POLICY_PIPELINES,
+    PolicyDraftNormalizationRepository,
+    PolicyDraftReplayRepository,
+)
 from familycare_worker.policy_jobs import (
     PolicyStructuringErrorCode,
     PolicyStructuringJobNotFound,
@@ -286,6 +290,11 @@ class PolicyStructuringJobRunner:
         if job is None:
             return False
         try:
+            if job.pipeline_version in NORMALIZED_POLICY_PIPELINES and (
+                self.range_repository is None or self.request_budget is None
+            ):
+                self._safe_fail(job.id, worker_id, "POLICY_STRUCTURING_INVALID_RESPONSE")
+                return True
             if job.processing_mode == "retained" and self.range_repository is None:
                 self._safe_fail(job.id, worker_id, "POLICY_STRUCTURING_INVALID_RESPONSE")
                 return True
@@ -377,6 +386,13 @@ class PolicyStructuringJobRunner:
 
     def _run_range(self, job: PolicyStructuringJobRecord, worker_id: str) -> None:
         assert self.range_repository is not None
+        normalization = (
+            PolicyDraftNormalizationRepository(self.range_repository.database_url)
+            if job.pipeline_version in NORMALIZED_POLICY_PIPELINES
+            else None
+        )
+        if normalization is not None and self.request_budget is None:
+            raise ValueError("normalized policy drafts require durable request accounting")
         member_terms = self.evidence_loader.load_member_terms(
             household_space_id=job.household_space_id,
             family_member_id=job.family_member_id,
@@ -386,6 +402,8 @@ class PolicyStructuringJobRunner:
             return
         replay = self.replay_repository
         draft = None if replay is None else replay.prepare(job, worker_id, work)
+        if draft is None and normalization is not None:
+            draft = normalization.prepare(job, worker_id, work)
         provider: AiProvider = self.provider
         if self.request_budget is not None:
             provider = BudgetedPolicyProvider(
@@ -395,6 +413,8 @@ class PolicyStructuringJobRunner:
         def current() -> bool:
             if replay is not None:
                 replay.assert_current(job, worker_id, work)
+            if normalization is not None:
+                normalization.assert_current(job, worker_id, work)
             return self.queue.heartbeat(job.id, worker_id, lease_seconds=self.lease_seconds)
 
         leased = _LeasedPolicyProvider(provider, current)
@@ -405,6 +425,9 @@ class PolicyStructuringJobRunner:
                     provider=leased,
                     model=self.structurer_model,
                 )
+                if normalization is not None:
+                    draft = normalization.normalize(job, worker_id, work, batch, request_id)
+                    batch, request_id = draft.batch, draft.request_id
             else:
                 batch, request_id = draft.batch, draft.request_id
         except PolicyBudgetExhausted:

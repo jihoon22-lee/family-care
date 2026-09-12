@@ -22,6 +22,8 @@ from familycare_worker.imports.password_scope import PasswordScope
 from familycare_worker.ocr.processor import SelectiveOcrProcessor
 from familycare_worker.policy_candidates import PolicyCandidatePublisher
 from familycare_worker.policy_jobs import PolicyStructuringJobQueue
+from familycare_worker.policy_range_repository import PolicyRangeRepository
+from familycare_worker.policy_request_budget import PolicyRequestBudget
 from familycare_worker.repository import BatchRepository
 from familycare_worker.runner import PolicyStructuringJobRunner
 from psycopg.rows import dict_row
@@ -40,15 +42,20 @@ class _SyntheticPolicyProvider:
         input_payload: Mapping[str, object],
         **_: object,
     ) -> ProviderResponse:
+        # The source deliberately contains no insurer/product facts. Initial
+        # normalization must retain the raw reply and reject these unsupported fields.
+        assert schema_name == "policy_range_structurer_v3"
         evidence = input_payload["evidence"]
-        assert isinstance(evidence, list) and len(evidence) == 1
-        evidence_item = evidence[0]
+        assert isinstance(evidence, list) and evidence
+        primary = input_payload["primary_ranges"]
+        assert isinstance(primary, list) and primary
+        evidence_item = primary[0]
         assert isinstance(evidence_item, Mapping)
         evidence_id = evidence_item["evidence_id"]
-        if "batch_structurer" in schema_name:
-            payload: Mapping[str, object] = {
-                "schema_version": "2",
-                "policy": {
+        payload: Mapping[str, object] = {
+            "schema_version": "3",
+            "candidates": [
+                {
                     "schema_version": "1",
                     "candidate_id": "00000000-0000-4000-8000-000000000801",
                     "candidate_kind": "policy_contract",
@@ -64,26 +71,17 @@ class _SyntheticPolicyProvider:
                             "evidence_ids": [evidence_id],
                         },
                     ],
-                },
-                "riders": [],
-            }
-        else:
-            candidates = input_payload["candidates"]
-            assert isinstance(candidates, list) and len(candidates) == 1
-            candidate = candidates[0]
-            assert isinstance(candidate, Mapping)
-            payload = {
-                "schema_version": "2",
-                "decisions": [
-                    {
-                        "schema_version": "1",
-                        "candidate_id": candidate["candidate_id"],
-                        "decision": "approved",
-                        "evidence_ids": [evidence_id],
-                        "issue_codes": [],
-                    }
-                ],
-            }
+                }
+            ],
+            "ranges": [
+                {
+                    "chunk_id": item["chunk_id"],
+                    "outcome": "CANDIDATES" if index == 0 else "NO_ENROLLMENT_FACTS",
+                    "candidate_ids": ["00000000-0000-4000-8000-000000000801"] if index == 0 else [],
+                }
+                for index, item in enumerate(primary)
+            ],
+        }
         return ProviderResponse(payload=payload, request_id="synthetic-policy-request")
 
 
@@ -283,7 +281,7 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
         assert structuring_job[5].int != 0
         assert structuring_job[6:] == (
             "queued",
-            "policy-candidate-batch-v2",
+            "policy-range-normalized-v1",
             0,
             5,
             None,
@@ -295,6 +293,8 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
             publisher=PolicyCandidatePublisher(database_url),
             structurer_model="synthetic-structurer",
             verifier_model="synthetic-verifier",
+            range_repository=PolicyRangeRepository(database_url),
+            request_budget=PolicyRequestBudget(database_url),
         )
         assert policy_runner.run_once("synthetic-policy-worker") is True
         with psycopg.connect(_psycopg_url(database_url), row_factory=dict_row) as connection:
@@ -317,19 +317,50 @@ def test_batch_runner_persists_extraction_and_archive_atomically(tmp_path: Path)
                 "SELECT count(*) FROM policy_contracts WHERE id = %s",
                 (structuring_job[5],),
             ).fetchone()
-        assert len(structured) == 2
-        assert all(row["state"] == "succeeded" for row in structured)
-        assert all(row["verifier_version"] == "policy-batch-verifier-v2" for row in structured)
-        assert all(row["aggregate_id"] == structuring_job[5] for row in structured)
-        assert all(row["status"] == "NEEDS_REVIEW" for row in structured)
-        assert all(row["structuring_job_id"].int != 0 for row in structured)
-        assert all(row["source_candidate_id"].int != 0 for row in structured)
-        assert all(row["bounded_excerpt"] == "Synthetic OCR Evidence" for row in structured)
+            stages = connection.execute(
+                "SELECT j.state,plan.state AS plan_state,r.state AS range_state,"
+                "receipt.origin,receipt.partial,receipt.normalized_batch_json,"
+                "request.response_json "
+                "FROM policy_structuring_jobs j "
+                "JOIN document_policy_range_plans plan ON plan.job_id=j.id "
+                "JOIN document_policy_ranges r ON r.job_id=j.id "
+                "JOIN policy_range_replay_sources receipt ON receipt.job_id=r.job_id "
+                "AND receipt.envelope_id=r.envelope_id "
+                "JOIN policy_provider_requests request ON "
+                "request.id=receipt.source_provider_request_id "
+                "WHERE j.batch_item_id=%s",
+                (structuring_job[1],),
+            ).fetchall()
+            request_count = connection.execute(
+                "SELECT count(*) AS n FROM policy_provider_requests request "
+                "JOIN policy_structuring_jobs j ON j.id=request.job_id WHERE j.batch_item_id=%s",
+                (structuring_job[1],),
+            ).fetchone()["n"]
+        assert structured == []
+        assert len(stages) == 1 and request_count == 1
+        stage = stages[0]
+        assert (stage["state"], stage["plan_state"], stage["range_state"]) == (
+            "permanently_failed",
+            "PARTIAL",
+            "REVIEW",
+        )
+        assert stage["origin"] == "initial" and stage["partial"] is True
+        assert stage["normalized_batch_json"]["candidates"] == []
+        assert len(stage["response_json"]["candidates"]) == 1
+        assert {field["value"] for field in stage["response_json"]["candidates"][0]["fields"]} == {
+            "Sample Insurer",
+            "Sample Plan",
+        }
         assert ledger_count is not None and ledger_count["count"] == 0
         assert len(list(archive_root.iterdir())) == 1
         assert list(work_root.iterdir()) == []
     finally:
         with psycopg.connect(_psycopg_url(database_url)) as connection:
+            # The global integration guard permits cleanup only in a dedicated
+            # synthetic DB; retained range/provider history cannot be row-deleted.
+            connection.execute(
+                "TRUNCATE document_structure_generations, policy_provider_requests CASCADE"
+            )
             connection.execute(
                 "DELETE FROM analysis_candidate_versions WHERE structuring_job_id IN "
                 "(SELECT id FROM policy_structuring_jobs WHERE batch_item_id IN "

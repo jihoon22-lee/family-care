@@ -321,22 +321,32 @@ class PolicyRangeRepository:
         *,
         review: bool,
     ) -> None:
-        from familycare_worker.policy_draft_replay import validate_replay_receipt
+        from familycare_worker.policy_draft_replay import (
+            NORMALIZED_POLICY_PIPELINES,
+            _current_source,
+            validate_replay_receipt,
+        )
 
         with psycopg.connect(self.database_url, row_factory=dict_row) as connection:
             _lock(connection, job, worker_id)
+            normalized = job.pipeline_version in NORMALIZED_POLICY_PIPELINES
+            if normalized:
+                _current_source(connection, job, work)
             receipt = (
                 validate_replay_receipt(connection, job, work)
-                if job.pipeline_version == "retained-policy-association-v4"
+                if normalized or job.pipeline_version == "retained-policy-association-v4"
                 else None
             )
+            if normalized and "result" in payload and receipt is None:
+                raise PolicyRangeConflict
             if receipt is not None:
                 if "result" in payload and payload.get("batch") != receipt["normalized_batch_json"]:
                     raise PolicyRangeConflict
                 review = review or receipt["partial"]
                 payload = {
                     **payload,
-                    "draft_replay": {
+                    "draft_normalization" if normalized else "draft_replay": {
+                        **({"origin": receipt["origin"]} if normalized else {}),
                         "source_provider_request_id": str(receipt["source_provider_request_id"]),
                         "source_response_hash": receipt["source_response_hash"],
                         "normalization_revision": receipt["normalization_revision"],

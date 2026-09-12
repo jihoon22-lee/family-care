@@ -1,4 +1,4 @@
-"""Historical v4 draft replay publishes only after fresh budgeted verification."""
+"""Explicit replay publishes only after fresh budgeted verification."""
 
 from uuid import uuid4
 
@@ -38,15 +38,21 @@ from workers.analyzer.tests.test_policy_range_repository import _no_facts, _one_
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize(
+    "source_revision,target_revision",
+    [
+        ("retained-policy-association-v2", "retained-policy-association-v4"),
+        ("retained-policy-association-v5", "retained-policy-association-v6"),
+    ],
+)
 def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
     enrollment_database,
     monkeypatch,
+    source_revision,
+    target_revision,
 ):
-    # v5 deliberately rejects earlier privacy packets; this exercises the
-    # historical v4 replay/publication contract without weakening that fence.
-    monkeypatch.setattr(
-        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v4"
-    )
+    # Each route preserves its original request and requires a new verifier.
+    monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", target_revision)
     url, original = enrollment_database
     _retain_contract(url, original)
     ranges = PolicyRangeRepository(url)
@@ -72,17 +78,15 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         expected_generation_id=generation,
     )
     with monkeypatch.context() as historical:
-        historical.setattr(
-            retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v2"
-        )
+        historical.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", source_revision)
         old = retained_policy.RetainedPolicyRepository(url).enqueue(
-            **arguments, pipeline_revision="retained-policy-association-v2"
+            **arguments, pipeline_revision=source_revision
         )
         old_queue = retained_policy.RetainedPolicyJobQueue(
             url,
             household_space_id=old.household_space_id,
             job_id=old.id,
-            pipeline_revision="retained-policy-association-v2",
+            pipeline_revision=source_revision,
         )
     old = old_queue.claim_next_job(WORKER)
     ranges = PolicyRangeRepository(url)
@@ -137,7 +141,7 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         ).fetchone()[0]
     ranges.reject(old, WORKER, work)
     target = retained_policy.RetainedPolicyRepository(url).enqueue(
-        **arguments, pipeline_revision="retained-policy-association-v4"
+        **arguments, pipeline_revision=target_revision
     )
     calls = []
 
@@ -171,7 +175,7 @@ def test_reduced_draft_retains_partial_receipt_and_publishes_proven_enrollment(
         url,
         household_space_id=target.household_space_id,
         job_id=target.id,
-        pipeline_revision="retained-policy-association-v4",
+        pipeline_revision=target_revision,
     )
     runner = PolicyStructuringJobRunner(
         queue=queue,

@@ -202,3 +202,16 @@ def test_receipt_is_immutable_and_alone_refuses_downgrade(retained_source, monke
     assert "policy draft replay history prevents downgrade" in refused.stderr
     assert _history(sample.url, old.id) == before
     _assert_original_preserved(sample)
+    # Earlier schemas admitted this same-job receipt. New origin metadata must
+    # preserve every original value instead of retroactively classifying it as initial.
+    with psycopg.connect(_psycopg_url(sample.url)) as connection:
+        original_receipt = connection.execute(
+            "SELECT to_jsonb(r) FROM policy_range_replay_sources r WHERE job_id=%s", (old.id,)
+        ).fetchone()[0]
+    assert _migrate(sample.url, "upgrade", "head").returncode == 0
+    with psycopg.connect(_psycopg_url(sample.url)) as connection:
+        upgraded_receipt = connection.execute(
+            "SELECT to_jsonb(r) FROM policy_range_replay_sources r WHERE job_id=%s", (old.id,)
+        ).fetchone()[0]
+    assert upgraded_receipt.pop("origin") == "replay"
+    assert upgraded_receipt == original_receipt

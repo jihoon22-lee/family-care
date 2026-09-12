@@ -29,6 +29,11 @@ V5 = "retained-policy-association-v5"
 PREVIOUS = "0073_metadata_header_regions"
 
 
+@pytest.fixture(autouse=True)
+def historical_v5_producer(monkeypatch):
+    monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", V5)
+
+
 def test_label_reader_revision_preserves_v4_history_and_creates_one_new_job(
     retained_source, monkeypatch
 ):
