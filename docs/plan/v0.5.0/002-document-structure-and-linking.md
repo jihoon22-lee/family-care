@@ -146,7 +146,7 @@ RED와 누락 각주/헤더 identity/페이지·OCR lineage 회귀 RED 후 IR 22
 같은 PR #103에서 통화가 누락된 기존 담보의 동일 금액 행·헤더 근거를 v9/v4로 복구한다.
 변경 담보만 독립 검수하고 사용자 교정·원장 버전을 보호하며 API가 통화 근거를 별도로 확인한다.
 
-후속 Task 3/4 (`fix/canonical-source-citations`)는 이미 게시된 담보의 이름 인용에 primary
+같은 PR #103의 후속 Task 3/4 (`fix/canonical-source-citations`에서 준비)는 이미 게시된 담보의 이름 인용에 primary
 표 헤더가 포함될 때도 동일 물리 위치를 정확히 확인해 canonical 연결한다. 또한 이미 인용한
 native 표 행의 이름/금액 근거로 provider의 이름 오류 3개를 명시적 v10 초안에서 복구한다.
 기존 raw/후보/검수·사용자 결정·출처를 보존하고 변경 후보만 독립 검수한다.

@@ -429,6 +429,11 @@ API는 schema 0078에서 같은 native 출처·대상자·계약·담보와 기�
 v7/v8/v9 후보는 제외한 뒤 복구한 후보만 새 검수와 프로그램 검증을 받는다. API/Worker는
 schema 0079에서 이 명시적 처리 revision을 허용하며 기본 automatic/retained 값은 유지한다.
 
+canonical 이름 위치의 유일성 검사에서는 검증된 비이름 열의 참조를 독립 가입 행과
+구분한다. 유일하고 일관된 이름 열, 그 행의 완전한 이름 셀에 대한 native 위치 증명,
+다른 명시적 열의 겹치지 않는 기하·텍스트가 모두 있어야 한다. 이 조건 없는 원문 이름
+위치와 실제 별도 가입 행은 계속 검사하며 참조만 있는 페이지는 승인하지 않는다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의
