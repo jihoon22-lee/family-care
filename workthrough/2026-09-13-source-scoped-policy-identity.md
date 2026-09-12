@@ -76,8 +76,16 @@ API publisher를 호출해 새 열을 찾지 못한 뒤 schema 미복원으로 1
 `mypy apps/api/src workers/analyzer/src`는 300개 파일을 통과했다. 별도 읽기 전용
 source→sink 검토에서는 구체적 회귀를 발견하지 못했고 동적 검증으로 취급하지 않는다.
 
+2026-09-13 source `ddcb87b`와 현재 `a7f3711` 변경의 관련 PostgreSQL 검사는 38개 모두
+통과했다(106.45초). 명령은 전용 합성 DB에서 `pytest -m integration`에
+`test_policy_currency_enrichment_integration.py`, `test_source_scoped_policy_identity_integration.py`,
+`test_retained_field_proof_revision.py`, `test_retained_policy_resubmission.py`를 지정했다.
+동일 ID/금액/원문 인용 보존, 6개 통화 보강, 원장 버전 충돌·부모/담보 사용자 검토 보호,
+과거 schema 왕복과 기존 후보 게시 권한을 확인했다. 문서 50개·안전 1176 경로와 Ruff/diff도
+통과했다. 이 결과를 필수 CI 전체 성공으로 확대하지 않는다.
+
 ## Remaining
 
-- 통화 복구 및 historical fixture의 관련 DB 검사·최종 필수 PR CI
+- 최종 필수 PR CI
 - 승인 격리 DB 0078 적용·변경 담보 검수와 실제 통화 소비 확인
 - 실제 원문 신원/약관 연결, #69/#70 최종 수용·전환·릴리스
