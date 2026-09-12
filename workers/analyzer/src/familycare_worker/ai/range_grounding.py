@@ -49,6 +49,16 @@ def _certificate_title(text: str, value: str) -> bool:
     return any(re.search(pattern, _normalize(line)) is not None for line in text.splitlines())
 
 
+def issuer_field_context(text: str, value: str) -> bool:
+    """Require an explicit issuer label, not an incidental company mention."""
+    normalized = _normalize(value)
+    if not normalized:
+        return False
+    label = r"(?:보험사|보험회사|인수회사|발급회사|발급기관|발행기관|insurer|issuer)"
+    pattern = r"^" + label + r"\s*[:：]\s*" + re.escape(normalized) + r"(?:$|\s*[;|])"
+    return any(re.match(pattern, _normalize(line)) is not None for line in text.splitlines())
+
+
 def _named_enrollment_line(text: str, name: str) -> bool:
     normalized = _normalize(text)
     value = re.escape(_normalize(name)) + r"(?!\w)"
@@ -195,6 +205,7 @@ def ground_range_candidate(
     *,
     local_nodes: Mapping[str, Mapping[str, Any]] | None = None,
     allow_certificate_title: bool = False,
+    require_issuer_context: bool = False,
 ) -> PolicyCandidate:
     """Retain unsupported facts for review; never promote rejected/review candidates."""
     if _excluded_enrollment(candidate, evidence, local_nodes or {}):
@@ -291,6 +302,13 @@ def ground_range_candidate(
             or any(key not in sources for key in field.evidence_ids)
             or len(field.evidence_ids) > 16
             or not any(item.primary and item.source_role == "policy" for item in cited)
+            or (
+                require_issuer_context
+                and field.field_id == "insurer"
+                and (
+                    not isinstance(field.value, str) or not issuer_field_context(text, field.value)
+                )
+            )
             or not (
                 _grounded(field, text, candidate)
                 or (

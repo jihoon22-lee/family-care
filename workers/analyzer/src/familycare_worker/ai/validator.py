@@ -84,7 +84,11 @@ def _validate_units(fields: Sequence[CandidateField], issues: list[IssueCode]) -
 
 
 def _validate_semantics(
-    candidate: StructurerCandidate, issues: list[IssueCode], *, allow_unclassified_enrollment: bool
+    candidate: StructurerCandidate,
+    issues: list[IssueCode],
+    *,
+    allow_unclassified_enrollment: bool,
+    allow_unconfirmed_insurer: bool = False,
 ) -> None:
     fields = {field.field_id: field.value for field in candidate.fields}
     for field in candidate.fields:
@@ -108,7 +112,7 @@ def _validate_semantics(
         if invalid:
             _append_issue(issues, "UNSUPPORTED_STRUCTURE")
     required = (
-        {"insurer", "product_name"}
+        ({"product_name"} if allow_unconfirmed_insurer else {"insurer", "product_name"})
         if candidate.candidate_kind == "policy_contract"
         else {"rider_name", "rider_key"}
         | (set() if allow_unclassified_enrollment else {"benefit_type"})
@@ -125,6 +129,7 @@ def validate_candidate(
     verifier: VerifierDecision,
     evidence: Sequence[EvidenceSlice],
     allow_unclassified_enrollment: bool = False,
+    allow_unconfirmed_insurer: bool = False,
 ) -> tuple[IssueCode, ...]:
     """Return stable issues; an empty tuple is the publication boundary."""
 
@@ -132,7 +137,10 @@ def validate_candidate(
     if candidate.candidate_kind == "policy_party":
         _append_issue(issues, "UNSUPPORTED_STRUCTURE")
     _validate_semantics(
-        candidate, issues, allow_unclassified_enrollment=allow_unclassified_enrollment
+        candidate,
+        issues,
+        allow_unclassified_enrollment=allow_unclassified_enrollment,
+        allow_unconfirmed_insurer=allow_unconfirmed_insurer,
     )
     evidence_by_id = {item.evidence_id: item for item in evidence}
     candidate_evidence: set[UUID] = set()

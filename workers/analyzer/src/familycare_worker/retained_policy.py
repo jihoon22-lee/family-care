@@ -23,6 +23,7 @@ from familycare_worker.policy_jobs import (
 # This identifies local association/grounding semantics independently of the immutable IR.
 # Advancing it permits a new explicit run; it never schedules one automatically.
 RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v7"
+SOURCE_SCOPED_POLICY_PIPELINE_REVISION = "retained-policy-association-v8"
 
 
 class RetainedPolicyConflict(RuntimeError):
@@ -37,7 +38,7 @@ def _identity(value: UUID) -> UUID:
 
 
 def _revision(value: str) -> str:
-    if value != RETAINED_POLICY_PIPELINE_REVISION:
+    if value not in {RETAINED_POLICY_PIPELINE_REVISION, SOURCE_SCOPED_POLICY_PIPELINE_REVISION}:
         raise RetainedPolicyConflict
     return value
 

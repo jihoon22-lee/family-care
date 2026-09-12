@@ -421,6 +421,7 @@ class PolicyRangeRepository:
         from familycare_worker.policy_draft_replay import (
             CERTIFICATE_TITLE_PIPELINES,
             NORMALIZED_POLICY_PIPELINES,
+            SOURCE_SCOPED_POLICY_PIPELINES,
             _current_source,
             validate_replay_receipt,
         )
@@ -482,6 +483,8 @@ class PolicyRangeRepository:
                         work.envelope.evidence,
                         local_nodes=nodes,
                         allow_certificate_title=job.pipeline_version in CERTIFICATE_TITLE_PIPELINES,
+                        require_issuer_context=job.pipeline_version
+                        in SOURCE_SCOPED_POLICY_PIPELINES,
                     )
                     for candidate in result.candidates
                 )
@@ -497,7 +500,9 @@ class PolicyRangeRepository:
                     **payload,
                     "result": result.model_dump(mode="json"),
                     "program_validation_version": (
-                        "range-grounding-v3"
+                        "range-grounding-v4"
+                        if job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
+                        else "range-grounding-v3"
                         if job.pipeline_version in CERTIFICATE_TITLE_PIPELINES
                         else "range-grounding-v2"
                     ),

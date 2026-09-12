@@ -386,6 +386,27 @@ extraction/OCR와 pipeline revision별로 전문 IR·범위 계획을 준비한�
 보존한 채 다음 범위로 진행한다. policy primary가 있는 혼합 범위는 기존 처리와 필드별
 근거 검증을 유지한다. 로컬 보류를 외부 AI의 검수 결과나 새로운 가입 사실로 기록하지 않는다.
 
+## Source-scoped policy identity
+
+명시적으로 선택한 `retained-policy-association-v8`는 `policy-draft-normalization-v3`와
+`range-grounding-v4`를 사용한다. 기존 automatic v2와 retained v7의 기본값·검수 의미는
+유지한다. 원문 계약 locator·피보험자·상품이 확인된 계약에서 발급 보험사만 미확인인 경우,
+보험사를 가짜 문자열로 채우지 않고 해당 필드를 제외한 별도 초안을 독립 검수한다.
+원래 응답·필드·인용은 그대로 보존하고 제외 이유는 `ISSUER_UNCONFIRMED`로 기록한다.
+새 revision의 보험사 필드는 policy primary의 명시적 발급주체 라벨 문맥까지 확인하며,
+본문에 같은 회사명이 있다는 사실만으로 발급 보험사로 삼지 않는다.
+
+새 부모는 정확한 native source·계약 locator·대상자·상품 근거를 요구한다. 보험사 display/key는
+함께 null이고, 출처 한정 신원과 미확인 이유를 게시 이력에 남긴다. 수동 신규 계약 입력의
+보험사 필수 조건은 유지한다. null 보험사끼리의 계약 합치기나 약관 판본 확정은 금지한다.
+후속 보험사 보강은 같은 원문 계약 identity를 유지하며 사용자 교정과 청구 snapshot을 덮지 않는다.
+
+같은 source/generation/envelope·최소화·대상자 연결과 필드/인용이 정확히 일치하고 현재
+AI_VERIFIED인 기존 v7 담보는 새 v8 검수 요청에서 제외한다. 새 승인을 복제하는 것이 아니라
+원래 후보·검수 이력을 유지하며 `PRIOR_VERIFIED_CANDIDATE_PRESERVED`로 작업 제외를 기록한다.
+범위는 부분 상태를 유지하고, 새 부모 게시 후 원래 담보가 같은 출처 한정 계약으로 연결된다.
+필드·인용·대상자·source나 현재 후보 상태가 달라지면 이 제외를 재사용하지 않는다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의

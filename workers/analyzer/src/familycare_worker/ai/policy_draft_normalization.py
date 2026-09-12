@@ -31,6 +31,7 @@ from familycare_worker.ai.schemas import (
 
 POLICY_DRAFT_NORMALIZATION_REVISION = "policy-draft-normalization-v1"
 CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
+SOURCE_SCOPED_NORMALIZATION_REVISION = "policy-draft-normalization-v3"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -39,6 +40,8 @@ type AdjustmentReason = Literal[
     "RIDER_KEY_DERIVED_FROM_NAME",
     "RANGE_PRIMARY_UNSUPPORTED",
     "CANDIDATE_UNREFERENCED",
+    "ISSUER_UNCONFIRMED",
+    "PRIOR_VERIFIED_CANDIDATE_PRESERVED",
 ]
 
 
@@ -129,6 +132,7 @@ def _supported(
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
     *,
     allow_certificate_title: bool = False,
+    allow_unconfirmed_insurer: bool = False,
 ) -> bool:
     # Probe one field with its rider-name anchor through the unchanged program
     # proof. The temporary status only enables that proof; it is never returned.
@@ -151,6 +155,7 @@ def _supported(
         envelope.evidence,
         local_nodes=local_nodes,
         allow_certificate_title=allow_certificate_title,
+        require_issuer_context=allow_unconfirmed_insurer,
     )
     proven = next((item for item in proof.fields if item.field_id == field.field_id), None)
     # The grounder can enrich table citations and demote guessed benefit types.
@@ -170,10 +175,11 @@ def _candidate_draft(
     adjustments: list[PolicyDraftAdjustment],
     *,
     allow_certificate_title: bool = False,
+    allow_unconfirmed_insurer: bool = False,
 ) -> StructurerCandidate | None:
     fields = {item.field_id: item for item in source.fields}
     required: tuple[PolicyCandidateFieldId, ...] = (
-        ("insurer", "product_name")
+        (("product_name",) if allow_unconfirmed_insurer else ("insurer", "product_name"))
         if source.candidate_kind == "policy_contract"
         else ("rider_name",)
     )
@@ -181,7 +187,12 @@ def _candidate_draft(
     for key in required:
         field = fields.get(key)
         if field is None or not _supported(
-            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=allow_certificate_title,
+            allow_unconfirmed_insurer=allow_unconfirmed_insurer,
         ):
             adjustments.append(
                 PolicyDraftAdjustment(
@@ -195,9 +206,22 @@ def _candidate_draft(
         return None
 
     retained = []
+    if (
+        source.candidate_kind == "policy_contract"
+        and allow_unconfirmed_insurer
+        and "insurer" not in fields
+    ):
+        adjustments.append(
+            PolicyDraftAdjustment("ISSUER_UNCONFIRMED", source.candidate_id, "insurer")
+        )
     for field in source.fields:
         if field.field_id in required or _supported(
-            source, field, envelope, local_nodes, allow_certificate_title=allow_certificate_title
+            source,
+            field,
+            envelope,
+            local_nodes,
+            allow_certificate_title=allow_certificate_title,
+            allow_unconfirmed_insurer=allow_unconfirmed_insurer,
         ):
             retained.append(field)
         elif source.candidate_kind == "rider" and field.field_id == "rider_key":
@@ -210,7 +234,11 @@ def _candidate_draft(
         else:
             adjustments.append(
                 PolicyDraftAdjustment(
-                    "OPTIONAL_FIELD_UNSUPPORTED", source.candidate_id, field.field_id
+                    "ISSUER_UNCONFIRMED"
+                    if allow_unconfirmed_insurer and field.field_id == "insurer"
+                    else "OPTIONAL_FIELD_UNSUPPORTED",
+                    source.candidate_id,
+                    field.field_id,
                 )
             )
     if source.candidate_kind == "rider" and "rider_key" not in fields:
@@ -246,6 +274,7 @@ def normalize_policy_draft(
         if revision not in (
             POLICY_DRAFT_NORMALIZATION_REVISION,
             CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+            SOURCE_SCOPED_NORMALIZATION_REVISION,
         ):
             raise PolicyDraftInvalid
         _check_source(batch, envelope)
@@ -257,7 +286,9 @@ def normalize_policy_draft(
                 envelope,
                 local_nodes,
                 adjustments,
-                allow_certificate_title=revision == CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+                allow_certificate_title=revision
+                in {CERTIFICATE_TITLE_NORMALIZATION_REVISION, SOURCE_SCOPED_NORMALIZATION_REVISION},
+                allow_unconfirmed_insurer=revision == SOURCE_SCOPED_NORMALIZATION_REVISION,
             )
             for candidate in batch.candidates
         }

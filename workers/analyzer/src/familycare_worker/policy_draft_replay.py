@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import asdict, dataclass
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid5
 
 import psycopg
 from psycopg.rows import dict_row
@@ -16,10 +16,14 @@ from pydantic import ValidationError
 from familycare_worker.ai.policy_draft_normalization import (
     CERTIFICATE_TITLE_NORMALIZATION_REVISION,
     POLICY_DRAFT_NORMALIZATION_REVISION,
+    SOURCE_SCOPED_NORMALIZATION_REVISION,
+    PolicyDraftAdjustment,
     PolicyDraftInvalid,
+    PolicyDraftNormalization,
     normalize_policy_draft,
 )
-from familycare_worker.ai.range_structurer import PolicyRangeBatch
+from familycare_worker.ai.range_structurer import PolicyRangeBatch, RangeDisposition
+from familycare_worker.ai.schemas import CandidatePipelineResult
 from familycare_worker.jobs import psycopg_database_url
 from familycare_worker.policy_jobs import PolicyStructuringJobRecord
 from familycare_worker.policy_range_repository import PolicyRangeConflict, PolicyRangeWork, _lock
@@ -28,7 +32,8 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-CERTIFICATE_TITLE_PIPELINES = frozenset(
+SOURCE_SCOPED_POLICY_PIPELINES = frozenset({"retained-policy-association-v8"})
+CERTIFICATE_TITLE_PIPELINES = SOURCE_SCOPED_POLICY_PIPELINES | frozenset(
     {"policy-range-normalized-v2", "retained-policy-association-v7"}
 )
 NORMALIZED_POLICY_PIPELINES = (
@@ -39,7 +44,9 @@ NORMALIZED_POLICY_PIPELINES = (
 
 def normalization_revision(pipeline_version: str) -> str:
     return (
-        CERTIFICATE_TITLE_NORMALIZATION_REVISION
+        SOURCE_SCOPED_NORMALIZATION_REVISION
+        if pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
+        else CERTIFICATE_TITLE_NORMALIZATION_REVISION
         if pipeline_version in CERTIFICATE_TITLE_PIPELINES
         else POLICY_DRAFT_NORMALIZATION_REVISION
     )
@@ -87,7 +94,8 @@ def _current_source(
                 ('policy-range-normalized-v1','policy-range-normalized-v2')
                 AND current.processing_mode='automatic')
             OR (current.pipeline_version IN
-                ('retained-policy-association-v6','retained-policy-association-v7')
+                ('retained-policy-association-v6','retained-policy-association-v7',
+                 'retained-policy-association-v8')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -113,6 +121,128 @@ class ReplayedPolicyDraft:
     request_id: str
 
 
+def _preserve_verified_riders(
+    connection: psycopg.Connection[dict[str, Any]],
+    job: PolicyStructuringJobRecord,
+    work: PolicyRangeWork,
+    normalized: PolicyDraftNormalization,
+) -> PolicyDraftNormalization:
+    """Exclude unchanged, still-current v7 Riders from a new v8 verifier request.
+
+    This grants no new approval and creates no copy. The existing candidate remains
+    the authority-bearing record; its exact fields, citations and source must match.
+    The new range remains partial, accounting for every omitted candidate.
+    """
+    rows = connection.execute(
+        "SELECT old.id AS job_id,r.result_json FROM policy_structuring_jobs old "
+        "JOIN document_policy_range_plans p ON p.job_id=old.id "
+        "JOIN document_policy_range_plans current ON current.job_id=%s "
+        "JOIN document_policy_ranges r ON r.job_id=old.id AND r.generation_id=p.generation_id "
+        "WHERE old.id<>%s AND old.pipeline_version='retained-policy-association-v7' "
+        "AND old.processing_mode='retained' AND old.household_space_id=%s "
+        "AND old.family_member_id=%s AND old.document_version_id=%s "
+        "AND old.extraction_id=%s AND old.batch_item_id=%s "
+        "AND old.resubmission_of_job_id IS NOT DISTINCT FROM %s "
+        "AND old.source_generation_id=%s AND p.generation_id=%s "
+        "AND p.privacy_fingerprint=current.privacy_fingerprint "
+        "AND p.associations_json=current.associations_json "
+        "AND r.envelope_id=%s AND r.envelope_json=%s "
+        "AND r.state IN ('COMPLETE','REVIEW') AND policy_structuring_source_current(old.id) "
+        "AND r.result_json->>'program_validation_version'='range-grounding-v3' "
+        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "'policy-draft-normalization-v2' FOR SHARE OF old,p,current,r",
+        (
+            job.id,
+            job.id,
+            job.household_space_id,
+            job.family_member_id,
+            job.document_version_id,
+            job.extraction_id,
+            job.batch_item_id,
+            job.resubmission_of_job_id,
+            work.generation_id,
+            work.generation_id,
+            work.envelope.envelope_id,
+            Jsonb(work.envelope.to_provider_payload()),
+        ),
+    ).fetchall()
+    preserved: set[UUID] = set()
+    sources = {
+        item.candidate_id: item
+        for item in normalized.batch.candidates
+        if item.candidate_kind == "rider"
+    }
+    for row in rows:
+        previous = CandidatePipelineResult.model_validate(row["result_json"]["result"])
+        for candidate in previous.candidates:
+            draft = sources.get(candidate.candidate_id)
+            if (
+                draft is None
+                or candidate.candidate_kind != "rider"
+                or candidate.status != "AI_VERIFIED"
+                or candidate.fields != draft.fields
+            ):
+                continue
+            version = connection.execute(
+                "SELECT id FROM analysis_candidate_versions WHERE structuring_job_id=%s "
+                "AND source_candidate_id=%s AND household_space_id=%s "
+                "AND candidate_kind='rider' AND is_current AND status='AI_VERIFIED' "
+                "AND generator_version='policy-draft-normalization-v2' FOR SHARE",
+                (
+                    row["job_id"],
+                    uuid5(row["job_id"], f"{work.envelope.envelope_id}:{candidate.candidate_id}"),
+                    job.household_space_id,
+                ),
+            ).fetchone()
+            if version is None:
+                continue
+            fields = connection.execute(
+                "SELECT f.field_id,f.value,ARRAY(SELECT e.evidence_id "
+                "FROM analysis_candidate_evidence e "
+                "WHERE e.candidate_version_id=f.candidate_version_id AND e.field_id=f.field_id "
+                "ORDER BY e.evidence_id) AS evidence_ids FROM analysis_candidate_fields f "
+                "WHERE f.candidate_version_id=%s ORDER BY f.position FOR SHARE OF f",
+                (version["id"],),
+            ).fetchall()
+            expected = [
+                {"field_id": f.field_id, "value": f.value, "evidence_ids": sorted(f.evidence_ids)}
+                for f in draft.fields
+            ]
+            if fields == expected:
+                preserved.add(candidate.candidate_id)
+    if not preserved:
+        return normalized
+    ranges = tuple(
+        RangeDisposition(chunk_id=item.chunk_id, outcome="UNRESOLVED", candidate_ids=())
+        if item.candidate_ids and set(item.candidate_ids) <= preserved
+        else item.model_copy(
+            update={
+                "candidate_ids": tuple(key for key in item.candidate_ids if key not in preserved)
+            }
+        )
+        for item in normalized.batch.ranges
+    )
+    return PolicyDraftNormalization(
+        normalized.batch.model_copy(
+            update={
+                "candidates": tuple(
+                    c for c in normalized.batch.candidates if c.candidate_id not in preserved
+                ),
+                "ranges": ranges,
+            }
+        ),
+        (
+            *normalized.adjustments,
+            *(
+                PolicyDraftAdjustment("PRIOR_VERIFIED_CANDIDATE_PRESERVED", key)
+                for key in sorted(preserved)
+            ),
+        ),
+        True,
+        revision=normalized.revision,
+    )
+
+
 def _source(
     connection: psycopg.Connection[dict[str, Any]],
     job: PolicyStructuringJobRecord,
@@ -128,7 +258,7 @@ def _source(
         """
         AND ((old.id=current.id AND current.pipeline_version IN
           ('policy-range-normalized-v1','retained-policy-association-v6',
-           'policy-range-normalized-v2','retained-policy-association-v7'))
+           'policy-range-normalized-v2','retained-policy-association-v7','retained-policy-association-v8'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
@@ -137,7 +267,13 @@ def _source(
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
             AND old.pipeline_version IN
-              ('retained-policy-association-v5','retained-policy-association-v6')))
+              ('retained-policy-association-v5','retained-policy-association-v6'))
+          OR (current.pipeline_version='retained-policy-association-v8'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained'
+            AND old.pipeline_version IN
+              ('retained-policy-association-v5','retained-policy-association-v6',
+               'retained-policy-association-v7')))
         AND (SELECT count(*) FROM policy_provider_requests matching
           WHERE matching.job_id=request.job_id AND matching.request_id=request.request_id
             AND matching.state='SUCCEEDED')=1
@@ -215,6 +351,8 @@ def _source(
             local_nodes={node["node_id"]: node for node in row["structure_json"]["nodes"]},
             revision=normalization_revision(job.pipeline_version),
         )
+        if job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES:
+            normalized = _preserve_verified_riders(connection, job, work, normalized)
     except ValueError, TypeError, KeyError, PolicyDraftInvalid, ValidationError:
         raise PolicyRangeConflict from None
     return {

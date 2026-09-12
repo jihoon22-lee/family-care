@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0076_certificate_title_grounding"
+REVISION = "0077_source_scoped_policy_identity"
 
 
 class Result:
@@ -52,7 +52,8 @@ class Connection:
         [("0072_metadata_physical_flow",)],
         [("0073_metadata_header_regions",)],
         [("0074_policy_label_spacing",)],
-        [("0076_synthetic_future",)],
+        [("0076_certificate_title_grounding",)],
+        [("0078_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

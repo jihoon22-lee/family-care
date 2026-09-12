@@ -113,6 +113,12 @@
 추출에서 확보하지 못한 보험사 근거를 OCR 원문에서 확인하되, 진단 결과만으로 가입이나
 약관 신원을 게시하지 않는다. 구현·관련 회귀·문서를 완성한 뒤 PR 검증을 한 번 수행한다.
 
+후속 Task 3/4는 `feat/source-scoped-policy-identity`에서 미확인 보험사 필드와 확인된 가입
+사실의 보류를 분리한다. 명시적 retained v8 복구에서만 정확한 원문 계약 locator·대상자·
+상품 근거와 새 부모 검수를 요구하고, 보험사 null 및 미확인 출처를 보존한다. 동일 필드와
+근거의 기존 v7 담보는 다시 검수하지 않는다. 실제 자료의 기존 원장·응답·교정·청구 이력을
+유지하며 이 변경만으로 약관 신원·판본 연결이나 마일스톤 전체 완료를 선언하지 않는다.
+
 `document_structure.py`는 로컬 전량 보존 adapter이고 외부 전달 DTO가 아니다.
 문서 bytes·extraction/OCR revision·node/row/cell 위치를 보존한다. 행은 쪼개지 않고
 반복 헤더/각주 문맥을 primary 가입 행과 별도로 참조한다. `ChunkPlan.complete`는 범위의
