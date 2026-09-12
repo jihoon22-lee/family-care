@@ -13,9 +13,16 @@ That document owns the command list; do not maintain a duplicate list here.
 
 - Classify the diff as read-only review, documentation/instruction changes,
   executable configuration, or product behavior. Use the union for mixed changes.
-- During implementation run the test that exposes the missing behavior, then
-  related tests. At PR completion run the required suite and the additional
-  integration checks selected by the changed boundaries.
+- Per commit, check changed-file syntax/format and alignment with the existing
+  plan. Do not make full tests, integration, builds, or protected acceptance a
+  commit gate. Write necessary tests alongside implementation; repeated RED/GREEN
+  execution is not mandatory.
+- Finish the PR's planned implementation, tests, and documentation before one
+  focused detailed verification pass. During development, run a minimal targeted
+  check only to resolve a concrete blocker or implementation decision.
+- Use matching final-PR CI evidence for required checks instead of duplicating
+  expensive suites locally. Run locally what CI does not cover or what is needed
+  to diagnose a specific failure. Preserve every required CI check.
 - A policy document that changes required CI or verification behavior must be
   reviewed against the actual workflow. Do not remove a required check to make
   the change pass.
@@ -31,8 +38,10 @@ for Python on WSL when Windows temporary paths interfere.
 
 Record exact commands, exit/result, time, source SHA plus relevant uncommitted
 changes, and environment/configuration. Compare with current inputs before using
-prior evidence. Rerun affected checks after changes, failures, or unresolved risks;
-do not repeat an unchanged successful suite just to answer a follow-up question.
+prior evidence. After a fix, rerun only checks whose results the fix can affect.
+Broaden only for a concrete regression concern; a new commit SHA, documentation
+edit, interruption, or follow-up question alone does not invalidate passed code
+checks. Do not repeatedly push intermediate changes just to restart full CI.
 
 Distinguish default pytest (integration excluded), PostgreSQL integration, Web
 unit/build, browser mock, real backend E2E, actual devices, external provider, and

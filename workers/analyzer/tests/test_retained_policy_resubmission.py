@@ -27,6 +27,15 @@ from workers.analyzer.tests.test_policy_structuring_jobs import _psycopg_url
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def historical_v5_producer(monkeypatch):
+    from familycare_worker import retained_policy
+
+    monkeypatch.setattr(
+        retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", "retained-policy-association-v5"
+    )
+
+
 @pytest.fixture()
 def retained_source(ranges_database):
     url, job = ranges_database
@@ -76,9 +85,13 @@ def retained_source(ranges_database):
 
 
 def _enqueue(sample, **overrides):
-    from familycare_worker.retained_policy import RetainedPolicyRepository
+    from familycare_worker.retained_policy import (
+        RETAINED_POLICY_PIPELINE_REVISION,
+        RetainedPolicyRepository,
+    )
 
     arguments = {
+        "pipeline_revision": RETAINED_POLICY_PIPELINE_REVISION,
         "household_space_id": sample.original.household_space_id,
         "source_job_id": sample.original.id,
         "expected_generation_id": sample.generation,
@@ -88,12 +101,16 @@ def _enqueue(sample, **overrides):
 
 
 def _target(sample, job_id):
-    from familycare_worker.retained_policy import RetainedPolicyJobQueue
+    from familycare_worker.retained_policy import (
+        RETAINED_POLICY_PIPELINE_REVISION,
+        RetainedPolicyJobQueue,
+    )
 
     return RetainedPolicyJobQueue(
         sample.url,
         household_space_id=sample.original.household_space_id,
         job_id=job_id,
+        pipeline_revision=RETAINED_POLICY_PIPELINE_REVISION,
     )
 
 
@@ -305,7 +322,12 @@ def test_target_queue_does_not_claim_or_recover_other_jobs(retained_source):
     recovered = queue.claim_next_job(WORKER)
     assert recovered is not None and recovered.id == new.id and recovered.attempts == 2
     assert queue.claim_next_job(WORKER) is None
-    foreign = type(queue)(sample.url, household_space_id=uuid4(), job_id=new.id)
+    foreign = type(queue)(
+        sample.url,
+        household_space_id=uuid4(),
+        job_id=new.id,
+        pipeline_revision=new.pipeline_version,
+    )
     assert foreign.claim_next_job(WORKER) is None
 
 

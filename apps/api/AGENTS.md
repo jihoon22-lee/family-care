@@ -12,7 +12,7 @@
 
 ## Verification and review
 
-- 해당 domain/API 테스트를 먼저 실패시키고 구현합니다. 권한·경로·데이터 변경에는 성공/거부 쌍과 동시성·실패 복구 사례를 포함합니다.
+- 필요한 domain/API 테스트를 구현과 함께 작성하고 PR 계획 완료 시점에 실행합니다. 커밋마다 RED/GREEN 실행을 요구하지 않습니다. 권한·경로·데이터 변경에는 성공/거부 쌍과 동시성·실패 복구 사례를 포함합니다.
 - migration/repository 변경은 [PostgreSQL 통합 규칙](../../docs/design/test-strategy.md#integration-tests)을 따릅니다. 전용 합성 test DB만 사용하며 runtime DB URL로 fallback하지 않습니다.
 - 기본 pytest는 integration을 제외합니다. 기본 suite 성공을 migration·DB 통합 성공으로 표현하지 않습니다.
 - 검증 명령과 재실행 기준은 [검증 전략](../../docs/design/test-strategy.md#verification-by-change)을 따릅니다. Web·Docker 검사와 직렬 실행합니다.

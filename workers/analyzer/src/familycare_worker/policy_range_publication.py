@@ -41,7 +41,12 @@ def publish_range_candidates(
             "WHERE job_id=%s AND envelope_id=%s",
             (job.id, envelope.envelope_id),
         ).fetchone()
-        if job.pipeline_version == "retained-policy-association-v4"
+        if job.pipeline_version
+        in {
+            "retained-policy-association-v4",
+            "retained-policy-association-v6",
+            "policy-range-normalized-v1",
+        }
         else None
     )
     generator = "policy-range-structurer-v3" if replay is None else replay["normalization_revision"]

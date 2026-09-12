@@ -1,4 +1,4 @@
-"""A repeated retained generation appends proof without replacing user-owned enrollment."""
+"""Historical v5 publication preserves source generations and user-owned enrollment."""
 
 from uuid import uuid4
 
@@ -26,6 +26,14 @@ from apps.api.tests.test_native_range_enrollment_integration import (
 )
 
 pytestmark = pytest.mark.integration
+V5 = "retained-policy-association-v5"
+
+
+@pytest.fixture(autouse=True)
+def historical_v5_producer(monkeypatch):
+    from familycare_worker import retained_policy
+
+    monkeypatch.setattr(retained_policy, "RETAINED_POLICY_PIPELINE_REVISION", V5)
 
 
 def _initial(sample):
@@ -56,9 +64,10 @@ def _reprocess(sample, generation):
         household_space_id=original.household_space_id,
         source_job_id=original.id,
         expected_generation_id=generation,
+        pipeline_revision=V5,
     )
     job = RetainedPolicyJobQueue(
-        url, household_space_id=original.household_space_id, job_id=new.id
+        url, household_space_id=original.household_space_id, job_id=new.id, pipeline_revision=V5
     ).claim_next_job(WORKER)
     assert job is not None
     work = _retain_native(url, job)

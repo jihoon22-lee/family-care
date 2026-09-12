@@ -26,9 +26,13 @@ main issue, requirement sections, WP, and affected design documents.
 ## Execute within the request
 
 Mark the current local task in progress, implement the agreed outcome with the
-repository's test-first and verification rules, and keep design/contract changes
-with their implementation. Read nested instructions before editing that area.
-Use the root's bounded delegation rules only for independent work.
+repository's commit/PR verification cadence, and keep design/contract changes
+with their implementation. Commit after lightweight syntax and plan-scope checks;
+finish all planned PR work before detailed verification. Write needed tests with
+the code and reserve development-time execution for concrete blockers. Reuse
+matching CI evidence and rerun only checks affected by fixes. Read nested
+instructions before editing that area. Use bounded delegation for independent
+work, never to multiply verification passes.
 
 Preserve the distinction between plan registration, implementation, test evidence,
 protected acceptance, and release. Record requirement → issue → actual PR (when

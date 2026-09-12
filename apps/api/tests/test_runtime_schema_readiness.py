@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0074_policy_label_spacing"
+REVISION = "0075_initial_policy_drafts"
 
 
 class Result:
@@ -61,7 +61,8 @@ class Engine:
         [("0071_source_calculations",)],
         [("0072_metadata_physical_flow",)],
         [("0073_metadata_header_regions",)],
-        [("0075_synthetic_future",)],
+        [("0074_policy_label_spacing",)],
+        [("0076_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],
@@ -86,7 +87,7 @@ def test_api_checks_current_contract_without_ai_or_checkout_access(monkeypatch, 
     assert any("review_job_id" in q and "WHERE false" in q for q in connection.queries)
     assert any("policy_structuring_source_current" in q for q in connection.queries)
     assert any(
-        "policy_range_replay_sources" in q and "source_response_hash" in q
+        "policy_range_replay_sources" in q and "source_response_hash" in q and "replay.origin" in q
         for q in connection.queries
     )
     assert engine.disposed

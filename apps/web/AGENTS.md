@@ -12,7 +12,7 @@
 
 ## Verification and review
 
-- 동작 변경은 사용자 행동을 검증하는 component test를 먼저 작성합니다. 기능 흐름이 바뀌면 해당 browser E2E도 확인합니다.
+- 동작 변경은 사용자 행동을 검증하는 component test를 함께 작성하고 PR 계획 완료 시점에 실행합니다. 기능 흐름이 바뀌면 해당 browser E2E를 같은 완료 검증에 포함합니다. 커밋마다 전체 Web 검사나 E2E를 반복하지 않습니다.
 - 좁은 화면·키보드·로그인 만료·부분 실패·오래된 비동기 응답을 변경 범위에 맞춰 검증합니다.
 - 전체 Web 검사는 저장소 루트에서 `corepack pnpm web:check`, E2E는 `corepack pnpm --filter @familycare/web test:e2e`입니다. 잠금 버전은 루트 `package.json`을 따릅니다.
 - `web:check`는 browser E2E를 포함하지 않습니다. mock 브라우저, 실제 backend 통합, 실제 Windows·모바일 검증을 구분합니다.
