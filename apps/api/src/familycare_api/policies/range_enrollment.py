@@ -20,6 +20,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from familycare_api.policies.contract_source_locator import contract_source_locator
+from familycare_api.policies.currency_enrichment import currency_enrichment_proven
 from familycare_api.policies.enrollment_locator import physical_enrollment_locator
 from familycare_api.policies.source_projection import StructureProjectionReader
 from familycare_api.policies.source_scoped_identity import source_scoped_identity
@@ -401,6 +402,7 @@ def project_range_candidate(
             return False
     authority = "USER_CONFIRMED" if version["status"] == "USER_CONFIRMED" else "PROGRAM_VERIFIED"
     update = False
+    currency_enrichment = False
     if target is not None:
         if (
             target["deleted_at"] is not None
@@ -420,7 +422,14 @@ def project_range_candidate(
                 == previous["field_values"]
                 and source["pipeline_version"] == "retained-policy-association-v8"
             )
-            if authority != "USER_CONFIRMED" and not issuer_enrichment:
+            currency_enrichment = (
+                rider_id is not None
+                and authority == "PROGRAM_VERIFIED"
+                and currency_enrichment_proven(
+                    connection, version, source, values, evidence, target, previous
+                )
+            )
+            if authority != "USER_CONFIRMED" and not issuer_enrichment and not currency_enrichment:
                 return False
             lineage_publication = connection.execute(
                 "SELECT candidate_version_id FROM range_enrollment_publications "
@@ -435,7 +444,10 @@ def project_range_candidate(
                 "ORDER BY created_at DESC LIMIT 1",
                 (household, policy_id, rider_id),
             ).fetchone()
-            if issuer_enrichment:
+            if currency_enrichment:
+                if last_user is not None:
+                    return False
+            elif issuer_enrichment:
                 if (
                     last_user is not None
                     or source_scoped_identity(
@@ -506,6 +518,8 @@ def project_range_candidate(
             coverage_start_date=_as_date(values.get("coverage_start")),
             coverage_end_date=_as_date(values.get("coverage_end")),
         )
+    if currency_enrichment:
+        columns = {"currency": values["currency"]}
     insured_evidence_id = _insured_evidence(connection, source)
     if insured_evidence_id is None:
         return False

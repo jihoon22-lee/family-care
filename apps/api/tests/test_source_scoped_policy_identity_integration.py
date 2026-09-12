@@ -77,7 +77,9 @@ def _drain(url, queue, job, terms):
 
 @pytest.fixture()
 def deferred_parent(enrollment_database, request):
-    review_action = getattr(request, "param", None)
+    option = getattr(request, "param", None)
+    missing_currency = option == "missing_currency"
+    review_action = None if missing_currency else option
     url, original = enrollment_database
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(
@@ -143,7 +145,7 @@ def deferred_parent(enrollment_database, request):
                 ("rider_key", f"Sample Rider {i}"),
                 *([("benefit_type", "fixed")] if i != 5 else []),
                 ("sum_assured", 100 + i),
-                ("currency", "KRW"),
+                *([] if missing_currency else [("currency", "KRW")]),
             ],
         )
         for i in range(6)
@@ -188,13 +190,16 @@ def deferred_parent(enrollment_database, request):
         repository = CandidateRepository(url)
         item = next(
             item
-            for item in repository.list_review_items(scope, status="AI_VERIFIED")
-            if any(
+            for item in repository.list_review_items(
+                scope, status="NEEDS_REVIEW" if review_action == "parent_reject" else "AI_VERIFIED"
+            )
+            if (review_action == "parent_reject" and item.candidate_kind == "policy_contract")
+            or any(
                 field.field_id == "rider_name" and field.value == "Sample Rider 0"
                 for field in item.fields
             )
         )
-        if review_action == "reject":
+        if review_action in {"reject", "parent_reject"}:
             current_item = repository.transition(
                 scope,
                 item.review_item_id,
@@ -219,7 +224,9 @@ def deferred_parent(enrollment_database, request):
         reviewed = {
             "review_item_id": item.review_item_id,
             "current_candidate_id": current_item.candidate_version_id,
-            "expected_status": "rejected" if review_action == "reject" else "NEEDS_REVIEW",
+            "expected_status": "rejected"
+            if review_action in {"reject", "parent_reject"}
+            else "NEEDS_REVIEW",
             "history": _review_history(url, item.review_item_id),
         }
     with psycopg.connect(_psycopg_url(url)) as connection:
@@ -253,10 +260,12 @@ def deferred_parent(enrollment_database, request):
     work = ranges.next(current, WORKER, sensitive_terms=terms)
     replay = PolicyDraftReplayRepository(url, source_provider_request_id=request)
     preview = replay.prepare(current, WORKER, work)
-    assert preview is not None and [c.candidate_kind for c in preview.batch.candidates] == [
-        "policy_contract"
-    ]
-    assert [f.field_id for f in preview.batch.candidates[0].fields] == ["product_name"]
+    assert preview is not None
+    if review_action == "parent_reject":
+        assert preview.batch.candidates == ()
+    else:
+        assert [c.candidate_kind for c in preview.batch.candidates] == ["policy_contract"]
+        assert [f.field_id for f in preview.batch.candidates[0].fields] == ["product_name"]
     calls = []
 
     class Verifier:
@@ -503,3 +512,33 @@ def test_v8_parent_recovery_preserves_prior_user_review_without_republishing_old
                 ).fetchall()
                 == before
             )
+
+
+@pytest.mark.parametrize("deferred_parent", ["parent_reject"], indirect=True)
+def test_v8_recovery_does_not_reapprove_previously_rejected_parent(deferred_parent):
+    url, _, _, current, _, _, _, calls, reviewed = deferred_parent
+    assert calls == []
+    assert RangeEnrollmentProjector(url).project_pending() == 0
+    assert _review_history(url, reviewed["review_item_id"]) == reviewed["history"]
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM analysis_candidate_versions WHERE structuring_job_id=%s",
+                (current.id,),
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM policy_contracts WHERE household_space_id=%s",
+                (current.household_space_id,),
+            ).fetchone()[0]
+            == 0
+        )
+        assert (
+            connection.execute(
+                "SELECT count(*) FROM riders WHERE household_space_id=%s",
+                (current.household_space_id,),
+            ).fetchone()[0]
+            == 0
+        )

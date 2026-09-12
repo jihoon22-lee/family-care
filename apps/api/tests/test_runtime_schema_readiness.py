@@ -8,7 +8,7 @@ from alembic.script import ScriptDirectory
 from familycare_api import health
 from sqlalchemy.exc import SQLAlchemyError
 
-REVISION = "0077_source_scoped_identity"
+REVISION = "0078_policy_currency_proof"
 
 
 class Result:
