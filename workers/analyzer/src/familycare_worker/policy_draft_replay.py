@@ -13,9 +13,12 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from familycare_worker.ai.evidence_loader import EvidenceLoadError, _household_member_terms
+from familycare_worker.ai.minimizer import MINIMIZATION_REVISION
 from familycare_worker.ai.policy_draft_normalization import (
     AMOUNT_CURRENCY_NORMALIZATION_REVISION,
     CERTIFICATE_TITLE_NORMALIZATION_REVISION,
+    EXPLICIT_UNIT_NORMALIZATION_REVISION,
     POLICY_DRAFT_NORMALIZATION_REVISION,
     SOURCE_SCOPED_NORMALIZATION_REVISION,
     TABLE_NAME_NORMALIZATION_REVISION,
@@ -37,7 +40,10 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-FIELD_SCOPED_POLICY_PIPELINES = frozenset({"retained-policy-association-v11"})
+EXPLICIT_UNIT_POLICY_PIPELINES = frozenset({"retained-policy-association-v12"})
+FIELD_SCOPED_POLICY_PIPELINES = EXPLICIT_UNIT_POLICY_PIPELINES | frozenset(
+    {"retained-policy-association-v11"}
+)
 TABLE_NAME_POLICY_PIPELINES = FIELD_SCOPED_POLICY_PIPELINES | frozenset(
     {"retained-policy-association-v10"}
 )
@@ -58,7 +64,9 @@ NORMALIZED_POLICY_PIPELINES = (
 
 def normalization_revision(pipeline_version: str) -> str:
     return (
-        TABLE_NAME_NORMALIZATION_REVISION
+        EXPLICIT_UNIT_NORMALIZATION_REVISION
+        if pipeline_version in EXPLICIT_UNIT_POLICY_PIPELINES
+        else TABLE_NAME_NORMALIZATION_REVISION
         if pipeline_version in TABLE_NAME_POLICY_PIPELINES
         else AMOUNT_CURRENCY_NORMALIZATION_REVISION
         if pipeline_version in AMOUNT_CURRENCY_POLICY_PIPELINES
@@ -81,7 +89,7 @@ def _current_source(
     )
     row = connection.execute(
         """
-        SELECT generation.id, plan.associations_json
+        SELECT generation.id, plan.associations_json, plan.privacy_fingerprint
         FROM policy_structuring_jobs current
         JOIN document_batch_items item ON item.id=current.batch_item_id
           AND item.state='succeeded' AND item.document_kind='policy'
@@ -114,7 +122,8 @@ def _current_source(
             OR (current.pipeline_version IN
                 ('retained-policy-association-v6','retained-policy-association-v7',
                  'retained-policy-association-v8','retained-policy-association-v9',
-                 'retained-policy-association-v10','retained-policy-association-v11')
+                 'retained-policy-association-v10','retained-policy-association-v11',
+                 'retained-policy-association-v12')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -129,9 +138,29 @@ def _current_source(
             job.household_space_id,
         ),
     ).fetchone()
-    identity = member_identity_fingerprint(load_local_members(connection, job.household_space_id))
+    members = load_local_members(connection, job.household_space_id)
+    identity = member_identity_fingerprint(members)
     if row is None or row["associations_json"].get("member_fingerprint") != identity:
         raise PolicyRangeConflict
+    if job.pipeline_version in EXPLICIT_UNIT_POLICY_PIPELINES:
+        try:
+            terms = _household_member_terms(
+                [
+                    {"display_name": m.display_name, "internal_alias": m.internal_alias}
+                    for m in sorted(members, key=lambda m: (m.id != job.family_member_id, m.id))
+                ]
+            )
+        except EvidenceLoadError:
+            raise PolicyRangeConflict from None
+        current_privacy = hashlib.sha256(
+            json.dumps(
+                [MINIMIZATION_REVISION, sorted(set(terms))],
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        if row["privacy_fingerprint"] != current_privacy:
+            raise PolicyRangeConflict
 
 
 @dataclass(frozen=True, repr=False)
@@ -180,11 +209,17 @@ def _preserve_verified_riders(
         "AND old.extraction_id=%s AND old.batch_item_id=%s "
         "AND old.resubmission_of_job_id IS NOT DISTINCT FROM %s "
         "AND old.source_generation_id=%s AND p.generation_id=%s "
-        "AND p.privacy_fingerprint=current.privacy_fingerprint "
+        "AND (p.privacy_fingerprint=current.privacy_fingerprint "
+        "OR EXISTS(SELECT 1 FROM policy_structuring_jobs cp WHERE cp.id=current.job_id "
+        "AND cp.pipeline_version='retained-policy-association-v12')) "
         "AND p.associations_json=current.associations_json "
         "AND r.envelope_id=%s AND r.envelope_json=%s "
         "AND r.state IN ('COMPLETE','REVIEW') AND policy_structuring_source_current(old.id) "
-        "AND ((old.pipeline_version='retained-policy-association-v7' "
+        "AND ((old.pipeline_version='retained-policy-association-v4' "
+        "AND r.result_json->>'program_validation_version'='range-grounding-v2' "
+        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "'policy-draft-normalization-v1') "
+        "OR (old.pipeline_version='retained-policy-association-v7' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v3' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
         "'policy-draft-normalization-v2') "
@@ -196,7 +231,8 @@ def _preserve_verified_riders(
         "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
         "'policy-draft-normalization-v4') "
-        "OR (old.pipeline_version='retained-policy-association-v10' "
+        "OR (old.pipeline_version IN "
+        "('retained-policy-association-v10','retained-policy-association-v11') "
         "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
         "'policy-draft-normalization-v5')) "
@@ -205,6 +241,15 @@ def _preserve_verified_riders(
             job.id,
             job.id,
             [
+                "retained-policy-association-v4",
+                "retained-policy-association-v7",
+                "retained-policy-association-v8",
+                "retained-policy-association-v9",
+                "retained-policy-association-v10",
+                "retained-policy-association-v11",
+            ]
+            if job.pipeline_version in EXPLICIT_UNIT_POLICY_PIPELINES
+            else [
                 "retained-policy-association-v7",
                 "retained-policy-association-v8",
                 "retained-policy-association-v9",
@@ -349,6 +394,10 @@ def _source(
     *,
     expected_batch: PolicyRangeBatch | None = None,
 ) -> dict[str, Any]:
+    # v12 may cross a minimizer revision only when the complete original and
+    # current envelopes (including all minimized text) are byte-for-byte equal.
+    # The current plan was produced by next() under current household privacy;
+    # source/member identity and all source offsets are still pinned below.
     normalized_pipeline = job.pipeline_version in NORMALIZED_POLICY_PIPELINES
     if normalized_pipeline:
         _current_source(connection, job, work)
@@ -358,7 +407,8 @@ def _source(
           ('policy-range-normalized-v1','retained-policy-association-v6',
            'policy-range-normalized-v2','retained-policy-association-v7',
            'retained-policy-association-v8','retained-policy-association-v9',
-                 'retained-policy-association-v10','retained-policy-association-v11'))
+                 'retained-policy-association-v10','retained-policy-association-v11',
+                 'retained-policy-association-v12'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
@@ -374,6 +424,14 @@ def _source(
             AND old.pipeline_version IN
               ('retained-policy-association-v5','retained-policy-association-v6',
                'retained-policy-association-v7'))
+          OR (current.pipeline_version='retained-policy-association-v12'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained' AND old.pipeline_version IN
+              ('retained-policy-association-v2','retained-policy-association-v3',
+               'retained-policy-association-v4','retained-policy-association-v5',
+               'retained-policy-association-v6','retained-policy-association-v7',
+               'retained-policy-association-v8','retained-policy-association-v9',
+               'retained-policy-association-v10','retained-policy-association-v11'))
           OR (current.pipeline_version='retained-policy-association-v11'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained' AND old.pipeline_version IN
@@ -430,7 +488,8 @@ def _source(
           AND old.source_generation_id IS NOT DISTINCT FROM current.source_generation_id
           AND original.generation_id=target.generation_id
           AND original.envelope_json=target.envelope_json
-          AND original_plan.privacy_fingerprint=target_plan.privacy_fingerprint
+          AND (original_plan.privacy_fingerprint=target_plan.privacy_fingerprint
+            OR current.pipeline_version='retained-policy-association-v12')
           AND target.generation_id=%s AND target.envelope_id=%s
           AND target.envelope_json=%s AND target.state='PENDING'
           AND policy_structuring_source_current(old.id)
