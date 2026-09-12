@@ -32,6 +32,20 @@ def _admission(expanded: bool) -> None:
           END $$;
         """)
 
+    revisions = (
+        "'policy-draft-normalization-v1','policy-draft-normalization-v2',"
+        "'policy-draft-normalization-v3','policy-draft-normalization-v4',"
+        "'policy-draft-normalization-v5'"
+    )
+    if expanded:
+        revisions += ",'policy-draft-normalization-v6'"
+    op.execute(f"""
+      ALTER TABLE policy_range_replay_sources
+        DROP CONSTRAINT policy_range_replay_sources_normalization_revision_check,
+        ADD CONSTRAINT policy_range_replay_sources_normalization_revision_check
+        CHECK(normalization_revision IN ({revisions}));
+    """)
+
 
 def upgrade() -> None:
     _admission(True)
@@ -41,7 +55,9 @@ def downgrade() -> None:
     op.execute("""
       DO $$ BEGIN
         IF EXISTS(SELECT 1 FROM policy_structuring_jobs
-            WHERE pipeline_version='retained-policy-association-v12') THEN
+            WHERE pipeline_version='retained-policy-association-v12')
+          OR EXISTS(SELECT 1 FROM policy_range_replay_sources
+            WHERE normalization_revision='policy-draft-normalization-v6') THEN
           RAISE EXCEPTION 'explicit unit draft history prevents downgrade' USING ERRCODE='23514';
         END IF;
       END $$;

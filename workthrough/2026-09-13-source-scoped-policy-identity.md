@@ -213,3 +213,11 @@ AI-off 분석·저장 결과를 확인했다(10.951초). 기존 두 출처의 18
 - 최종 수정 묶음의 필수 PR CI 및 merge
 - 선택 계약 외의 실제 가입/약관 신원·판본 적용 연결, #69/#70 최종 수용·전환·릴리스
 - 운영 source `2370761`/schema 0069와 runtime은 이번 적용에서 바꾸지 않았다.
+
+## Final PR integration
+
+Final source `2aa9d22430bcf00175f1a816bcbce2980686d31b` passed required CI 7/7 in
+run `34709430266`; PostgreSQL passed 928 tests with 4300 deselected in 2063.33 seconds.
+PR #103 was merged as `957d7edf4d94d716bdcd43a62f45d16d25efe85f`. The matching
+PR tree is the verification evidence; no duplicate full local or main-CI wait was added.
+This completes the PR, while #63/#69/#70 and the full protected-data release remain open.

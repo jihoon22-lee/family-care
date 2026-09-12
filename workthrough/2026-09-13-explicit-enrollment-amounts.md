@@ -1,6 +1,6 @@
 # Explicit enrolled amount recovery
 
-- Status: implementation in progress; detailed PR verification not started.
+- Status: implementation and focused verification complete; final required CI and protected application pending.
 - Scope: B02 Task 3/4, WP03 #63; final activation/acceptance remains #69/#70.
 - Base: PR #103 source `2aa9d22430bcf00175f1a816bcbce2980686d31b`.
 - Branch: `fix/explicit-enrollment-amounts`.
@@ -52,3 +52,37 @@ Apply the completed bundle to the approved owned clone, recover supported existi
 fields and finish the selected pending ranges within the additional USD 1 target / 2
 hard ceiling. Source/canonical and terms identity acceptance must reflect actual proof;
 this bundle alone does not complete the full supplied catalog or final release.
+
+### Focused verification started
+
+At `f2bd4933cbea55162bfaaab11225cd0c72c982ca`, related normalization, source/currency
+enrichment, scoped verifier and runtime-readiness unit modules passed **226 tests in
+2.08 seconds**. The initial mypy run found three annotations caused by reusing a
+regex-match variable for a unit string; a variable rename and typed unit set corrected
+that issue. Re-running mypy passed **368 source files**. No semantic unit change was
+made by the type correction.
+
+Static review found v4 results store `draft_replay`, while the first v12 preservation
+query used the later `draft_normalization` key. The v4-specific key was corrected
+before PostgreSQL execution, and a pre-verifier rejection-preservation case was added
+alongside late-user-change cases. Related integration verification uses the existing
+owned synthetic PostgreSQL 18.6 container; other project resources remain running.
+
+First focused PostgreSQL run: **10 passed, 3 failed, 5 setup errors in 100.09 seconds**.
+The five setup errors shared two missing `StructurerCandidate.schema_version` fixture
+arguments. The new normalization v6 was also missing from schema 0081's receipt CHECK
+constraint; migration admission and its guarded downgrade were corrected. Only those
+eight affected cases plus the changed migration roundtrip are re-executed.
+
+The affected PostgreSQL rerun passed **8 cases with 1 failure in 79.20 seconds**.
+The remaining case attempted to correct a field already removed from the old candidate;
+the correction API correctly rejected that invalid fixture operation. The fixture now
+corrects an existing Rider name, preserving the intended late-user-edit boundary. That
+one case then passed in **10.82 seconds**. Across these runs, all **18 distinct selected
+PostgreSQL cases** passed; this is not a claim of one full-suite run.
+
+Documentation checks passed for 50 files, repository safety for 1193 paths, changed-file
+Ruff checks and format checks for 13 files, and `git diff --check` passed. Full required
+Web/Python/containers/PostgreSQL are delegated to the final PR CI once; no equivalent
+full local run is added. Protected-operation results will be linked to the PR/issue
+without pushing a documentation-only commit merely to restart the same full CI.
