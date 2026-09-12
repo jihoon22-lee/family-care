@@ -18,6 +18,7 @@ from familycare_worker.ai.policy_draft_normalization import (
     CERTIFICATE_TITLE_NORMALIZATION_REVISION,
     POLICY_DRAFT_NORMALIZATION_REVISION,
     SOURCE_SCOPED_NORMALIZATION_REVISION,
+    TABLE_NAME_NORMALIZATION_REVISION,
     PolicyDraftAdjustment,
     PolicyDraftInvalid,
     PolicyDraftNormalization,
@@ -34,7 +35,10 @@ from familycare_worker.policy_source_association import (
     member_identity_fingerprint,
 )
 
-AMOUNT_CURRENCY_POLICY_PIPELINES = frozenset({"retained-policy-association-v9"})
+TABLE_NAME_POLICY_PIPELINES = frozenset({"retained-policy-association-v10"})
+AMOUNT_CURRENCY_POLICY_PIPELINES = TABLE_NAME_POLICY_PIPELINES | frozenset(
+    {"retained-policy-association-v9"}
+)
 SOURCE_SCOPED_POLICY_PIPELINES = AMOUNT_CURRENCY_POLICY_PIPELINES | frozenset(
     {"retained-policy-association-v8"}
 )
@@ -49,7 +53,9 @@ NORMALIZED_POLICY_PIPELINES = (
 
 def normalization_revision(pipeline_version: str) -> str:
     return (
-        AMOUNT_CURRENCY_NORMALIZATION_REVISION
+        TABLE_NAME_NORMALIZATION_REVISION
+        if pipeline_version in TABLE_NAME_POLICY_PIPELINES
+        else AMOUNT_CURRENCY_NORMALIZATION_REVISION
         if pipeline_version in AMOUNT_CURRENCY_POLICY_PIPELINES
         else SOURCE_SCOPED_NORMALIZATION_REVISION
         if pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
@@ -102,7 +108,8 @@ def _current_source(
                 AND current.processing_mode='automatic')
             OR (current.pipeline_version IN
                 ('retained-policy-association-v6','retained-policy-association-v7',
-                 'retained-policy-association-v8','retained-policy-association-v9')
+                 'retained-policy-association-v8','retained-policy-association-v9',
+                 'retained-policy-association-v10')
                 AND current.processing_mode='retained'))
           AND policy_structuring_source_current(current.id)
           AND (item.processed_document_version_id IS NULL
@@ -164,12 +171,22 @@ def _preserve_verified_riders(
         "OR (old.pipeline_version='retained-policy-association-v8' "
         "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
         "AND r.result_json->'draft_normalization'->>'normalization_revision'="
-        "'policy-draft-normalization-v3')) "
+        "'policy-draft-normalization-v3') "
+        "OR (old.pipeline_version='retained-policy-association-v9' "
+        "AND r.result_json->>'program_validation_version'='range-grounding-v4' "
+        "AND r.result_json->'draft_normalization'->>'normalization_revision'="
+        "'policy-draft-normalization-v4')) "
         "FOR SHARE OF old,p,current,r",
         (
             job.id,
             job.id,
-            ["retained-policy-association-v7", "retained-policy-association-v8"]
+            [
+                "retained-policy-association-v7",
+                "retained-policy-association-v8",
+                "retained-policy-association-v9",
+            ]
+            if job.pipeline_version in TABLE_NAME_POLICY_PIPELINES
+            else ["retained-policy-association-v7", "retained-policy-association-v8"]
             if job.pipeline_version in AMOUNT_CURRENCY_POLICY_PIPELINES
             else ["retained-policy-association-v7"],
             job.household_space_id,
@@ -309,7 +326,8 @@ def _source(
         AND ((old.id=current.id AND current.pipeline_version IN
           ('policy-range-normalized-v1','retained-policy-association-v6',
            'policy-range-normalized-v2','retained-policy-association-v7',
-           'retained-policy-association-v8','retained-policy-association-v9'))
+           'retained-policy-association-v8','retained-policy-association-v9',
+                 'retained-policy-association-v10'))
           OR (current.pipeline_version='retained-policy-association-v6'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained'
@@ -325,6 +343,12 @@ def _source(
             AND old.pipeline_version IN
               ('retained-policy-association-v5','retained-policy-association-v6',
                'retained-policy-association-v7'))
+          OR (current.pipeline_version='retained-policy-association-v10'
+            AND current.processing_mode='retained' AND old.id<>current.id
+            AND old.processing_mode='retained' AND old.pipeline_version IN
+              ('retained-policy-association-v5','retained-policy-association-v6',
+               'retained-policy-association-v7','retained-policy-association-v8',
+               'retained-policy-association-v9'))
           OR (current.pipeline_version='retained-policy-association-v9'
             AND current.processing_mode='retained' AND old.id<>current.id
             AND old.processing_mode='retained' AND old.pipeline_version IN

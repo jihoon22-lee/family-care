@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -33,6 +34,7 @@ POLICY_DRAFT_NORMALIZATION_REVISION = "policy-draft-normalization-v1"
 CERTIFICATE_TITLE_NORMALIZATION_REVISION = "policy-draft-normalization-v2"
 SOURCE_SCOPED_NORMALIZATION_REVISION = "policy-draft-normalization-v3"
 AMOUNT_CURRENCY_NORMALIZATION_REVISION = "policy-draft-normalization-v4"
+TABLE_NAME_NORMALIZATION_REVISION = "policy-draft-normalization-v5"
 
 type AdjustmentReason = Literal[
     "REQUIRED_FIELD_MISSING",
@@ -46,6 +48,7 @@ type AdjustmentReason = Literal[
     "PRIOR_CANDIDATE_REVIEW_PRESERVED",
     "CURRENCY_DERIVED_FROM_AMOUNT",
     "CURRENCY_EVIDENCE_REALIGNED",
+    "RIDER_NAME_RESTORED_FROM_CITED_ROW",
 ]
 
 
@@ -170,6 +173,103 @@ def _supported(
         and type(proven.value) is type(field.value)
         and proven.value == field.value
     )
+
+
+def _table_name_draft(
+    source: StructurerCandidate,
+    envelope: PolicyRangeEnvelope,
+    local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    adjustments: list[PolicyDraftAdjustment],
+) -> StructurerCandidate:
+    """Restore an already-cited single native row's exact name, never search by value."""
+    from familycare_worker.ai.table_grounding import _NAME, _cells, _label
+
+    if source.candidate_kind != "rider" or local_nodes is None:
+        return source
+    fields = {field.field_id: field for field in source.fields}
+    if len(fields) != len(source.fields) or "rider_name" not in fields:
+        return source
+    name = fields["rider_name"]
+    if _supported(source, name, envelope, local_nodes):
+        return source
+    cited = [e for e in envelope.evidence if e.evidence_id in name.evidence_ids]
+    rows = [
+        e
+        for e in cited
+        if e.primary
+        and e.source_role == "policy"
+        and local_nodes[e.node_id].get("kind") == "TABLE_ROW"
+        and local_nodes[e.node_id].get("row_role") == "data"
+    ]
+    if len(rows) != 1:
+        return source
+    evidence = rows[0]
+    row = local_nodes[evidence.node_id]
+    if (
+        row.get("source_layer") != "native"
+        or evidence.start != 0
+        or evidence.end != len(row["text"])
+    ):
+        return source
+    cells = _cells(row)
+    headers = [
+        local_nodes[key]
+        for key in row.get("context_node_ids", ())
+        if key in local_nodes
+        and local_nodes[key].get("kind") == "TABLE_ROW"
+        and local_nodes[key].get("row_role") == "header"
+    ]
+    columns = {
+        column
+        for header in headers
+        for column, cell in (_cells(header) or {}).items()
+        if _label(cell["text"]) in _NAME
+    }
+    if cells is None or len(columns) != 1 or next(iter(columns)) not in cells:
+        return source
+    value = cells[next(iter(columns))]["text"]
+    if not isinstance(value, str) or not value.strip() or len(value) > 240:
+        return source
+    # Local nodes retain unminimized source. Never reintroduce a removed name or
+    # identifier into the provider draft: the complete value must already appear
+    # in this exact privacy-minimized source slice.
+    visible = " ".join(unicodedata.normalize("NFKC", evidence.text).split())
+    if " ".join(unicodedata.normalize("NFKC", value).split()) not in visible:
+        return source
+    restored = name.model_copy(update={"value": value, "evidence_ids": (evidence.evidence_id,)})
+    # Existing logical keys must either copy the former name or remain independently
+    # proven. They are never silently redirected from another named Rider.
+    key = fields.get("rider_key")
+    if key is not None and key.value != name.value:
+        return source
+    proposed = source.model_copy(
+        update={
+            "fields": tuple(
+                restored
+                if f.field_id == "rider_name"
+                else f.model_copy(update={"value": value, "evidence_ids": restored.evidence_ids})
+                if f.field_id == "rider_key"
+                else f
+                for f in source.fields
+            )
+        }
+    )
+    # The unchanged column proof rejects ambiguous headers, examples, multiple rows,
+    # missing context and conflicting source. At least the same numeric amount must
+    # be proven, so a guessed citation cannot reassign a name-only candidate.
+    amount = fields.get("sum_assured")
+    if (
+        amount is None
+        or not _supported(proposed, restored, envelope, local_nodes)
+        or not _supported(proposed, amount, envelope, local_nodes)
+    ):
+        return source
+    adjustments.append(
+        PolicyDraftAdjustment(
+            "RIDER_NAME_RESTORED_FROM_CITED_ROW", source.candidate_id, "rider_name"
+        )
+    )
+    return proposed
 
 
 def _amount_currency_draft(
@@ -346,6 +446,7 @@ def normalize_policy_draft(
             CERTIFICATE_TITLE_NORMALIZATION_REVISION,
             SOURCE_SCOPED_NORMALIZATION_REVISION,
             AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+            TABLE_NAME_NORMALIZATION_REVISION,
         ):
             raise PolicyDraftInvalid
         _check_source(batch, envelope)
@@ -353,8 +454,16 @@ def normalize_policy_draft(
         adjustments: list[PolicyDraftAdjustment] = []
         drafts = {
             candidate.candidate_id: _candidate_draft(
-                _amount_currency_draft(candidate, envelope, local_nodes, adjustments)
-                if revision == AMOUNT_CURRENCY_NORMALIZATION_REVISION
+                _amount_currency_draft(
+                    _table_name_draft(candidate, envelope, local_nodes, adjustments)
+                    if revision == TABLE_NAME_NORMALIZATION_REVISION
+                    else candidate,
+                    envelope,
+                    local_nodes,
+                    adjustments,
+                )
+                if revision
+                in {AMOUNT_CURRENCY_NORMALIZATION_REVISION, TABLE_NAME_NORMALIZATION_REVISION}
                 else candidate,
                 envelope,
                 local_nodes,
@@ -364,9 +473,14 @@ def normalize_policy_draft(
                     CERTIFICATE_TITLE_NORMALIZATION_REVISION,
                     SOURCE_SCOPED_NORMALIZATION_REVISION,
                     AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                    TABLE_NAME_NORMALIZATION_REVISION,
                 },
                 allow_unconfirmed_insurer=revision
-                in {SOURCE_SCOPED_NORMALIZATION_REVISION, AMOUNT_CURRENCY_NORMALIZATION_REVISION},
+                in {
+                    SOURCE_SCOPED_NORMALIZATION_REVISION,
+                    AMOUNT_CURRENCY_NORMALIZATION_REVISION,
+                    TABLE_NAME_NORMALIZATION_REVISION,
+                },
             )
             for candidate in batch.candidates
         }

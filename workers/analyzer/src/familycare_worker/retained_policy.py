@@ -25,6 +25,7 @@ from familycare_worker.policy_jobs import (
 RETAINED_POLICY_PIPELINE_REVISION = "retained-policy-association-v7"
 SOURCE_SCOPED_POLICY_PIPELINE_REVISION = "retained-policy-association-v8"
 AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION = "retained-policy-association-v9"
+TABLE_NAME_POLICY_PIPELINE_REVISION = "retained-policy-association-v10"
 
 
 class RetainedPolicyConflict(RuntimeError):
@@ -43,6 +44,7 @@ def _revision(value: str) -> str:
         RETAINED_POLICY_PIPELINE_REVISION,
         SOURCE_SCOPED_POLICY_PIPELINE_REVISION,
         AMOUNT_CURRENCY_POLICY_PIPELINE_REVISION,
+        TABLE_NAME_POLICY_PIPELINE_REVISION,
     }:
         raise RetainedPolicyConflict
     return value

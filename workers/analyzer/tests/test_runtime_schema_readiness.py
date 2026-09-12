@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0078_policy_currency_proof"
+REVISION = "0079_cited_rider_name"
 
 
 class Result:
@@ -54,7 +54,7 @@ class Connection:
         [("0074_policy_label_spacing",)],
         [("0076_certificate_title_grounding",)],
         [("0077_source_scoped_identity",)],
-        [("0079_synthetic_future",)],
+        [("0080_synthetic_future",)],
         [(REVISION,), ("synthetic_other_head",)],
         [(REVISION,), (REVISION,)],
         [(None,)],

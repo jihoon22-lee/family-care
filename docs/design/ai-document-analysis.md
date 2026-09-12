@@ -422,6 +422,13 @@ API는 schema 0078에서 같은 native 출처·대상자·계약·담보와 기�
 이력은 유지하고 통화와 원장 버전만 갱신하며 새 게시 이력을 추가한다. 가입금액의 통화
 복구는 지급 산식이나 지급액 확정을 뜻하지 않는다.
 
+명시적 retained v10 / normalization v5는 provider가 이미 인용한 단일 native 표 행에서
+이름 열과 같은 행의 가입금액이 독립적으로 증명될 때만 원래 이름 셀을 새 초안에 복구한다.
+공백 차이나 provider의 잘못된 이름을 private 목록 값으로 바꾸거나 유사 이름 검색으로
+해결하지 않는다. 원래 raw 응답·제외 이력과 모든 기존 사용자 결정을 유지하고, 변경 없는
+v7/v8/v9 후보는 제외한 뒤 복구한 후보만 새 검수와 프로그램 검증을 받는다. API/Worker는
+schema 0079에서 이 명시적 처리 revision을 허용하며 기본 automatic/retained 값은 유지한다.
+
 ## v0.5 bounded terms proposals
 
 `FAMILYCARE_ENABLE_TERMS_STRUCTURING=true`는 API의 unresolved 구역 작업 준비와 Worker의
