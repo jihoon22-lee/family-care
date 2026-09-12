@@ -10,6 +10,8 @@ from familycare_api.insurance_documents.repository import InsuranceDocumentRepos
 from familycare_api.insurance_documents.schemas import MemberInsuranceDocumentInventoryResponse
 from familycare_api.insurance_reconciliation.repository import InsuranceReconciliationRepository
 from familycare_api.insurance_reconciliation.schemas import MemberInsuranceReconciliationResponse
+from familycare_api.policies.candidate_models import CandidateCorrectionRequest
+from familycare_api.policies.candidate_repository import CandidateRepository
 from familycare_api.policies.range_enrollment import RangeEnrollmentProjector
 from familycare_api.policies.repository import PolicyLedgerRepository
 from familycare_api.policies.schemas import PolicyResponse
@@ -41,6 +43,15 @@ from apps.api.tests.test_range_enrollment_integration import (
 from apps.api.tests.test_range_enrollment_integration import (
     enrollment_database as enrollment_database,
 )
+from apps.api.tests.test_range_enrollment_integration import (
+    ranges_database as ranges_database,
+)
+from apps.api.tests.test_range_enrollment_integration import (
+    seeded_policy_database as seeded_policy_database,
+)
+from apps.api.tests.test_range_enrollment_integration import (
+    structure_database as structure_database,
+)
 from workers.analyzer.tests.test_initial_policy_draft_normalization import _raw_request
 
 pytestmark = pytest.mark.integration
@@ -65,7 +76,8 @@ def _drain(url, queue, job, terms):
 
 
 @pytest.fixture()
-def deferred_parent(enrollment_database):
+def deferred_parent(enrollment_database, request):
+    review_action = getattr(request, "param", None)
     url, original = enrollment_database
     with psycopg.connect(_psycopg_url(url)) as connection:
         connection.execute(
@@ -170,6 +182,46 @@ def deferred_parent(enrollment_database):
     ranges.save(old, WORKER, work, draft.batch, result)
     _drain(url, queue, queue.claim_next_job(WORKER), terms)
     assert RangeEnrollmentProjector(url).project_pending() == 0
+    reviewed = None
+    if review_action is not None:
+        scope = HouseholdScope(old.household_space_id)
+        repository = CandidateRepository(url)
+        item = next(
+            item
+            for item in repository.list_review_items(scope, status="AI_VERIFIED")
+            if any(
+                field.field_id == "rider_name" and field.value == "Sample Rider 0"
+                for field in item.fields
+            )
+        )
+        if review_action == "reject":
+            current_item = repository.transition(
+                scope,
+                item.review_item_id,
+                expected_version=item.expected_version,
+                status="rejected",
+                actor_id=uuid4(),
+                rejection_reason="INVALID_EVIDENCE",
+            )
+        else:
+            assert review_action == "correct"
+            current_item = repository.correct_field(
+                scope,
+                review_item_id=item.review_item_id,
+                actor_id=uuid4(),
+                request=CandidateCorrectionRequest(
+                    expected_version=item.expected_version,
+                    field_id="sum_assured",
+                    value=737,
+                    evidence_id=item.evidence[0].evidence_id,
+                ),
+            )
+        reviewed = {
+            "review_item_id": item.review_item_id,
+            "current_candidate_id": current_item.candidate_version_id,
+            "expected_status": "rejected" if review_action == "reject" else "NEEDS_REVIEW",
+            "history": _review_history(url, item.review_item_id),
+        }
     with psycopg.connect(_psycopg_url(url)) as connection:
         history = {
             table: connection.execute(
@@ -241,11 +293,11 @@ def deferred_parent(enrollment_database):
         replay_repository=replay,
     )
     runner._run_range(current, WORKER)
-    return url, original, old, current, history, old_fields, old_candidates, calls
+    return url, original, old, current, history, old_fields, old_candidates, calls, reviewed
 
 
 def test_v8_parent_publishes_existing_six_riders_without_copy_or_reverification(deferred_parent):
-    url, original, old, current, history, old_fields, old_candidates, calls = deferred_parent
+    url, original, old, current, history, old_fields, old_candidates, calls, _ = deferred_parent
     assert len(calls) == 1 and calls[0]["schema_name"] == "policy_candidate_batch_verifier_v2"
     projector = RangeEnrollmentProjector(url)
     assert projector.project_pending() == 7
@@ -346,3 +398,73 @@ def test_database_cannot_create_unknown_issuer_without_source_provenance(enrollm
                 (job.household_space_id, job.document_version_id, evidence),
             )
             connection.execute("SET CONSTRAINTS policy_source_scoped_identity_guard IMMEDIATE")
+
+
+def _review_history(url, review_item_id):
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        versions = connection.execute(
+            "SELECT to_jsonb(c) FROM analysis_candidate_versions c WHERE review_item_id=%s "
+            "ORDER BY c.version,c.id",
+            (review_item_id,),
+        ).fetchall()
+        payload = {
+            table: connection.execute(
+                f"SELECT to_jsonb(p) FROM {table} p JOIN analysis_candidate_versions c "
+                "ON c.id=p.candidate_version_id WHERE c.review_item_id=%s "
+                "ORDER BY to_jsonb(p)::text",
+                (review_item_id,),
+            ).fetchall()
+            for table in ("analysis_candidate_fields", "analysis_candidate_evidence")
+        }
+    return {"versions": versions, **payload}
+
+
+@pytest.mark.parametrize("deferred_parent", ["reject", "correct"], indirect=True)
+def test_v8_parent_recovery_preserves_prior_user_review_without_republishing_old_rider(
+    deferred_parent,
+):
+    url, _, old, current, history, _, _, calls, reviewed = deferred_parent
+    assert reviewed is not None and len(calls) == 1
+    projector = RangeEnrollmentProjector(url)
+    assert projector.project_pending() == 6  # One parent and five untouched prior Riders.
+    assert projector.project_pending() == 0
+    assert _review_history(url, reviewed["review_item_id"]) == reviewed["history"]
+    with psycopg.connect(_psycopg_url(url)) as connection:
+        assert connection.execute(
+            "SELECT status,published_at FROM analysis_candidate_versions "
+            "WHERE id=%s AND is_current",
+            (reviewed["current_candidate_id"],),
+        ).fetchone() == (reviewed["expected_status"], None)
+        assert connection.execute(
+            "SELECT count(*) FROM riders WHERE household_space_id=%s",
+            (old.household_space_id,),
+        ).fetchone() == (5,)
+        assert connection.execute(
+            "SELECT count(*) FROM riders WHERE household_space_id=%s AND display_name=%s",
+            (old.household_space_id, "Sample Rider 0"),
+        ).fetchone() == (0,)
+        assert connection.execute(
+            "SELECT candidate_kind FROM analysis_candidate_versions WHERE structuring_job_id=%s",
+            (current.id,),
+        ).fetchall() == [("policy_contract",)]
+        adjustments = connection.execute(
+            "SELECT adjustments_json FROM policy_range_replay_sources WHERE job_id=%s",
+            (current.id,),
+        ).fetchone()[0]
+        assert (
+            sum(item["reason"] == "PRIOR_CANDIDATE_REVIEW_PRESERVED" for item in adjustments) == 1
+        )
+        if reviewed["expected_status"] == "NEEDS_REVIEW":
+            assert connection.execute(
+                "SELECT value FROM analysis_candidate_fields WHERE candidate_version_id=%s "
+                "AND field_id='sum_assured'",
+                (reviewed["current_candidate_id"],),
+            ).fetchone() == (737,)
+        for table, before in history.items():
+            assert (
+                connection.execute(
+                    f"SELECT to_jsonb(t) FROM {table} t WHERE job_id=%s ORDER BY to_jsonb(t)::text",
+                    (old.id,),
+                ).fetchall()
+                == before
+            )
