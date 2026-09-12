@@ -1,8 +1,8 @@
 # FamilyCare 프로젝트 로드맵
 
-- 상태: v0.5.0 최종 수용 기록 정리 중; 최종 CI·이슈 판단·릴리스/배포 PENDING
+- 상태: v0.5.0 최종 릴리스·운영 전환·HTTPS 수용 완료; 자료 지원 PARTIAL, 이슈 종료 동기화 준비
 - 현재 구현 기준 설계: `docs/design/v0.1-product.md`; v0.5 전환 기준은 아래 현재 마일스톤 참조
-- 현재 개발·최종 릴리스 버전: `v0.5.0`; 마일스톤 완료 후 최종 태그·릴리스·배포
+- 현재 개발·최종 릴리스 버전: `v0.5.0`; 최종 태그·운영 소스 `7d1a53d`, schema 0083
 - 실행 위치: 개인 WSL Docker Compose와 Tailscale private access
 
 ## Current milestone
@@ -14,8 +14,16 @@
 
 2026-09-13 현재 [PR #103](https://github.com/jihoon22-lee/family-care/pull/103)과
 [#105](https://github.com/jihoon22-lee/family-care/pull/105)는 병합됐고,
-[#106](https://github.com/jihoon22-lee/family-care/pull/106)은 필수 CI 6/7 통과·PostgreSQL 진행 중이다.
-최종 후보는 `54496fa`/schema 0083의 명시 원화 단위 보강(v14)이며 다음 PR의 CI는 PENDING이다.
+[#106](https://github.com/jihoon22-lee/family-care/pull/106)은 `34df397`로 병합됐다.
+[CI 34715572418](https://github.com/jihoon22-lee/family-care/actions/runs/34715572418)는 필수 7/7·PostgreSQL 944개를 통과했다.
+[#107](https://github.com/jihoon22-lee/family-care/pull/107)은 `7d1a53d`로 병합됐고
+[CI 34717282331](https://github.com/jihoon22-lee/family-care/actions/runs/34717282331)는 필수 7/7·PostgreSQL 947개를 통과했다.
+최종 태그 `v0.5.0`은 `7d1a53d`에 게시됐으며 [release 34719394060](https://github.com/jihoon22-lee/family-care/actions/runs/34719394060)는 SUCCESS다.
+[GitHub Release](https://github.com/jihoon22-lee/family-care/releases/tag/v0.5.0)는 2026-09-12T22:00:32Z에 정식 게시됐다.
+인증된 이미지 manifest/digest 확인과 순차 pull·up 전환이 완료됐다. source `7d1a53d`/
+schema 0083의 세 이미지·리비전·health 및 API readiness가 일치했다. WSL curl의
+HTTPS 10회·readiness 1회와 인증된 기존 결과/근거/청구 조회가 30.765초에 통과했다.
+별도 restart·새 event·분석 실행은 없었고 이전 DB를 보존한 새 stage를 활성화했다.
 `39a63bc`/격리 schema 0082에서 원문 근거를 보존한 재검수로 선택 계약의 native 담보가
 16→53개가 됐고 별도 계약의 기존 9개를 유지했다. 문서 출처 연결은 기존 2개에 1개를
 추가했으며, 교정·검수·과거 청구 이력은 보존했다. 자료 지원은 여전히 PARTIAL이다.
@@ -27,12 +35,14 @@
 12개는 v14 실제 적용으로 보완했다. 지원 규칙이 있는 구성원의 기존 입력에서는 후보 6개·
 POINT 3개·FORMULA 1개와 근거·저장 재조회가 확인됐다. 마지막 helper의 로컬 검색/provider
 카운터 오류는 실패로 보존하며 재분석 없는 후속 대사로 외부 작업/시도 0과 이력 보존을
-확인했다. 운영 전환은 새 live 분석·청구 이력 병합과 전환 직전 source barrier가 남아 있다. 최신 결과와 종료 판단은 [최종 수용 기록](../../workthrough/2026-09-13-source-unit-currency.md)에 모은다.
+확인했다. 새 live 이력 9,208행의 사전 병합은 완료했고 동등한 로컬 작업 6개와 run 참조
+12개의 명시적 alias를 보존했다. 최종 barrier 재호출은 추가 INSERT·누락 0과 기존
+source/owned 행 보존으로 통과했고 activation과 외부 네트워크 수용도 완료했다. 최신 결과와 종료 판단은 [최종 수용 기록](../../workthrough/2026-09-13-source-unit-currency.md)에 모은다.
 
 #60/#63/#69/#70의 수용은 근거가 확인된 범위의 사용과 미지원 범위의 정확한 기록을 함께
 평가한다. 승인 자료 58개 전체의 100% 자동 확정이나 모바일 실기기 PASS를 별도 종료
 조건으로 추가하지 않는다. 불명확한 약관·연결·기기는 PARTIAL/UNVERIFIED로 남기고
-전체 분모에서 빼지 않는다. 최종 필수 CI와 실제 릴리스·배포 결과는 실행 후 기록한다.
+전체 분모에서 빼지 않는다. 기능 PR의 필수 CI 성공과 실제 릴리스·운영 전환 결과를 구분한다.
 
 아래 날짜별 기록은 당시 상태를 보존한 역사다.
 
