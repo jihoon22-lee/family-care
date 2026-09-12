@@ -454,7 +454,8 @@ export function PrivateInsuranceCatalog({ memberId }: { memberId?: string }) {
                             key={policy.policy_contract_id}
                             value={policy.policy_contract_id}
                           >
-                            {policy.insurer_display} · {policy.product_display}
+                            {policy.insurer_display ?? "보험사 확인 전"} ·{" "}
+                            {policy.product_display}
                           </option>
                         ))}
                       </select>
@@ -539,7 +540,7 @@ export function PrivateInsuranceCatalog({ memberId }: { memberId?: string }) {
               {data.orphan_operational_contracts.map((policy) => (
                 <li key={policy.policy_contract_id}>
                   <strong>{policy.product_display}</strong>
-                  <span>{policy.insurer_display}</span>
+                  <span>{policy.insurer_display ?? "보험사 확인 전"}</span>
                   <span>
                     {policy.completeness === "CERTIFICATE_AND_TERMS"
                       ? "증권+약관 준비"

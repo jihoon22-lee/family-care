@@ -87,7 +87,7 @@ class InventoryPolicy:
     source_document_version_id: UUID
     source_content_sha256: str
     source_evidence_page: int
-    insurer_display: str
+    insurer_display: str | None
     product_display: str
     status: PolicyStatus
     rider_count: int

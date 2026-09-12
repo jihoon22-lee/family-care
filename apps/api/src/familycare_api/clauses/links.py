@@ -106,7 +106,7 @@ class RiderClauseLinkValidationContext:
     policy_contract_id: UUID
     policy_household_space_id: UUID
     contract_date: date | None
-    policy_insurer_key: str
+    policy_insurer_key: str | None
     policy_product_key: str
     policy_document_version_id: UUID
     rider_policy_contract_id: UUID
@@ -172,7 +172,8 @@ def validate_rider_clause_link(
         edition.source_component_id is not None and context.program_applicability_verified is True
     ):
         if (
-            context.policy_insurer_key != edition.insurer_key
+            context.policy_insurer_key is None
+            or context.policy_insurer_key != edition.insurer_key
             or context.policy_product_key != edition.product_key
         ):
             _invalid("TERMS_EDITION_MISMATCH")

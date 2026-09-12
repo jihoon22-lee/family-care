@@ -171,6 +171,7 @@ def _source_candidates(
             product = row["field_values"].get("product_name")
             if (
                 isinstance(insurer, str)
+                and isinstance(row["insurer_display"], str)
                 and _key(insurer) == _key(row["insurer_display"])
                 and isinstance(product, str)
                 and _key(product) == _key(row["product_display"])

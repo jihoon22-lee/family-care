@@ -21,7 +21,7 @@ export function PolicySummaryCard({
     <article className="policy-card" aria-labelledby={`policy-${policy.id}`}>
       <header className="policy-heading">
         <div>
-          <p>{policy.insurer_display}</p>
+          <p>{policy.insurer_display ?? "보험사 확인 전"}</p>
           <h2 id={`policy-${policy.id}`}>{policy.product_display}</h2>
         </div>
         <span className={`policy-status status-${policy.status}`}>

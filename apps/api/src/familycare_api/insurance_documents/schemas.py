@@ -166,7 +166,8 @@ class RegisteredPolicyInventoryResponse(BaseModel):
     model_config = _STRICT
 
     policy_id: UUID
-    insurer_display: str = Field(min_length=1, max_length=160)
+    insurer_display: str | None = Field(min_length=1, max_length=160)
+    insurer_unresolved_reason: Literal["INSURER_SOURCE_UNVERIFIED"] | None = None
     product_display: str = Field(min_length=1, max_length=200)
     status: PolicyStatus
     rider_count: int = Field(ge=0)
@@ -247,6 +248,9 @@ class MemberInsuranceDocumentInventoryResponse(BaseModel):
                 RegisteredPolicyInventoryResponse(
                     policy_id=item.policy.id,
                     insurer_display=item.policy.insurer_display,
+                    insurer_unresolved_reason="INSURER_SOURCE_UNVERIFIED"
+                    if item.policy.insurer_display is None
+                    else None,
                     product_display=item.policy.product_display,
                     status=item.policy.status,
                     rider_count=item.policy.rider_count,

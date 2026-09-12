@@ -76,7 +76,7 @@ class UnresolvedDocumentSource:
 @dataclass(frozen=True)
 class OperationalPolicySource:
     id: UUID
-    insurer_display: str
+    insurer_display: str | None
     product_display: str
     status: PolicyStatus
     completeness: Completeness
@@ -118,7 +118,7 @@ class ContractReconciliation:
 @dataclass(frozen=True)
 class OrphanOperationalPolicy:
     policy_contract_id: UUID
-    insurer_display: str
+    insurer_display: str | None
     product_display: str
     status: PolicyStatus
     completeness: Completeness

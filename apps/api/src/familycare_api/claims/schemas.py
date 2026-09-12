@@ -250,8 +250,8 @@ class ClaimCaseResponse(StrictModel):
     @model_validator(mode="after")
     def source_identity(self) -> Self:
         if self.policy_contract_id is not None and self.rider_id is not None:
-            if not self.insurer_key:
-                raise ValueError("operational insurer key required")
+            if self.insurer_key is not None and not self.insurer_key:
+                raise ValueError("empty operational insurer key")
             if self.coverage is not None and self.coverage != CanonicalCoverageRef(
                 kind="OPERATIONAL_RIDER",
                 contract_id=self.policy_contract_id,

@@ -1244,7 +1244,7 @@ class RiderClauseLinkRepository:
             policy_contract_id=cast(UUID, policy_row["policy_contract_id"]),
             policy_household_space_id=cast(UUID, policy_row["policy_household_space_id"]),
             contract_date=cast(date | None, policy_row.get("contract_date")),
-            policy_insurer_key=cast(str, policy_row["policy_insurer_key"]),
+            policy_insurer_key=cast(str | None, policy_row["policy_insurer_key"]),
             policy_product_key=cast(str, policy_row["policy_product_key"]),
             policy_document_version_id=cast(UUID, policy_row["policy_document_version_id"]),
             rider_policy_contract_id=cast(UUID, policy_row["rider_policy_contract_id"]),

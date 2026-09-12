@@ -1362,6 +1362,7 @@ class PostgresPrivateKnowledgeRepository:
                         cast(str, row["product_display"]),
                     )
                     for row in policy_labels
+                    if row["insurer_display"] is not None
                 ]
             ),
             coverage_label_key_counts=_label_counts(
@@ -1372,6 +1373,7 @@ class PostgresPrivateKnowledgeRepository:
                         cast(str, row["display_name"]),
                     )
                     for row in coverage_labels
+                    if row["insurer_display"] is not None
                 ]
             ),
         )

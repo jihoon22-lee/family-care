@@ -410,7 +410,7 @@ class InsuranceDocumentRepository:
                 source_document_version_id=cast(UUID, row["source_document_version_id"]),
                 source_content_sha256=cast(str, row["source_content_sha256"]),
                 source_evidence_page=int(row["source_evidence_page"]),
-                insurer_display=cast(str, row["insurer_display"]),
+                insurer_display=cast(str | None, row["insurer_display"]),
                 product_display=cast(str, row["product_display"]),
                 status=cast(PolicyStatus, row["status"]),
                 rider_count=int(row["rider_count"]),
@@ -639,7 +639,7 @@ class InsuranceDocumentRepository:
                     ).fetchone()
                     if policy is None:
                         raise PolicyStateConflict
-                    insurer_display = cast(str, policy["insurer_display"])
+                    insurer_display = cast(str | None, policy["insurer_display"])
                     product_display = cast(str, policy["product_display"])
                     display_label = product_display
                 row = connection.execute(

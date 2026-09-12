@@ -177,7 +177,8 @@ class ClaimCase:
             self.private_coverage_id,
         )
         if self.rider_id is not None:
-            _require_bounded_text(self.insurer_key, "insurer key", 160)
+            if self.insurer_key is not None:
+                _require_bounded_text(self.insurer_key, "insurer key", 160)
         else:
             if self.insurer_key is not None:
                 raise ValueError("private coverage has no operational insurer key")

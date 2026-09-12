@@ -53,7 +53,7 @@ function isReconciliationResponse(
       (policy) =>
         isRecord(policy) &&
         typeof policy.policy_contract_id === "string" &&
-        typeof policy.insurer_display === "string" &&
+        isNullableString(policy.insurer_display) &&
         typeof policy.product_display === "string",
     ) &&
     Array.isArray(value.unresolved_sources) &&

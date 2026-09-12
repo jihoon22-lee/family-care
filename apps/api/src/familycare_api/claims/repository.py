@@ -170,7 +170,7 @@ class ClaimRepository:
                 cast(UUID, selected["active_claim_id"]),
             )
         policy_contract_id = cast(UUID, selected["policy_contract_id"])
-        insurer_key = cast(str, selected["insurer_key"])
+        insurer_key = cast(str | None, selected["insurer_key"])
         decision_repository = DecisionRepository(self.database_url)
         event = decision_repository.get_medical_event(scope, event_id)
         result = decision_repository.get_decision_result(scope, event_id, event.version)
@@ -251,7 +251,7 @@ class ClaimRepository:
                     JOIN policy_contracts AS policy
                       ON policy.id = %s
                      AND policy.household_space_id = event.household_space_id
-                     AND policy.insurer_key = %s
+                     AND policy.insurer_key IS NOT DISTINCT FROM %s
                      AND policy.deleted_at IS NULL
                      AND policy.updated_at <= decision.created_at
                     JOIN riders AS selected_rider

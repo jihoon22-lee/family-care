@@ -2529,7 +2529,8 @@ export interface OptionalQuestionResponse {
 
 export interface OrphanOperationalPolicyResponse {
   completeness: "CERTIFICATE_AND_TERMS" | "CERTIFICATE_ONLY";
-  insurer_display: string;
+  insurer_display: string | null;
+  insurer_unresolved_reason?: "INSURER_SOURCE_UNVERIFIED" | null;
   policy_contract_id: string;
   product_display: string;
   status: "active" | "inactive" | "expired" | "cancelled" | "unknown";
@@ -2637,8 +2638,9 @@ export interface PolicyResponse {
   coverage_start_date: string | null;
   deleted: boolean;
   id: string;
-  insurer_display: string;
-  insurer_key: string;
+  insurer_display: string | null;
+  insurer_key: string | null;
+  insurer_unresolved_reason?: "INSURER_SOURCE_UNVERIFIED" | null;
   parties: Array<PolicyPartyResponse>;
   product_display: string;
   product_key: string;
@@ -2815,7 +2817,8 @@ export interface RegisteredPolicyInventoryResponse {
   documents: Array<RoleDocumentSummaryResponse>;
   has_application: boolean;
   has_product_explanation: boolean;
-  insurer_display: string;
+  insurer_display: string | null;
+  insurer_unresolved_reason?: "INSURER_SOURCE_UNVERIFIED" | null;
   missing_document_roles: Array<
     | "policy"
     | "terms"

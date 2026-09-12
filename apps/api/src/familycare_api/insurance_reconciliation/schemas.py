@@ -210,14 +210,20 @@ class OrphanOperationalPolicyResponse(BaseModel):
     model_config = _STRICT
 
     policy_contract_id: UUID
-    insurer_display: str = Field(min_length=1, max_length=240)
+    insurer_display: str | None = Field(min_length=1, max_length=240)
+    insurer_unresolved_reason: Literal["INSURER_SOURCE_UNVERIFIED"] | None = None
     product_display: str = Field(min_length=1, max_length=800)
     status: Literal["active", "inactive", "expired", "cancelled", "unknown"]
     completeness: Literal["CERTIFICATE_AND_TERMS", "CERTIFICATE_ONLY"]
 
     @classmethod
     def from_domain(cls, value: OrphanOperationalPolicy) -> Self:
-        return cls(**value.__dict__)
+        return cls(
+            **value.__dict__,
+            insurer_unresolved_reason="INSURER_SOURCE_UNVERIFIED"
+            if value.insurer_display is None
+            else None,
+        )
 
 
 class ReconciliationSummaryResponse(BaseModel):
