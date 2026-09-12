@@ -300,6 +300,7 @@ def verify_structured_policy_batch(
     verifier_model: str,
     allow_unclassified_enrollment: bool = False,
     allow_unconfirmed_insurer: bool = False,
+    field_scoped: bool = False,
 ) -> CandidatePipelineResult:
     """Resume a retained structurer stage without paying for it again."""
 
@@ -309,6 +310,7 @@ def verify_structured_policy_batch(
             evidence=evidence,
             provider=provider,
             model=verifier_model,
+            field_scoped=field_scoped,
         )
     except (
         ProviderValidationError,
