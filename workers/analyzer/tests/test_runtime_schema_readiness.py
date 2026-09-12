@@ -7,7 +7,7 @@ import pytest
 from familycare_worker import __main__ as entry
 from familycare_worker import health
 
-REVISION = "0077_source_scoped_policy_identity"
+REVISION = "0077_source_scoped_identity"
 
 
 class Result:

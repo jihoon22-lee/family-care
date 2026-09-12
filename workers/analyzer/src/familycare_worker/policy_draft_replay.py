@@ -22,8 +22,9 @@ from familycare_worker.ai.policy_draft_normalization import (
     PolicyDraftNormalization,
     normalize_policy_draft,
 )
+from familycare_worker.ai.range_grounding import ground_range_candidate
 from familycare_worker.ai.range_structurer import PolicyRangeBatch, RangeDisposition
-from familycare_worker.ai.schemas import CandidatePipelineResult
+from familycare_worker.ai.schemas import CandidatePipelineResult, PolicyCandidate
 from familycare_worker.jobs import psycopg_database_url
 from familycare_worker.policy_jobs import PolicyStructuringJobRecord
 from familycare_worker.policy_range_repository import PolicyRangeConflict, PolicyRangeWork, _lock
@@ -126,6 +127,7 @@ def _preserve_verified_riders(
     job: PolicyStructuringJobRecord,
     work: PolicyRangeWork,
     normalized: PolicyDraftNormalization,
+    local_nodes: dict[str, dict[str, Any]],
 ) -> PolicyDraftNormalization:
     """Exclude unchanged, still-current v7 Riders from a new v8 verifier request.
 
@@ -180,8 +182,23 @@ def _preserve_verified_riders(
                 draft is None
                 or candidate.candidate_kind != "rider"
                 or candidate.status != "AI_VERIFIED"
-                or candidate.fields != draft.fields
             ):
+                continue
+            grounded = ground_range_candidate(
+                PolicyCandidate(
+                    candidate_id=draft.candidate_id,
+                    candidate_kind=draft.candidate_kind,
+                    fields=draft.fields,
+                    status="AI_VERIFIED",
+                    issue_codes=(),
+                    provider_request_ids=(),
+                ),
+                work.envelope.evidence,
+                local_nodes=local_nodes,
+                allow_certificate_title=True,
+                require_issuer_context=True,
+            )
+            if grounded.status != "AI_VERIFIED" or candidate.fields != grounded.fields:
                 continue
             version = connection.execute(
                 "SELECT id FROM analysis_candidate_versions WHERE structuring_job_id=%s "
@@ -206,7 +223,7 @@ def _preserve_verified_riders(
             ).fetchall()
             expected = [
                 {"field_id": f.field_id, "value": f.value, "evidence_ids": sorted(f.evidence_ids)}
-                for f in draft.fields
+                for f in grounded.fields
             ]
             if fields == expected:
                 preserved.add(candidate.candidate_id)
@@ -352,7 +369,13 @@ def _source(
             revision=normalization_revision(job.pipeline_version),
         )
         if job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES:
-            normalized = _preserve_verified_riders(connection, job, work, normalized)
+            normalized = _preserve_verified_riders(
+                connection,
+                job,
+                work,
+                normalized,
+                {node["node_id"]: node for node in row["structure_json"]["nodes"]},
+            )
     except ValueError, TypeError, KeyError, PolicyDraftInvalid, ValidationError:
         raise PolicyRangeConflict from None
     return {
