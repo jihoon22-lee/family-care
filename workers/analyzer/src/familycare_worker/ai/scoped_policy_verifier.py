@@ -18,6 +18,8 @@ def scoped_policy_evidence(
     batch: PolicyRangeBatch,
     envelope: PolicyRangeEnvelope,
     local_nodes: Mapping[str, Mapping[str, Any]] | None,
+    *,
+    allow_primary_header_context: bool = False,
 ) -> tuple[RangeEvidenceSlice, ...]:
     """Return whole context closure, or the original envelope on any uncertainty.
 
@@ -54,6 +56,7 @@ def scoped_policy_evidence(
                 local_nodes=local_nodes,
                 allow_certificate_title=True,
                 require_issuer_context=True,
+                allow_primary_header_context=allow_primary_header_context,
             )
             grounded = {field.field_id: field.value for field in probe.fields}
             if probe.status != "AI_VERIFIED" or any(

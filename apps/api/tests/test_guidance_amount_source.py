@@ -190,7 +190,8 @@ class SourceDatabase:
 
 
 @pytest.mark.parametrize(
-    "revision", ["range-grounding-v2", "range-grounding-v3", "range-grounding-v4"]
+    "revision",
+    ["range-grounding-v2", "range-grounding-v3", "range-grounding-v4", "range-grounding-v5"],
 )
 def test_program_amount_and_currency_replay_original_field_meaning(revision):
     database = SourceDatabase()
@@ -215,7 +216,8 @@ def test_general_ledger_evidence_is_not_direct_amount_authority():
 
 @pytest.mark.parametrize("fault", ["amount", "currency"])
 @pytest.mark.parametrize(
-    "revision", ["range-grounding-v2", "range-grounding-v3", "range-grounding-v4"]
+    "revision",
+    ["range-grounding-v2", "range-grounding-v3", "range-grounding-v4", "range-grounding-v5"],
 )
 def test_forged_retained_program_values_do_not_replace_original_proof(fault, revision):
     database = SourceDatabase()

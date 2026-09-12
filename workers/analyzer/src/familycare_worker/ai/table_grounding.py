@@ -85,6 +85,8 @@ def table_field_proof(
     cited: Sequence[RangeEvidenceSlice],
     evidence: Sequence[RangeEvidenceSlice],
     nodes: Mapping[str, Mapping[str, Any]],
+    *,
+    allow_primary_header_context: bool = False,
 ) -> TableFieldProof | None:
     """None means plain text; an empty proof means unsupported/conflicting table structure."""
     if candidate.candidate_kind != "rider":
@@ -101,6 +103,7 @@ def table_field_proof(
         if item.evidence_id in name_ids
         and item.primary
         and nodes.get(item.node_id, {}).get("kind") == "TABLE_ROW"
+        and (not allow_primary_header_context or nodes[item.node_id].get("row_role") == "data")
     }
     primary = [
         item

@@ -422,6 +422,7 @@ class PolicyRangeRepository:
             CERTIFICATE_TITLE_PIPELINES,
             FIELD_SCOPED_POLICY_PIPELINES,
             NORMALIZED_POLICY_PIPELINES,
+            PROVEN_CONTEXT_POLICY_PIPELINES,
             SOURCE_SCOPED_POLICY_PIPELINES,
             _current_source,
             validate_replay_receipt,
@@ -498,6 +499,8 @@ class PolicyRangeRepository:
                         allow_certificate_title=job.pipeline_version in CERTIFICATE_TITLE_PIPELINES,
                         require_issuer_context=job.pipeline_version
                         in SOURCE_SCOPED_POLICY_PIPELINES,
+                        allow_primary_header_context=job.pipeline_version
+                        in PROVEN_CONTEXT_POLICY_PIPELINES,
                     )
                     for candidate in result.candidates
                 )
@@ -513,7 +516,9 @@ class PolicyRangeRepository:
                     **payload,
                     "result": result.model_dump(mode="json"),
                     "program_validation_version": (
-                        "range-grounding-v4"
+                        "range-grounding-v5"
+                        if job.pipeline_version in PROVEN_CONTEXT_POLICY_PIPELINES
+                        else "range-grounding-v4"
                         if job.pipeline_version in SOURCE_SCOPED_POLICY_PIPELINES
                         else "range-grounding-v3"
                         if job.pipeline_version in CERTIFICATE_TITLE_PIPELINES

@@ -504,3 +504,21 @@ API는 같은 source generation·물리 담보·구성원·원장 버전의 이�
 fingerprint를 재확인하고, 이전/현재 envelope의 모든 근거·원문 위치·역할·최소화된 전송
 문자열이 완전히 같을 때만 이전 raw 응답을 재사용한다. 전송 내용이 달라졌다면 재사용을
 거부한다. 이는 이전 개인정보 제거 규칙으로 되돌리거나 이전 승인을 새 초안에 옮기지 않는다.
+
+### Source-proven draft context and range reconciliation
+
+명시적 retained v13 / normalization v7 / schema 0082는 보존된 원 응답의 참조 관계를
+원문 근거로 정리하고 새 독립 검수를 받는다. 기존 필드와 정확히 같은 값·type을 증명하는
+grounder 결과의 field-specific 헤더/단위 문맥만 초안 Evidence에 추가한다. 이 문맥은
+현재 최소화 envelope에 이미 포함되어야 한다. validator의 외부/다른 후보 근거 거부를
+완화하지 않으며 이전 검수 실패를 소급하여 승인하지 않는다.
+
+누락되거나 잘못된 후보-범위 연결은 동일 원문의 독립적으로 입증된 required-field primary가
+유일할 때만 정리한다. raw schema·중복·알 수 없는 ID·외부 근거는 계속 거부한다. 개별
+미지원 후보는 이유와 partial 상태를 보존하고, 관계 복구만으로 빈 범위를 미가입 또는
+전체 처리 완료로 확정하지 않는다. v1–v6 초안/receipt 의미와 기존 사용자 결정은 유지한다.
+
+새 v13 결과는 `range-grounding-v5`를 기록한다. 명시적 v5에서만 primary로도 계획된
+표 헤더를 가입 행이 아닌 field context로 취급하여, 이미 입증한 헤더가 붙은 필드를 다시
+검사해도 같은 값·인용·상태가 유지되게 한다. header-only와 복수 가입 행은 계속 거부하며
+v1–v4의 이전 판독은 기본 플래그를 유지한다. API의 독립 금액 근거 검사도 v5 출처를 읽는다.
